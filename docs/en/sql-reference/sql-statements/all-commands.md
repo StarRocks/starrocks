@@ -13,7 +13,8 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
     - [Resource group](#resource-group)
     - [Storage volume](#storage-volume)
     - [Check and repair table, tablet, and replica](#check-and-repair-table-tablet-and-replica)
-    - [System configurations, variables, and files](#system-configurations-variables-and-files)
+    - [Configurations and variables](#configurations-and-variables)
+    - [Files](#files)
     - [SQL Blacklist](#sql-blacklist)
     - [Plugin](#plugin)
     - [Execution plan and query profile](#execution-plan-and-query-profile)
@@ -77,8 +78,8 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 
 ### Resource group
 
-- [CREATE RESOURCE GROUP](./Administration/CREATE_RESOURCE_GROUP.md)
 - [ALTER RESOURCE GROUP](./Administration/ALTER_RESOURCE_GROUP.md)
+- [CREATE RESOURCE GROUP](./Administration/CREATE_RESOURCE_GROUP.md)
 - [DROP RESOURCE GROUP](./Administration/DROP_RESOURCE_GROUP.md)
 - [SHOW RESOURCE GROUP](./Administration/SHOW_RESOURCE_GROUP.md)
 - [SHOW USAGE RESOURCE GROUPS](./Administration/SHOW_USAGE_RESOURCE_GROUPS.md)
@@ -102,15 +103,18 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [ADMIN SHOW REPLICA STATUS](./Administration/ADMIN_SHOW_REPLICA_STATUS.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
-### System configurations, variables, and files
+### Configurations and variables
 
 - [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
 - [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
+- [SET (variable)](./Administration/SET.md)
+- [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
+
+### Files
+
 - [CREATE FILE](./Administration/CREATE_FILE.md)
 - [DROP FILE](./Administration/DROP_FILE.md)
-- [SET (variable)](./Administration/SET.md)
 - [SHOW FILE](./Administration/SHOW_FILE.md)
-- [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
 
 ### SQL Blacklist
 
@@ -165,8 +169,8 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 
 ### Unloading
 
-- [EXPORT](./data-manipulation/EXPORT.md)
 - [CANCEL EXPORT](./data-manipulation/CANCEL_EXPORT.md)
+- [EXPORT](./data-manipulation/EXPORT.md)
 - [SHOW EXPORT](./data-manipulation/SHOW_EXPORT.md)
 
 ### ETL task
@@ -208,11 +212,10 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [CREATE TABLE](./data-definition/CREATE_TABLE.md)
 - [CREATE TABLE AS SELECT](./data-definition/CREATE_TABLE_AS_SELECT.md)
 - [CREATE TABLE LIKE](./data-definition/CREATE_TABLE_LIKE.md)
+- [DELETE](./data-manipulation/DELETE.md)
 - [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
-- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
-- [DELETE](./data-manipulation/DELETE.md)
 - [SELECT](./data-manipulation/SELECT.md)
 - [SHOW ALTER TABLE](./data-manipulation/SHOW_ALTER.md)
 - [SHOW CREATE TABLE](./data-manipulation/SHOW_CREATE_TABLE.md)
@@ -223,6 +226,7 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [SHOW PARTITIONS](./data-manipulation/SHOW_PARTITIONS.md)
 - [SHOW TABLES](./data-manipulation/SHOW_TABLES.md)
 - [SHOW TABLET](./data-manipulation/SHOW_TABLET.md)
+- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
 - [UPDATE](./data-manipulation/UPDATE.md)
 
 ## View, materialized view
@@ -231,15 +235,15 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 
 - [ALTER VIEW](./data-definition/ALTER_VIEW.md)
 - [CREATE VIEW](./data-definition/CREATE_VIEW.md)
-- [SHOW CREATE VIEW](./data-manipulation/SHOW_CREATE_VIEW.md)
 - [DROP VIEW](./data-definition/DROP_VIEW.md)
+- [SHOW CREATE VIEW](./data-manipulation/SHOW_CREATE_VIEW.md)
 
 ### Materialized view
 
 - [ALTER MATERIALIZED VIEW](./data-definition/ALTER_MATERIALIZED_VIEW.md)
+- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [CREATE MATERIALIZED VIEW](./data-definition/CREATE_MATERIALIZED_VIEW.md)
 - [DROP MATERIALIZED VIEW](./data-definition/DROP_MATERIALIZED_VIEW.md)
-- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [REFRESH MATERIALIZED VIEW](./data-manipulation/REFRESH_MATERIALIZED_VIEW.md)
 - [SHOW ALTER MATERIALIZED VIEW](./data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md)
 - [SHOW CREATE MATERIALIZED VIEW](./data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW.md)

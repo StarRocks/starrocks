@@ -488,8 +488,8 @@
                   "type": "category",
                   "label": "Resource group",
                   "items": [
-                  "sql-reference/sql-statements/Administration/CREATE_RESOURCE_GROUP",
                   "sql-reference/sql-statements/Administration/ALTER_RESOURCE_GROUP",
+                  "sql-reference/sql-statements/Administration/CREATE_RESOURCE_GROUP",
                   "sql-reference/sql-statements/Administration/DROP_RESOURCE_GROUP",
                   "sql-reference/sql-statements/Administration/SHOW_RESOURCE_GROUP",
                   "sql-reference/sql-statements/Administration/SHOW_USAGE_RESOURCE_GROUPS"
@@ -522,15 +522,21 @@
                 },
                 {
                   "type": "category",
-                  "label": "System configurations and files",
+                  "label": "Configurations and variables",
                   "items": [
                   "sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG",
                   "sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG",
+                  "sql-reference/sql-statements/Administration/SET",
+                  "sql-reference/sql-statements/Administration/SHOW_VARIABLES"
+                 ]
+                },
+                {
+                  "type": "category",
+                  "label": "File",
+                  "items": [
                   "sql-reference/sql-statements/Administration/CREATE_FILE",
                   "sql-reference/sql-statements/Administration/DROP_FILE",
-                  "sql-reference/sql-statements/Administration/SET",
-                  "sql-reference/sql-statements/Administration/SHOW_FILE",
-                  "sql-reference/sql-statements/Administration/SHOW_VARIABLES"
+                  "sql-reference/sql-statements/Administration/SHOW_FILE"
                  ]
                 },
                 {
@@ -669,11 +675,10 @@
                     "sql-reference/sql-statements/data-definition/CREATE_TABLE",
                     "sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT",
                     "sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE",
+                    "sql-reference/sql-statements/data-manipulation/DELETE",
                     "sql-reference/sql-statements/data-definition/DROP_INDEX",
                     "sql-reference/sql-statements/data-definition/DROP_TABLE",
                     "sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE",
-                    "sql-reference/sql-statements/data-definition/TRUNCATE_TABLE",
-                    "sql-reference/sql-statements/data-manipulation/DELETE",
                     "sql-reference/sql-statements/data-manipulation/SELECT",
                     "sql-reference/sql-statements/data-manipulation/SHOW_ALTER",
                     "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE",
@@ -684,6 +689,7 @@
                     "sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS",
                     "sql-reference/sql-statements/data-manipulation/SHOW_TABLES",
                     "sql-reference/sql-statements/data-manipulation/SHOW_TABLET",
+                    "sql-reference/sql-statements/data-definition/TRUNCATE_TABLE",
                     "sql-reference/sql-statements/data-manipulation/UPDATE"
                 ]
             },
@@ -697,8 +703,8 @@
                   "items": [
                     "sql-reference/sql-statements/data-definition/ALTER_VIEW",
                     "sql-reference/sql-statements/data-definition/CREATE_VIEW",
-                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW",
                     "sql-reference/sql-statements/data-definition/DROP_VIEW"
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW"
                   ]
                 },
                 {
@@ -706,9 +712,9 @@
                   "label": "Materialized view",
                   "items": [
                     "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                    "sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-manipulation/REFRESH_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW",
@@ -1535,15 +1541,21 @@
                   },
                   {
                     "type": "category",
-                    "label": "系统配置和文件",
+                    "label": "系统配置和变量",
                     "items": [
                     "sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG",
                     "sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG",
+                    "sql-reference/sql-statements/Administration/SET",
+                    "sql-reference/sql-statements/Administration/SHOW_VARIABLES"
+                   ]
+                  },
+                  {
+                    "type": "category",
+                    "label": "文件",
+                    "items": [
                     "sql-reference/sql-statements/Administration/CREATE_FILE",
                     "sql-reference/sql-statements/Administration/DROP_FILE",
-                    "sql-reference/sql-statements/Administration/SET",
-                    "sql-reference/sql-statements/Administration/SHOW_FILE",
-                    "sql-reference/sql-statements/Administration/SHOW_VARIABLES"
+                    "sql-reference/sql-statements/Administration/SHOW_FILE"
                    ]
                   },
                   {
@@ -1682,11 +1694,10 @@
                     "sql-reference/sql-statements/data-definition/CREATE_TABLE",
                     "sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT",
                     "sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE",
+                    "sql-reference/sql-statements/data-manipulation/DELETE",
                     "sql-reference/sql-statements/data-definition/DROP_INDEX",
                     "sql-reference/sql-statements/data-definition/DROP_TABLE",
                     "sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE",
-                    "sql-reference/sql-statements/data-definition/TRUNCATE_TABLE",
-                    "sql-reference/sql-statements/data-manipulation/DELETE",
                     "sql-reference/sql-statements/data-manipulation/SELECT",
                     "sql-reference/sql-statements/data-manipulation/SHOW_ALTER",
                     "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE",
@@ -1697,6 +1708,7 @@
                     "sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS",
                     "sql-reference/sql-statements/data-manipulation/SHOW_TABLES",
                     "sql-reference/sql-statements/data-manipulation/SHOW_TABLET",
+                    "sql-reference/sql-statements/data-definition/TRUNCATE_TABLE",
                     "sql-reference/sql-statements/data-manipulation/UPDATE"
                 ]
             },
@@ -1710,8 +1722,8 @@
                   "items": [
                     "sql-reference/sql-statements/data-definition/ALTER_VIEW",
                     "sql-reference/sql-statements/data-definition/CREATE_VIEW",
-                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW",
-                    "sql-reference/sql-statements/data-definition/DROP_VIEW"
+                    "sql-reference/sql-statements/data-definition/DROP_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW"
                   ]
                 },
                 {
@@ -1719,9 +1731,9 @@
                   "label": "物化视图",
                   "items": [
                     "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                    "sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-manipulation/REFRESH_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW",
                     "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW",

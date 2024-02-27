@@ -13,7 +13,8 @@ displayed_sidebar: "Chinese"
     - [资源组](#资源组)
     - [存储卷](#存储卷)
     - [表，tablet，副本检查与修复](#表tablet副本检查与修复)
-    - [系统配置、系统变量、文件](#系统配置系统变量文件)
+    - [系统配置、变量](#系统配置变量)
+    - [文件](#文件)
     - [SQL 黑名单](#sql-黑名单)
     - [插件](#插件)
     - [执行计划和 Profile](#执行计划和-profile)
@@ -77,8 +78,8 @@ displayed_sidebar: "Chinese"
 
 ### 资源组
 
-- [CREATE RESOURCE GROUP](./Administration/CREATE_RESOURCE_GROUP.md)
 - [ALTER RESOURCE GROUP](./Administration/ALTER_RESOURCE_GROUP.md)
+- [CREATE RESOURCE GROUP](./Administration/CREATE_RESOURCE_GROUP.md)
 - [DROP RESOURCE GROUP](./Administration/DROP_RESOURCE_GROUP.md)
 - [SHOW RESOURCE GROUP](./Administration/SHOW_RESOURCE_GROUP.md)
 - [SHOW USAGE RESOURCE GROUPS](./Administration/SHOW_USAGE_RESOURCE_GROUPS.md)
@@ -102,21 +103,24 @@ displayed_sidebar: "Chinese"
 - [ADMIN SHOW REPLICA STATUS](./Administration/ADMIN_SHOW_REPLICA_STATUS.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
-### 系统配置、系统变量、文件
+### 系统配置、变量
 
 - [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
 - [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
+- [SET (variable)](./Administration/SET.md)
+- [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
+
+### 文件
+
 - [CREATE FILE](./Administration/CREATE_FILE.md)
 - [DROP FILE](./Administration/DROP_FILE.md)
-- [SET (variable)](./Administration/SET.md)
 - [SHOW FILE](./Administration/SHOW_FILE.md)
-- [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
 
 ### SQL 黑名单
 
 - [ADD SQLBLACKLIST](./Administration/ADD_SQLBLACKLIST.md)
-- [SHOW SQLBLACKLIST](./Administration/SHOW_SQLBLACKLIST.md)
 - [DELETE SQLBLACKLIST](./Administration/DELETE_SQLBLACKLIST.md)
+- [SHOW SQLBLACKLIST](./Administration/SHOW_SQLBLACKLIST.md)
 
 ### 插件
 
@@ -212,7 +216,6 @@ displayed_sidebar: "Chinese"
 - [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
-- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
 - [SELECT](./data-manipulation/SELECT.md)
 - [SHOW ALTER TABLE](./data-manipulation/SHOW_ALTER.md)
 - [SHOW CREATE TABLE](./data-manipulation/SHOW_CREATE_TABLE.md)
@@ -223,6 +226,7 @@ displayed_sidebar: "Chinese"
 - [SHOW INDEX](./data-manipulation/SHOW_INDEX.md)
 - [SHOW TABLES](./data-manipulation/SHOW_TABLES.md)
 - [SHOW TABLET](./data-manipulation/SHOW_TABLET.md)
+- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
 - [UPDATE](./data-manipulation/UPDATE.md)
 
 ## 视图，物化视图
@@ -231,15 +235,15 @@ displayed_sidebar: "Chinese"
 
 - [ALTER VIEW](./data-definition/ALTER_VIEW.md)
 - [CREATE VIEW](./data-definition/CREATE_VIEW.md)
-- [SHOW CREATE VIEW](./data-manipulation/SHOW_CREATE_VIEW.md)
 - [DROP VIEW](./data-definition/DROP_VIEW.md)
+- [SHOW CREATE VIEW](./data-manipulation/SHOW_CREATE_VIEW.md)
 
 ### 物化视图
 
 - [ALTER MATERIALIZED VIEW](./data-definition/ALTER_MATERIALIZED_VIEW.md)
+- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [CREATE MATERIALIZED VIEW](./data-definition/CREATE_MATERIALIZED_VIEW.md)
 - [DROP MATERIALIZED VIEW](./data-definition/DROP_MATERIALIZED_VIEW.md)
-- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [REFRESH MATERIALIZED VIEW](./data-manipulation/REFRESH_MATERIALIZED_VIEW.md)
 - [SHOW ALTER MATERIALIZED VIEW](./data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md)
 - [SHOW CREATE MATERIALIZED VIEW](./data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW.md)
