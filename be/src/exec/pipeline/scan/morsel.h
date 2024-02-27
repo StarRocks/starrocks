@@ -111,7 +111,11 @@ private:
 class ScanSplitContext {
 public:
     virtual ~ScanSplitContext() = default;
-    bool is_last_split = false;
+    void set_last_split(bool v) { _is_last_split = v; }
+    bool is_last_split() const { return _is_last_split; }
+
+private:
+    bool _is_last_split = false;
 };
 using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
 
@@ -151,14 +155,9 @@ public:
     void set_split_context(ScanSplitContextPtr&& split_context) {
         if (split_context == nullptr) return;
         _split_context = std::move(split_context);
-        _is_last_split = _split_context->is_last_split;
+        _is_last_split = _split_context->is_last_split();
     }
-    ScanSplitContext* get_split_context() {
-        if (_split_context != nullptr) {
-            return _split_context.get();
-        }
-        return nullptr;
-    }
+    ScanSplitContext* get_split_context() { return _split_context.get(); }
 
     bool has_owner_id() const { return _has_owner_id; }
     int32_t owner_id() const { return _owner_id; }
