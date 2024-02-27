@@ -57,7 +57,7 @@ public:
     static std::string get_filename(const std::string& path) {
         std::size_t i = path.find_last_of("/");
         CHECK_NE(i, std::string::npos);
-        return path.substr(i, path.length());
+        return path.substr(i + 1);
     }
 };
 

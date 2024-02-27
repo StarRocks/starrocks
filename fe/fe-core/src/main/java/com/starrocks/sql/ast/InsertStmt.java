@@ -374,10 +374,6 @@ public class InsertStmt extends DmlStmt {
         }
 
         if (partitionBy == null) {
-            // prepend `data_` if path ends with forward slash
-            if (path.endsWith("/")) {
-                path += "data_";
-            }
             return new TableFunctionTable(path, format, compressionType, columns, null, false, props);
         }
 
