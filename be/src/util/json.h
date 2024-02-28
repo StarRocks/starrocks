@@ -109,6 +109,7 @@ public:
     ////////////////// serialization  //////////////////////
     size_t serialize(uint8_t* dst) const;
     uint64_t serialize_size() const;
+    uint64_t mem_usage() const { return serialize_size(); }
 
     ////////////////// RAW accessor ////////////////////////////
     Slice get_slice() const;

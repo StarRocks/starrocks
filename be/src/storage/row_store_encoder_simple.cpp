@@ -164,7 +164,7 @@ Status RowStoreEncoderSimple::decode_columns_from_full_row_column(const Schema& 
 
 // encode bitmap<column_num>
 void RowStoreEncoderSimple::encode_null_bitmap(BitmapValue& null_bitmap, std::string* dest) {
-    size_t len = null_bitmap.getSizeInBytes();
+    size_t len = null_bitmap.get_size_in_bytes();
     encode_integral<size_t>(len, dest);
     std::string bitmap_value;
     bitmap_value.reserve(len);
