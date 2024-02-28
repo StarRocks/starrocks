@@ -378,23 +378,85 @@ llvm::Module* JITEngine::Engine::module() const {
     return _module.get();
 }
 
-static void optimize_module(llvm::Module& module) {
-    llvm::legacy::FunctionPassManager fpm(&module);
-    llvm::PassManagerBuilder pass_manager_builder;
-    llvm::legacy::PassManager pass_manager;
-    pass_manager_builder.OptLevel = 3;
-    pass_manager_builder.SLPVectorize = true;
-    pass_manager_builder.LoopVectorize = true;
-    pass_manager_builder.VerifyInput = true;
-    pass_manager_builder.VerifyOutput = true;
-    pass_manager_builder.populateModulePassManager(pass_manager);
-    pass_manager_builder.populateFunctionPassManager(fpm);
+#include "common/config.h"
+static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
+    auto version = config::jit_pass_version;
+    switch (version) {
+    case 0: {
+        // Setup an optimiser pipeline
+        llvm::PassBuilder pass_builder;
+        llvm::LoopAnalysisManager loop_am;
+        llvm::FunctionAnalysisManager function_am;
+        llvm::CGSCCAnalysisManager cgscc_am;
+        llvm::ModuleAnalysisManager module_am;
 
-    fpm.doInitialization();
-    for (auto& function : module) {
-        fpm.run(function);
+        function_am.registerPass([&] { return target_analysis; });
+
+        // Register required analysis managers
+        pass_builder.registerModuleAnalyses(module_am);
+        pass_builder.registerCGSCCAnalyses(cgscc_am);
+        pass_builder.registerFunctionAnalyses(function_am);
+        pass_builder.registerLoopAnalyses(loop_am);
+        pass_builder.crossRegisterProxies(loop_am, function_am, cgscc_am, module_am);
+
+        pass_builder.registerPipelineStartEPCallback(
+                [&](llvm::ModulePassManager& module_pm, llvm::OptimizationLevel Level) {
+                    module_pm.addPass(llvm::ModuleInlinerPass());
+
+                    llvm::FunctionPassManager function_pm;
+                    function_pm.addPass(llvm::InstCombinePass());
+                    function_pm.addPass(llvm::PromotePass());
+                    function_pm.addPass(llvm::GVNPass());
+                    function_pm.addPass(llvm::NewGVNPass());
+                    function_pm.addPass(llvm::SimplifyCFGPass());
+                    function_pm.addPass(llvm::LoopVectorizePass());
+                    function_pm.addPass(llvm::SLPVectorizerPass());
+                    module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
+
+                    module_pm.addPass(llvm::GlobalOptPass());
+                });
+
+        pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3).run(module, module_am);
+    } break;
+    case 2: {
+        std::unique_ptr<llvm::legacy::PassManager> pass_manager(new llvm::legacy::PassManager());
+
+        pass_manager->add(llvm::createTargetTransformInfoWrapperPass(std::move(target_analysis)));
+        pass_manager->add(llvm::createFunctionInliningPass());
+        pass_manager->add(llvm::createInstructionCombiningPass());
+        pass_manager->add(llvm::createPromoteMemoryToRegisterPass());
+        pass_manager->add(llvm::createGVNPass());
+        pass_manager->add(llvm::createNewGVNPass());
+        pass_manager->add(llvm::createCFGSimplificationPass());
+        pass_manager->add(llvm::createLoopVectorizePass());
+        pass_manager->add(llvm::createSLPVectorizerPass());
+        pass_manager->add(llvm::createGlobalOptimizerPass());
+
+        // run the optimiser
+        llvm::PassManagerBuilder pass_builder;
+        pass_builder.OptLevel = 3;
+        pass_builder.populateModulePassManager(*pass_manager);
+        pass_manager->run(module);
+    } break;
+    default: {
+        llvm::legacy::FunctionPassManager fpm(&module);
+        llvm::PassManagerBuilder pass_manager_builder;
+        llvm::legacy::PassManager pass_manager;
+        pass_manager_builder.OptLevel = 3;
+        pass_manager_builder.SLPVectorize = true;
+        pass_manager_builder.LoopVectorize = true;
+        pass_manager_builder.VerifyInput = true;
+        pass_manager_builder.VerifyOutput = true;
+        pass_manager_builder.populateModulePassManager(pass_manager);
+        pass_manager_builder.populateFunctionPassManager(fpm);
+
+        fpm.doInitialization();
+        for (auto& function : module) {
+            fpm.run(function);
+        }
+        fpm.doFinalization();
     }
-    fpm.doFinalization();
+    }
 }
 
 // Optimise and compile the module.
@@ -404,7 +466,8 @@ Status JITEngine::Engine::optimize_and_finalize_module() {
     if (llvm::verifyModule(*_module, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to generate scalar function IR, errors: {}", errs.str()));
     }
-    optimize_module(*_module);
+    auto target_analysis = _target_machine->getTargetIRAnalysis();
+    optimize_module(*_module, std::move(target_analysis));
 
     if (llvm::verifyModule(*_module, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));
