@@ -55,7 +55,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -167,7 +167,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_aggregate_lake_tablet_reader";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -304,7 +304,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader_with_delete";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -442,7 +442,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader_with_delete_not_in_one";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };

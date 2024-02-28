@@ -123,7 +123,7 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_lake_primary_key";
     constexpr static const int kChunkSize = 12;
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = next_id();

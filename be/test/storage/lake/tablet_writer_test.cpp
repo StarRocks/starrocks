@@ -54,7 +54,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_tablet_writer";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
