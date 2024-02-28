@@ -443,15 +443,10 @@ public:
             de.is_dir = S_ISDIR(child_stat.st_mode);
             de.mtime = static_cast<int64_t>(child_stat.st_mtime);
             de.size = child_stat.st_size;
-<<<<<<< HEAD
-            // callback returning false means to terminate iteration
-            if (!cb(de)) {
-=======
             auto saved_errno = errno;
             auto r = cb(de);
             errno = saved_errno;
             if (!r) {
->>>>>>> eb8edd3ffc ([BugFix] Incorrect error checking in PosixFileSystem::iterate_dir (#41766))
                 break;
             }
         }
