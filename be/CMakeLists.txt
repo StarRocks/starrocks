@@ -435,6 +435,9 @@ include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 add_library(protobuf::libprotobuf ALIAS protobuf)
 add_library(ZLIB::ZLIB ALIAS libz)
 
+add_library(ubiqfpe STATIC IMPORTED)
+set_target_properties(ubiqfpe PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libubiqfpe.a)
+
 # Disable libdeflate on aarch64
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(libdeflate STATIC IMPORTED GLOBAL)
@@ -983,6 +986,9 @@ set(STARROCKS_DEPENDENCIES
     icuuc
     icui18n
     icudata
+    gmp
+    unistring
+    ubiqfpe
     ${WL_END_GROUP}
 )
 

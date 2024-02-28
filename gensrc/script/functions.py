@@ -835,6 +835,10 @@ vectorized_functions = [
     [120160, "sha2", False, False, "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2",
      "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
     [120161, "to_base64", False, True, "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64"],
+    [120170, "fpe_ff1_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "INT"], "EncryptionFunctions::fpe_ff1_encrypt"],
+    [120171, "fpe_encrypt_num", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::fpe_encrypt_num"],
+    [120172, "fpe_ff1_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "INT"], "EncryptionFunctions::fpe_ff1_decrypt"],
+    [120173, "fpe_decrypt_num", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::fpe_decrypt_num"],
 
     # geo function
     [120000, "ST_Point", False, False, "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point"],
