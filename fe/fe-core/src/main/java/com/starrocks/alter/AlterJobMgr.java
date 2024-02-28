@@ -907,6 +907,12 @@ public class AlterJobMgr {
         // 4. tablet type
         TTabletType tTabletType =
                 PropertyAnalyzer.analyzeTabletType(properties);
+        // 5. external cool down synced time
+        long externalCoolDownSyncedTime = PropertyAnalyzer.analyzeDatetimeProp(properties,
+                PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME, -1L);
+        // 6. external cool down consistency check time
+        long externalCoolDownConsistencyCheckTime = PropertyAnalyzer.analyzeDatetimeProp(properties,
+                PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME, -1L);
 
         // modify meta here
         for (String partitionName : partitionNames) {
@@ -958,8 +964,20 @@ public class AlterJobMgr {
             if (tTabletType != partitionInfo.getTabletType(partition.getId())) {
                 partitionInfo.setTabletType(partition.getId(), tTabletType);
             }
+            // 5. external cool down partition
+            if (externalCoolDownSyncedTime != -1L && !Objects.equals(externalCoolDownSyncedTime,
+                    partitionInfo.getExternalCoolDownSyncedTimeMs(partition.getId()))) {
+                partitionInfo.setExternalCoolDownSyncedTimeMs(partition.getId(), externalCoolDownSyncedTime);
+            }
+            // 6. external cool down partition
+            if (externalCoolDownConsistencyCheckTime != -1L && !Objects.equals(externalCoolDownConsistencyCheckTime,
+                    partitionInfo.getExternalCoolDownConsistencyCheckTimeMs(partition.getId()))) {
+                partitionInfo.setExternalCoolDownConsistencyCheckTimeMs(partition.getId(),
+                        externalCoolDownConsistencyCheckTime);
+            }
             ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
-                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory);
+                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory,
+                    externalCoolDownSyncedTime, externalCoolDownConsistencyCheckTime);
             modifyPartitionInfos.add(info);
         }
 
@@ -987,6 +1005,14 @@ public class AlterJobMgr {
                 }
             }
             partitionInfo.setIsInMemory(info.getPartitionId(), info.isInMemory());
+            if (info.getExternalCoolDownSyncedTimeMs() != -1L) {
+                partitionInfo.setExternalCoolDownSyncedTimeMs(
+                        info.getPartitionId(), info.getExternalCoolDownSyncedTimeMs());
+            }
+            if (info.getExternalCoolDownConsistencyCheckTimeMs() != -1L) {
+                partitionInfo.setExternalCoolDownConsistencyCheckTimeMs(
+                        info.getPartitionId(), info.getExternalCoolDownConsistencyCheckTimeMs());
+            }
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }

@@ -37,7 +37,9 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Writable;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -57,6 +59,10 @@ public class ModifyPartitionInfo implements Writable {
     private short replicationNum;
     @SerializedName(value = "isInMemory")
     private boolean isInMemory;
+    @SerializedName(value = "externalCoolDownSyncedTimeMs")
+    private long externalCoolDownSyncedTimeMs;
+    @SerializedName(value = "externalCoolDownConsistencyCheckTimeMs")
+    private long externalCoolDownConsistencyCheckTimeMs;
 
     public ModifyPartitionInfo() {
         // for persist
@@ -65,12 +71,22 @@ public class ModifyPartitionInfo implements Writable {
     public ModifyPartitionInfo(long dbId, long tableId, long partitionId,
                                DataProperty dataProperty, short replicationNum,
                                boolean isInMemory) {
+        this(dbId, tableId, partitionId, dataProperty, replicationNum, isInMemory, -1L, -1L);
+    }
+
+    public ModifyPartitionInfo(long dbId, long tableId, long partitionId,
+                               DataProperty dataProperty, short replicationNum,
+                               boolean isInMemory,
+                               long externalCoolDownSyncedTimeMs,
+                               long externalCoolDownConsistencyCheckTimeMs) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partitionId = partitionId;
         this.dataProperty = dataProperty;
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
+        this.externalCoolDownSyncedTimeMs = externalCoolDownSyncedTimeMs;
+        this.externalCoolDownConsistencyCheckTimeMs = externalCoolDownConsistencyCheckTimeMs;
     }
 
     public long getDbId() {
@@ -97,6 +113,14 @@ public class ModifyPartitionInfo implements Writable {
         return isInMemory;
     }
 
+    public long getExternalCoolDownSyncedTimeMs() {
+        return externalCoolDownSyncedTimeMs;
+    }
+
+    public long getExternalCoolDownConsistencyCheckTimeMs() {
+        return externalCoolDownConsistencyCheckTimeMs;
+    }
+
     public static ModifyPartitionInfo read(DataInput in) throws IOException {
         ModifyPartitionInfo info = new ModifyPartitionInfo();
         info.readFields(in);
@@ -119,7 +143,9 @@ public class ModifyPartitionInfo implements Writable {
         ModifyPartitionInfo otherInfo = (ModifyPartitionInfo) other;
         return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
                 dataProperty.equals(otherInfo.getDataProperty()) && replicationNum == otherInfo.getReplicationNum()
-                && isInMemory == otherInfo.isInMemory();
+                && isInMemory == otherInfo.isInMemory()
+                && externalCoolDownSyncedTimeMs == otherInfo.externalCoolDownSyncedTimeMs
+                && externalCoolDownConsistencyCheckTimeMs == otherInfo.externalCoolDownConsistencyCheckTimeMs;
     }
 
     @Override
@@ -137,6 +163,9 @@ public class ModifyPartitionInfo implements Writable {
 
         out.writeShort(replicationNum);
         out.writeBoolean(isInMemory);
+
+        out.writeLong(externalCoolDownSyncedTimeMs);
+        out.writeLong(externalCoolDownConsistencyCheckTimeMs);
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -153,6 +182,11 @@ public class ModifyPartitionInfo implements Writable {
 
         replicationNum = in.readShort();
         isInMemory = in.readBoolean();
+
+        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_5) {
+            externalCoolDownSyncedTimeMs = in.readLong();
+            externalCoolDownConsistencyCheckTimeMs = in.readLong();
+        }
     }
 
 }

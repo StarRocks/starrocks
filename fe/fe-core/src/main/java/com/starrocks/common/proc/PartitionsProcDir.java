@@ -80,6 +80,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /*
@@ -141,7 +142,10 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("LastConsistencyCheckTime")
                     .add("DataSize")
                     .add("IsInMemory")
-                    .add("RowCount");
+                    .add("RowCount")
+                    .add("ExternalCoolDownSyncedTime")
+                    .add("ExternalCoolDownConsistencyCheckTime")
+                    .add("ExternalCoolDownConsistencyCheckDifference");
             this.titleNames = builder.build();
         }
     }
@@ -362,6 +366,23 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(byteSizeValue);
         partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
         partitionInfo.add(physicalPartition.storageRowCount());
+
+        Long externalCoolDownSyncedTimeMs = tblPartitionInfo.getExternalCoolDownSyncedTimeMs(partition.getId());
+        if (externalCoolDownSyncedTimeMs == null) {
+            partitionInfo.add("NULL");
+        } else {
+            partitionInfo.add(TimeUtils.longToTimeString(externalCoolDownSyncedTimeMs));
+        }
+
+        Long externalCoolDownConsistencyCheckTimeMs = tblPartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(
+                partition.getId());
+        if (externalCoolDownConsistencyCheckTimeMs == null) {
+            partitionInfo.add("NULL");
+        } else {
+            partitionInfo.add(TimeUtils.longToTimeString(externalCoolDownConsistencyCheckTimeMs));
+        }
+        Long diff = tblPartitionInfo.getExternalCoolDownConsistencyCheckDifference(partition.getId());
+        partitionInfo.add(Objects.requireNonNullElse(diff, "NULL"));
 
         return partitionInfo;
     }

@@ -37,11 +37,14 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -87,6 +90,16 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
     // storage cache, ttl and enable_async_write_back
     @SerializedName(value = "idToStorageCacheInfo")
     protected Map<Long, DataCacheInfo> idToStorageCacheInfo;
+    // partition id -> last external cool down time
+    @SerializedName(value = "idToExternalCoolDownSyncedTimeMs")
+    protected Map<Long, Long> idToExternalCoolDownSyncedTimeMs;
+
+    // partition id -> last external cool down data consistency check time
+    @SerializedName(value = "idToExternalCoolDownConsistencyCheckTimeMs")
+    protected Map<Long, Long> idToExternalCoolDownConsistencyCheckTimeMs;
+    // partition id -> last consistency cool down data consistency check difference (olap - iceberg)
+    @SerializedName(value = "idToExternalCoolDownConsistencyCheckDifference")
+    protected Map<Long, Long> idToExternalCoolDownConsistencyCheckDifference;
 
 
     public PartitionInfo() {
@@ -95,6 +108,9 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         this.idToInMemory = new HashMap<>();
         this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
+        this.idToExternalCoolDownSyncedTimeMs = new HashMap<>();
+        this.idToExternalCoolDownConsistencyCheckTimeMs = new HashMap<>();
+        this.idToExternalCoolDownConsistencyCheckDifference = new HashMap<>();
     }
 
     public PartitionInfo(PartitionType type) {
@@ -104,6 +120,9 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         this.idToInMemory = new HashMap<>();
         this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
+        this.idToExternalCoolDownSyncedTimeMs = new HashMap<>();
+        this.idToExternalCoolDownConsistencyCheckTimeMs = new HashMap<>();
+        this.idToExternalCoolDownConsistencyCheckDifference = new HashMap<>();
     }
 
     public PartitionType getType() {
@@ -186,10 +205,37 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         idToStorageCacheInfo.put(partitionId, dataCacheInfo);
     }
 
+    public Long getExternalCoolDownSyncedTimeMs(long partitionId) {
+        return idToExternalCoolDownSyncedTimeMs.get(partitionId);
+    }
+
+    public void setExternalCoolDownSyncedTimeMs(long partitionId, long coldDownTimeMs) {
+        idToExternalCoolDownSyncedTimeMs.put(partitionId, coldDownTimeMs);
+    }
+
+    public Long getExternalCoolDownConsistencyCheckTimeMs(long partitionId) {
+        return idToExternalCoolDownConsistencyCheckTimeMs.get(partitionId);
+    }
+
+    public void setExternalCoolDownConsistencyCheckTimeMs(long partitionId, long checkTimeMs) {
+        idToExternalCoolDownConsistencyCheckTimeMs.put(partitionId, checkTimeMs);
+    }
+
+    public Long getExternalCoolDownConsistencyCheckDifference(long partitionId) {
+        return idToExternalCoolDownConsistencyCheckDifference.get(partitionId);
+    }
+
+    public void setCoolDownConsistencyCheckDifference(long partitionId, long difference) {
+        idToExternalCoolDownConsistencyCheckDifference.put(partitionId, difference);
+    }
+
     public void dropPartition(long partitionId) {
         idToDataProperty.remove(partitionId);
         idToReplicationNum.remove(partitionId);
         idToInMemory.remove(partitionId);
+        idToExternalCoolDownSyncedTimeMs.remove(partitionId);
+        idToExternalCoolDownConsistencyCheckTimeMs.remove(partitionId);
+        idToExternalCoolDownConsistencyCheckDifference.remove(partitionId);
     }
 
     public void moveRangeFromTempToFormal(long tempPartitionId) {
@@ -201,6 +247,24 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         idToDataProperty.put(partitionId, dataProperty);
         idToReplicationNum.put(partitionId, replicationNum);
         idToInMemory.put(partitionId, isInMemory);
+        idToExternalCoolDownSyncedTimeMs.put(partitionId, 0L);
+        idToExternalCoolDownConsistencyCheckTimeMs.put(partitionId, 0L);
+        idToExternalCoolDownConsistencyCheckDifference.put(partitionId, 0L);
+    }
+
+    public boolean couldUseExternalCoolDownPartition(Partition partition) {
+        return partition.getVisibleVersionTime() <= this.getExternalCoolDownSyncedTimeMs(partition.getId()) &&
+                this.getExternalCoolDownSyncedTimeMs(partition.getId()) > 0;
+    }
+
+    public boolean couldUseExternalCoolDownPartition(Partition partition, long visibleVersionTime) {
+        // just change from 1(initial version) to 2
+        if (partition.getVisibleVersion() == 2) {
+            return true;
+        }
+
+        return visibleVersionTime <= this.getExternalCoolDownSyncedTimeMs(partition.getId()) &&
+                this.getExternalCoolDownSyncedTimeMs(partition.getId()) > 0;
     }
 
     public void addPartition(long partitionId, DataProperty dataProperty,
@@ -250,6 +314,10 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
 
             out.writeShort(idToReplicationNum.get(entry.getKey()));
             out.writeBoolean(idToInMemory.get(entry.getKey()));
+
+            out.writeLong(idToExternalCoolDownSyncedTimeMs.get(entry.getKey()));
+            out.writeLong(idToExternalCoolDownConsistencyCheckTimeMs.get(entry.getKey()));
+            out.writeLong(idToExternalCoolDownConsistencyCheckDifference.get(entry.getKey()));
         }
     }
 
@@ -269,6 +337,12 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
             short replicationNum = in.readShort();
             idToReplicationNum.put(partitionId, replicationNum);
             idToInMemory.put(partitionId, in.readBoolean());
+
+            if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_5) {
+                idToExternalCoolDownSyncedTimeMs.put(partitionId, in.readLong());
+                idToExternalCoolDownConsistencyCheckTimeMs.put(partitionId, in.readLong());
+                idToExternalCoolDownConsistencyCheckDifference.put(partitionId, in.readLong());
+            }
         }
     }
 
@@ -295,6 +369,19 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
             buff.append(" data_property: ").append(entry.getValue().toString());
             buff.append(" replica number: ").append(idToReplicationNum.get(entry.getKey()));
             buff.append(" in memory: ").append(idToInMemory.get(entry.getKey()));
+
+            if (idToExternalCoolDownSyncedTimeMs.get(entry.getKey()) != null) {
+                buff.append(" external cool down time: ").append(
+                        TimeUtils.longToTimeString(idToExternalCoolDownSyncedTimeMs.get(entry.getKey())));
+            }
+            if (idToExternalCoolDownConsistencyCheckTimeMs.get(entry.getKey()) != null) {
+                buff.append(" external cool down consistency check time: ").append(
+                        TimeUtils.longToTimeString(idToExternalCoolDownConsistencyCheckTimeMs.get(entry.getKey())));
+            }
+            if (idToExternalCoolDownConsistencyCheckDifference.get(entry.getKey()) != null) {
+                buff.append(" external cool down consistency check result: ").append(
+                        idToExternalCoolDownConsistencyCheckDifference.get(entry.getKey()));
+            }
         }
 
         return buff.toString();
@@ -318,6 +405,9 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
             p.idToInMemory = this.idToInMemory;
             p.idToTabletType = this.idToTabletType;
             p.idToStorageCacheInfo = this.idToStorageCacheInfo;
+            p.idToExternalCoolDownSyncedTimeMs = this.idToExternalCoolDownSyncedTimeMs;
+            p.idToExternalCoolDownConsistencyCheckTimeMs = this.idToExternalCoolDownConsistencyCheckTimeMs;
+            p.idToExternalCoolDownConsistencyCheckDifference = this.idToExternalCoolDownConsistencyCheckDifference;
             return p;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
