@@ -20,7 +20,7 @@ displayed_sidebar: "Chinese"
       cumulative_compaction_check_interval_seconds = 2
       ```
 
-    - 对于主键表：可以适当调大 `update_compaction_num_threads_per_disk` 的值。适当调小 `update_compaction_per_tablet_min_interval_seconds` 的值。
+  - 对于主键表：可以适当调大 `update_compaction_num_threads_per_disk` 的值。适当调小 `update_compaction_per_tablet_min_interval_seconds` 的值。
 
   修改完成后，需要观察内存和 I/O，确保内存和 I/O 正常。
 
