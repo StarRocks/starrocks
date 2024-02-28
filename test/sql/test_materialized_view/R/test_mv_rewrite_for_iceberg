@@ -1,21 +1,39 @@
 -- name: test_mv_rewrite_for_hive
-
 set catalog default_catalog;
+-- result:
+-- !result
 create database mv_db_${uuid0};
+-- result:
+-- !result
 use mv_db_${uuid0};
+-- result:
+-- !result
 function: prepare_data("ssb", "mv_db_${uuid0}")
-
-create external catalog catalog_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
-
+-- result:
+None
+-- !result
+create external catalog catalog_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
 create database catalog_${uuid0}.mv_db_${uuid0};
-
+-- result:
+-- !result
 function: prepare_external_data("ssb", "catalog_${uuid0}", "mv_db_${uuid0}", "mv_db_${uuid0}")
-
+-- result:
+None
+-- !result
 use default_catalog.mv_db_${uuid0};
+-- result:
+-- !result
 function: prepare_flat_mv("catalog_${uuid0}", "mv_db_${uuid0}")
-
+-- result:
+None
+-- !result
 refresh materialized view lineorder_flat_mv with sync mode;
-
 function: test_ssb_rewrite("catalog_${uuid0}", "mv_db_${uuid0}")
-
+-- result:
+None
+-- !result
 drop catalog catalog_${uuid0};
+-- result:
+-- !result

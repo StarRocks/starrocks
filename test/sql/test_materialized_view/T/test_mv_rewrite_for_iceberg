@@ -1,11 +1,11 @@
--- name: test_mv_rewrite_for_hive
+-- name: test_mv_rewrite_for_iceberg
 
 set catalog default_catalog;
 create database mv_db_${uuid0};
 use mv_db_${uuid0};
 function: prepare_data("ssb", "mv_db_${uuid0}")
 
-create external catalog catalog_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+create external catalog catalog_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
 
 create database catalog_${uuid0}.mv_db_${uuid0};
 

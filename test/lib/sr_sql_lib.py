@@ -1015,7 +1015,7 @@ class StarrocksSQLApiLib(object):
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
         for expect in expects:
-            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan for query: %s" % (expect, query))
 
     def check_no_hit_materialized_view(self, query, *expects):
         """
@@ -1241,6 +1241,40 @@ class StarrocksSQLApiLib(object):
                     res["Status"] = "Failed"
         return res
 
+    def get_file_list(self, directory):
+        if not os.path.isdir(directory):
+            return []
+
+        file_list = [f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+        return file_list
+
+    def test_ssb_rewrite(self, catalog_name, database_name):
+        tables = ['lineorder', 'customer', 'dates', 'part', 'supplier']
+        replacements = {}
+        for table in tables:
+            replacements[" " + table] = " " + '.'.join([catalog_name, database_name, table])
+
+        dir_name = "query-ssb"
+        dir_path = os.path.join(common_sql_path, dir_name)
+        queries = self.get_file_list(dir_path)
+        for query_file in queries:
+            dir_name = "query-ssb"
+            dir_path = os.path.join(common_sql_path, dir_name)
+            query_sql = self.get_sql_from_file(query_file, dir_path)
+            for key, value in replacements.items():
+                query_sql = query_sql.replace(key, value)
+            self.check_hit_materialized_view(query_sql, "lineorder_flat_mv")
+
+    def prepare_flat_mv(self, catalog_name, database_name):
+        dir_name = "ssb-external"
+        dir_path = os.path.join(common_sql_path, dir_name)
+        create_flat_mv_sql = self.get_sql_from_file("flat_mv.sql", dir_path)
+        create_flat_mv_sql = create_flat_mv_sql.replace('catalog_name', catalog_name)
+        create_flat_mv_sql = create_flat_mv_sql.replace('database_name', database_name)
+        res = self.execute_sql(create_flat_mv_sql, True)
+        tools.assert_true(res["status"], "create materialized view %s error, %s" % ('lineorder_flat_mv', res["msg"]))
+
+
     # should prepare data in src_db, then call this function to create table in external catalog
     # and load data from src_db into external catalog tables
     def prepare_external_data(self, data_name, catalog, db, src_db):
@@ -1258,7 +1292,10 @@ class StarrocksSQLApiLib(object):
 
         # create tables
         dir_name = "%s-external" % (data_name)
-        create_table_sqls = self.get_sql_from_file("create.sql", dir_path=os.path.join(common_sql_path, dir_name))
+        dir_path = os.path.join(common_sql_path, dir_name)
+        create_table_sqls = self.get_sql_from_file("create.sql", dir_path)
+        create_table_sqls = create_table_sqls.replace('catalog', catalog)
+        create_table_sqls = create_table_sqls.replace('database', db)
         res = self.execute_sql(create_table_sqls, True)
         tools.assert_true(res["status"], "create %s table error, %s" % (data_name, res["msg"]))
 
@@ -1268,7 +1305,7 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(res["status"], res["msg"])
         tables = res["result"]
         for table in tables:
-            insert_sql = 'insert into %s.%s.%s select * from default_catalog.%s.%s' % (catalog, db, table, src_db, table)
+            insert_sql = 'insert into %s.%s.%s select * from default_catalog.%s.%s' % (catalog, db, table[0], src_db, table[0])
             res = self.execute_sql(insert_sql, True)
             tools.assert_true(res["status"], "insert table %s error, %s" % (table, res["msg"]))
 
