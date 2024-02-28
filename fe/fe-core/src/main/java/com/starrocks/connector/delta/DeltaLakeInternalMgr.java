@@ -37,7 +37,7 @@ import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class DeltaLakeInternalMgr {
-    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue");
+    public static final List<String> SUPPORTED_METASTORE_TYPE = ImmutableList.of("hive", "glue", "dlf");
     private final String catalogName;
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
