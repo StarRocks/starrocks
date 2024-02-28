@@ -126,6 +126,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：false
 - 引入版本：3.1.5
 
+### 用户，角色，权限
+
+#### privilege_max_total_roles_per_user
+
+- 含义：每个用户最多可以拥有的角色数量。
+- 默认值：64
+- 引入版本：v3.0.0
+
+#### privilege_max_role_depth
+
+- 含义：每个角色最多的嵌套层数。
+- 默认值：16
+- 引入版本：v3.0.0
+
 ### Query engine
 
 #### max_allowed_in_element_num_of_delete
@@ -861,18 +875,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：单次物化视图刷新需更新多个分区时，任务将分批执行。该值用于指定单个批次内刷新的分区数。
 - 默认值：1
 - 引入版本：v3.2.3
-
-##### privilege_max_total_roles_per_user
-
-- 含义：每个用户最多可以拥有的角色数量。
-- 默认值：64
-- 引入版本：v3.0.0
-
-##### privilege_max_role_depth
-
-- 含义：每个角色最多的嵌套层数。
-- 默认值：16
-- 引入版本：v3.0.0
 
 ## 配置 FE 静态参数
 
