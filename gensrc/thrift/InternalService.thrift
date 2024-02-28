@@ -278,7 +278,8 @@ struct TQueryOptions {
   118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
 
   119: optional bool enable_result_sink_accumulate;
-  
+  120: optional bool enable_connector_split_io_tasks = false;
+
   130: optional bool enable_wait_dependent_event = false;
 }
 

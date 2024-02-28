@@ -918,7 +918,6 @@ public class LeaderImpl {
             tableMeta.setTable_type(TableType.serialize(table.getType()));
             tableMeta.setDb_id(db.getId());
             tableMeta.setDb_name(dbName);
-            tableMeta.setCluster_id(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId());
             tableMeta.setState(olapTable.getState().name());
             tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
             if (olapTable.getCopiedBfColumns() != null) {

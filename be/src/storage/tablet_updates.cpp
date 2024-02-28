@@ -3227,14 +3227,17 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
 
 Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                           EditVersion* full_edit_version) {
+    int64_t begin_ms = MonotonicMillis();
     if (_error) {
         return Status::InternalError(
                 strings::Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
                                     _tablet.tablet_id(), _error_msg));
     }
     std::unique_lock<std::mutex> ul(_lock);
+    int64_t get_lock_ms = MonotonicMillis();
     // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
+    int64_t wait_ver_ms = MonotonicMillis();
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute(
                 "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. Please "
@@ -3263,10 +3266,20 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
             if (full_edit_version != nullptr) {
                 *full_edit_version = edit_version_info->version;
             }
+            int64_t end_ms = MonotonicMillis();
+            if (end_ms - begin_ms > 3 * 1000) {
+                // more than 3 seconds
+                LOG(INFO) << strings::Substitute("get_applied_rowsets(version $0) slow cost ($1/$2/$3)", version,
+                                                 get_lock_ms - begin_ms, wait_ver_ms - get_lock_ms,
+                                                 end_ms - wait_ver_ms);
+            }
             return Status::OK();
         }
     }
-    string msg = strings::Substitute("get_applied_rowsets(version $0) failed $1", version, _debug_version_info(false));
+    int64_t end_ms = MonotonicMillis();
+    string msg = strings::Substitute("get_applied_rowsets(version $0) failed $1 cost ($2/$3/$4)", version,
+                                     _debug_version_info(false), get_lock_ms - begin_ms, wait_ver_ms - get_lock_ms,
+                                     end_ms - wait_ver_ms);
     LOG(WARNING) << msg;
     return Status::NotFound(msg);
 }
@@ -3531,6 +3544,15 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
     Schema base_schema = ChunkHelper::convert_schema(base_tablet_schema, chunk_changer->get_selected_column_indexes());
+    auto tschema = _tablet.tablet_schema();
+    std::vector<ColumnId> cids;
+    for (size_t i = 0; i < tschema->num_columns(); i++) {
+        if (tschema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+        cids.push_back(i);
+    }
+    Schema new_schema = ChunkHelper::convert_schema(tschema, cids);
 
     OlapReaderStatistics stats;
 
@@ -3579,7 +3601,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         }
 
         // notice: rowset's del files not linked, it's not useful
-        status = _convert_from_base_rowset(base_schema, seg_iterator, chunk_changer, rowset_writer);
+        status = _convert_from_base_rowset(base_schema, new_schema, seg_iterator, chunk_changer, rowset_writer);
         if (!status.ok()) {
             LOG(WARNING) << err_msg_header << "failed to convert from base rowset, exit alter process, "
                          << status.to_string();
@@ -3693,12 +3715,10 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     return Status::OK();
 }
 
-Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const ChunkIteratorPtr& seg_iterator,
-                                                ChunkChanger* chunk_changer,
+Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const Schema& new_schema,
+                                                const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-
-    Schema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -3793,6 +3813,14 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     size_t total_rows = 0;
     size_t total_files = 0;
     auto tschema = _tablet.tablet_schema();
+    std::vector<ColumnId> cids;
+    for (size_t i = 0; i < tschema->num_columns(); i++) {
+        if (tschema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+        cids.push_back(i);
+    }
+    Schema new_schema = ChunkHelper::convert_schema(tschema, cids);
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
 
@@ -3827,7 +3855,6 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         }
 
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-        Schema new_schema = ChunkHelper::convert_schema(tschema);
 
         for (auto& seg_iterator : seg_iterators) {
             if (seg_iterator.get() == nullptr) {

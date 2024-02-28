@@ -64,6 +64,8 @@ public:
 
     Status shutdown() override;
 
+    DataCacheEngineType engine_type() override { return DataCacheEngineType::CACHELIB; }
+
 private:
     std::unordered_map<std::string, double> cache_stats();
     void _dump_cache_stats();

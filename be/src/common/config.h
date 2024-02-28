@@ -805,6 +805,9 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // When it's 0, low speed limit check will be disabled.
 CONF_Int64(object_storage_request_timeout_ms, "-1");
 
+CONF_Strings(fallback_to_hadoop_fs_list, "");
+CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
+
 // text reader
 // Spilt text file's scan range into io ranges of 16mb size
 CONF_Int64(text_io_range_size, "16777216");
@@ -821,7 +824,6 @@ CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
-CONF_Bool(parquet_late_materialization_v2_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
@@ -918,6 +920,7 @@ CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
+CONF_Int64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
@@ -937,7 +940,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
-CONF_mBool(lake_print_delete_log, "true");
+CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");

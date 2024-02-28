@@ -200,9 +200,21 @@ protected:
 
 static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
     TabletReaderParams params;
-    if (!reader.prepare().ok()) {
-        LOG(ERROR) << "reader prepare failed";
-        return nullptr;
+    int retry_cnt = 1;
+    while (true) {
+        // retry 3 times, in case version not ready
+        if (!reader.prepare().ok()) {
+            LOG(ERROR) << "reader prepare failed, retry cnt: " << retry_cnt;
+            if (retry_cnt < 3) {
+                retry_cnt++;
+            } else {
+                // fail
+                return nullptr;
+            }
+        } else {
+            // success
+            break;
+        }
     }
     std::vector<ChunkIteratorPtr> seg_iters;
     if (!reader.get_segment_iterators(params, &seg_iters).ok()) {
