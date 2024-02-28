@@ -16,26 +16,20 @@ displayed_sidebar: "English"
 ## Loading
 
 - [ALTER LOAD](./data-manipulation/ALTER_LOAD.md)
-- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
 - [ALTER ROUTINE LOAD](./data-manipulation/ALTER_ROUTINE_LOAD.md)
 - [BROKER LOAD](./data-manipulation/BROKER_LOAD.md)
 - [CANCEL LOAD](./data-manipulation/CANCEL_LOAD.md)
-- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
 - [CREATE ROUTINE LOAD](./data-manipulation/CREATE_ROUTINE_LOAD.md)
-- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
 - [INSERT](./data-manipulation/INSERT.md)
 - [PAUSE ROUTINE LOAD](./data-manipulation/PAUSE_ROUTINE_LOAD.md)
 - [RESUME ROUTINE LOAD](./data-manipulation/RESUME_ROUTINE_LOAD.md)
-- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
 - [SHOW LOAD](./data-manipulation/SHOW_LOAD.md)
-- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SHOW ROUTINE LOAD](./data-manipulation/SHOW_ROUTINE_LOAD.md)
 - [SHOW ROUTINE LOAD TASK](./data-manipulation/SHOW_ROUTINE_LOAD_TASK.md)
 - [SHOW TRANSACTION](./data-manipulation/SHOW_TRANSACTION.md)
 - [STOP ROUTINE LOAD](./data-manipulation/STOP_ROUTINE_LOAD.md)
 - [SPARK LOAD](./data-manipulation/SPARK_LOAD.md)
 - [STREAM LOAD](./data-manipulation/STREAM_LOAD.md)
-- [SUSPEND or RESUME PIPE](./data-manipulation/SUSPEND_or_RESUME_PIPE.md)
 
 ## Unloading
 
