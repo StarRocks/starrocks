@@ -28,7 +28,7 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
     - [Catalog](#catalog)
     - [Database](#database)
     - [Resource](#resource)
-  - [Table, partition, index](#table-partition-index)
+  - [Table, partition, bucket, index](#table-partition-bucket-index)
   - [View, materialized view](#view-materialized-view)
     - [View](#view)
     - [Materialized view](#materialized-view)
@@ -204,7 +204,7 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [SHOW RESOURCES](./data-definition/SHOW_RESOURCES.md)
 
-## Table, partition, index
+## Table, partition, bucket, index
 
 - [ALTER TABLE](./data-definition/ALTER_TABLE.md)
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)

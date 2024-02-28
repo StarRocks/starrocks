@@ -4,6 +4,15 @@ displayed_sidebar: "English"
 
 # General DML
 
+- [General DML](#general-dml)
+  - [Loading](#loading)
+  - [Unloading](#unloading)
+  - [ETL task](#etl-task)
+  - [SHOW](#show)
+  - [DELETE](#delete)
+  - [UPDATE](#update)
+  - [SELECT](#select)
+
 ## Loading
 
 - [ALTER LOAD](./data-manipulation/ALTER_LOAD.md)

@@ -4,6 +4,19 @@ displayed_sidebar: "English"
 
 # General DDL
 
+- [General DDL](#general-ddl)
+  - [CREATE](#create)
+  - [ALTER](#alter)
+  - [DROP](#drop)
+  - [REFRESH](#refresh)
+  - [TRUNCATE TABLE](#truncate-table)
+  - [BACKUP and RESTORE](#backup-and-restore)
+  - [SET](#set)
+  - [CANCEL](#cancel)
+  - [KILL](#kill)
+  - [Utility commands](#utility-commands)
+
+
 ## CREATE
 
 - [ANALYZE TABLE](./data-definition/ANALYZE_TABLE.md)

@@ -28,7 +28,7 @@ displayed_sidebar: "Chinese"
     - [Catalog](#catalog)
     - [数据库](#数据库)
     - [资源](#资源)
-  - [表，分区，索引](#表分区索引)
+  - [表，分区，分桶，索引](#表分区分桶索引)
   - [视图，物化视图](#视图物化视图)
     - [视图](#视图)
     - [物化视图](#物化视图)
@@ -204,7 +204,7 @@ displayed_sidebar: "Chinese"
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [SHOW RESOURCES](./data-definition/SHOW_RESOURCES.md)
 
-## 表，分区，索引
+## 表，分区，分桶，索引
 
 - [ALTER TABLE](./data-definition/ALTER_TABLE.md)
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)

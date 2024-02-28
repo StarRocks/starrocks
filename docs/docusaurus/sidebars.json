@@ -667,7 +667,7 @@
             },
             {
               "type": "category",
-              "label": "Table, partition, index",
+              "label": "Table, partition, bucket, index",
               "items": [
                     "sql-reference/sql-statements/data-definition/ALTER_TABLE",
                     "sql-reference/sql-statements/data-definition/CANCEL_ALTER_TABLE",
@@ -1749,7 +1749,7 @@
             },
             {
               "type": "category",
-              "label": "表，分区，索引",
+              "label": "表，分区，分桶，索引",
               "items": [
                     "sql-reference/sql-statements/data-definition/ALTER_TABLE",
                     "sql-reference/sql-statements/data-definition/CANCEL_ALTER_TABLE",

@@ -2,7 +2,19 @@
 displayed_sidebar: "Chinese"
 ---
 
-# DDL
+# DDL 概览
+
+- [DDL 概览](#ddl-概览)
+  - [CREATE](#create)
+  - [ALTER](#alter)
+  - [DROP](#drop)
+  - [REFRESH](#refresh)
+  - [TRUNCATE TABLE](#truncate-table)
+  - [BACKUP and RESTORE](#backup-and-restore)
+  - [SET](#set)
+  - [CANCEL](#cancel)
+  - [KILL](#kill)
+  - [Utility commands](#utility-commands)
 
 ## CREATE
 
