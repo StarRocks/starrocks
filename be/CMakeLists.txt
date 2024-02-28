@@ -387,6 +387,9 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
 endif()
 
+add_library(ubiqfpe STATIC IMPORTED)
+set_target_properties(ubiqfpe PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libubiqfpe.a)
+
 # cachelib
 set(CACHELIB_DEPENDENCIES
     cachelib_common
@@ -911,6 +914,9 @@ set(STARROCKS_DEPENDENCIES
     serdes
     fiu
     ${LLVM_LIBRARIES}
+    gmp
+    unistring
+    ubiqfpe
     ${WL_END_GROUP}
 )
 

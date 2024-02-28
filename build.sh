@@ -71,6 +71,10 @@ else
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/libubiqfpe.a ]]; then
+        echo "Thirdparty libraries need to be build ..."
+        ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
+    fi
     PARALLEL=$[$(nproc)/4+1]
 fi
 
