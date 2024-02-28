@@ -42,12 +42,16 @@ export STARROCKS_HOME=${ROOT}
 
 . ${STARROCKS_HOME}/env.sh
 
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
-    echo "Thirdparty libraries need to be build ..."
-    ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
+if [[ $OSTYPE == darwin* ]] ; then
+    PARALLEL=$(sysctl -n hw.ncpu)
+    # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
+else
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/libubiqfpe.a ]]; then
+        echo "Thirdparty libraries need to be build ..."
+        ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
+    fi
+    PARALLEL=$[$(nproc)/4+1]
 fi
-
-PARALLEL=$[$(nproc)/4+1]
 
 # Check args
 usage() {

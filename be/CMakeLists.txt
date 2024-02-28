@@ -325,6 +325,9 @@ set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THI
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+add_library(ubiqfpe STATIC IMPORTED)
+set_target_properties(ubiqfpe PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libubiqfpe.a)
+
 # cachelib
 set(CACHELIB_DEPENDENCIES
     cachelib_common
@@ -642,6 +645,9 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_resources
     opentelemetry_common
     opentelemetry_exporter_jaeger_trace
+    gmp
+    unistring
+    ubiqfpe
     ${WL_END_GROUP}
 )
 
