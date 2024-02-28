@@ -35,6 +35,8 @@ public:
     // V2 type: DATE_V2, TIMESTAMP, DECIMAL_V2
     static Field convert_field(ColumnId id, const TabletColumn& c);
 
+    static Schema convert_schema(const std::shared_ptr<const TabletSchema>& schema);
+
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
     static Schema convert_schema(const TabletSchema& schema);
 
