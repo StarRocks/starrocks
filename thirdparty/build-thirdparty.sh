@@ -1244,6 +1244,42 @@ build_clucene() {
     fi
 }
 
+# libunistring 
+build_libunistring() {
+    check_if_source_exist $LIBFUNISTRING_SOURCE
+    cd $TP_SOURCE_DIR/$LIBFUNISTRING_SOURCE
+    ./configure --prefix=${TP_INSTALL_DIR} --disable-shared
+    make -j$PARALLEL
+    make install
+}
+
+# gmp
+build_gmp() {
+    check_if_source_exist $GMP_SOURCE
+    cd $TP_SOURCE_DIR/$GMP_SOURCE
+    CFLAGS="-fPIC"
+    ./configure --enable-static --disable-shared --with-pic --prefix=${TP_INSTALL_DIR}
+    make -j$PARALLEL
+    make install
+}
+
+build_libfpe() {
+    check_if_source_exist $LIBFPE_SOURCE
+    mkdir -p $TP_SOURCE_DIR/$LIBFPE_SOURCE/build
+    cd $TP_SOURCE_DIR/$LIBFPE_SOURCE/build
+    
+    # export C_INCLUDE_PATH=/home/botao/dev/starrocks/thirdparty/installed/include
+    # export LIBRARY_PATH=/home/botao/dev/starrocks/thirdparty/installed/lib
+    # export LD_LIBRARY_PATH=/home/botao/dev/starrocks/thirdparty/installed/lib
+
+    $CMAKE_CMD -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
+        -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
+        -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ..
+
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1333,7 +1369,9 @@ build_async_profiler
 build_fiu
 build_llvm
 build_clucene
-
+build_libunistring
+build_gmp
+build_libfpe
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
