@@ -40,13 +40,8 @@ namespace starrocks::lake {
 
 class PartialUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
-<<<<<<< HEAD
     PartialUpdateTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
-=======
-    LakePartialUpdateTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
->>>>>>> 06fdc902b4 ([BugFix] Forgot to update the variable CompactionTaskContext::runs (#41860))
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);

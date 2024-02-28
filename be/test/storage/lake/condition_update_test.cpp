@@ -40,25 +40,13 @@ namespace starrocks::lake {
 class ConditionUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     ConditionUpdateTest() : TestBase(kTestDirectory) {
-<<<<<<< HEAD
-        _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        _tablet_metadata->set_next_rowset_id(1);
-=======
         _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
->>>>>>> 06fdc902b4 ([BugFix] Forgot to update the variable CompactionTaskContext::runs (#41860))
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
 
         _referenced_column_ids.push_back(0);
         _referenced_column_ids.push_back(1);
-<<<<<<< HEAD
-        _partial_tablet_schema = TabletSchema::create(*schema);
-        _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_partial_tablet_schema));
-=======
         _partial_tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_partial_tablet_schema));
->>>>>>> 06fdc902b4 ([BugFix] Forgot to update the variable CompactionTaskContext::runs (#41860))
 
         auto c2 = _tablet_metadata->mutable_schema()->add_column();
         {
@@ -70,13 +58,8 @@ public:
             c2->set_aggregation("REPLACE");
         }
 
-<<<<<<< HEAD
-        _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
-=======
         _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
->>>>>>> 06fdc902b4 ([BugFix] Forgot to update the variable CompactionTaskContext::runs (#41860))
     }
 
     void SetUp() override {

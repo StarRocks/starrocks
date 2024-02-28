@@ -143,13 +143,6 @@ inline Status TestBase::publish_single_log_version(int64_t tablet_id, int64_t tx
     return TEST_publish_single_log_version(_tablet_mgr.get(), tablet_id, txn_id, log_version);
 }
 
-<<<<<<< HEAD
-=======
-inline StatusOr<TabletMetadataPtr> TestBase::batch_publish(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                           std::vector<int64_t>& txn_ids) {
-    return TEST_batch_publish(_tablet_mgr.get(), tablet_id, base_version, new_version, txn_ids);
-}
-
 inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type) {
     auto metadata = std::make_shared<lake::TabletMetadata>();
     metadata->set_id(next_id());
@@ -186,5 +179,4 @@ inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysTyp
     return metadata;
 }
 
->>>>>>> 06fdc902b4 ([BugFix] Forgot to update the variable CompactionTaskContext::runs (#41860))
 } // namespace starrocks::lake
