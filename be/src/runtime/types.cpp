@@ -406,4 +406,41 @@ size_t TypeDescriptor::get_array_depth_limit() const {
     return depth;
 }
 
+TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2) {
+    DCHECK(type1 != type2);
+    if (type1.is_integer_type() && type2.is_integer_type()) {
+        // promote integer type. Larger enum values mean larger value ranges.
+        auto tp = type1.type > type2.type ? type1.type : type2.type;
+        return TypeDescriptor::from_logical_type(tp);
+    } else if (type1.is_float_type() && type2.is_float_type()) {
+        // promote all float to double.
+        return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    } else if ((type1.is_float_type() && type2.is_integer_type()) ||
+               (type1.is_integer_type() && type2.is_float_type())) {
+        // if one is float and other is integer, promote to double
+        return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    } else if (type1.is_decimal_type() && type2.is_decimal_type()) {
+        // decimal v3 only
+        auto tp = type1.type > type2.type ? type1.type : type2.type;
+        if (tp > TYPE_DECIMAL128) tp = TYPE_DECIMAL128;
+        if (tp < TYPE_DECIMAL32) tp = TYPE_DECIMAL32;
+        auto precision = type1.precision > type2.precision ? type1.precision : type2.precision;
+        if (precision > MAX_PRECISION) precision = MAX_PRECISION;
+        auto scale = type1.scale > type2.scale ? type1.scale : type2.scale;
+        if (scale > MAX_SCALE) scale = MAX_SCALE;
+        return TypeDescriptor::create_decimalv3_type(tp, precision, scale);
+    } else if (type1.type == TYPE_VARCHAR && type2.type == TYPE_VARCHAR) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_varchar_type(len);
+    } else if (type1.type == TYPE_CHAR && type2.type == TYPE_CHAR) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_char_type(len);
+    } else if (type1.type == TYPE_VARBINARY && type2.type == TYPE_VARBINARY) {
+        auto len = type1.len > type2.len ? type1.len : type2.len;
+        return TypeDescriptor::create_varbinary_type(len);
+    }
+    // treat other conflicted types as varchar.
+    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+}
+
 } // namespace starrocks
