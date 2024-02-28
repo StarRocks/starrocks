@@ -873,4 +873,138 @@ INSTANTIATE_TEST_SUITE_P(
                                 "eaf18d26b2976216790d95b2942d15b7db5f926c7d62d35f24c98b8eedbe96f2e6241e5e4fdc6b7d9e7893"
                                 "d94d86cd8a6f3bb6b1804c22097b337ecc24f6015e")));
 
+// --gtest_filter=FpeTestFixture.fpe_ff1_encryptTest
+class FpeFf1EncryptTestFixture
+        : public ::testing::TestWithParam<std::tuple<std::string, std::string, int, std::string>> {};
+
+TEST_P(FpeFf1EncryptTestFixture, fpe_ff1_encryptTest) {
+    //LOG(INFO) << " fpe_ff1_encryptTest ";
+    auto [str, key, radix, expected] = GetParam();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto str_plain = BinaryColumn::create();
+    str_plain->append(str);
+    ColumnPtr key_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(key, 1);
+    ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
+
+    Columns columns;
+    columns.emplace_back(str_plain);
+    columns.emplace_back(key_column);
+    columns.emplace_back(radix_column);
+
+    ctx->set_constant_columns(columns);
+
+    ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
+    //ASSERT_TRUE(result->is_nullable());
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    EXPECT_EQ(expected, v->get_data()[0].to_string());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FpeFf1EncryptTest, FpeFf1EncryptTestFixture,
+        ::testing::Values(std::make_tuple("0", "abcdefghijk12345abcdefghijk12345", 10, "608824"),
+                          std::make_tuple("1123123", "abcdefghijk12345abcdefghijk12345", 10, "0459571"),
+                          std::make_tuple("23423274521", "abcdefghijk12345abcdefghijk12345", 10, "17651024676"),
+                          std::make_tuple("469823423432", "abcdefghijk12345", 10, "539696457650")));
+
+class FpeFf1DecryptTestFixture
+        : public ::testing::TestWithParam<std::tuple<std::string, std::string, int, std::string>> {};
+TEST_P(FpeFf1DecryptTestFixture, fpe_ff1_decryptTest) {
+    auto [str, key, radix, expected] = GetParam();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    auto str_plain = BinaryColumn::create();
+    str_plain->append(str);
+    ColumnPtr key_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(key, 1);
+
+    ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
+    columns.emplace_back(str_plain);
+    columns.emplace_back(key_column);
+    columns.emplace_back(radix_column);
+
+    ctx->set_constant_columns(columns);
+
+    ColumnPtr result = EncryptionFunctions::fpe_ff1_decrypt(ctx.get(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    EXPECT_EQ(expected, v->get_data()[0].to_string());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FpeFf1DecryptTest, FpeFf1DecryptTestFixture,
+        ::testing::Values(std::make_tuple("608824", "abcdefghijk12345abcdefghijk12345", 10, "000000"),
+                          std::make_tuple("0459571", "abcdefghijk12345abcdefghijk12345", 10, "1123123"),
+                          std::make_tuple("17651024676", "abcdefghijk12345abcdefghijk12345", 10, "23423274521"),
+                          std::make_tuple("539696457650", "abcdefghijk12345", 10, "469823423432")));
+
+class FpeFf1NumEncryptTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {
+};
+TEST_P(FpeFf1NumEncryptTestFixture, fpe_ff1_encrypt_numTest) {
+    auto [str, key, expected] = GetParam();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    auto str_plain = BinaryColumn::create();
+    str_plain->append(str);
+    ColumnPtr key_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(key, 1);
+
+    columns.emplace_back(str_plain);
+    columns.emplace_back(key_column);
+
+    ctx->set_constant_columns(columns);
+
+    ColumnPtr result = EncryptionFunctions::fpe_encrypt(ctx.get(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    EXPECT_EQ(expected, v->get_data()[0].to_string());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FpeFf1NumEncryptTest, FpeFf1NumEncryptTestFixture,
+        ::testing::Values(
+                std::make_tuple("-1000", "abcdefghijk12345abcdefghijk12345", "-1520384"),
+                std::make_tuple("0", "abcdefghijk12345abcdefghijk12345", "1608824"),
+                std::make_tuple("0.00", "abcdefghijk12345abcdefghijk12345", "1608824"),
+                std::make_tuple("0.58", "abcdefghijk12345abcdefghijk12345", "1608824.472366138329091"),
+                std::make_tuple("1.58", "abcdefghijk12345abcdefghijk12345", "1478093.472366138329091"),
+                std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
+                std::make_tuple("-82695393.42", "abcdefghijk12345abcdefghijk12345", "-115815106.800956527124541"),
+                std::make_tuple("-47724403.07", "abcdefghijk12345abcdefghijk12345", "-181831555.57492613140701"),
+                std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
+                std::make_tuple("38229200.77", "abcdefghijk12345abcdefghijk12345", "184295182.721481625269811"),
+                std::make_tuple("61386179.40", "abcdefghijk12345abcdefghijk12345", "171024887.068976512463771")));
+
+class FpeFf1NumDecryptTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {
+};
+TEST_P(FpeFf1NumDecryptTestFixture, fpe_ff1_decrypt_numTest) {
+    auto [str, key, expected] = GetParam();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    auto str_plain = BinaryColumn::create();
+    str_plain->append(str);
+    ColumnPtr key_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(key, 1);
+
+    columns.emplace_back(str_plain);
+    columns.emplace_back(key_column);
+
+    ctx->set_constant_columns(columns);
+
+    ColumnPtr result = EncryptionFunctions::fpe_decrypt(ctx.get(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    EXPECT_EQ(expected, v->get_data()[0].to_string());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FpeFf1NumDecryptTest, FpeFf1NumDecryptTestFixture,
+        ::testing::Values(
+                std::make_tuple("-1520384", "abcdefghijk12345abcdefghijk12345", "-1000"),
+                std::make_tuple("1608824", "abcdefghijk12345abcdefghijk12345", "0"),
+                std::make_tuple("1608824.472366138329091", "abcdefghijk12345abcdefghijk12345", "0.58"),
+                std::make_tuple("1478093.472366138329091", "abcdefghijk12345abcdefghijk12345", "1.58"),
+                std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
+                std::make_tuple("-115815106.800956527124541", "abcdefghijk12345abcdefghijk12345", "-82695393.42"),
+                std::make_tuple("-181831555.57492613140701", "abcdefghijk12345abcdefghijk12345", "-47724403.07"),
+                std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
+                std::make_tuple("184295182.721481625269811", "abcdefghijk12345abcdefghijk12345", "38229200.77"),
+                std::make_tuple("171024887.068976512463771", "abcdefghijk12345abcdefghijk12345", "61386179.4")));
 } // namespace starrocks
