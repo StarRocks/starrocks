@@ -253,6 +253,8 @@ TEST_F(PosixFileSystemTest, test_delete_files) {
     EXPECT_OK(fs->delete_files(paths));
     EXPECT_TRUE(fs->path_exists(path1).is_not_found());
     EXPECT_TRUE(fs->path_exists(path2).is_not_found());
+    EXPECT_OK(fs->delete_dir_recursive(path1));
+    EXPECT_OK(fs->delete_dir_recursive(path2));
 }
 
 } // namespace starrocks
