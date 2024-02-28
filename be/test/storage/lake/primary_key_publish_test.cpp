@@ -48,18 +48,6 @@ public:
     LakePrimaryKeyPublishTest() : TestBase(kTestGroupPath) {
         _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
-
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
-        _slot_pointers.emplace_back(&_slots[0]);
-        _slot_pointers.emplace_back(&_slots[1]);
-        _slot_pointers.emplace_back(&_slots[2]);
-
-        _slot_cid_map.emplace(0, 0);
-        _slot_cid_map.emplace(1, 1);
-        _slot_cid_map.emplace(2, 2);
-
         _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
