@@ -135,6 +135,7 @@ void my_free(void* p) __THROW {
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     // If new_size is zero, the behavior is implementation defined
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
@@ -143,14 +144,25 @@ void* my_realloc(void* p, size_t size) __THROW {
     }
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
 
-    void* ptr = STARROCKS_REALLOC(p, size);
-    if (ptr != nullptr) {
-        MEMORY_CONSUME_SIZE((int64_t)STARROCKS_MALLOC_SIZE(ptr) - old_size);
+    if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
+        TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0) - old_size, nullptr);
+        void* ptr = STARROCKS_REALLOC(p, size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0) - old_size);
+        }
+        return ptr;
     } else {
-        // nothing to do.
-        // If tc_realloc() fails the original block is left untouched; it is not freed or moved
+        void* ptr = STARROCKS_REALLOC(p, size);
+        if (ptr != nullptr) {
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - old_size);
+        } else {
+            // nothing to do.
+            // If tc_realloc() fails the original block is left untouched; it is not freed or moved
+        }
+        return ptr;
     }
-    return ptr;
 }
 
 // calloc
