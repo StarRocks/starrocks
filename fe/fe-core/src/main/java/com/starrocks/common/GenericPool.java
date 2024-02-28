@@ -65,13 +65,19 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
 
     public boolean reopen(VALUE object, int timeoutMs) {
         boolean ok = true;
-        object.getOutputProtocol().getTransport().close();
+        try {
+            object.getOutputProtocol().getTransport().close();
+        } catch (Exception ignored) {
+            // Close exceptions are ignored because the socket may have been closed.
+        }
+
         try {
             object.getOutputProtocol().getTransport().open();
             // transport.open() doesn't set timeout, Maybe the timeoutMs change.
             TSocket socket = (TSocket) object.getOutputProtocol().getTransport();
             socket.setTimeout(timeoutMs);
         } catch (TTransportException e) {
+            LOG.warn("reopen error", e);
             ok = false;
         }
         return ok;
@@ -79,7 +85,12 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
 
     public boolean reopen(VALUE object) {
         boolean ok = true;
-        object.getOutputProtocol().getTransport().close();
+        try {
+            object.getOutputProtocol().getTransport().close();
+        } catch (Exception ignored) {
+            // Close exceptions are ignored because the socket may have been closed.
+        }
+
         try {
             object.getOutputProtocol().getTransport().open();
         } catch (TTransportException e) {
