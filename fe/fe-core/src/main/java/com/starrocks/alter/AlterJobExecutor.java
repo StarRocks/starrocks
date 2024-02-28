@@ -437,6 +437,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         }
                         GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .modifyTableDynamicPartition(db, olapTable, properties);
+                    } else if (TableProperty.isSamePrefixProperties(properties,
+                            PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_PREFIX)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                         Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
                         GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -727,6 +730,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         TTabletType tTabletType =
                 PropertyAnalyzer.analyzeTabletType(properties);
 
+        // 5. external cooldown synced time
+        long coolDownSyncedTimeMs = PropertyAnalyzer.analyzeExternalCooldownSyncedTimeMs(properties);
+
+        // 6. external cooldown consistency check time
+        long coolDownCheckTimeMs = PropertyAnalyzer.analyzeExternalCooldownConsistencyCheckTimeMs(properties);
+
         // modify meta here
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
@@ -779,8 +788,19 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             if (tTabletType != partitionInfo.getTabletType(partition.getId())) {
                 partitionInfo.setTabletType(partition.getId(), tTabletType);
             }
+            Long preCoolDownSyncedTimeMs = partitionInfo.getExternalCoolDownSyncedTimeMs(partition.getId());
+            if (coolDownSyncedTimeMs != -1L &&
+                    (preCoolDownSyncedTimeMs == null || coolDownSyncedTimeMs != preCoolDownSyncedTimeMs)) {
+                partitionInfo.setExternalCoolDownSyncedTimeMs(partition.getId(), coolDownSyncedTimeMs);
+            }
+            Long preCoolDownCheckTimeMs = partitionInfo.getExternalCoolDownConsistencyCheckTimeMs(partition.getId());
+            if (coolDownCheckTimeMs != -1L &&
+                    (preCoolDownCheckTimeMs == null || coolDownCheckTimeMs != preCoolDownCheckTimeMs)) {
+                partitionInfo.setExternalCoolDownConsistencyCheckTimeMs(partition.getId(), coolDownCheckTimeMs);
+            }
             ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
-                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory);
+                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory,
+                    coolDownSyncedTimeMs, coolDownCheckTimeMs);
             modifyPartitionInfos.add(info);
         }
 

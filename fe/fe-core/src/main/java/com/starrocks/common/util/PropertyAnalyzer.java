@@ -59,6 +59,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
@@ -260,6 +261,10 @@ public class PropertyAnalyzer {
 
     // "external_cooldown_wait_second"="86400"
     public static final String PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND = "external_cooldown_wait_second";
+    // external cool down synced time(ms)
+    public static final String PROPERTIES_EXTERNAL_COOLDOWN_SYNCED_TIME = "external_cooldown_synced_time";
+    // external cool down consistency check time(ms)
+    public static final String PROPERTIES_EXTERNAL_COOLDOWN_CONSISTENCY_CHECK_TIME = "external_cooldown_consistency_check_time";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties,
                                                    DataProperty inferredDataProperty,
@@ -1766,5 +1771,18 @@ public class PropertyAnalyzer {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    public static long analyzeDatetimeProp(Map<String, String> properties,
+                                           String propKey, long defaultVal) throws AnalysisException {
+        String text = properties.get(propKey);
+        if (text == null) {
+            return defaultVal;
+        }
+        properties.remove(propKey);
+        if (text.trim().isEmpty()) {
+            return 0L;
+        }
+        return TimeUtils.parseDate(text, PrimitiveType.DATETIME).getTime();
     }
 }
