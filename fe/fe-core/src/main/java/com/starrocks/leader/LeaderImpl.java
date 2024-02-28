@@ -396,7 +396,11 @@ public class LeaderImpl {
                                     "finish recover create replica task. set replica to good. tablet {}, replica {}, backend {}",
                                     tabletId, task.getBackendId(), replica.getId());
                         }
+                    } else {
+                        LOG.warn("replica not found in inverted index");
                     }
+                } else {
+                    LOG.warn("request not set tablet infos");
                 }
 
                 // this should be called before 'countDownLatch()'
