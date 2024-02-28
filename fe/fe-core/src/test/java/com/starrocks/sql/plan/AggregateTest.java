@@ -2543,4 +2543,94 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 1: t1a, 2: t1b",
                 "order by: <slot 14> 14: round ASC, <slot 12> 12: min ASC, <slot 15> 15: abs ASC");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTableAliasCountDistinctHaving() throws Exception {
+        String sql = "select " +
+                "   count(distinct xx.v2) as j1, " +
+                "   xx.v2 as v2 " +
+                "from test.t0 as xx " +
+                "group by xx.v2 " +
+                "having count(distinct xx.v2) > 0";
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: v2)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  having: 4: count > 0");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1");
+    }
+
+    @Test
+    public void testLegacyGroupConcat() throws Exception {
+        String sql = "select /*+ set_var(sql_mode = GROUP_CONCAT_LEGACY) */ group_concat(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), ', ')");
+
+        sql = "select /*+ set_var('sql_mode' = 'GROUP_CONCAT_LEGACY, ONLY_full_group_by') */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+
+        sql = "select /*+ set_var(sql_mode = '68719476768') */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+        sql = "select /*+ set_var(sql_mode = 68719476768) */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+        // overwrite the GROUP_CONCAT_LEGACY
+        sql = "select /*+ set_var(sql_mode = 68719476768) */ /*+ set_var(sql_mode = 32) */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-', ',')");
+    }
+
+    @Test
+    public void testCountDistinctGlobalAgg() throws Exception {
+        String sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "count(distinct t1d) from test_all_type";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "aggregate: multi_distinct_count[([4: t1d, BIGINT, true]); " +
+                "args: BIGINT; result: BIGINT; args nullable: true; result nullable: false]");
+
+        sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "count(distinct id_decimal) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "multi_distinct_count[([10: id_decimal, DECIMAL64(10,2), true]); " +
+                "args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]");
+
+        sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "sum(distinct id_decimal) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "aggregate: multi_distinct_sum[([10: id_decimal, DECIMAL64(10,2), true]); " +
+                "args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
+    }
+
+    @Test
+    public void testArrayAggGlobalAgg() throws Exception {
+        String sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "array_agg(distinct t1g) from test_all_type";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "aggregate: array_agg_distinct[([7: t1g, BIGINT, true]); " +
+                "args: BIGINT; result: ARRAY<BIGINT>; args nullable: true; result nullable: true]");
+
+        sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "array_agg(distinct t1f) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "aggregate: array_agg_distinct[([6: t1f, DOUBLE, true]); " +
+                "args: DOUBLE; result: ARRAY<DOUBLE>; args nullable: true; result nullable: true]");
+    }
+>>>>>>> 8bae11b4b2 ([BugFix] Fix one-phase count-distinct with lambda error (backport #41646) (#41742))
 }
