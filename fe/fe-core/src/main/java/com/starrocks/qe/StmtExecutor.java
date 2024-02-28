@@ -100,6 +100,7 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -1935,6 +1936,8 @@ public class StmtExecutor {
         long loadedBytes = 0;
         long jobId = -1;
         long estimateScanRows = -1;
+        int estimateFileNum = 0;
+        long estimateScanFileSize = 0;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         boolean insertError = false;
         String trackingSql = "";
@@ -1948,6 +1951,11 @@ public class StmtExecutor {
             for (ScanNode scanNode : scanNodes) {
                 if (scanNode instanceof OlapScanNode) {
                     estimateScanRows += ((OlapScanNode) scanNode).getActualRows();
+                    containOlapScanNode = true;
+                }
+                if (scanNode instanceof FileScanNode) {
+                    estimateFileNum += ((FileScanNode) scanNode).getFileNum();
+                    estimateScanFileSize += ((FileScanNode ) scanNode).getFileTotalSize();
                     containOlapScanNode = true;
                 }
             }
@@ -1972,6 +1980,8 @@ public class StmtExecutor {
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,
+                        estimateFileNum,
+                        estimateScanFileSize,
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             }
