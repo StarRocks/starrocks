@@ -216,7 +216,7 @@ DROP USER jack@'172.10.1.10';
 
 ### 创建角色
 
-您可以使用 [CREATE ROLE](../sql-reference/sql-statements/account-management/CREATE_ROLE.md) 创建角色。
+您可以使用 [CREATE ROLE](../sql-reference/sql-statements/account-management/CREATE_ROLE.md) 创建角色。默认每个用户最多可以拥有 64 个角色，您也可以通过 FE 动态参数 `privilege_max_total_roles_per_user` 来根据需求调整这一限制。角色的嵌套关系最多为 16 层，您也可以通过 FE 动态参数 `privilege_max_role_depth` 来进行调整。
 
 以下示例创建角色 `example_role`：
 

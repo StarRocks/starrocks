@@ -24,6 +24,10 @@ CREATE ROLE <role_name>
 
 > 注意：角色名称不能与 StarRocks 的系统预置角色 `root`，`cluster_admin`，`db_admin`，`user_admin`，`public` 重复。
 
+## 使用限制
+
+为用户分配角色时，默认每个用户最多可以拥有 64 个角色，您也可以通过 FE 动态参数 `privilege_max_total_roles_per_user` 来根据需求调整这一限制。角色的嵌套关系最多为 16 层，您也可以通过 FE 动态参数 `privilege_max_role_depth` 来进行调整。
+
 ## 示例
 
 创建一个角色 `analyst`。
