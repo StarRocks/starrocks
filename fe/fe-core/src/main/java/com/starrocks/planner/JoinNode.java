@@ -260,23 +260,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     public boolean isEffectiveFilter(SessionVariable sessionVariable, RuntimeFilterDescription runtimeFilter) {
         long probeMin = sessionVariable.getGlobalRuntimeFilterProbeMinSize();
-        long card = this.getCardinality();
-
         long buildMin = sessionVariable.getGlobalRuntimeFilterBuildMinSize();
-        long buildCardinality = getChild(1).getCardinality();
-        if (buildMin > 0 && (this.isColocate || this.isLocalHashBucket)) {
-            int numBackends = ConnectContext.get() != null ? ConnectContext.get().getAliveBackendNumber() : 1;
-            numBackends = Math.max(1, numBackends);
-            buildMin = (Long.MAX_VALUE / numBackends > buildMin) ? buildMin * numBackends : Long.MAX_VALUE;
-        }
-        if (probeMin == 0 || (buildMin > 0 && buildCardinality <= buildMin)) {
+        if (probeMin == 0 || (buildMin > 0 && runtimeFilter.getBuildCardinality() <= buildMin)) {
             return true;
         }
-        if (card < probeMin) {
-            return false;
-        }
 
-        if (cardinality > sessionVariable.getGlobalRuntimeFilterProbeMinSize()) {
+        if (cardinality > probeMin) {
             // don't push down if the filter is meaningless
             return runtimeFilter.getSelectivity() <= sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity();
         }
