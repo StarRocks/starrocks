@@ -420,7 +420,15 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
     Schema base_schema =
             ChunkHelper::convert_schema(cur_base_tablet_schema, _chunk_changer->get_selected_column_indexes());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    auto new_tschema = new_tablet->tablet_schema();
+    std::vector<ColumnId> cids;
+    for (size_t i = 0; i < new_tschema->num_columns(); i++) {
+        if (new_tschema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+        cids.push_back(i);
+    }
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
@@ -504,7 +512,15 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
     Schema base_schema =
             ChunkHelper::convert_schema(cur_base_tablet_schema, _chunk_changer->get_selected_column_indexes());
-    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
+    auto new_tschema = new_tablet->tablet_schema();
+    std::vector<ColumnId> cids;
+    for (size_t i = 0; i < new_tschema->num_columns(); i++) {
+        if (new_tschema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+        cids.push_back(i);
+    }
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema(), cids);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
@@ -712,8 +728,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
     auto new_tablet_schema = new_tablet->tablet_schema();
 
-    auto tablet_schema_ptr = new_tablet->tablet_schema();
-
     SchemaChangeParams sc_params;
     sc_params.base_tablet = base_tablet;
     sc_params.new_tablet = new_tablet;
@@ -721,7 +735,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     sc_params.base_table_column_names = request.base_table_column_names;
     sc_params.alter_job_type = request.alter_job_type;
     sc_params.chunk_changer =
-            std::make_unique<ChunkChanger>(sc_params.base_tablet_schema, tablet_schema_ptr,
+            std::make_unique<ChunkChanger>(sc_params.base_tablet_schema, new_tablet_schema,
                                            sc_params.base_table_column_names, sc_params.alter_job_type);
 
     auto* chunk_changer = sc_params.chunk_changer.get();

@@ -46,7 +46,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/utils.h"
 #include "util/uid_util.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 
