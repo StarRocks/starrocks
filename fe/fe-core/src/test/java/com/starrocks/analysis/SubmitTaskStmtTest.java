@@ -45,6 +45,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
@@ -235,7 +236,8 @@ public class SubmitTaskStmtTest {
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t1");
             Assert.assertNotNull(task);
-            Assert.assertEquals("EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(TimeUnit.MINUTES, task.getSchedule().getTimeUnit());
+            Assert.assertEquals(1, task.getSchedule().getPeriod());
             Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
             Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t1");

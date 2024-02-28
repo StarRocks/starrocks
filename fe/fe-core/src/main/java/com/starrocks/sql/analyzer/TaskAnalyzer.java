@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -51,6 +52,9 @@ public class TaskAnalyzer {
             ErrorReport.reportSemanticException("schedule interval is too small, the minimum value is %d SECONDS",
                     ErrorCode.ERR_INVALID_PARAMETER,
                     Config.task_min_schedule_interval_s);
+        }
+        if (schedule.getStartTime() == 0) {
+            schedule.setStartTime(TimeUtils.getEpochSeconds());
         }
     }
 
