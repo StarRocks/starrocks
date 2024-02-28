@@ -40,6 +40,7 @@ using namespace starrocks;
 class LakeMetacacheTest : public TestBase {
 public:
     LakeMetacacheTest() : TestBase(kTestDirectory) {
+<<<<<<< HEAD
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -72,6 +73,11 @@ public:
 
         _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+=======
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+>>>>>>> 06fdc902b4 ([BugFix] Forgot to update the variable CompactionTaskContext::runs (#41860))
     }
 
     void SetUp() override {

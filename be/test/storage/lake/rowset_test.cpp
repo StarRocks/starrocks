@@ -35,6 +35,7 @@ using namespace starrocks;
 class LakeRowsetTest : public TestBase {
 public:
     LakeRowsetTest() : TestBase(kTestDirectory) {
+<<<<<<< HEAD
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -67,6 +68,11 @@ public:
 
         _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+=======
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+>>>>>>> 06fdc902b4 ([BugFix] Forgot to update the variable CompactionTaskContext::runs (#41860))
     }
 
     void SetUp() override {
@@ -137,7 +143,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_rowset";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };

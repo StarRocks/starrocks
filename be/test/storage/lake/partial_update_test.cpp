@@ -40,8 +40,13 @@ namespace starrocks::lake {
 
 class PartialUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
+<<<<<<< HEAD
     PartialUpdateTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
+=======
+    LakePartialUpdateTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+>>>>>>> 06fdc902b4 ([BugFix] Forgot to update the variable CompactionTaskContext::runs (#41860))
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
@@ -180,7 +185,7 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_partial_update";
     constexpr static const int kChunkSize = 12;
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<TabletSchema> _partial_tablet_schema;
     std::shared_ptr<Schema> _schema;
@@ -709,7 +714,7 @@ INSTANTIATE_TEST_SUITE_P(PartialUpdateTest, PartialUpdateTest,
 class LakeIncompleteSortKeyPartialUpdateTest : public TestBase {
 public:
     LakeIncompleteSortKeyPartialUpdateTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
@@ -805,7 +810,7 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_incomplete_sort_key_partial_update";
     constexpr static const int kChunkSize = 12;
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     int64_t _partition_id = 4561;
     std::vector<SlotDescriptor> _slots;
