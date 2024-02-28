@@ -522,18 +522,6 @@
                 "sql-reference/sql-statements/data-manipulation/STREAM_LOAD",
                 {
                   "type": "category",
-                  "label": "PIPE",
-                  "items": [
-                    "sql-reference/sql-statements/data-manipulation/ALTER_PIPE",
-                    "sql-reference/sql-statements/data-manipulation/CREATE_PIPE",
-                    "sql-reference/sql-statements/data-manipulation/DROP_PIPE",
-                    "sql-reference/sql-statements/data-manipulation/RETRY_FILE",
-                    "sql-reference/sql-statements/data-manipulation/SHOW_PIPES",
-                    "sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE"
-                  ]
-                },
-                {
-                  "type": "category",
                   "label": "Unloading",
                   "items": [
                     "sql-reference/sql-statements/data-manipulation/EXPORT",
@@ -694,74 +682,6 @@
                   "dirName": "sql-reference/sql-statements/Utility"
                 }
               ]
-<<<<<<< HEAD
-            },
-            {
-              "type": "category",
-              "label": "Data Types",
-              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/data-type-list"},
-              "items": [
-                {
-                  "type": "category",
-                  "label": "Numeric",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/INT"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/TINYINT",
-                    "sql-reference/sql-statements/data-types/SMALLINT",
-                    "sql-reference/sql-statements/data-types/INT",
-                    "sql-reference/sql-statements/data-types/BIGINT",
-                    "sql-reference/sql-statements/data-types/LARGEINT",
-                    "sql-reference/sql-statements/data-types/DECIMAL",
-                    "sql-reference/sql-statements/data-types/DOUBLE",
-                    "sql-reference/sql-statements/data-types/FLOAT",
-                    "sql-reference/sql-statements/data-types/BOOLEAN"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "String",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/STRING"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/BINARY",
-                    "sql-reference/sql-statements/data-types/CHAR",
-                    "sql-reference/sql-statements/data-types/VARCHAR"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "Date",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/DATE"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/DATETIME"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "Semi-structured",
-                  "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/Array",
-                    "sql-reference/sql-statements/data-types/JSON",
-                    "sql-reference/sql-statements/data-types/Map",
-                    "sql-reference/sql-statements/data-types/STRUCT"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "Other",
-                  "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/BITMAP",
-                    "sql-reference/sql-statements/data-types/HLL"
-                  ]
-                }
-              ]
-            },
-            "sql-reference/sql-statements/keywords"
-=======
-            }
->>>>>>> 7abba9a39e ([Doc] recategorize all commands (backport #41672) (#41809))
-          ]
         },
         {
           "type": "category",
@@ -1503,18 +1423,6 @@
                 "sql-reference/sql-statements/data-manipulation/STREAM_LOAD",
                 {
                   "type": "category",
-                  "label": "PIPE",
-                  "items": [
-                    "sql-reference/sql-statements/data-manipulation/ALTER_PIPE",
-                    "sql-reference/sql-statements/data-manipulation/CREATE_PIPE",
-                    "sql-reference/sql-statements/data-manipulation/DROP_PIPE",
-                    "sql-reference/sql-statements/data-manipulation/RETRY_FILE",
-                    "sql-reference/sql-statements/data-manipulation/SHOW_PIPES",
-                    "sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE"
-                  ]
-                },
-                {
-                  "type": "category",
                   "label": "导出",
                   "items": [
                     "sql-reference/sql-statements/data-manipulation/EXPORT",
@@ -1675,73 +1583,7 @@
                   "dirName": "sql-reference/sql-statements/Utility"
                 }
               ]
-<<<<<<< HEAD
-            },
-            {
-              "type": "category",
-              "label": "数据类型",
-              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/data-type-list"},
-              "items": [
-                {
-                  "type": "category",
-                  "label": "数值类型",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/INT"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/TINYINT",
-                    "sql-reference/sql-statements/data-types/SMALLINT",
-                    "sql-reference/sql-statements/data-types/INT",
-                    "sql-reference/sql-statements/data-types/BIGINT",
-                    "sql-reference/sql-statements/data-types/LARGEINT",
-                    "sql-reference/sql-statements/data-types/DECIMAL",
-                    "sql-reference/sql-statements/data-types/DOUBLE",
-                    "sql-reference/sql-statements/data-types/FLOAT",
-                    "sql-reference/sql-statements/data-types/BOOLEAN"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "字符串类型",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/STRING"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/BINARY",
-                    "sql-reference/sql-statements/data-types/CHAR",
-                    "sql-reference/sql-statements/data-types/VARCHAR"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "日期类型",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/DATE"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/DATETIME"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "半结构化类型",
-                  "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/Array",
-                    "sql-reference/sql-statements/data-types/JSON",
-                    "sql-reference/sql-statements/data-types/Map",
-                    "sql-reference/sql-statements/data-types/STRUCT"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "其他类型",
-                  "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
-                  "items": [
-                    "sql-reference/sql-statements/data-types/BITMAP",
-                    "sql-reference/sql-statements/data-types/HLL"
-                  ]
-                }
-              ]
-            },
-            "sql-reference/sql-statements/keywords"
-=======
             }
->>>>>>> 7abba9a39e ([Doc] recategorize all commands (backport #41672) (#41809))
           ]
         },
         {
