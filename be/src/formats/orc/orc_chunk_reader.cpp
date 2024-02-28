@@ -959,6 +959,9 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     auto type_it = _supported_logical_types.find(slot->type().type);
     if (type_it != _supported_logical_types.end()) {
         pred_type = type_it->second;
+    } else {
+        return Status::NotSupported(
+                fmt::format("orc chunk reader don't support {}.", std::to_string(slot->type().type)));
     }
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
