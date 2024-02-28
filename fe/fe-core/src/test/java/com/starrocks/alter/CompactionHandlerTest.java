@@ -93,7 +93,7 @@ public class CompactionHandlerTest {
 
     @Test
     public void testProcessCompactionClauseWithOnePartitionForLakeTable() {
-        processAlterClauses(List.of("p1"), 1);
+        processAlterClauses(Collections.singletonList("p1"), 1);
     }
 
     @Test
@@ -110,7 +110,7 @@ public class CompactionHandlerTest {
     @Test(expected = IllegalStateException.class)
     public void testProcessNonCompactionClause() {
         AlterClause nonCompactionClause = mock(AlterClause.class);
-        List<AlterClause> alterList = List.of(nonCompactionClause);
+        List<AlterClause> alterList = Collections.singletonList((nonCompactionClause));
         try {
             compactionHandler.process(alterList, db, olapTable);
         } catch (UserException e) {
