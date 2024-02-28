@@ -216,28 +216,21 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _async_delta_writer_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
-    REGISTER_GAUGE_STARROCKS_METRIC(async_delta_writer_queue_count, [this]() {
-        return static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())
-                ->get_thread_pool()
-                ->num_queued_tasks();
-    })
+    REGISTER_THREAD_POOL_METRICS(
+            async_delta_writer,
+            static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
-    REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_queue_count, [this]() {
-        return _memtable_flush_executor->get_thread_pool()->num_queued_tasks();
-    })
+    REGISTER_THREAD_POOL_METRICS(memtable_flush, _memtable_flush_executor->get_thread_pool());
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
-    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_queue_count,
-                                    [this]() { return _segment_flush_executor->get_thread_pool()->num_queued_tasks(); })
+    REGISTER_THREAD_POOL_METRICS(segment_flush, _segment_flush_executor->get_thread_pool());
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
-    REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_queue_count, [this]() {
-        return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
-    })
+    REGISTER_THREAD_POOL_METRICS(segment_replicate, _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
 

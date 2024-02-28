@@ -34,6 +34,9 @@
 
 #pragma once
 
+#include <bvar/bvar.h>
+#include <fmt/format.h>
+
 #include <atomic>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/list_hook.hpp>
@@ -243,6 +246,15 @@ public:
 
     int max_threads() const { return _max_threads.load(std::memory_order_acquire); }
 
+    // Use bvar as the counter, and should not be called frequently.
+    int64_t total_executed_tasks() const { return _total_executed_tasks.get_value(); }
+
+    // Use bvar as the counter, and should not be called frequently.
+    int64_t total_pending_time_ns() const { return _total_pending_time_ns.get_value(); }
+
+    // Use bvar as the counter, and should not be called frequently.
+    int64_t total_execute_time_ns() const { return _total_execute_time_ns.get_value(); }
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
@@ -366,6 +378,15 @@ private:
 
     // ExecutionMode::CONCURRENT token used by the pool for tokenless submission.
     std::unique_ptr<ThreadPoolToken> _tokenless;
+
+    // Total number of tasks that have finished
+    bvar::Adder<int64_t> _total_executed_tasks;
+
+    // Total time in nanoseconds that tasks pending in the queue.
+    bvar::Adder<int64_t> _total_pending_time_ns;
+
+    // Total time in nanoseconds to execute tasks.
+    bvar::Adder<int64_t> _total_execute_time_ns;
 
     ThreadPool(const ThreadPool&) = delete;
     const ThreadPool& operator=(const ThreadPool&) = delete;
