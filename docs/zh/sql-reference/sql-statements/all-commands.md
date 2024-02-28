@@ -21,7 +21,6 @@ displayed_sidebar: "Chinese"
   - [导入，导出](#导入导出)
     - [Routine load](#routine-load)
     - [其他导入](#其他导入)
-    - [Pipe](#pipe)
     - [导出](#导出)
     - [ETL 任务](#etl-任务)
   - [数据目录 (Catalog)，数据库，资源](#数据目录-catalog数据库资源)

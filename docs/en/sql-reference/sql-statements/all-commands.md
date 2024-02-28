@@ -21,7 +21,6 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
   - [Loading, unloading](#loading-unloading)
     - [Routine load](#routine-load)
     - [Other load](#other-load)
-    - [Pipe](#pipe)
     - [Unloading](#unloading)
     - [ETL task](#etl-task)
   - [Catalog, database, resource](#catalog-database-resource)
