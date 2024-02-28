@@ -408,8 +408,8 @@ public class LeaderImpl {
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
-                LOG.info("finish create replica. tablet id: {}, be: {}, report version: {}",
-                        tabletId, task.getBackendId(), request.getReport_version());
+                LOG.info("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
+                        tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
             }
 
             if (createReplicaTask.getRecoverySource() == RecoverySource.SCHEDULER) {
