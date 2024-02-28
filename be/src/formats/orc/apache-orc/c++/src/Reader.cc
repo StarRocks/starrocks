@@ -1123,6 +1123,7 @@ void RowReaderImpl::startNextStripe() {
             // select row groups to read in the current stripe
             sargsApplier->pickRowGroups(rowsInCurrentStripe, rowIndexes, bloomFilterIndex);
             if (!sargsApplier->hasSelectedFrom(currentRowInStripe)) {
+                std::cout << "orc eval to skip the stripe by row index" << std::endl;
                 skipStripe = true;
                 goto end;
             }
@@ -1145,6 +1146,7 @@ void RowReaderImpl::startNextStripe() {
                     collectStringDictionary(reader.get(), sdicts);
                     if (sargsApplier->getRowReaderFilter()->filterOnPickStringDictionary(sdicts)) {
                         skipStripe = true;
+                        std::cout << "orc eval to skip the stripe by dictionary filter" << std::endl;
                         reader.reset();
                         goto end;
                     }
