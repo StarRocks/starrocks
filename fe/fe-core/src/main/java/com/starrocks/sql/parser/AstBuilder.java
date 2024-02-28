@@ -450,7 +450,6 @@ import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1437,7 +1436,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
                 LocalDateTime startTime =
                         DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
-                schedule.setStartTime(startTime.toEpochSecond(ZoneOffset.UTC));
+                schedule.setStartTime(startTime.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond());
             } catch (AnalysisException e) {
                 throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
                         timePos);
