@@ -14,11 +14,11 @@ displayed_sidebar: "Chinese"
   
   - 对于明细表，聚合表和更新，可以适当调大 `cumulative_compaction_num_threads_per_disk`、`base_compaction_num_threads_per_disk` 和 `cumulative_compaction_check_interval_seconds` 的值。例如：
 
-    ```Plain
-    cumulative_compaction_num_threads_per_disk = 4
-    base_compaction_num_threads_per_disk = 2
-    cumulative_compaction_check_interval_seconds = 2
-    ```
+      ```Plain
+      cumulative_compaction_num_threads_per_disk = 4
+      base_compaction_num_threads_per_disk = 2
+      cumulative_compaction_check_interval_seconds = 2
+      ```
 
     - 对于主键表：可以适当调大 `update_compaction_num_threads_per_disk` 的值。适当调小 `update_compaction_per_tablet_min_interval_seconds` 的值。
 
