@@ -469,6 +469,7 @@ BE dynamic parameters are as follows.
 #### lake_compaction_stream_buffer_size_bytes
 
 - **Default:** 1048576
+- **Unit**: Bytes
 - **Description:** The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - **Introduced in:** v3.2.3
 
