@@ -862,13 +862,13 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：1
 - 引入版本：v3.2.3
 
-##### privilege_max_total_per_user
+##### privilege_max_total_roles_per_user
 
 - 含义：每个用户最多可以拥有的角色数量。
 - 默认值：64
 - 引入版本：v3.0.0
 
-##### privilege_max_total_per_user
+##### privilege_max_role_depth
 
 - 含义：每个角色最多的嵌套层数。
 - 默认值：16
