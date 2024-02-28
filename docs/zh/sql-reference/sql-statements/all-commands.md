@@ -157,18 +157,6 @@ displayed_sidebar: "Chinese"
 - [SHOW TRANSACTION](./data-manipulation/SHOW_TRANSACTION.md)
 - [SPARK LOAD](./data-manipulation/SPARK_LOAD.md)
 - [STREAM LOAD](./data-manipulation/STREAM_LOAD.md)
-<<<<<<< HEAD
-=======
-
-### Pipe
-
-- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
-- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
-- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
-- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
-- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
-- [SUSPEND or RESUME PIPE](./data-manipulation/SUSPEND_or_RESUME_PIPE.md)
->>>>>>> 7abba9a39e ([Doc] recategorize all commands (backport #41672) (#41809))
 
 ### 导出
 
