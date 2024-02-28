@@ -263,13 +263,13 @@ Status HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         for (SlotDescriptor* d_slot_desc : delete_column_tuple_desc->slots()) {
             _equality_delete_slots.emplace_back(d_slot_desc);
             if (!id_to_slots.contains(d_slot_desc->id())) {
-                _materialize_slots.push_back(d_slot_desc);
                 const auto& it = id_to_index.find(d_slot_desc->id());
                 if (it == id_to_index.end()) {
                     return Status::InternalError(
-                            "Invalid slot id in delete_column_slot_ids. id =  " + std::to_string(d_slot_desc->id()) +
-                            ", name = " + d_slot_desc->col_name());
+                            fmt::format("Invalid slot id in delete_column_slot_ids. id = {}, name = {}",
+                                        d_slot_desc->id(), d_slot_desc->col_name()));
                 }
+                _materialize_slots.push_back(d_slot_desc);
                 _materialize_index_in_chunk.push_back(it->second);
             }
         }
