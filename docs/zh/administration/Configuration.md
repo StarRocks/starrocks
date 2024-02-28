@@ -404,8 +404,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | path_gc_check_step                                    | 1000        | N/A    | 单次连续 scan 最大的文件数量。                                   |
 | path_gc_check_step_interval_ms                        | 10          | ms     | 多次连续 scan 文件间隔时间。                                     |
 | path_scan_interval_second                             | 86400       | second | gc 线程清理过期数据的间隔时间。                                 |
-| storage_flood_stage_usage_percent                     | 95          | %      | 如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。        |
-| storage_flood_stage_left_capacity_bytes               | 107374182400| Byte   | 如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。 |
+| storage_flood_stage_usage_percent                     | 95          | %      | BE 存储目录整体磁盘空间使用率的硬上限。如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_percent` 才能使配置生效。        |
+| storage_flood_stage_left_capacity_bytes               | 107374182400| Byte   | BE 存储目录整体磁盘剩余空间的硬限制。如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_reserve_bytes` 才能使配置生效。 |
 | tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。        |
 | tablet_meta_checkpoint_min_interval_secs              | 600         | second | TabletMeta Checkpoint 线程轮询的时间间隔。         |
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
