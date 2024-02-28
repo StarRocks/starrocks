@@ -30,6 +30,7 @@ class MemPool;
 class RuntimeState;
 
 class Column;
+class Slice;
 struct JavaUDAFContext;
 using ColumnPtr = std::shared_ptr<Column>;
 
@@ -173,6 +174,8 @@ public:
 
     bool error_if_overflow() const;
 
+    std::vector<Slice>& get_ngram_set() { return ngram_set; }
+
 private:
     friend class ExprContext;
 
@@ -215,6 +218,9 @@ private:
     std::vector<bool> _nulls_first;
     bool _is_distinct = false;
     ssize_t group_concat_max_len = 1024;
+
+    // used for ngram bloom filter to speed up some function
+    std::vector<Slice> ngram_set;
 };
 
 } // namespace starrocks

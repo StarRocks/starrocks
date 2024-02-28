@@ -773,14 +773,6 @@ public class Config extends ConfigBase {
     public static String mysql_server_version = "5.1.0";
 
     /**
-     * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
-     * Cluster id is usually a random integer generated when master FE start at first time.
-     * You can also specify one.
-     */
-    @ConfField
-    public static int cluster_id = -1;
-
-    /**
      * If a backend is down for *max_backend_down_time_second*, a BACKEND_DOWN event will be triggered.
      * Do not set this if you know what you are doing.
      */
@@ -1234,6 +1226,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_create_partial_partition_in_batch = false;
+
+    @ConfField(mutable = true, comment = "The interval of create partition batch, to avoid too frequent")
+    public static long mv_create_partition_batch_interval_ms = 1000;
 
     /**
      * The number of query retries.
