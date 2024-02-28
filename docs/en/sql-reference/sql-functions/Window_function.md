@@ -4,6 +4,36 @@ displayed_sidebar: "English"
 
 # Window function
 
+- [Window function](#window-function)
+  - [Background](#background)
+  - [Usage](#usage)
+    - [Functions](#functions)
+    - [PARTITION BY clause](#partition-by-clause)
+    - [ORDER BY clause](#order-by-clause)
+    - [Window clause](#window-clause)
+  - [Function Examples](#function-examples)
+    - [AVG()](#avg)
+    - [COUNT()](#count)
+    - [DENSE\_RANK()](#dense_rank)
+    - [NTILE()](#ntile)
+    - [FIRST\_VALUE()](#first_value)
+    - [LAG()](#lag)
+    - [LAST\_VALUE()](#last_value)
+    - [LEAD()](#lead)
+    - [MAX()](#max)
+    - [MIN()](#min)
+    - [RANK()](#rank)
+    - [ROW\_NUMBER()](#row_number)
+    - [QUALIFY()](#qualify)
+    - [SUM()](#sum)
+    - [VARIANCE, VAR\_POP, VARIANCE\_POP](#variance-var_pop-variance_pop)
+    - [VAR\_SAMP, VARIANCE\_SAMP](#var_samp-variance_samp)
+    - [STD, STDDEV, STDDEV\_POP](#std-stddev-stddev_pop)
+    - [STDDEV\_SAMP](#stddev_samp)
+    - [COVAR\_SAMP](#covar_samp)
+    - [COVAR\_POP](#covar_pop)
+    - [CORR](#corr)
+
 ## Background
 
 The window function is a special class of built-in functions. Similar to the aggregation function, it also does calculations on multiple input rows to get a single data value. The difference is that the window function processes the input data within a specific window, rather than using the "group by" method. The data in each window can be sorted and grouped using the over() clause. The window function **computes a separate value for each row**, rather than computing one value for each group. This flexibility allows users to add additional columns to the select clause and further filter the result set. The window function can only appear in the select list and the outermost position of a clause. It takes effect at the end of the query, that is, after the `join`, `where`, and `group by` operations are performed. The window function is often used to analyze trends, calculate outliers, and perform bucketing analyses on large-scale data.
@@ -25,7 +55,7 @@ Currently supported functions include:
 * MIN(), MAX(), COUNT(), SUM(), AVG()
 * FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
 * ROW_NUMBER(), RANK(), DENSE_RANK()
-* CUME_DIST(), PERCENT_RANK(), QUALIFY()
+* QUALIFY()
 * NTILE()
 * VARIANCE(), VAR_SAMP(), STD(), STDDEV_SAMP(), COVAR_SAMP(), COVAR_POP(), CORR()
 
@@ -201,48 +231,6 @@ from int_t where property in ('odd','even');
 | 7  | odd      | 4                |
 | 9  | odd      | 5                |
 +----+----------+------------------+
-```
-
-### CUME_DIST()
-
-The CUME_DIST() function calculates the cumulative distribution of a value within a partition, indicating its relative position as a percentage of values less than or equal to the value in the current row. With a range of 0 to 1, it's useful for percentile calculations and data distribution analysis.
-
-Syntax:
-
-```SQL
-CUME_DIST() OVER (partition_by_clause order_by_clause)
-```
-
-**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value N/N = 1, where N is the partition size.**
-
-CUME_DIST() contains NULL values and treats them as the lowest values.
-
-The following example shows the cumulative distribution of column y within each group of column x.
-
-```SQL
-SELECT x, y,
-    CUME_DIST()
-        OVER (
-            PARTITION BY x
-            ORDER BY y
-        ) AS `cume_dist`
-FROM int_t;
-```
-
-```plaintext
-+---+---+--------------------+
-| x | y | cume_dist          |
-+---+---+--------------------+
-| 1 | 1 | 0.3333333333333333 |
-| 1 | 2 |                  1 |
-| 1 | 2 |                  1 |
-| 2 | 1 | 0.3333333333333333 |
-| 2 | 2 | 0.6666666666666667 |
-| 2 | 3 |                  1 |
-| 3 | 1 | 0.6666666666666667 |
-| 3 | 1 | 0.6666666666666667 |
-| 3 | 2 |                  1 |
-+---+---+--------------------+
 ```
 
 ### DENSE_RANK()
@@ -738,52 +726,6 @@ select x, property,
           rows between 3 preceding and 2 following) as 'local minimum'
 from int_t
 where property in ('prime','square');
-```
-
-### PERCENT_RANK()
-
-The PERCENT_RANK() function calculates the relative rank of a row within a result set as a percentage. It returns the percentage of partition values less than the value in the current row, excluding the highest value. The return values range from 0 to 1. This function is useful for percentile calculations and analyzing data distribution.
-
-The PERCENT_RANK() function is calculated using the following formula, where rank represents the row rank and rows represents the number of partition rows:
-
-```plaintext
-(rank - 1) / (rows - 1)
-```
-
-Syntax:
-
-```SQL
-PERCENT_RANK() OVER (partition_by_clause order_by_clause)
-```
-
-**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value (1 - 1)/(N - 1) = 0, where N is the partition size.**
-
-The following example shows the relative rank of column y within each group of column x.
-
-```SQL
-SELECT x, y,
-    PERCENT_RANK()
-        OVER (
-            PARTITION BY x
-            ORDER BY y
-        ) AS `percent_rank`
-FROM int_t;
-```
-
-```plaintext
-+---+---+--------------+
-| x | y | percent_rank |
-+---+---+--------------+
-| 1 | 1 |            0 |
-| 1 | 2 |          0.5 |
-| 1 | 2 |          0.5 |
-| 2 | 1 |            0 |
-| 2 | 2 |          0.5 |
-| 2 | 3 |            1 |
-| 3 | 1 |            0 |
-| 3 | 1 |            0 |
-| 3 | 2 |            1 |
-+---+---+--------------+
 ```
 
 ### RANK()
