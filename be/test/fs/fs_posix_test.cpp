@@ -160,6 +160,16 @@ TEST_F(PosixFileSystemTest, iterate_dir) {
         ASSERT_STREQ("123", children[0].c_str());
         ASSERT_STREQ("abc", children[1].c_str());
     }
+    {
+        ASSERT_OK(FileSystem::Default()->iterate_dir(dir_path, [](std::string_view) {
+            errno = EBADF;
+            return false;
+        }));
+        ASSERT_OK(FileSystem::Default()->iterate_dir(dir_path, [](std::string_view) {
+            errno = EBADF;
+            return true;
+        }));
+    }
 
     // Delete non-empty directory, should fail.
     ASSERT_ERROR(FileSystem::Default()->delete_dir(dir_path));
@@ -224,6 +234,16 @@ TEST_F(PosixFileSystemTest, iterate_dir2) {
         } else {
             CHECK(false) << "Unexpected file " << name;
         }
+        return true;
+    }));
+
+    ASSERT_OK(fs->iterate_dir2("./ut_dir/fs_posix/", [&](DirEntry entry) -> bool {
+        errno = EBADF;
+        return false;
+    }));
+
+    ASSERT_OK(fs->iterate_dir2("./ut_dir/fs_posix/", [&](DirEntry entry) -> bool {
+        errno = EBADF;
         return true;
     }));
 }
