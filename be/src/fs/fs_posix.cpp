@@ -370,22 +370,80 @@ public:
             return io_error(dir, errno);
         }
         errno = 0;
+        Status ret;
         struct dirent* entry;
         while ((entry = readdir(d)) != nullptr) {
             std::string_view name(entry->d_name);
             if (name == "." || name == "..") {
                 continue;
             }
-            // callback returning false means to terminate iteration
-            if (!cb(name)) {
+            auto saved_errno = errno;
+            auto r = cb(name);
+            errno = saved_errno;
+            if (!r) {
                 break;
             }
         }
-        closedir(d);
-        if (errno != 0) return io_error(dir, errno);
-        return Status::OK();
+        if (entry == nullptr && errno != 0) {
+            PLOG(WARNING) << "Fail to read " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        if (closedir(d) != 0) {
+            PLOG(WARNING) << "Fail to close " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        return ret;
     }
 
+<<<<<<< HEAD
+=======
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        DIR* d = opendir(dir.c_str());
+        if (d == nullptr) {
+            // If the error is caused by a nonexist directory or is not a directory, does not print log
+            PLOG_IF(WARNING, errno != ENOENT && errno != ENOTDIR) << "Fail to open " << dir;
+            return io_error(dir, errno);
+        }
+        errno = 0;
+        Status ret;
+        struct dirent* entry;
+        // FIXME: readdir is not required to be thread-safe, replace it with readdir_r
+        while ((entry = readdir(d)) != nullptr) {
+            std::string_view name(entry->d_name);
+            if (name == "." || name == "..") {
+                continue;
+            }
+            struct stat child_stat;
+            std::string child_path = fmt::format("{}/{}", dir, name);
+            if (stat(child_path.c_str(), &child_stat) != 0) {
+                PLOG(WARNING) << "Fail to stat " << child_path;
+                ret.update(io_error(child_path, errno));
+                break;
+            }
+            DirEntry de;
+            de.name = name;
+            de.is_dir = S_ISDIR(child_stat.st_mode);
+            de.mtime = static_cast<int64_t>(child_stat.st_mtime);
+            de.size = child_stat.st_size;
+            auto saved_errno = errno;
+            auto r = cb(de);
+            errno = saved_errno;
+            if (!r) {
+                break;
+            }
+        }
+        if (entry == nullptr && errno != 0) {
+            PLOG(WARNING) << "Fail to read " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        if (closedir(d) != 0) {
+            PLOG(WARNING) << "Fail to close " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        return ret;
+    }
+
+>>>>>>> eb8edd3ffc ([BugFix] Incorrect error checking in PosixFileSystem::iterate_dir (#41766))
     Status delete_file(const std::string& fname) override {
         if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
             FdCache::Instance()->erase(fname);
