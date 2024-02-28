@@ -49,8 +49,13 @@ void common_encode_decode(RowStoreEncoderPtr& row_encoder, std::unique_ptr<Schem
     ASSERT_EQ(full_row_col->size(), pchunk->num_rows());
 
     //decode
-    auto read_value_schema = create_schema({{TYPE_VARCHAR, false}, {TYPE_INT, false}, {TYPE_BOOLEAN, false}});
-    std::vector<ColumnId> value_column_ids{1, 2, 3};
+    auto read_value_schema = create_schema({{TYPE_VARCHAR, false},
+                                            {TYPE_INT, false},
+                                            {TYPE_BOOLEAN, false},
+                                            {TYPE_HLL, false},
+                                            {TYPE_PERCENTILE, false},
+                                            {TYPE_OBJECT, false}});
+    std::vector<ColumnId> value_column_ids{1, 2, 3, 4, 5, 6};
     std::vector<MutableColumnPtr> read_value_columns(value_column_ids.size());
     read_value_columns.reserve(value_column_ids.size());
     for (uint32_t i = 0; i < value_column_ids.size(); ++i) {
@@ -91,12 +96,26 @@ TEST(RowStoreEncoderTest, testBitmap) {
 
 TEST(RowStoreEncoderTest, testEncodeFullRowColumn) {
     // init schema
-    auto schema = create_schema({{TYPE_INT, true}, {TYPE_VARCHAR, false}, {TYPE_INT, false}, {TYPE_BOOLEAN, false}});
-    auto schema_with_row = create_schema(
-            {{TYPE_INT, true}, {TYPE_VARCHAR, false}, {TYPE_INT, false}, {TYPE_BOOLEAN, false}, {TYPE_VARCHAR, false}});
+    auto schema = create_schema({{TYPE_INT, true},
+                                 {TYPE_VARCHAR, false},
+                                 {TYPE_INT, false},
+                                 {TYPE_BOOLEAN, false},
+                                 {TYPE_HLL, false},
+                                 {TYPE_PERCENTILE, false},
+                                 {TYPE_OBJECT, false}});
+    auto schema_with_row = create_schema({{TYPE_INT, true},
+                                          {TYPE_VARCHAR, false},
+                                          {TYPE_INT, false},
+                                          {TYPE_BOOLEAN, false},
+                                          {TYPE_HLL, false},
+                                          {TYPE_PERCENTILE, false},
+                                          {TYPE_OBJECT, false},
+                                          {TYPE_VARCHAR, false}});
     // fill chunk
     const int n = 2;
     auto pchunk = ChunkHelper::new_chunk(*schema, n);
+    auto obj_column = down_cast<ObjectColumn<BitmapValue>*>(pchunk->columns()[6].get());
+    size_t ss = 0;
     for (int i = 0; i < n; i++) {
         Datum tmp;
         string tmpstr = StringPrintf("slice000%d", i * 17);
@@ -108,7 +127,20 @@ TEST(RowStoreEncoderTest, testEncodeFullRowColumn) {
         pchunk->columns()[2]->append_datum(tmp);
         tmp.set_uint8(i % 2);
         pchunk->columns()[3]->append_datum(tmp);
+        down_cast<ObjectColumn<HyperLogLog>*>(pchunk->columns()[4].get())->append(HyperLogLog(1));
+        down_cast<ObjectColumn<PercentileValue>*>(pchunk->columns()[5].get())->append(PercentileValue());
+        down_cast<ObjectColumn<BitmapValue>*>(pchunk->columns()[6].get())->append(BitmapValue());
+        ss += obj_column->byte_size(i);
     }
+    EXPECT_EQ(ss, obj_column->byte_size(0, n));
+    uint8_t obj_buffer[1024];
+    Buffer<uint32_t> slice_sizes(n);
+    obj_column->serialize_batch(obj_buffer, slice_sizes, n, 128);
+    size_t ss2 = 0;
+    for (int i = 0; i < n; i++) {
+        ss2 += slice_sizes[i];
+    }
+    EXPECT_EQ(ss, ss2);
 
     // simple encoder
     auto simple_row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);

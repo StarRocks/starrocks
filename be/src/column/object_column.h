@@ -22,6 +22,7 @@
 #include "common/object_pool.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
+#include "util/json.h"
 #include "util/percentile_value.h"
 
 namespace starrocks {
@@ -121,6 +122,8 @@ public:
                          uint32_t max_one_row_size) override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+
+    bool deserialize_and_append(const Slice& src);
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
