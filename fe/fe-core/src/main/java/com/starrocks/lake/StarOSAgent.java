@@ -724,4 +724,9 @@ public class StarOSAgent {
         Preconditions.checkState(shardInfos.size() == 1);
         return shardInfos.get(0);
     }
+
+    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long partitionId) {
+        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(partitionId));
+        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, partitionId)).build();
+    }
 }
