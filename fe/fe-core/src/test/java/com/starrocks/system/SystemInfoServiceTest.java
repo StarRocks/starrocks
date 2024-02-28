@@ -15,7 +15,6 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -344,6 +343,7 @@ public class SystemInfoServiceTest {
         } catch (AnalysisException e) {
             e.printStackTrace();
         }
+    }
 
     @Test
     public void testGetComputeNodeWithBePort() throws Exception {
