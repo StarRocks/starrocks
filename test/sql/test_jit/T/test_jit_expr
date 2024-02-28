@@ -51,3 +51,28 @@ select int0 from t order by case nint0 when 0 then int0 when 1 then int1 when 2 
 
 -- can jit on filter
 select int0 from t where case nint0 when 0 then int0 when 1 then int1 when 2 then null when 3 then null end > 0 order by 1;
+
+-- work with udf
+CREATE FUNCTION Echotinyint(tinyint)
+RETURNS tinyint
+properties
+(
+    "symbol" = "Echotinyint",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc%2FEchotinyint.jar"
+);
+select count(*) from t where int0 = Echotinyint(int0);
+
+-- work with dict_mapping
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+                primary key(col_1)
+                distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into dict values(1, 'hello world 1', default, 1 * 10);
+insert into dict values(2, 'hello world 2', default, 2 * 10);
+insert into dict values(3, 'hello world 3', default, 3 * 10);
+insert into dict values(4, 'hello world 4', default, 4 * 10);
+select count(*) from t where int0 <> dict_mapping("dict", int0, "col_4");
+select count(*) from t where int0 = dict_mapping("dict", int0, "col_4");

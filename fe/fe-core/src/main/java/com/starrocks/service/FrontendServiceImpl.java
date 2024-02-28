@@ -142,10 +142,12 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Frontend;
@@ -515,7 +517,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 if (tbl != null) {
                                     try {
                                         Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                                null, tableName.getDb(), tbl);
+                                                null, db.getFullName(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
                                     }
@@ -2228,6 +2230,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
         try {
+            // ingestion is top priority, if schema change or rollup is running, cancel it
+            try {
+                if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
+                    LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
+                    state.getLocalMetastore().cancelAlter(
+                            new CancelAlterTableStmt(
+                                    ShowAlterStmt.AlterType.ROLLUP,
+                                    new TableName(db.getFullName(), olapTable.getName())),
+                                    "conflict with expression partition");
+                }
+
+                if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                    LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
+                    state.getLocalMetastore().cancelAlter(
+                            new CancelAlterTableStmt(
+                                    ShowAlterStmt.AlterType.COLUMN,
+                                    new TableName(db.getFullName(), olapTable.getName())),
+                                    "conflict with expression partition");
+                }
+            } catch (Exception e) {
+                LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
+            }
             state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn(e);

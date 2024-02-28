@@ -24,6 +24,7 @@ import java.util.List;
 public class CompactionClause extends AlterTableClause {
 
     private List<String> partitionNames;
+    // used only in shared-nothing mode
     private boolean baseCompaction = true;
 
     public List<String> getPartitionNames() {

@@ -39,13 +39,12 @@ public:
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status prepare_batch(size_t* num_records, Column* column) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+        size_t num_rows = static_cast<size_t>(range.span_size());
         if (_step > 1) {
-            *num_records = 0;
             return Status::EndOfFile("");
         }
         size_t start = 0;
-        size_t num_rows = 0;
         if (_step == 0) {
             start = 0;
             num_rows = 8;
@@ -55,29 +54,21 @@ public:
         }
 
         if (_type == tparquet::Type::type::INT32) {
-            _append_int32_column(column, start, num_rows);
+            _append_int32_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::INT64) {
-            _append_int64_column(column, start, num_rows);
+            _append_int64_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::INT96) {
-            _append_int96_column(column, start, num_rows);
+            _append_int96_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::BYTE_ARRAY) {
-            _append_binary_column(column, start, num_rows);
+            _append_binary_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::FLOAT) {
-            _append_float_column(column, start, num_rows);
+            _append_float_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::DOUBLE) {
-            _append_double_column(column, start, num_rows);
+            _append_double_column(dst, start, num_rows);
         }
 
         _step++;
-        *num_records = num_rows;
         return Status::OK();
-    }
-
-    Status finish_batch() override { return Status::OK(); }
-
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
-        size_t rows = static_cast<size_t>(range.span_size());
-        return prepare_batch(&rows, dst);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override{};

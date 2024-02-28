@@ -21,7 +21,7 @@ However, the INSERT+`FILES()` method currently supports only the Parquet and ORC
 
 ## Before you begin
 
-### Make source data read
+### Make source data ready
 
 Make sure that the source data you want to load into StarRocks is properly stored in a container within your Azure storage account.
 

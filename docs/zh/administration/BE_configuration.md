@@ -293,8 +293,14 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### enable_size_tiered_compaction_strategy
 
-- 含义：是否开启 Size-tiered Compaction 策略。
+- 含义：是否开启 Size-tiered Compaction 策略 (Primary Key 表除外)。
 - 默认值：true
+
+#### enable_pk_size_tiered_compaction_strategy
+
+- 含义：是否为 Primary Key 表开启 Size-tiered Compaction 策略。
+- 默认值：true
+- 引入版本：v3.2.4, v3.1.10
 
 #### min_compaction_failure_interval_sec
 
@@ -505,8 +511,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### lake_pk_compaction_max_input_rowsets
 
-- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。
-- 默认值：5
+- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。从 v3.2.4 和 v3.1.10 版本开始，该参数默认值从 `5` 变更为 `1000`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
+- 默认值：1000
 - 引入版本：v3.1.8、v3.2.3
 
 #### compact_threads
@@ -546,6 +552,19 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：磁盘进行垃圾清理的最小间隔。自 3.0 版本起，该参数由静态变为动态。
 - 单位：秒
 - 默认值：180
+
+#### starlet_use_star_cache
+
+- 含义：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。
+- 默认值：true
+- 引入版本：3.1
+
+#### starlet_cache_evict_high_water
+
+- 含义：在存算分离模式下启用 file data cache，如果当前剩余磁盘容量百分比低于此配置项中指定的值，StarRocks 将触发缓存淘汰。默认值表示 file data cache 默认最多使用 80% 磁盘容量。
+- 默认值：0.2
+- 引入版本：3.0
+
 
 ## 配置 BE 静态参数
 
@@ -958,3 +977,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
 - 单位：N/A
 - 默认值：0
+
+#### starlet_star_cache_disk_size_percent
+
+- 含义：存算分离模式下，block data cache 最多可使用的磁盘容量百分比。
+- 默认值：80
+- 引入版本：3.1

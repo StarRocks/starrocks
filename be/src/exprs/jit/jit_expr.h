@@ -40,6 +40,8 @@ public:
 
     void set_uncompilable_children(RuntimeState* state);
 
+    Status prepare_impl(RuntimeState* state, ExprContext* context);
+
 protected:
     // Compile the expression into native code and retrieve the function pointer.
     // if compile failed, fallback to original expr.

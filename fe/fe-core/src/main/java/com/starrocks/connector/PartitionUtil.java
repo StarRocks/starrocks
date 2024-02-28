@@ -731,7 +731,8 @@ public class PartitionUtil {
         boolean existPartitionEvolution = spec.fields().stream().anyMatch(field -> field.transform().isVoid());
         for (int i = 0; i < spec.fields().size(); i++) {
             PartitionField partitionField = spec.fields().get(i);
-            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) || partitionData.get(i) == null) {
+            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) ||
+                    (partitionField.transform().isVoid() && partitionData.get(i) == null)) {
                 continue;
             }
 

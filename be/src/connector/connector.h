@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -71,10 +72,12 @@ public:
     void set_predicates(const std::vector<ExprContext*>& predicates) { _conjunct_ctxs = predicates; }
     void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
+    void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
     Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
     // Called frequently, don't do heavy work
     virtual const std::string get_custom_coredump_msg() const { return ""; }
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {}
 
     struct Profile {
         int mem_alloc_failed_count;
@@ -89,6 +92,7 @@ protected:
     RuntimeBloomFilterEvalContext runtime_bloom_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
+    pipeline::ScanSplitContext* _split_context = nullptr;
     void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
 };
 

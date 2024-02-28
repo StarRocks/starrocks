@@ -50,7 +50,10 @@ void JITExpr::set_uncompilable_children(RuntimeState* state) {
 
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
+    return prepare_impl(state, context);
+}
 
+Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
     if (_is_prepared) {
         return Status::OK();
     }

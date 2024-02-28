@@ -1235,6 +1235,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_create_partial_partition_in_batch = false;
 
+    @ConfField(mutable = true, comment = "The interval of create partition batch, to avoid too frequent")
+    public static long mv_create_partition_batch_interval_ms = 1000;
+
     /**
      * The number of query retries.
      * A query may retry if we encounter RPC exception and no result has been sent to user.
@@ -2086,6 +2089,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_refresh_hive_partitions_statistics = true;
+
+    /**
+     * Enable reuse spark column statistics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_reuse_spark_column_statistics = true;
 
     /**
      * size of iceberg worker pool
