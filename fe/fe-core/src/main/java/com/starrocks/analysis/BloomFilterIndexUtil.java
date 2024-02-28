@@ -70,7 +70,6 @@ public class BloomFilterIndexUtil {
             if (!caseSensitive.equalsIgnoreCase("true") && !caseSensitive.equalsIgnoreCase("false")) {
                 throw new SemanticException("Ngram Bloom filter's case_sensitive should be true or false");
             }
-            properties.remove(CASE_SENSITIVE_KEY);
         }
     }
 

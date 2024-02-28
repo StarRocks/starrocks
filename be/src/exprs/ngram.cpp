@@ -153,23 +153,24 @@ private:
         std::vector<NgramHash> map_restore_helper(MAX_STRING_SIZE, 0);
 
         NullColumnPtr res_null = nullptr;
-        BinaryColumn* haystack = nullptr;
+        ColumnPtr haystackPtr = nullptr;
         // used in case_insensitive
         StatusOr<ColumnPtr> lower;
         if (haystack_column->is_nullable()) {
             auto haystack_nullable = ColumnHelper::as_column<NullableColumn>(haystack_column);
             res_null = haystack_nullable->null_column();
-            haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_nullable->data_column());
+            haystackPtr = haystack_nullable->data_column();
         } else {
-            haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_column);
+            haystackPtr = haystack_column;
         }
         if constexpr (case_insensitive) {
             Columns temp;
-            temp.emplace_back(haystack_column);
+            temp.emplace_back(haystackPtr);
             lower = StringFunctions::lower(nullptr, temp);
-            haystack = ColumnHelper::as_raw_column<BinaryColumn>(lower.value());
+            haystackPtr = lower.value();
         }
 
+        BinaryColumn* haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystackPtr);
         size_t chunk_size = haystack->size();
         auto res = RunTimeColumnType<TYPE_DOUBLE>::create(chunk_size);
 
