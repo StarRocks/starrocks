@@ -532,12 +532,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### storage_usage_hard_limit_percent
 
-- 含义：单个 BE 存储目录空间使用率硬上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_hard_limit_reserve_bytes`，会拒绝 Load 和 Restore 作业。需要同步修改 BE 配置 `storage_flood_stage_usage_percent` 以使其生效。
+- 含义：单个 BE 存储目录空间使用率硬上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_hard_limit_reserve_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数`storage_flood_stage_usage_percent` 才能使配置生效。
 - 默认值：95
 
 #### storage_usage_hard_limit_reserve_bytes
 
-- 含义：单个 BE 存储目录剩余空间硬限制。默认 100 GB，单位为 Byte。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_hard_limit_percent`，会拒绝 Load 和 Restore 作业。需要同步修改 BE 配置 `storage_flood_stage_left_capacity_bytes` 以使其生效。
+- 含义：单个 BE 存储目录剩余空间硬限制。默认 100 GB，单位为 Byte。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_hard_limit_percent`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数 `storage_flood_stage_left_capacity_bytes` 才能使配置生效。
 - 单位：字节
 - 默认值：100 \* 1024 \* 1024 \* 1024
 
