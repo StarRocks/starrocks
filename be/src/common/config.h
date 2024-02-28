@@ -274,6 +274,9 @@ CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
+// data and index page size, default is 64k
+CONF_Int32(data_page_size, "65536");
+
 // Cache for storage page size
 CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
