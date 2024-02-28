@@ -97,7 +97,7 @@ public class CreateLakeTableTest {
                     .setS3FsInfo(s3FileStoreInfo).build();
 
             @Mock
-            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException, DdlException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
 
@@ -107,7 +107,7 @@ public class CreateLakeTableTest {
             }
 
             @Mock
-            public StorageVolume getStorageVolume(String svId) {
+            public StorageVolume getStorageVolume(String svId) throws DdlException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
