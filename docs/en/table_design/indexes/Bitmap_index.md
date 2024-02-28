@@ -76,7 +76,7 @@ There are two ways to create a bitmap index for a column.
 
 ## Display bitmap indexes
 
-You can view all bitmap indexes created in a table using the SHOW INDEX statement. For parameter descriptions and examples, see [SHOW INDEX](../../sql-reference/sql-statements/Administration/SHOW_INDEX.md).
+You can view all bitmap indexes created in a table using the SHOW INDEX statement. For parameter descriptions and examples, see [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation/SHOW_INDEX.md).
 
 ```SQL
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];

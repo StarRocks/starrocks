@@ -9,28 +9,30 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
 - [All statements](#all-statements)
   - [User account management](#user-account-management)
   - [Cluster management](#cluster-management)
-    - [FE, BE, CN, Broker, process](#fe-be-cn-broker-process)
+    - [Nodes and processes](#nodes-and-processes)
     - [Resource group](#resource-group)
     - [Storage volume](#storage-volume)
-    - [Table, tablet, replica](#table-tablet-replica)
-    - [File, index, variable](#file-index-variable)
+    - [Check and repair table, tablet, and replica](#check-and-repair-table-tablet-and-replica)
+    - [Configurations and variables](#configurations-and-variables)
+    - [Files](#files)
     - [SQL Blacklist](#sql-blacklist)
     - [Plugin](#plugin)
-    - [Query plan and query profile](#query-plan-and-query-profile)
+    - [Execution plan and query profile](#execution-plan-and-query-profile)
   - [Loading, unloading](#loading-unloading)
     - [Routine load](#routine-load)
     - [Other load](#other-load)
+    - [Pipe](#pipe)
     - [Unloading](#unloading)
     - [ETL task](#etl-task)
   - [Catalog, database, resource](#catalog-database-resource)
     - [Catalog](#catalog)
     - [Database](#database)
     - [Resource](#resource)
-  - [Create table, partition](#create-table-partition)
+  - [Table, partition, bucket, index](#table-partition-bucket-index)
   - [View, materialized view](#view-materialized-view)
     - [View](#view)
     - [Materialized view](#materialized-view)
-  - [Function, SELECT](#function-select)
+  - [Function](#function)
   - [CBO statistics](#cbo-statistics)
   - [Backup and restore](#backup-and-restore)
   - [Utility commands](#utility-commands)
@@ -59,12 +61,10 @@ Manages users, roles, and privileges.
 
 ## Cluster management
 
-Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, storage volumes, tables, tablets, replicas, files, indexes, variables, and plugins.
+Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource groups, storage volumes, tables, tablets, replicas, files, variables, plugins, and SQL blacklist.
 
-### FE, BE, CN, Broker, process
+### Nodes and processes
 
-- [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
-- [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
 - [ALTER SYSTEM](./Administration/ALTER_SYSTEM.md)
 - [CANCEL DECOMMISSION](./Administration/CANCEL_DECOMMISSION.md)
 - [KILL](./Administration/KILL.md)
@@ -78,8 +78,8 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 
 ### Resource group
 
-- [CREATE RESOURCE GROUP](./Administration/CREATE_RESOURCE_GROUP.md)
 - [ALTER RESOURCE GROUP](./Administration/ALTER_RESOURCE_GROUP.md)
+- [CREATE RESOURCE GROUP](./Administration/CREATE_RESOURCE_GROUP.md)
 - [DROP RESOURCE GROUP](./Administration/DROP_RESOURCE_GROUP.md)
 - [SHOW RESOURCE GROUP](./Administration/SHOW_RESOURCE_GROUP.md)
 - [SHOW USAGE RESOURCE GROUPS](./Administration/SHOW_USAGE_RESOURCE_GROUPS.md)
@@ -93,7 +93,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [SET DEFAULT STORAGE VOLUME](./Administration/SET_DEFAULT_STORAGE_VOLUME.md)
 - [SHOW STORAGE VOLUMES](./Administration/SHOW_STORAGE_VOLUMES.md)
 
-### Table, tablet, replica
+### Check and repair table, tablet, and replica
 
 - [ADMIN CANCEL REPAIR TABLE](./Administration/ADMIN_CANCEL_REPAIR.md)
 - [ADMIN CHECK TABLET](./Administration/ADMIN_CHECK_TABLET.md)
@@ -101,20 +101,20 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [ADMIN SET REPLICA STATUS](./Administration/ADMIN_SET_REPLICA_STATUS.md)
 - [ADMIN SHOW REPLICA DISTRIBUTION](./Administration/ADMIN_SHOW_REPLICA_DISTRIBUTION.md)
 - [ADMIN SHOW REPLICA STATUS](./Administration/ADMIN_SHOW_REPLICA_STATUS.md)
-- [RECOVER](./data-definition/RECOVER.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
-### File, index, variable
+### Configurations and variables
+
+- [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
+- [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
+- [SET (variable)](./Administration/SET.md)
+- [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
+
+### Files
 
 - [CREATE FILE](./Administration/CREATE_FILE.md)
-- [CREATE INDEX](./data-definition/CREATE_INDEX.md)
 - [DROP FILE](./Administration/DROP_FILE.md)
-- [DROP INDEX](./data-definition/DROP_INDEX.md)
-- [SET (variable)](./Administration/SET.md)
 - [SHOW FILE](./Administration/SHOW_FILE.md)
-- [SHOW FULL COLUMNS](./Administration/SHOW_FULL_COLUMNS.md)
-- [SHOW INDEX](./Administration/SHOW_INDEX.md)
-- [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
 
 ### SQL Blacklist
 
@@ -128,13 +128,12 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [SHOW PLUGINS](./Administration/SHOW_PLUGINS.md)
 - [UNINSTALL PLUGIN](./Administration/UNINSTALL_PLUGIN.md)
 
-### Query plan and query profile
+### Execution plan and query profile
 
 - [ANALYZE PROFILE](./Administration/ANALYZE_PROFILE.md)
 - [EXPLAIN](./Administration/EXPLAIN.md)
 - [EXPLAIN ANALYZE](./Administration/EXPLAIN_ANALYZE.md)
 - [SHOW PROFILELIST](./Administration/SHOW_PROFILELIST.md)
-
 
 ## Loading, unloading
 
@@ -151,24 +150,27 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 ### Other load
 
 - [ALTER LOAD](./data-manipulation/ALTER_LOAD.md)
-- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
 - [BROKER LOAD](./data-manipulation/BROKER_LOAD.md)
 - [CANCEL LOAD](./data-manipulation/CANCEL_LOAD.md)
-- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
-- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
 - [INSERT](./data-manipulation/INSERT.md)
-- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
 - [SHOW LOAD](./data-manipulation/SHOW_LOAD.md)
-- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SHOW TRANSACTION](./data-manipulation/SHOW_TRANSACTION.md)
 - [SPARK LOAD](./data-manipulation/SPARK_LOAD.md)
 - [STREAM LOAD](./data-manipulation/STREAM_LOAD.md)
+
+### Pipe
+
+- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
+- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
+- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
+- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
+- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SUSPEND or RESUME PIPE](./data-manipulation/SUSPEND_or_RESUME_PIPE.md)
 
 ### Unloading
 
-- [EXPORT](./data-manipulation/EXPORT.md)
 - [CANCEL EXPORT](./data-manipulation/CANCEL_EXPORT.md)
+- [EXPORT](./data-manipulation/EXPORT.md)
 - [SHOW EXPORT](./data-manipulation/SHOW_EXPORT.md)
 
 ### ETL task
@@ -202,24 +204,29 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [SHOW RESOURCES](./data-definition/SHOW_RESOURCES.md)
 
-## Create table, partition
+## Table, partition, bucket, index
 
 - [ALTER TABLE](./data-definition/ALTER_TABLE.md)
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
+- [CREATE INDEX](./data-definition/CREATE_INDEX.md)
 - [CREATE TABLE](./data-definition/CREATE_TABLE.md)
 - [CREATE TABLE AS SELECT](./data-definition/CREATE_TABLE_AS_SELECT.md)
 - [CREATE TABLE LIKE](./data-definition/CREATE_TABLE_LIKE.md)
+- [DELETE](./data-manipulation/DELETE.md)
+- [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
-- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
-- [DELETE](./data-manipulation/DELETE.md)
+- [SELECT](./data-manipulation/SELECT.md)
 - [SHOW ALTER TABLE](./data-manipulation/SHOW_ALTER.md)
 - [SHOW CREATE TABLE](./data-manipulation/SHOW_CREATE_TABLE.md)
 - [SHOW DELETE](./data-manipulation/SHOW_DELETE.md)
 - [SHOW DYNAMIC PARTITION TABLES](./data-manipulation/SHOW_DYNAMIC_PARTITION_TABLES.md)
+- [SHOW FULL COLUMNS](./data-manipulation/SHOW_FULL_COLUMNS.md)
+- [SHOW INDEX](./data-manipulation/SHOW_INDEX.md)
 - [SHOW PARTITIONS](./data-manipulation/SHOW_PARTITIONS.md)
 - [SHOW TABLES](./data-manipulation/SHOW_TABLES.md)
 - [SHOW TABLET](./data-manipulation/SHOW_TABLET.md)
+- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
 - [UPDATE](./data-manipulation/UPDATE.md)
 
 ## View, materialized view
@@ -228,26 +235,25 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 
 - [ALTER VIEW](./data-definition/ALTER_VIEW.md)
 - [CREATE VIEW](./data-definition/CREATE_VIEW.md)
-- [SHOW CREATE VIEW](./data-manipulation/SHOW_CREATE_VIEW.md)
 - [DROP VIEW](./data-definition/DROP_VIEW.md)
+- [SHOW CREATE VIEW](./data-manipulation/SHOW_CREATE_VIEW.md)
 
 ### Materialized view
 
 - [ALTER MATERIALIZED VIEW](./data-definition/ALTER_MATERIALIZED_VIEW.md)
+- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [CREATE MATERIALIZED VIEW](./data-definition/CREATE_MATERIALIZED_VIEW.md)
 - [DROP MATERIALIZED VIEW](./data-definition/DROP_MATERIALIZED_VIEW.md)
-- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [REFRESH MATERIALIZED VIEW](./data-manipulation/REFRESH_MATERIALIZED_VIEW.md)
 - [SHOW ALTER MATERIALIZED VIEW](./data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md)
 - [SHOW CREATE MATERIALIZED VIEW](./data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW.md)
 - [SHOW MATERIALIZED VIEWS](./data-manipulation/SHOW_MATERIALIZED_VIEW.md)
 
-## Function, SELECT
+## Function
 
 - [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
 - [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
-- [SHOW FUNCTION](./data-definition/SHOW_FUNCTIONS.md)
-- [SELECT](./data-manipulation/SELECT.md)
+- [SHOW FUNCTIONS](./data-definition/SHOW_FUNCTIONS.md)
 
 ## CBO statistics
 
