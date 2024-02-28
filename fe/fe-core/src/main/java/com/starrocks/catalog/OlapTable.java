@@ -2819,6 +2819,10 @@ public class OlapTable extends Table {
     }
 
     public boolean getUseFastSchemaEvolution() {
+        if (hasRowStorageType()) {
+            // row storage type does not support fast schema evolution currently
+            return false;
+        }
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }
