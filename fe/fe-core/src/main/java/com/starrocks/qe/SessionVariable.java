@@ -1510,9 +1510,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
     private String cboEqBaseType = SessionVariableConstants.VARCHAR;
 
-
-
-
     @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryQueue = true;
 
@@ -1532,6 +1529,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getCboEqBaseType() {
         return cboEqBaseType;
+    }
+
+    public void setCboEqBaseType(String cboEqBaseType) {
+        this.cboEqBaseType = cboEqBaseType;
     }
 
     public void setChooseExecuteInstancesMode(String mode) {
