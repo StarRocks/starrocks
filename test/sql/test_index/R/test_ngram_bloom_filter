@@ -101,3 +101,100 @@ show index from ngram_index_default_3;
 -- result:
 ngram_bloom_filter_db_2.ngram_index_default_3		idx_name1		username						NGRAMBF	
 -- !result
+-- name: test_ngram_bloom_filter_like
+CREATE TABLE ngram_index_like(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into ngram_index_like values ('2023-01-01',"hina",3);
+-- result:
+-- !result
+insert into ngram_index_like values ('2023-01-01',"chinese",3);
+-- result:
+-- !result
+select * from ngram_index_like where username like 'chia%';
+-- result:
+-- !result
+select * from ngram_index_like where username like '_hine%';
+-- result:
+2023-01-01 00:00:00	chinese	3
+-- !result
+select * from ngram_index_like where username like '_hin%';
+-- result:
+2023-01-01 00:00:00	chinese	3
+-- !result
+-- name: test_ngram_bloom_filter_case_insensitive
+CREATE TABLE ngram_index_case_in_sensitive(
+    timestamp DATETIME NOT NULL,
+    Username STRING,
+    price INT NULL
+)PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into ngram_index_case_in_sensitive values ('2023-01-01',"aAbac",3);
+-- result:
+-- !result
+insert into ngram_index_case_in_sensitive values ('2023-01-01',"AaBAa",3);
+-- result:
+-- !result
+select ngram_search(Username,"aabaa",4) as order_col from ngram_index_case_in_sensitive order by order_col desc;
+-- result:
+0.0
+0.0
+-- !result
+select ngram_search_case_insensitive(Username,"aabaa",4) as order_col from ngram_index_case_in_sensitive order by order_col desc;
+-- result:
+1.0
+0.5
+-- !result
+ALTER TABLE ngram_index_case_in_sensitive ADD INDEX idx_name1(Username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.01");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from ngram_index_case_in_sensitive order by ngram_search(Username,"aabaa",4) desc;
+-- result:
+-- !result
+select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+-- result:
+2023-01-01 00:00:00	AaBAa	3
+2023-01-01 00:00:00	aAbac	3
+-- !result
+drop index idx_name1 on ngram_index_case_in_sensitive;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE ngram_index_case_in_sensitive ADD INDEX idx_name1(Username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.05", "case_sensitive" = "false");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from ngram_index_case_in_sensitive order by ngram_search(Username,"aabaa",4) desc;
+-- result:
+2023-01-01 00:00:00	aAbac	3
+2023-01-01 00:00:00	AaBAa	3
+-- !result
+select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+-- result:
+2023-01-01 00:00:00	AaBAa	3
+2023-01-01 00:00:00	aAbac	3
+-- !result
+insert into ngram_index_case_in_sensitive values ('2023-01-01',"DDDDDDd",3);
+-- result:
+-- !result
+select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+-- result:
+2023-01-01 00:00:00	AaBAa	3
+2023-01-01 00:00:00	aAbac	3
+-- !result
