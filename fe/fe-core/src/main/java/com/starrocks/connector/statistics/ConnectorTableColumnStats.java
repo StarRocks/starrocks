@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector;
+package com.starrocks.connector.statistics;
 
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 

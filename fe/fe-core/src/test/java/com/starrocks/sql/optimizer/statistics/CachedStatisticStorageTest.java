@@ -18,6 +18,7 @@ import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -25,9 +26,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorColumnStatsCacheLoader;
-import com.starrocks.connector.ConnectorTableColumnKey;
-import com.starrocks.connector.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
+import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
+import com.starrocks.connector.statistics.ConnectorTableColumnKey;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -247,7 +250,9 @@ public class CachedStatisticStorageTest {
 
                 return ImmutableList.of(data1, data2, data3);
             }
+        };
 
+        new MockUp<StatisticsUtils>() {
             @Mock
             public Table getTableByUUID(String tableUUID) {
                 return connectContext.getGlobalStateMgr().getMetadataMgr().
@@ -255,6 +260,7 @@ public class CachedStatisticStorageTest {
             }
 
         };
+
         List<ConnectorTableColumnKey> cacheKeys = ImmutableList.of(
                 new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c1"),
                 new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c2"),
@@ -324,6 +330,34 @@ public class CachedStatisticStorageTest {
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
         try {
             cachedStatisticStorage.expireConnectorTableColumnStatistics(table, ImmutableList.of("c1", "c2"));
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testGetConnectorHistogramStatistics(@Mocked AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>>
+                                                    histogramCache) {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c1");
+        new Expectations() {
+            {
+                histogramCache.getAll((Iterable<? extends ConnectorTableColumnKey>) any);
+                result = CompletableFuture.completedFuture(ImmutableMap.of(key, Optional.empty()));
+                minTimes = 0;
+            }
+        };
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        Map<String, Histogram> histogramMap = cachedStatisticStorage.getConnectorHistogramStatistics(table, ImmutableList.of("c1"));
+        Assert.assertEquals(0, histogramMap.size());
+    }
+
+    @Test
+    public void testExpireConnectorHistogramStatistics() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        try {
+            cachedStatisticStorage.expireConnectorHistogramStatistics(table, ImmutableList.of("c1", "c2"));
         } catch (Exception e) {
             Assert.fail();
         }
