@@ -228,4 +228,36 @@ TEST_F(PosixFileSystemTest, iterate_dir2) {
     }));
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(PosixFileSystemTest, test_delete_files) {
+    auto fs = FileSystem::Default();
+
+    auto path1 = std::string("./ut_dir/fs_posix/f1");
+    ASSIGN_OR_ABORT(auto wf1, fs->new_writable_file(path1));
+    EXPECT_OK(wf1->append("hello"));
+    EXPECT_OK(wf1->append(" world!"));
+    EXPECT_OK(wf1->sync());
+    EXPECT_OK(wf1->close());
+    EXPECT_EQ(sizeof("hello world!"), wf1->size() + 1);
+    EXPECT_OK(fs->path_exists(path1));
+
+    auto path2 = std::string("./ut_dir/fs_posix/f2");
+    ASSIGN_OR_ABORT(auto wf2, fs->new_writable_file(path2));
+    EXPECT_OK(wf2->append("hello"));
+    EXPECT_OK(wf2->append(" world!"));
+    EXPECT_OK(wf2->sync());
+    EXPECT_OK(wf2->close());
+    EXPECT_EQ(sizeof("hello world!"), wf2->size() + 1);
+    EXPECT_OK(fs->path_exists(path2));
+
+    std::vector<std::string> paths{path1, path2};
+    EXPECT_OK(fs->delete_files(paths));
+    EXPECT_TRUE(fs->path_exists(path1).is_not_found());
+    EXPECT_TRUE(fs->path_exists(path2).is_not_found());
+    EXPECT_OK(fs->delete_dir_recursive(path1));
+    EXPECT_OK(fs->delete_dir_recursive(path2));
+}
+
+>>>>>>> afac66361f ([BugFix] PosixFileSystem::delete_dir_recursive() should return OK on non-exist file (#41770))
 } // namespace starrocks
