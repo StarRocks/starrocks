@@ -396,20 +396,29 @@ public:
             return io_error(dir, errno);
         }
         errno = 0;
+        Status ret;
         struct dirent* entry;
         while ((entry = readdir(d)) != nullptr) {
             std::string_view name(entry->d_name);
             if (name == "." || name == "..") {
                 continue;
             }
-            // callback returning false means to terminate iteration
-            if (!cb(name)) {
+            auto saved_errno = errno;
+            auto r = cb(name);
+            errno = saved_errno;
+            if (!r) {
                 break;
             }
         }
-        closedir(d);
-        if (errno != 0) return io_error(dir, errno);
-        return Status::OK();
+        if (entry == nullptr && errno != 0) {
+            PLOG(WARNING) << "Fail to read " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        if (closedir(d) != 0) {
+            PLOG(WARNING) << "Fail to close " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        return ret;
     }
 
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
@@ -434,8 +443,10 @@ public:
             de.is_dir = S_ISDIR(child_stat.st_mode);
             de.mtime = static_cast<int64_t>(child_stat.st_mtime);
             de.size = child_stat.st_size;
-            // callback returning false means to terminate iteration
-            if (!cb(de)) {
+            auto saved_errno = errno;
+            auto r = cb(de);
+            errno = saved_errno;
+            if (!r) {
                 break;
             }
         }
