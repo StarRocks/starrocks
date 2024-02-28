@@ -3449,16 +3449,20 @@ public class LocalMetastore implements ConnectorMetadata {
      * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
      */
-    public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
+    public void cancelAlter(CancelAlterTableStmt stmt, String reason) throws DdlException {
         if (stmt.getAlterType() == ShowAlterStmt.AlterType.ROLLUP) {
-            stateMgr.getRollupHandler().cancel(stmt);
+            stateMgr.getRollupHandler().cancel(stmt, reason);
         } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN) {
-            stateMgr.getSchemaChangeHandler().cancel(stmt);
+            stateMgr.getSchemaChangeHandler().cancel(stmt, reason);
         } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
             stateMgr.getRollupHandler().cancelMV(stmt);
         } else {
             throw new DdlException("Cancel " + stmt.getAlterType() + " does not implement yet");
         }
+    }
+
+    public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
+        cancelAlter(stmt, "user cancelled");
     }
 
     // entry of rename table operation

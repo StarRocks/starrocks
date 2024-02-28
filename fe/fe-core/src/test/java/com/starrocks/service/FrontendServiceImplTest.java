@@ -17,6 +17,7 @@ package com.starrocks.service;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -245,6 +246,66 @@ public class FrontendServiceImplTest {
         partition = impl.createPartition(request);
         Assert.assertEquals(1, partition.partitions.size());
     }
+
+    @Test
+    public void testCreatePartitionWithSchemaChange() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        ((OlapTable) table).setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        ((OlapTable) table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    @Test
+    public void testCreatePartitionWithRollup() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        ((OlapTable) table).setState(OlapTable.OlapTableState.ROLLUP);
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        ((OlapTable) table).setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+
 
     @Test
     public void testCreatePartitionExceedLimit() throws TException {
