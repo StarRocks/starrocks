@@ -190,17 +190,7 @@ public:
 
     int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const;
 
-<<<<<<< HEAD
-    std::vector<BitmapValue> split_bitmap(size_t batch_size);
-=======
-    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
-                                         BitmapValue* ret_bitmap) const;
-
-    int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
-                                            BitmapValue* ret_bitmap) const;
-
     std::vector<BitmapValue> split_bitmap(size_t batch_size) const;
->>>>>>> 3684456677 ([Enhancement] Avoid repeated calculation of bitmap memory usage (#41767))
 
     BitmapDataType type() const { return _type; }
     bool is_shared() const { return _bitmap.use_count() > 1; }
