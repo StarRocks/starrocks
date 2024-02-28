@@ -69,6 +69,9 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     public void addReplicationJob(ReplicationJob job) throws AlreadyExistsException {
+        if (!Config.emr_serveless_replication_enable) {
+            throw new RuntimeException("EMR Serverless StarRocks: Cannot execute replication job.");
+        }
         // Limit replication job size
         if (runningJobs.size() >= Config.replication_max_parallel_table_count) {
             throw new RuntimeException(

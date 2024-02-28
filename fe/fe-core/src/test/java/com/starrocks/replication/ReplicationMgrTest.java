@@ -109,6 +109,7 @@ public class ReplicationMgrTest {
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         replicationMgr = new ReplicationMgr();
+        Config.emr_serveless_replication_enable = true;
         replicationMgr.addReplicationJob(job);
     }
 

@@ -1406,6 +1406,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
 
+    /**
+     * If set to true, we will only support dla analysis in this shared_data mode.
+     * Since we use shared_data mode to deploy the cluster, we should disable
+     * creation of cloud native tables by users. We did not add pure dla run mode
+     * to avoid unconsidered system exceptions.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_pure_dla_mode = false;
+
     @ConfField
     public static boolean enable_udf = false;
 
@@ -3549,6 +3558,8 @@ public class Config extends ConfigBase {
     /*
      * Replication config
      */
+    @ConfField(mutable = true)
+    public static boolean emr_serveless_replication_enable = false;
     @ConfField
     public static int replication_interval_ms = 100;
     @ConfField(mutable = true)
