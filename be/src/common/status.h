@@ -290,6 +290,10 @@ inline const Status& to_status(const StatusOr<T>& st) {
     return st.status();
 }
 
+inline Status ignore_not_found(const Status& status) {
+    return status.is_not_found() ? Status::OK() : status;
+}
+
 #ifndef AS_STRING
 #define AS_STRING(x) AS_STRING_INTERNAL(x)
 #define AS_STRING_INTERNAL(x) #x

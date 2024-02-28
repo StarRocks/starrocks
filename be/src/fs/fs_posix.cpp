@@ -453,7 +453,7 @@ public:
             RETURN_IF_ERROR(st);
             return delete_dir(dirname);
         } else {
-            return delete_file(dirname);
+            return ignore_not_found(delete_file(dirname));
         }
     }
 
