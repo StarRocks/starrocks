@@ -965,7 +965,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed1) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
     // non-exist type bitmap.
     *((uint8_t*)(buf.c_str())) = (uint8_t)14;
@@ -997,7 +997,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
     bitmap_value.add(1);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
@@ -1032,7 +1032,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingleFailed) {
     bitmap_value.add(1);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     size_t half_length = buf.size() / 2;
@@ -1068,7 +1068,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
     bitmap_value.add(2);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
@@ -1105,7 +1105,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSetFailed) {
     bitmap_value.add(2);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     size_t half_length = buf.size() / 2;
@@ -1143,7 +1143,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
@@ -1183,7 +1183,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMapFailed) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
     size_t half_length = buf.size() / 2;
 
