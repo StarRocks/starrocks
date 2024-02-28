@@ -32,6 +32,13 @@ public class CloudConfigurationConstants {
     public static final String AWS_S3_ENDPOINT = "aws.s3.endpoint";
 
     // Configuration for AWS s3
+    /**
+     * Storage Volume specific parameters
+     */
+    // whether enable partitioned prefix layout on s3 storage
+    public static final String AWS_S3_ENABLE_PARTITIONED_PREFIX = "aws.s3.enable_partitioned_prefix";
+    // how many partitions to be created as the prefix.
+    public static final String AWS_S3_NUM_PARTITIONED_PREFIX = "aws.s3.num_partitioned_prefix";
 
     /**
      * Enable S3 path style access ie disabling the default virtual hosting behaviour.

@@ -14,6 +14,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.DdlException;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -24,13 +26,14 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.StatementBase;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class StorageVolumeTest {
+public class StorageVolumeAnalysisTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
@@ -186,5 +189,27 @@ public class StorageVolumeTest {
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof SetDefaultStorageVolumeStmt);
         Assert.assertEquals("SET storage_volume1 AS DEFAULT STORAGE VOLUME", stmt.toSql());
+    }
+
+    @Test
+    public void testCreatePartitionedPrefixStorageVolumeWithSubPathFail() throws DdlException {
+        String sql = "CREATE STORAGE VOLUME vol TYPE = S3 LOCATIONS = ('s3://bucket/subpath') PROPERTIES" +
+                " (\"aws.s3.region\"=\"us-west-2\", \"aws.s3.enable_partitioned_prefix\"=\"true\", " +
+                "\"aws.s3.use_aws_sdk_default_behavior\"=\"true\")";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
+
+        SharedDataStorageVolumeMgr mgr = new SharedDataStorageVolumeMgr();
+
+        // Partially mock SharedDataStorageVolumeMgr
+        new Expectations(mgr) {
+            {
+                mgr.exists(anyString);
+                result = false;
+            }
+        };
+
+        Assert.assertThrows(DdlException.class, () ->
+                mgr.createStorageVolume((CreateStorageVolumeStmt) stmt));
     }
 }

@@ -36,6 +36,7 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -260,6 +261,33 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
+    public void testImmutableProperties() throws DdlException, AlreadyExistsException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = List.of("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        String svKey = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Assert.assertTrue(svm.exists(svName));
+
+        {
+            Map<String, String> modifyParams = new HashMap<>();
+            modifyParams.put(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "true");
+            Assert.assertThrows(DdlException.class, () ->
+                    svm.updateStorageVolume(svName, modifyParams, Optional.of(false), ""));
+        }
+
+        {
+            Map<String, String> modifyParams = new HashMap<>();
+            modifyParams.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "12");
+            Assert.assertThrows(DdlException.class, () ->
+                    svm.updateStorageVolume(svName, modifyParams, Optional.of(false), ""));
+        }
+    }
+
+    @Test
     public void testBindAndUnbind() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         String svName = "test";
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
@@ -341,10 +369,14 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertTrue(sdsvm.exists(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
         StorageVolume sv = sdsvm.getStorageVolumeByName(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
         Assert.assertEquals(id, sdsvm.getDefaultStorageVolumeId());
-        Assert.assertEquals("region", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
-        Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().hasCredential());
-        Assert.assertTrue(sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getCredential().hasSimpleCredential());
+
+        FileStoreInfo fsInfo = sv.getCloudConfiguration().toFileStoreInfo();
+        Assert.assertEquals("region", fsInfo.getS3FsInfo().getRegion());
+        Assert.assertEquals("endpoint", fsInfo.getS3FsInfo().getEndpoint());
+        Assert.assertTrue(fsInfo.getS3FsInfo().hasCredential());
+        Assert.assertTrue(fsInfo.getS3FsInfo().getCredential().hasSimpleCredential());
+        Assert.assertFalse(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
+        Assert.assertEquals(0, fsInfo.getS3FsInfo().getNumPartitionedPrefix());
 
         // Builtin storage volume has existed, the conf will be ignored
         Config.aws_s3_region = "region1";
@@ -806,5 +838,34 @@ public class SharedDataStorageVolumeMgrTest {
 
         Assert.assertThrows(DdlException.class,
                 () -> svm.createStorageVolume(svName, "abc", locations, storageParams, Optional.empty(), ""));
+
+        {
+            // only for s3
+            Map<String, String> params = new HashMap<>();
+            params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "32");
+            Assert.assertThrows(DdlException.class,
+                    () -> svm.createStorageVolume(svName, "azblob", locations, params, Optional.empty(), ""));
+        }
+        {
+            // only for s3
+            Map<String, String> params = new HashMap<>();
+            params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "true");
+            Assert.assertThrows(DdlException.class,
+                    () -> svm.createStorageVolume(svName, "azblob", locations, params, Optional.empty(), ""));
+        }
+        {
+            // should be a number
+            Map<String, String> params = new HashMap<>();
+            params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "not_a_number");
+            Assert.assertThrows(DdlException.class,
+                    () -> svm.createStorageVolume(svName, "s3", locations, params, Optional.empty(), ""));
+        }
+        {
+            // should be a positive integer
+            Map<String, String> params = new HashMap<>();
+            params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX, "-1");
+            Assert.assertThrows(DdlException.class,
+                    () -> svm.createStorageVolume(svName, "s3", locations, params, Optional.empty(), ""));
+        }
     }
 }
