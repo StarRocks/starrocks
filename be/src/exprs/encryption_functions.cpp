@@ -19,6 +19,7 @@
 #include "common/status.h"
 #include "exprs/base64.h"
 #include "exprs/expr.h"
+#include "exprs/fpe.h"
 #include "util/aes_util.h"
 #include "util/debug_util.h"
 #include "util/integer_util.h"
@@ -417,6 +418,184 @@ Status EncryptionFunctions::sha2_close(FunctionContext* context, FunctionContext
     }
 
     return Status::OK();
+}
+
+StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const auto& key_column = ctx->get_constant_column(1);
+    if (key_column == nullptr) {
+        return Status::InvalidArgument("key is null");
+    }
+
+    auto key_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(key_column);
+    auto key_size = key_value.size;
+    if (key_size != 16 && key_size != 24 && key_size != 32) {
+        return Status::InvalidArgument("key size must 16 or 24 or 32");
+    }
+
+    std::vector<uint8_t> key(key_size);
+    for (size_t i = 0; i < key_size; ++i) {
+        key[i] = static_cast<uint8_t>(key_value[i]);
+    }
+
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto length_viewer = ColumnViewer<TYPE_INT>(columns[2]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    for (int row = 0; row < size; ++row) {
+        if (src_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        auto length = length_viewer.value(row);
+
+        std::string value;
+        auto src_size = src_value.size > FPE::MIN_LENGTH ? src_value.size : FPE::MIN_LENGTH;
+        value.resize(src_size);
+        RETURN_IF_ERROR(
+                FPE::encrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
+        result.append(Slice(value));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    const auto& key_column = ctx->get_constant_column(1);
+    if (key_column == nullptr) {
+        return Status::InvalidArgument("key is null");
+    }
+
+    auto key_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(key_column);
+    auto key_size = key_value.size;
+    if (key_size != 16 && key_size != 24 && key_size != 32) {
+        return Status::InvalidArgument("key size must 16 or 24 or 32");
+    }
+
+    std::vector<uint8_t> key(key_size);
+    for (size_t i = 0; i < key_size; ++i) {
+        key[i] = static_cast<uint8_t>(key_value[i]);
+    }
+
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto length_viewer = ColumnViewer<TYPE_INT>(columns[2]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    for (int row = 0; row < size; ++row) {
+        if (src_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        auto length = length_viewer.value(row);
+
+        std::string value;
+        auto src_size = src_value.size > FPE::MIN_LENGTH ? src_value.size : FPE::MIN_LENGTH;
+        value.resize(src_size);
+        std::string_view src_value_view((char*)src_value.data, src_value.size);
+        RETURN_IF_ERROR(FPE::decrypt(src_value_view, key, value.data(), length));
+        result.append(Slice(value));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    if (key_viewer.is_null(0)) {
+        return Status::InvalidArgument("key is null");
+    }
+
+    auto key_value = key_viewer.value(0);
+
+    auto key_size = key_value.size;
+    if (key_size != 16 && key_size != 24 && key_size != 32) {
+        return Status::InvalidArgument("key size must 16 or 24 or 32");
+    }
+
+    std::vector<uint8_t> key(key_size);
+    for (size_t i = 0; i < key_size; ++i) {
+        key[i] = static_cast<uint8_t>(key_value[i]);
+    }
+
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    for (int row = 0; row < size; ++row) {
+        if (src_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto src_value = src_viewer.value(row);
+        std::string value;
+        Status status = FPE::encrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value);
+        if (!status.ok()) {
+            return Status::RuntimeError("fpe_encrypt failed, value is :" + std::string(src_value));
+        }
+
+        result.append(Slice(value));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    if (key_viewer.is_null(0)) {
+        return Status::InvalidArgument("key is null");
+    }
+
+    auto key_value = key_viewer.value(0);
+
+    auto key_size = key_value.size;
+    if (key_size != 16 && key_size != 24 && key_size != 32) {
+        return Status::InvalidArgument("key size must 16 or 24 or 32");
+    }
+
+    std::vector<uint8_t> key(key_size);
+    for (size_t i = 0; i < key_size; ++i) {
+        key[i] = static_cast<uint8_t>(key_value[i]);
+    }
+
+    auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    for (int row = 0; row < size; ++row) {
+        if (src_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        auto src_value = src_viewer.value(row);
+
+        std::string value;
+        Status status = FPE::decrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value);
+        if (!status.ok()) {
+            return Status::RuntimeError("fpe_decrpyt failed, maybe because this value:" + std::string(src_value) +
+                                        " is not encrypted correctly");
+        }
+
+        result.append(Slice(value));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks
