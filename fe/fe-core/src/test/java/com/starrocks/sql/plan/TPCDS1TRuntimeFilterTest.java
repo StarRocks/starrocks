@@ -25,16 +25,7 @@ public class TPCDS1TRuntimeFilterTest extends TPCDS1TTestBase {
     }
 
     @Test
-    public void testBroadcastRuntimeFilter() throws Exception {
-        String sql = Q87;
-        String plan = getVerboseExplain(sql);
-        System.out.println(Q87);
-
-        System.out.println(plan);
-    }
-
-    @Test
-    public void testStr() throws Exception {
+    public void testQ87() throws Exception {
         String sql = "select count(*) \n" +
                 "from (" +
                 "      select distinct c_last_name, c_first_name, d_date\n" +
@@ -42,22 +33,9 @@ public class TPCDS1TRuntimeFilterTest extends TPCDS1TTestBase {
                 "       where catalog_sales.cs_sold_date_sk = date_dim.d_date_sk\n" +
                 "         and catalog_sales.cs_bill_customer_sk = customer.c_customer_sk\n" +
                 "         and d_month_seq between 1200 and 1200+11\n" +
-                ") cool_cust\n" +
-                ";";
+                ") cool_cust;";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
-    }
-
-    @Test
-    public void testStr1() throws Exception {
-        String sql = "select count(*) \n" +
-                "from (" +
-                "      select c_last_name, c_first_name\n" +
-                "       from catalog_sales join[broadcast] customer\n" +
-                "         on catalog_sales.cs_bill_customer_sk = customer.c_customer_sk\n" +
-                ") cool_cust\n" +
-                ";";
-        String plan = getVerboseExplain(sql);
-        System.out.println(plan);
+        assertCContains(plan, "filter_id = 0, probe_expr = (3: cs_sold_date_sk)");
+        assertNotContains(plan, "filter_id = 1");
     }
 }

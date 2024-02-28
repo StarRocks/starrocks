@@ -410,6 +410,9 @@ public class RuntimeFilterDescription {
             sb.append(", build_expr = (").append(buildExpr.toSql()).append(")");
             sb.append(", remote = ").append(hasRemoteTargets);
         }
+        if (hasRemoteTargets) {
+            sb.append(", wait=").append(waitTimeMs).append("ms");
+        }
         return sb.toString();
     }
 
@@ -538,6 +541,8 @@ public class RuntimeFilterDescription {
         } else {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
         }
+
+        t.setWait_time_ms(waitTimeMs);
 
         return t;
     }
