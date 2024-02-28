@@ -75,7 +75,7 @@ public class InsertLoadJob extends LoadJob {
 
     @SerializedName("tid")
     private long tableId;
-    private long estimateScanRow;
+    private long estimateScanRow = 0;
     private TLoadJobType loadType;
 
     // only for log replay
