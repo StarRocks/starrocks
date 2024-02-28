@@ -46,29 +46,14 @@ namespace starrocks {
 
 namespace detail {
 class Roaring64Map;
-<<<<<<< HEAD
 }
-=======
-} // namespace detail
 
->>>>>>> 3684456677 ([Enhancement] Avoid repeated calculation of bitmap memory usage (#41767))
 // Represent the in-memory and on-disk structure of StarRocks's BITMAP data type.
 // Optimize for the case where the bitmap contains 0 or 1 element which is common
 // for streaming load scenario.
 class BitmapValue {
 public:
-<<<<<<< HEAD
-    enum BitmapDataType {
-        EMPTY = 0,
-        SINGLE = 1, // single element
-        BITMAP = 2, // more than one elements
-        SET = 3
-    };
-=======
-    friend class BitmapValueIter;
-
     enum BitmapDataType { EMPTY = 0, SINGLE = 1, BITMAP = 2, SET = 3 };
->>>>>>> 3684456677 ([Enhancement] Avoid repeated calculation of bitmap memory usage (#41767))
 
     // Construct an empty bitmap.
     BitmapValue() = default;
@@ -190,17 +175,7 @@ public:
 
     int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const;
 
-<<<<<<< HEAD
-    std::vector<BitmapValue> split_bitmap(size_t batch_size);
-=======
-    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
-                                         BitmapValue* ret_bitmap) const;
-
-    int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
-                                            BitmapValue* ret_bitmap) const;
-
     std::vector<BitmapValue> split_bitmap(size_t batch_size) const;
->>>>>>> 3684456677 ([Enhancement] Avoid repeated calculation of bitmap memory usage (#41767))
 
     BitmapDataType type() const { return _type; }
     bool is_shared() const { return _bitmap.use_count() > 1; }
