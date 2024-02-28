@@ -107,7 +107,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
-    _init_tuples_and_slots(state);
+    RETURN_IF_ERROR(_init_tuples_and_slots(state));
     _init_counter(state);
     RETURN_IF_ERROR(_init_partition_values());
     if (_filter_by_eval_partition_conjuncts) {
@@ -220,7 +220,7 @@ int32_t HiveDataSource::scan_range_indicate_const_column_index(SlotId id) const 
     }
 }
 
-void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
+Status HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_tuple_id) {
         _min_max_tuple_id = hdfs_scan_node.min_max_tuple_id;
@@ -251,8 +251,11 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         for (const auto& slot : _materialize_slots) {
             id_to_slots.emplace(slot->id(), slot);
         }
+        std::map<SlotId, int> id_to_index;
+        for (int i = 0; i < slots.size(); i++) {
+            id_to_index.emplace(slots[i]->id(), i);
+        }
 
-        int32_t delete_column_index = slots.size();
         auto* delete_column_tuple_desc =
                 state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
 
@@ -261,7 +264,13 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             _equality_delete_slots.emplace_back(d_slot_desc);
             if (!id_to_slots.contains(d_slot_desc->id())) {
                 _materialize_slots.push_back(d_slot_desc);
-                _materialize_index_in_chunk.push_back(delete_column_index++);
+                const auto& it = id_to_index.find(d_slot_desc->id());
+                if (it == id_to_index.end()) {
+                    return Status::InternalError(
+                            "Invalid slot id in delete_column_slot_ids. id =  " + std::to_string(d_slot_desc->id()) +
+                            ", name = " + d_slot_desc->col_name());
+                }
+                _materialize_index_in_chunk.push_back(it->second);
             }
         }
     }
@@ -310,6 +319,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         _use_partition_column_value_only = false;
         _can_use_any_column = false;
     }
+    return Status::OK();
 }
 
 Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
