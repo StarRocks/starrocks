@@ -85,6 +85,7 @@ public class TaskBuilder {
         task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
         task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
         task.setSchedule(submitTaskStmt.getSchedule());
+        task.setType(submitTaskStmt.getSchedule() != null ? Constants.TaskType.PERIODICAL : Constants.TaskType.MANUAL);
 
         handleSpecialTaskProperties(task);
         return task;

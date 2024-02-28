@@ -96,10 +96,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -448,6 +450,7 @@ import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -459,6 +462,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.IndexDef.IndexType.getIndexType;
@@ -1422,36 +1426,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return result;
     }
 
-    private TaskSchedule parseTaskSchedule(StarRocksParser.TaskScheduleDescContext scheduleDesc) {
-        LocalDateTime startTime = null;
-        boolean defineStartTime = false;
+    private TaskSchedule parseTaskSchedule(StarRocksParser.TaskScheduleDescContext desc) {
+        TaskSchedule schedule = new TaskSchedule();
 
-        var desc = context.taskScheduleDesc();
-        TaskSchedule schedule = null;
         if (desc.START() != null) {
-            NodePosition timePos = createPos(context.string());
+            NodePosition timePos = createPos(desc);
             StringLiteral stringLiteral = (StringLiteral) visit(desc.string());
             DateTimeFormatter dateTimeFormatter = null;
             try {
                 dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
-                LocalDateTime tempStartTime = DateUtils.
-                        parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
-                startTime = tempStartTime;
-                defineStartTime = true;
+                LocalDateTime startTime =
+                        DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
+                schedule.setStartTime(startTime.toEpochSecond(ZoneOffset.UTC));
             } catch (AnalysisException e) {
                 throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
                         timePos);
             }
         }
 
-        if (context.interval() != null) {
-            intervalLiteral = (IntervalLiteral) visit(context.interval());
+        if (desc.interval() != null) {
+            var intervalLiteral = (IntervalLiteral) visit(desc.interval());
             if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
                 String exprSql = intervalLiteral.getValue().toSql();
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
-                        createPos(context.interval()));
+                        createPos(desc.interval()));
+
             }
+
+            long period = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
+            TimeUnit timeUnit = null;
+            try {
+                timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
+                        intervalLiteral.getUnitIdentifier().getDescription());
+            } catch (DdlException e) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(intervalLiteral.toString(),
+                        "INTERVAL "), createPos(desc.interval()));
+            }
+            schedule.setPeriod(period);
+            schedule.setTimeUnit(timeUnit);
         }
+
         return schedule;
     }
 

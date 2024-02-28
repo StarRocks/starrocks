@@ -23,6 +23,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -222,5 +223,44 @@ public class SubmitTaskStmtTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
         starRocksAssert.getCtx().setCurrentRoleIds(starRocksAssert.getCtx().getGlobalStateMgr()
                 .getAuthorizationMgr().getRoleIdsByUser(UserIdentity.ROOT));
+    }
+
+    @Test
+    public void testRoutineTask() throws Exception {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+        {
+            connectContext.executeSql("submit task t1 " +
+                    "schedule every(interval 1 minute) " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Task task = tm.getTask("t1");
+            Assert.assertNotNull(task);
+            Assert.assertEquals("EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            connectContext.executeSql("drop task t1");
+        }
+
+        {
+            connectContext.executeSql("submit task t2 " +
+                    "schedule start('1997-01-01 00:00:00') every(interval 1 minute) " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Task task = tm.getTask("t2");
+            Assert.assertNotNull(task);
+            Assert.assertEquals("START(1997-01-01T08:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            connectContext.executeSql("drop task t2");
+        }
+
+        {
+            // illegal
+            connectContext.executeSql("submit task t_illegal " +
+                    "schedule every(interval 1 second) " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Assert.assertEquals("Getting analyzing error. Detail message: schedule interval is too small, " +
+                            "the minimum value is 10 SECONDS.",
+                    connectContext.getState().getErrorMessage());
+        }
     }
 }
