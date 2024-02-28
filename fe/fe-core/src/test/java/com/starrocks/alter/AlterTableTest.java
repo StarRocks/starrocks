@@ -20,6 +20,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -549,5 +550,56 @@ public class AlterTableTest {
         AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt3);
         Assert.assertTrue(olapTable.getExternalCoolDownWaitSecond().equals(7200L));
+    }
+
+    @Test
+    public void testAlterTableExternalCoolDownSyncedTime() throws Exception {
+        Config.default_replication_num = 1;
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_external_cool_down_synced_time (\n" +
+                "event_day DATE,\n" +
+                "site_id INT DEFAULT '10',\n" +
+                "city_code VARCHAR(100),\n" +
+                "user_name VARCHAR(32) DEFAULT '',\n" +
+                "pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                "PARTITION BY RANGE(event_day)(\n" +
+                "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(event_day, site_id);");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("test_alter_external_cool_down_synced_time");
+        OlapTable olapTable = (OlapTable) table;
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+
+        String sql = "ALTER TABLE test_alter_external_cool_down_synced_time\n" +
+                "MODIFY PARTITION (*) SET(\"external_cooldown_synced_time\" = \"2020-03-25 01:00:00\",\n" +
+                " \"external_cooldown_consistency_check_time\" = \"2020-03-25 02:00:00\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+
+        Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 01:00:00", PrimitiveType.DATETIME).getTime()),
+                rangePartitionInfo.getExternalCoolDownSyncedTimeMs(olapTable.getPartition("p20200321").getId()));
+        Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 02:00:00", PrimitiveType.DATETIME).getTime()),
+                rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(olapTable.getPartition("p20200321").getId()));
+
+        Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 01:00:00", PrimitiveType.DATETIME).getTime()),
+                rangePartitionInfo.getExternalCoolDownSyncedTimeMs(olapTable.getPartition("p20200322").getId()));
+        Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 02:00:00", PrimitiveType.DATETIME).getTime()),
+                rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(olapTable.getPartition("p20200322").getId()));
+
+        Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 01:00:00", PrimitiveType.DATETIME).getTime()),
+                rangePartitionInfo.getExternalCoolDownSyncedTimeMs(olapTable.getPartition("p20200323").getId()));
+        Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 02:00:00", PrimitiveType.DATETIME).getTime()),
+                rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(olapTable.getPartition("p20200323").getId()));
+
+        Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 01:00:00", PrimitiveType.DATETIME).getTime()),
+                rangePartitionInfo.getExternalCoolDownSyncedTimeMs(olapTable.getPartition("p20200324").getId()));
+        Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 02:00:00", PrimitiveType.DATETIME).getTime()),
+                rangePartitionInfo.getExternalCoolDownConsistencyCheckTimeMs(olapTable.getPartition("p20200324").getId()));
     }
 }
