@@ -15,7 +15,6 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -191,14 +190,6 @@ public class SystemInfoServiceTest {
             }
         };
 
-        new Expectations(localMetastore) {
-            {
-                localMetastore.getCluster();
-                minTimes = 0;
-                result = new Cluster("cluster", 1);
-            }
-        };
-
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, false);
@@ -228,14 +219,6 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
-            }
-        };
-
-        new Expectations(localMetastore) {
-            {
-                localMetastore.getCluster();
-                minTimes = 0;
-                result = new Cluster("cluster", 1);
             }
         };
 
