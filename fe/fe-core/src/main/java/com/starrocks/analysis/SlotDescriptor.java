@@ -43,12 +43,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TSlotDescriptor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 public class SlotDescriptor {
 
@@ -195,6 +194,12 @@ public class SlotDescriptor {
 
     public void setIsNullable(boolean value) {
         isNullable = value;
+        // NullIndicatorBit is deprecated in BE, we mock bit to avoid BE crash
+        if (isNullable) {
+            nullIndicatorBit = 0;
+        } else {
+            nullIndicatorBit = -1;
+        }
     }
 
     public void setStats(ColumnStats stats) {

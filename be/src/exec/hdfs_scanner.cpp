@@ -145,7 +145,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_app_stats;
     ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
-
+    ctx.split_context = _scanner_params.split_context;
     return Status::OK();
 }
 
@@ -333,6 +333,8 @@ void HdfsScanner::update_counter() {
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());
         COUNTER_UPDATE(profile->shared_buffered_shared_io_bytes, _shared_buffered_input_stream->shared_io_bytes());
+        COUNTER_UPDATE(profile->shared_buffered_shared_align_io_bytes,
+                       _shared_buffered_input_stream->shared_align_io_bytes());
         COUNTER_UPDATE(profile->shared_buffered_shared_io_timer, _shared_buffered_input_stream->shared_io_timer());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_count, _shared_buffered_input_stream->direct_io_count());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_bytes, _shared_buffered_input_stream->direct_io_bytes());

@@ -153,6 +153,13 @@ TO test_repo
 ON (sr_member);
 ```
 
+:::tip
+StarRocks 支持以下粒度的备份还原操作：
+- 分区级：你需要按照以下格式在 ON 子句中指定分区名 `ON (<table_name>.<partition_name>)`。
+- 表级：你需要在 ON 子句中指定表名 `ON (<table_name>)`。
+- 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
+:::
+
 数据备份为异步操作。您可以通过 [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md) 语句取消备份作业。
 
 ## 恢复或迁移数据
@@ -195,6 +202,13 @@ PROPERTIES (
 );
 ```
 
+:::tip
+StarRocks 支持以下粒度的备份还原操作：
+- 分区级：你需要按照以下格式在 ON 子句中指定分区名 `ON (<table_name>.<partition_name>)`。
+- 表级：你需要在 ON 子句中指定表名 `ON (<table_name>)`。
+- 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
+:::
+
 数据恢复为异步操作。您可以通过 [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md) 语句取消恢复作业。
 
 ## 配置相关参数
@@ -207,13 +221,11 @@ PROPERTIES (
 | download_worker_count   | BE 节点下载任务的最大线程数，用于还原作业。默认值：`1`。增加此配置项的值可以增加下载任务并行度。|
 | max_download_speed_kbps | BE 节点下载速度上限。默认值：`50000`。单位：KB/s。通常还原作业的下载速度不会超过默认值。如果该速度上限限制了还原作业的性能，您可以根据带宽情况适当增加。|
 
-<!--
-
 ## 物化视图备份恢复
 
 在备份或还原表（Table）数据期间，StarRocks 会自动备份或还原其中的 [同步物化视图](../using_starrocks/Materialized_view-single_table.md)。
 
-从 v3.2.0 开始，StarRocks 支持在备份和还原数据库（Database）时备份和还原数据库中的 [异步物化视图](../using_starrocks/Materialized_view.md)。
+从 v3.2.3 开始，StarRocks 支持在备份和还原数据库（Database）时备份和还原数据库中的 [异步物化视图](../using_starrocks/Materialized_view.md)。
 
 在备份和还原数据库期间，StarRocks 执行以下操作：
 
@@ -237,11 +249,9 @@ PROPERTIES (
 - 如果物化视图处于 Active 状态，则可以直接使用。
 - 如果物化视图处于 Inactive 状态，可能是因为其基表尚未还原。在还原所有基表后，您可以使用[ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) 重新激活物化视图。
 
--->
-
 ## 注意事项
 
-- 仅限拥有 ADMIN 权限的用户执行备份与恢复功能。
+- 执行全局、数据库级、表级以及分区级备份恢复需要不同权限。详细内容，请参考 [基于使用场景创建自定义角色](./User_privilege.md#基于使用场景创建自定义角色)。
 - 单一数据库内，仅可同时执行一个备份或恢复作业。否则，StarRocks 返回错误。
 - 因为备份与恢复操作会占用一定系统资源，建议您在集群业务低峰期进行该操作。
 - 目前 StarRocks 不支持在备份数据时使用压缩算法。

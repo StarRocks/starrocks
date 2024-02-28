@@ -64,7 +64,7 @@ public class PreparedStmtTest{
 
     @Test
     public void testParser() throws Exception {
-        String sql1= "PREPARE stmt2 FROM select * from demo.prepare_stmt where k1 = ? and k2 = ?;";
+        String sql1 = "PREPARE stmt2 FROM select * from demo.prepare_stmt where c1 = ? and c2 = ?;";
         String sql2 = "PREPARE stmt3 FROM 'select * from demo.prepare_stmt';";
         String sql3 = "execute stmt3;";
         String sql4 = "execute stmt2 using @i;";

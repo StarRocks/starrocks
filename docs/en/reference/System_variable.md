@@ -176,6 +176,12 @@ The maximum number of concurrent I/O tasks that can be issued by a scan operator
 
 Currently, StarRocks can adaptively adjust the number of concurrent I/O tasks when querying external tables. This feature is controlled by the variable `enable_connector_adaptive_io_tasks`, which is enabled by default.
 
+### connector_sink_compression_codec (3.2.3 and later)
+
+Specifies the compression algorithm used for writing data into Hive tables or Iceberg tables, or exporting data with Files().
+
+Valid values: `gzip`, `brotli`, `zstd`, and `lz4`.
+
 ### count_distinct_column_buckets (2.5 and later)
 
 The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`. Default value: 1024.
@@ -535,7 +541,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_mem_limit
 
-Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enbaled.
+Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled.
 
 When the `Memory Exceed Limit` error happens, you could try to increase this variable.
 

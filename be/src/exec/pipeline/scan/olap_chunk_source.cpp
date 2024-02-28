@@ -124,6 +124,8 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", segment_init_name);
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
+    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, segment_init_name);
+    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilter", segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT,
                                            _get_counter_min_max_type("SegmentZoneMapFilterRows"), segment_init_name);
@@ -528,6 +530,8 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);

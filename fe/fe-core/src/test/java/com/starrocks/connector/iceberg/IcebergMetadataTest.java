@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
@@ -830,6 +831,32 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testPruneNullPartition() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("dt", DATE));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableI, Maps.newHashMap());
+
+        org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_F_1, SCHEMA_F);
+        partitionKey.set(0, null);
+        DataFile tsDataFiles = DataFiles.builder(SPEC_F_1)
+                .withPath("/path/to/data-f1.parquet")
+                .withFileSizeInBytes(20)
+                .withPartition(partitionKey)
+                .withRecordCount(2)
+                .build();
+        mockedNativeTableI.newAppend().appendFile(tsDataFiles).commit();
+        mockedNativeTableI.refresh();
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1);
+        Assert.assertTrue(partitionKeys.get(0).getKeys().get(0) instanceof NullLiteral);
+    }
+
+    @Test
     public void testPartitionPruneWithDuplicated() {
         Map<String, String> config = new HashMap<>();
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
@@ -1093,6 +1120,33 @@ public class IcebergMetadataTest extends TableTestBase {
 
         List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, Lists.newArrayList());
         Assert.assertEquals(1, partitions.size());
+    }
+
+    @Test
+    public void testGetPartitionsWithExpireSnapshot() {
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
+        mockedNativeTableB.refresh();
+
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3,
+                Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
+        Assert.assertEquals(2, partitions.size());
+        Assert.assertTrue(partitions.stream().anyMatch(x -> x.getModifiedTime() == -1));
     }
 
     @Test

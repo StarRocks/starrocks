@@ -52,4 +52,34 @@ public class ScoreSorterTest {
         Assert.assertEquals(4, sortedList.get(2).getPartition().getPartitionId());
         Assert.assertEquals(3, sortedList.get(3).getPartition().getPartitionId());
     }
+
+    @Test
+    public void testPriority() {
+        List<PartitionStatistics> statisticsList = new ArrayList<>();
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+        statistics.setCompactionScore(Quantiles.compute(Arrays.asList(0.0, 0.0, 0.0)));
+        statisticsList.add(statistics);
+
+        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
+        statistics.setCompactionScore(Quantiles.compute(Arrays.asList(1.1, 1.1, 1.2)));
+        statisticsList.add(statistics);
+
+        ScoreSorter sorter = new ScoreSorter();
+
+        List<PartitionStatistics> sortedList = sorter.sort(statisticsList);
+        Assert.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
+        Assert.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
+
+        // sort by priority first
+        statisticsList.get(0).setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+        sortedList = sorter.sort(statisticsList);
+        Assert.assertEquals(3, sortedList.get(0).getPartition().getPartitionId());
+        Assert.assertEquals(4, sortedList.get(1).getPartition().getPartitionId());
+
+        // when having same priority value, should compare by compaction score
+        statisticsList.get(1).setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+        sortedList = sorter.sort(statisticsList);
+        Assert.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
+        Assert.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
+    }
 }

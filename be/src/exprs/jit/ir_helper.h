@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include <llvm/IR/IRBuilder.h>
+
 #include <cstdint>
 
 #include "column/type_traits.h"
 #include "common/statusor.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "runtime/types.h"
 
 namespace starrocks {
@@ -31,9 +31,7 @@ struct LLVMDatum {
     llvm::Value* value = nullptr;     ///< Represents the actual value of the datum.
     llvm::Value* null_flag = nullptr; ///< Represents the nullity status of the datum.
 
-    LLVMDatum(llvm::IRBuilder<>& b, bool null = false) {
-        null_flag = llvm::ConstantInt::get(b.getInt8Ty(), null, false);
-    }
+    LLVMDatum(llvm::IRBuilder<>& b, bool null = false) { null_flag = b.getInt8(null); }
 
     LLVMDatum() = default;
 };

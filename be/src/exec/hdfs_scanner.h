@@ -78,7 +78,10 @@ struct HdfsScanStats {
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
 
-    std::vector<int64_t> orc_stripe_sizes;
+    // orc stripe information
+    std::vector<int64_t> orc_stripe_sizes{};
+    int64_t orc_total_tiny_stripe_size = 0;
+
     // io coalesce
     int64_t orc_stripe_active_lazy_coalesce_together = 0;
     int64_t orc_stripe_active_lazy_coalesce_seperately = 0;
@@ -122,6 +125,7 @@ struct HdfsScanProfile {
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_align_io_bytes = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_timer = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;
@@ -138,6 +142,9 @@ struct HdfsScanProfile {
 struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
     const THdfsScanRange* scan_range = nullptr;
+
+    bool enable_split_tasks = false;
+    const pipeline::ScanSplitContext* split_context = nullptr;
 
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
@@ -232,6 +239,7 @@ struct HdfsScannerContext {
 
     // scan range
     const THdfsScanRange* scan_range = nullptr;
+    const pipeline::ScanSplitContext* split_context = nullptr;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -311,6 +319,9 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+        split_tasks->swap(_split_tasks);
+    }
 
 protected:
     Status open_random_access_file();
@@ -338,6 +349,9 @@ protected:
     int64_t _total_running_time = 0;
 
     std::shared_ptr<DefaultMORProcessor> _mor_processor;
+
+    const pipeline::ScanSplitContext* _split_context = nullptr;
+    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
 };
 
 } // namespace starrocks

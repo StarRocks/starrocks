@@ -13,7 +13,7 @@ PLAN FRAGMENT 0(F01)
   DOP: 16
   INSTANCES
     INSTANCE(0-F01#0)
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -94,4 +94,3 @@ PLAN FRAGMENT 1
      cardinality=1
      avgRowSize=36.0
 [end]
-

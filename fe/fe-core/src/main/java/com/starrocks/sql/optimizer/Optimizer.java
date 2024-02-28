@@ -72,6 +72,7 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTa
 import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
+import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
@@ -367,6 +368,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_UKFK_JOIN);
         deriveLogicalProperty(tree);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
@@ -452,6 +454,7 @@ public class Optimizer {
         }
 
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
 
         CTEUtils.collectCteOperators(tree, context);
         // inline CTE if consume use once
@@ -779,6 +782,8 @@ public class Optimizer {
             result = new SubfieldExprNoCopyRule().rewrite(result, rootTaskContext);
         }
 
+        result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
+
         result.setPlanCount(planCount);
         return result;
     }
@@ -834,9 +839,6 @@ public class Optimizer {
         }
         context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, false));
         context.getTaskScheduler().executeTasks(rootTaskContext);
-        if (ruleSetType.equals(RuleSetType.PUSH_DOWN_PREDICATE)) {
-            context.reset();
-        }
     }
 
     private void ruleRewriteIterative(OptExpression tree, TaskContext rootTaskContext, Rule rule) {

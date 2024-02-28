@@ -46,6 +46,8 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "storage/column_predicate.h"
+#include "storage/inverted/index_descriptor.hpp"
+#include "storage/inverted/inverted_plugin_factory.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -58,6 +60,7 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/rowset/struct_column_iterator.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
@@ -111,6 +114,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
     _name = meta->has_name() ? meta->name() : "None";
+    _column_unique_id = meta->unique_id();
 
     if (meta->is_nullable()) _flags |= kIsNullableMask;
     if (meta->has_all_dict_encoded()) _flags |= kHasAllDictEncodedMask;
@@ -357,11 +361,13 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
             iter.next();
         }
     }
+
     for (const auto& pid : page_ids) {
         std::unique_ptr<BloomFilter> bf;
         RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
         for (const auto* pred : predicates) {
-            if (pred->support_bloom_filter() && pred->bloom_filter(bf.get())) {
+            if ((pred->support_bloom_filter() && pred->bloom_filter(bf.get())) ||
+                (pred->support_ngram_bloom_filter() && pred->ngram_bloom_filter(bf.get(), _get_gram_num_for_ngram()))) {
                 bf_row_ranges.add(
                         Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
             }
@@ -432,6 +438,45 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
         _bloom_filter_index_meta.reset();
         _segment->update_cache_size();
     }
+    return Status::OK();
+}
+
+Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta,
+                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts) {
+    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts));
+    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator));
+    return Status::OK();
+}
+
+Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
+                                          const SegmentReadOptions& opts) {
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+
+    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id()) {
+        return Status::OK();
+    }
+
+    // inverted_index call
+    std::lock_guard<std::mutex> wlock(_load_index_lock);
+
+    // Double check lock
+    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id()) {
+        return Status::OK();
+    }
+
+    LogicalType type;
+    if (_column_type == LogicalType::TYPE_ARRAY) {
+        type = _column_child_type;
+    } else {
+        type = _column_type;
+    }
+
+    ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
+    std::string index_path = IndexDescriptor::inverted_index_file_path(opts.rowset_path, opts.rowsetid.to_string(),
+                                                                       _segment->id(), index_meta->index_id());
+    ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
+    RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type, &_inverted_index));
+
     return Status::OK();
 }
 
@@ -639,6 +684,27 @@ size_t ColumnReader::mem_usage() const {
     }
 
     return size;
+}
+
+size_t ColumnReader::_get_gram_num_for_ngram() const {
+    // initialize with invalid number
+    size_t gram_num = 0;
+    std::shared_ptr<TabletIndex> ngram_bf_index;
+
+    Status status = _segment->tablet_schema().get_indexes_for_column(_column_unique_id, NGRAMBF, ngram_bf_index);
+    if (!status.ok() || ngram_bf_index.get() == nullptr) {
+        return gram_num;
+    }
+
+    const std::map<std::string, std::string>& index_properties = ngram_bf_index->index_properties();
+    auto it = index_properties.find(GRAM_NUM_KEY);
+    if (it != index_properties.end()) {
+        // Found the key "ngram_size"
+        const std::string& gram_num_str = it->second; // The value corresponding to the key "ngram_size"
+        gram_num = std::stoi(gram_num_str);
+    }
+
+    return gram_num;
 }
 
 } // namespace starrocks

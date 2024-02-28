@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.compaction;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class RandomSorter implements Sorter {
@@ -26,6 +27,9 @@ public class RandomSorter implements Sorter {
     @NotNull
     public List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics) {
         Collections.shuffle(partitionStatistics);
-        return partitionStatistics;
+        return partitionStatistics.stream()
+                .sorted(Comparator.comparingInt((PartitionStatistics stats) -> stats.getPriority().getValue())
+                        .reversed())
+                .collect(Collectors.toList());
     }
 }

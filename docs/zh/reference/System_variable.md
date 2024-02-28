@@ -171,6 +171,12 @@ StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）
 
 外表查询时每个 Scan 算子能同时下发的 I/O 任务的最大数量。取值为整数，默认值 16。目前外表查询时会使用自适应算法来调整并发 I/O 任务的数量，通过 `enable_connector_adaptive_io_tasks` 开关来控制，默认打开。
 
+### connector_sink_compression_codec（3.2.3 及以后）
+
+用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。
+
+有效值：`gzip`、`brotli`、`zstd` 和 `lz4`。
+
 ### count_distinct_column_buckets（2.5 及以后）
 
 group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。默认值：1024。
@@ -522,7 +528,7 @@ GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行�
 
 ### query_mem_limit
 
-用于设置每个 BE 节点上查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
+用于设置每个 BE 节点上单个查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
 
 ### query_queue_concurrency_limit (global)
 

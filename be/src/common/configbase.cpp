@@ -31,23 +31,16 @@
 #include "common/config.h"
 #undef __IN_CONFIGBASE_CPP__
 
+#include <fmt/format.h>
+
 #include "common/status.h"
-#include "gutil/strings/substitute.h"
+#include "gutil/strings/join.h"
 
 namespace starrocks::config {
 
 std::map<std::string, Register::Field>* Register::_s_field_map = nullptr;
-std::map<std::string, std::string>* full_conf_map = nullptr;
 
 Properties props;
-
-// Because changes to the std::string type are not atomic,
-// we introduce a lock to protect mutable string type config item.
-std::mutex mstring_conf_lock;
-
-std::mutex* get_mstring_conf_lock() {
-    return &mstring_conf_lock;
-}
 
 // trim string
 std::string& trim(std::string& s) {
@@ -177,6 +170,11 @@ bool strtox(const std::string& valstr, std::string& retval) {
     return true;
 }
 
+bool strtox(const std::string& valstr, MutableString& retval) {
+    retval = valstr;
+    return true;
+}
+
 // Load conf file.
 bool Properties::load(const char* filename) {
     // If 'filename' is null, use the empty props.
@@ -269,71 +267,58 @@ std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
     return out;
 }
 
-#define SET_FIELD(FIELD, TYPE, FILL_CONFMAP)                                                       \
+#define SET_FIELD(FIELD, TYPE)                                                                     \
     if (strcmp((FIELD).type, #TYPE) == 0) {                                                        \
         if (!props.get((FIELD).name, (FIELD).defval, *reinterpret_cast<TYPE*>((FIELD).storage))) { \
             std::cerr << "config field error: " << (FIELD).name << std::endl;                      \
             return false;                                                                          \
         }                                                                                          \
-        if (FILL_CONFMAP) {                                                                        \
-            std::ostringstream oss;                                                                \
-            oss << (*reinterpret_cast<TYPE*>((FIELD).storage));                                    \
-            (*full_conf_map)[(FIELD).name] = oss.str();                                            \
-        }                                                                                          \
         continue;                                                                                  \
     }
 
 // Init conf fields.
-bool init(const char* filename, bool fillconfmap) {
+bool init(const char* filename) {
     // Load properties file.
     if (!props.load(filename)) {
         return false;
     }
-    // Fill 'full_conf_map'.
-    if (fillconfmap && full_conf_map == nullptr) {
-        full_conf_map = new std::map<std::string, std::string>();
-    }
 
     // Set conf fields.
     for (const auto& it : *Register::_s_field_map) {
-        SET_FIELD(it.second, bool, fillconfmap);
-        SET_FIELD(it.second, int16_t, fillconfmap);
-        SET_FIELD(it.second, int32_t, fillconfmap);
-        SET_FIELD(it.second, int64_t, fillconfmap);
-        SET_FIELD(it.second, double, fillconfmap);
-        SET_FIELD(it.second, std::string, fillconfmap);
-        SET_FIELD(it.second, std::vector<bool>, fillconfmap);
-        SET_FIELD(it.second, std::vector<int16_t>, fillconfmap);
-        SET_FIELD(it.second, std::vector<int32_t>, fillconfmap);
-        SET_FIELD(it.second, std::vector<int64_t>, fillconfmap);
-        SET_FIELD(it.second, std::vector<double>, fillconfmap);
-        SET_FIELD(it.second, std::vector<std::string>, fillconfmap);
+        SET_FIELD(it.second, bool);
+        SET_FIELD(it.second, int16_t);
+        SET_FIELD(it.second, int32_t);
+        SET_FIELD(it.second, int64_t);
+        SET_FIELD(it.second, double);
+        SET_FIELD(it.second, std::string);
+        SET_FIELD(it.second, MutableString);
+        SET_FIELD(it.second, std::vector<bool>);
+        SET_FIELD(it.second, std::vector<int16_t>);
+        SET_FIELD(it.second, std::vector<int32_t>);
+        SET_FIELD(it.second, std::vector<int64_t>);
+        SET_FIELD(it.second, std::vector<double>);
+        SET_FIELD(it.second, std::vector<std::string>);
     }
 
     return true;
 }
 
-#define UPDATE_FIELD(FIELD, VALUE, TYPE)                                                                    \
-    if (strcmp((FIELD).type, #TYPE) == 0) {                                                                 \
-        if (!update((VALUE), *reinterpret_cast<TYPE*>((FIELD).storage))) {                                  \
-            return Status::InvalidArgument(strings::Substitute("convert '$0' as $1 failed", VALUE, #TYPE)); \
-        }                                                                                                   \
-        if (full_conf_map != nullptr) {                                                                     \
-            std::ostringstream oss;                                                                         \
-            oss << (*reinterpret_cast<TYPE*>((FIELD).storage));                                             \
-            (*full_conf_map)[(FIELD).name] = oss.str();                                                     \
-        }                                                                                                   \
-        return Status::OK();                                                                                \
+#define UPDATE_FIELD(FIELD, VALUE, TYPE)                                                            \
+    if (strcmp((FIELD).type, #TYPE) == 0) {                                                         \
+        if (!update((VALUE), *reinterpret_cast<TYPE*>((FIELD).storage))) {                          \
+            return Status::InvalidArgument(fmt::format("convert '{}' as {} failed", VALUE, #TYPE)); \
+        }                                                                                           \
+        return Status::OK();                                                                        \
     }
 
 Status set_config(const std::string& field, const std::string& value) {
     auto it = Register::_s_field_map->find(field);
     if (it == Register::_s_field_map->end()) {
-        return Status::NotFound(strings::Substitute("'$0' is not found", field));
+        return Status::NotFound(fmt::format("'{}' is not found", field));
     }
 
     if (!it->second.valmutable) {
-        return Status::NotSupported(strings::Substitute("'$0' is not support to modify", field));
+        return Status::NotSupported(fmt::format("'{}' is not support to modify", field));
     }
 
     UPDATE_FIELD(it->second, value, bool);
@@ -341,46 +326,63 @@ Status set_config(const std::string& field, const std::string& value) {
     UPDATE_FIELD(it->second, value, int32_t);
     UPDATE_FIELD(it->second, value, int64_t);
     UPDATE_FIELD(it->second, value, double);
-    {
-        std::lock_guard lock(mstring_conf_lock);
-        UPDATE_FIELD(it->second, value, std::string);
-    }
+    UPDATE_FIELD(it->second, value, MutableString);
 
     // The other types are not thread safe to change dynamically.
     return Status::NotSupported(
-            strings::Substitute("'$0' is type of '$1' which is not support to modify", field, it->second.type));
+            fmt::format("'{}' is type of '{}' which is not support to modify", field, it->second.type));
 }
 
 std::string Register::Field::value() const {
     if (strcmp(type, "bool") == 0) {
-        return std::to_string(*reinterpret_cast<bool*>(storage));
+        return fmt::format("{}", *reinterpret_cast<bool*>(storage));
     }
     if (strcmp(type, "int16_t") == 0) {
-        return std::to_string(*reinterpret_cast<int16_t*>(storage));
+        return fmt::format("{}", *reinterpret_cast<int16_t*>(storage));
     }
     if (strcmp(type, "int32_t") == 0) {
-        return std::to_string(*reinterpret_cast<int32_t*>(storage));
+        return fmt::format("{}", *reinterpret_cast<int32_t*>(storage));
     }
     if (strcmp(type, "int64_t") == 0) {
-        return std::to_string(*reinterpret_cast<int64_t*>(storage));
+        return fmt::format("{}", *reinterpret_cast<int64_t*>(storage));
     }
     if (strcmp(type, "double") == 0) {
-        return std::to_string(*reinterpret_cast<double*>(storage));
+        return fmt::format("{}", *reinterpret_cast<double*>(storage));
     }
     if (strcmp(type, "std::string") == 0) {
-        if (valmutable) {
-            std::lock_guard lock(mstring_conf_lock);
-            return *reinterpret_cast<std::string*>(storage);
-        } else {
-            return *reinterpret_cast<std::string*>(storage);
-        }
+        DCHECK(!valmutable);
+        return *reinterpret_cast<std::string*>(storage);
+    }
+    if (strcmp(type, "MutableString") == 0) {
+        DCHECK(valmutable);
+        return reinterpret_cast<MutableString*>(storage)->value();
     }
     if (strcmp(type, "std::vector<std::string>") == 0) {
-        std::stringstream ss;
-        ss << *reinterpret_cast<std::vector<std::string>*>(storage);
-        return ss.str();
+        const auto& v = *reinterpret_cast<const std::vector<std::string>*>(storage);
+        return JoinStrings(v, ",");
     }
-    return strings::Substitute("unsupported config type: $0", type);
+    if (strcmp(type, "std::vector<bool>") == 0) {
+        auto as_str = [](bool v) { return fmt::format("{}", v); };
+        const auto& v = *reinterpret_cast<const std::vector<bool>*>(storage);
+        return JoinMapped(v, as_str, ",");
+    }
+    if (strcmp(type, "std::vector<double>") == 0) {
+        const auto& v = *reinterpret_cast<const std::vector<double>*>(storage);
+        return JoinInts(v, ",");
+    }
+    if (strcmp(type, "std::vector<int16_t>") == 0) {
+        const auto& v = *reinterpret_cast<const std::vector<int16_t>*>(storage);
+        return JoinInts(v, ",");
+    }
+    if (strcmp(type, "std::vector<int32_t>") == 0) {
+        const auto& v = *reinterpret_cast<const std::vector<int32_t>*>(storage);
+        return JoinInts(v, ",");
+    }
+    if (strcmp(type, "std::vector<int64_t>") == 0) {
+        const auto& v = *reinterpret_cast<const std::vector<int64_t>*>(storage);
+        return JoinInts(v, ",");
+    }
+    return fmt::format("unsupported config type: {}", type);
 }
 
 std::vector<ConfigInfo> list_configs() {

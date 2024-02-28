@@ -99,14 +99,7 @@ public:
     Status init();
     // we need load dict for dict_filter, so prepare should be after collec_io_range
     Status prepare();
-    Status get_next(ChunkPtr* chunk, size_t* row_count) {
-        // TODO: new late materialization with read_range only deal with case enable late materialization
-        if (config::parquet_late_materialization_enable && config::parquet_late_materialization_v2_enable) {
-            return _do_get_next_new(chunk, row_count);
-        } else {
-            return _do_get_next(chunk, row_count);
-        }
-    }
+    Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                            ColumnIOType type = ColumnIOType::PAGES);
@@ -130,15 +123,10 @@ public:
 
     void _init_read_chunk();
 
-    Status _do_get_next(ChunkPtr* chunk, size_t* row_count);
-    Status _do_get_next_new(ChunkPtr* chunk, size_t* row_count);
     Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
                        ChunkPtr* chunk);
 
     StatusOr<size_t> _read_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
-
-    Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
-    Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
 
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;

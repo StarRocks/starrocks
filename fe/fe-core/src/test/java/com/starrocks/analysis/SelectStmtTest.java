@@ -165,7 +165,7 @@ public class SelectStmtTest {
                         "nullable_tuples:[false], conjuncts:[TExpr(nodes:[TExprNode(node_type:BINARY_PRED, " +
                         "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BOOLEAN))]), " +
                         "opcode:EQ, num_children:2, output_scale:-1, vector_opcode:INVALID_OPCODE, child_type:INT, " +
-                        "has_nullable_child:true, is_nullable:true, is_monotonic:false)";
+                        "has_nullable_child:true, is_nullable:true, is_monotonic:false,";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift, thrift.contains(expectString));
     }
@@ -593,5 +593,54 @@ public class SelectStmtTest {
         } catch (Exception e) {
             Assert.fail("Should not throw an exception");
         }
+    }
+
+    @Test
+    public void testMergeLimitAfterPruneGroupByKeys() throws Exception {
+        String sql = "SELECT\n" +
+                "    name\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        select\n" +
+                "            case\n" +
+                "                when a.emp_name in('Alice', 'Bob') then 'RD'\n" +
+                "                when a.emp_name in('Bob', 'Charlie') then 'QA'\n" +
+                "                else 'BD'\n" +
+                "            end as role,\n" +
+                "            a.emp_name as name\n" +
+                "        from\n" +
+                "            (\n" +
+                "                select 'Alice' as emp_name\n" +
+                "                union   all\n" +
+                "                select 'Bob' as emp_name\n" +
+                "                union all\n" +
+                "                select 'Charlie' as emp_name\n" +
+                "            ) a\n" +
+                "    ) SUB_QRY\n" +
+                "WHERE name IS NOT NULL AND role IN ('QA')\n" +
+                "GROUP BY name\n" +
+                "ORDER BY name ASC";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+        Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
+                "  Output Exprs:7: expr\n" +
+                "  Input Partition: UNPARTITIONED\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:SORT\n" +
+                "  |  order by: [7, VARCHAR, false] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  7 <-> 'Charlie'\n" +
+                "  |  limit: 1\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n" +
+                "     limit: 1\n" +
+                "     cardinality: 1\n"));
     }
 }

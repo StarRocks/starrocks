@@ -23,15 +23,12 @@ import java.util.Map;
 public class SetVarHint extends HintNode {
 
     public static final String SET_VAR = "SET_VAR";
-
-    public static final String PREFIX = "(";
-
-    public static final String SUFFIX = ")";
-
     public static final int LEAST_LEN = 9;
 
+    private Map<String, String> value;
     public SetVarHint(NodePosition pos, Map<String, String> value, String hintStr) {
-        super(pos, value, hintStr);
+        super(pos, hintStr);
+        this.value = value;
     }
 
     public long getSqlModeHintValue() {
@@ -47,8 +44,8 @@ public class SetVarHint extends HintNode {
     }
 
     @Override
-    public String toSql() {
-        return hintStr;
+    public Map<String, String> getValue() {
+        return value;
     }
 
 

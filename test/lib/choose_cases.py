@@ -169,6 +169,8 @@ class ChooseCase(object):
         tools.assert_greater(len(f_lines), 0, "case file lines must not be empty: %s" % file)
 
         attr = os.environ.get("attr").split(",") if os.environ.get("attr") != "" else []
+        no_attr = [at.lstrip("!") for at in filter(lambda at: at.startswith("!"), attr)]
+        attr = list(filter(lambda at: not at.startswith("!"), attr))
 
         line_id = 0
         name = ""
@@ -192,7 +194,8 @@ class ChooseCase(object):
                     if case_regex is not None and not re.compile(case_regex).search(name):
                         # case name don't match regex
                         pass
-                    elif attr and any(each_attr not in tags for each_attr in attr):
+                    elif (attr and any(each_attr not in tags for each_attr in attr)) \
+                            or (no_attr and any(each_attr in tags for each_attr in no_attr)):
                         # case attrs don't match attr filter
                         pass
                     elif not attr and "sequential" in tags:
@@ -263,7 +266,8 @@ class ChooseCase(object):
             if case_regex is not None and not re.compile(case_regex).search(name):
                 # case name don't match regex
                 pass
-            elif attr and any(each_attr not in tags for each_attr in attr):
+            elif (attr and any(each_attr not in tags for each_attr in attr)) \
+                    or (no_attr and any(each_attr in tags for each_attr in no_attr)):
                 # case attrs don't match attr filter
                 pass
             elif not attr and "sequential" in tags:

@@ -121,6 +121,13 @@ TO test_repo
 ON (sr_member);
 ```
 
+:::tip
+StarRocks supports BACKUP and RESTORE operations on the following levels of granularity:
+- Partition level: You need to specify the ON clause in the format `ON (<table_name>.<partition_name>)`.
+- Table level: You need to specify the ON clause in the format `ON (<table_name>)`.
+- Database level: You do not need to specify the ON clause. This will back up or restore the entire database.
+:::
+
 BACKUP is an asynchronous operation. You can check the status of a BACKUP job using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md).
 
 ## Restore or migrate data
@@ -163,6 +170,13 @@ PROPERTIES (
 );
 ```
 
+:::tip
+StarRocks supports BACKUP and RESTORE operations on the following levels of granularity:
+- Partition level: You need to specify the ON clause in the format `ON (<table_name>.<partition_name>)`.
+- Table level: You need to specify the ON clause in the format `ON (<table_name>)`.
+- Database level: You do not need to specify the ON clause. This will back up or restore the entire database.
+:::
+
 RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md).
 
 ## Configure BACKUP or RESTORE jobs
@@ -175,13 +189,11 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 | download_worker_count   | The maximum number of threads for the download tasks of RESTORE jobs on a BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the download task. |
 | max_download_speed_kbps | The upper limit of the download speed on a BE node. Default: `50000`. Unit: KB/s. Usually, the speed of the download tasks in RESTORE jobs will not exceed the default value. If this configuration is limiting the performance of RESTORE jobs, you can increase it according to your bandwidth.|
 
-<!--
-
 ## Materialized view BACKUP and RESTORE
 
 During a BACKUP or a RESTORE job of a table, StarRocks automatically backs up or restores its [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md).
 
-From v3.2.0, StarRocks supports backing up and restoring [asynchronous materialized views](../using_starrocks/Materialized_view.md) when you back up and restore the database they reside in.
+From v3.2.3, StarRocks supports backing up and restoring [asynchronous materialized views](../using_starrocks/Materialized_view.md) when you back up and restore the database they reside in.
 
 During BACKUP and RESTORE a database, StarRocks does as follows:
 
@@ -205,11 +217,9 @@ After RESTORE, you can check the status of the materialized view using [SHOW MAT
 - If the materialized view is active, it can be used directly.
 - If the materialized view is inactive, it might be because its base tables are not restored. After all the base tables are restored, you can use [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) to re-activate the materialized view.
 
--->
-
 ## Usage notes
 
-- Only users with the ADMIN privilege can back up or restore data.
+- Performing backup and restore operations on global, database, table, and partition levels requires different privileges. For detailed information, see [Customize roles based on scenarios](./User_privilege.md#customize-roles-based-on-scenarios).
 - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
 - Because BACKUP and RESTORE jobs occupy many resources of your StarRocks cluster, you can back up and restore your data while your StarRocks cluster is not heavily loaded.
 - StarRocks does not support specifying data compression algorithm for data backup.

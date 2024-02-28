@@ -358,7 +358,8 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     }
 }
 
-void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input, std::vector<SlotDescriptor>* output) {
+void FileScanner::merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
+                               std::vector<SlotDescriptor>* output) {
     if (output == nullptr) {
         return;
     }
@@ -373,25 +374,12 @@ void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input, std::ve
                         std::make_shared<SlotDescriptor>(merged_schema.size(), slot.col_name(), slot.type()));
                 merged_schema_index.insert({slot.col_name(), merged_schema.size() - 1});
             } else {
-                auto merged_type = merged_schema[itr->second]->type().type;
-                auto slot_type = slot.type().type;
+                const auto& merged_type = merged_schema[itr->second]->type();
+                const auto& slot_type = slot.type();
                 // handle conflicted types.
                 if (merged_type != slot_type) {
-                    if (is_integer_type(merged_type) && is_integer_type(slot_type)) {
-                        // promote integer type.
-                        merged_type = promote_integer_types(merged_type, slot_type);
-                        merged_schema[itr->second] = std::make_shared<SlotDescriptor>(
-                                slot.id(), slot.col_name(), TypeDescriptor::from_logical_type(merged_type));
-                    } else if (is_float_type(merged_type) && is_float_type(slot_type)) {
-                        // promote float type as double.
-                        merged_schema[itr->second] = std::make_shared<SlotDescriptor>(
-                                slot.id(), slot.col_name(), TypeDescriptor::from_logical_type(TYPE_DOUBLE));
-                    } else {
-                        // treat other conflicted types as varchar.
-                        merged_schema[itr->second] = std::make_shared<SlotDescriptor>(
-                                slot.id(), slot.col_name(),
-                                TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
-                    }
+                    merged_schema[itr->second] = std::make_shared<SlotDescriptor>(
+                            slot.id(), slot.col_name(), TypeDescriptor::promote_types(merged_type, slot_type));
                 }
             }
         }
@@ -443,6 +431,10 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
             p_scanner = std::make_unique<ORCScanner>(state, &profile, sample_range, &counter, true);
             break;
 
+        case TFileFormatType::FORMAT_CSV_PLAIN:
+            p_scanner = std::make_unique<CSVScanner>(state, &profile, sample_range, &counter, true);
+            break;
+
         default:
             auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
             LOG(WARNING) << err_msg;
@@ -485,6 +477,8 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
 
         if (++sample_file_count > max_sample_file_count) break;
     }
+
+    if (schemas.empty()) return Status::InvalidArgument("get an empty schema");
 
     merge_schema(schemas, schema);
 

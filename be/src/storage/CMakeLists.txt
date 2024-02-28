@@ -190,6 +190,7 @@ add_library(Storage STATIC
     lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/primary_key_compaction_policy.cpp
     lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
@@ -224,4 +225,16 @@ add_library(Storage STATIC
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
     primary_key_dump.cpp
-    dictionary_cache_manager.cpp)
+    dictionary_cache_manager.cpp
+    inverted/index_descriptor.hpp
+    inverted/inverted_index_iterator.cpp
+    inverted/inverted_index_iterator.cpp
+    inverted/inverted_index_option.cpp
+    inverted/inverted_index_common.hpp
+    inverted/inverted_plugin_factory.cpp
+    inverted/clucene/clucene_plugin.cpp
+    inverted/clucene/clucene_roaring_hit_collector.hpp
+    inverted/clucene/clucene_inverted_writer.cpp
+    inverted/clucene/clucene_inverted_reader.cpp
+    inverted/clucene/clucene_inverted_util.hpp
+    inverted/clucene/match_operator.cpp)

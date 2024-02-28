@@ -10,7 +10,7 @@ A Hive catalog is a kind of external catalog that is supported by StarRocks from
 - Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive and load the data into StarRocks.
 - Perform operations on StarRocks to create or drop Hive databases and tables, or sink data from StarRocks tables to Parquet-formatted Hive tables by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) (this feature is supported from v3.2 onwards).
 
-To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster must be able to access the storage system and metastore of your Hive cluster. StarRocks supports the following storage systems and metastores:
 
 - Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
@@ -29,7 +29,6 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - CSV files support the LZO compression format from v3.1.5 onwards.
 
 - The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for CSV-formatted Hive tables.
-- You can only use Hive catalogs to query data. You cannot use Hive catalogs to drop, delete, or insert data into your Hive cluster.
 
 ## Integration preparations
 
