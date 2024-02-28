@@ -954,7 +954,12 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     auto* ref = down_cast<ColumnRef*>(slot);
     const SlotId& slot_id = ref->slot_id();
     const std::string& name = _slot_id_to_desc[slot_id]->col_name();
-    orc::PredicateDataType pred_type = _supported_logical_types[slot->type().type];
+
+    orc::PredicateDataType pred_type = orc::PredicateDataType::LONG;
+    auto type_it = _supported_logical_types.find(slot->type().type);
+    if (type_it != _supported_logical_types.end()) {
+        pred_type = type_it->second;
+    }
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
         Expr* lit = conjunct->get_child(1);
