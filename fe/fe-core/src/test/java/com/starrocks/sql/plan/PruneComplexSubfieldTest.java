@@ -1044,4 +1044,17 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/j1/a]");
     }
+
+    @Test
+    public void testPruneMapFromAllChild() throws Exception {
+        String sql = "WITH A AS (SELECT 'a' as event_key, 'x' as property_key ), \n" +
+                "          B AS (SELECT 'a' as event_key, map { 'x' :1 } as props ) \n" +
+                "SELECT * FROM A JOIN B ON A.event_key = B.event_key WHERE props [property_key] = 1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 6:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: expr = 5: expr\n" +
+                "  |  other join predicates: 6: expr[3: expr] = 1");
+    }
 }
