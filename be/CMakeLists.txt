@@ -386,6 +386,9 @@ set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+add_library(ubiqfpe STATIC IMPORTED)
+set_target_properties(ubiqfpe PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libubiqfpe.a)
+
 # Disable libdefalte on aarch64
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(libdeflate STATIC IMPORTED GLOBAL)
@@ -918,6 +921,9 @@ set(STARROCKS_DEPENDENCIES
     avro
     serdes
     fiu
+    gmp
+    unistring
+    ubiqfpe
     ${LLVM_LIBRARIES}
     ${WL_END_GROUP}
 )
