@@ -404,7 +404,7 @@ public class LeaderImpl {
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
-                LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}",
+                LOG.info("finish create replica. tablet id: {}, be: {}, report version: {}",
                         tabletId, task.getBackendId(), request.getReport_version());
             }
 
