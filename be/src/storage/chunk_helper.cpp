@@ -147,7 +147,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
 starrocks::Schema ChunkHelper::convert_schema(const std::shared_ptr<const TabletSchema>& schema) {
     return starrocks::Schema(schema->schema());
 }
- 
+
 starrocks::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema) {
     return starrocks::Schema(schema.schema());
 }
