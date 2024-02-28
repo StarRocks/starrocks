@@ -232,6 +232,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     if (context->start_time.load(std::memory_order_relaxed) == 0) {
         context->start_time.store(start_time, std::memory_order_relaxed);
     }
+    context->runs.fetch_add(1, std::memory_order_relaxed);
 
     auto status = Status::OK();
     auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
