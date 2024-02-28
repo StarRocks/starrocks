@@ -470,7 +470,7 @@ BE dynamic parameters are as follows.
 
 - **Default:** 1048576
 - **Unit**: Bytes
-- **Description:** The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
+- **Description:** The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1 MB. You can increase this value to accelerate the compaction process.
 - **Introduced in:** v3.2.3
 
 #### create_tablet_worker_count
