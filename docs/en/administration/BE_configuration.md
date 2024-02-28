@@ -472,6 +472,13 @@ BE dynamic parameters are as follows.
 - **Default:** 0.5
 - **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
 
+#### lake_compaction_stream_buffer_size_bytes
+
+- **Default:** 1048576
+- **Unit**: Bytes
+- **Description:** The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1 MB. You can increase this value to accelerate the compaction process.
+- **Introduced in:** v3.2.3
+
 #### create_tablet_worker_count
 
 - **Default**: 3

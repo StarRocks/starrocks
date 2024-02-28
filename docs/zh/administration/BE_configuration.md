@@ -526,6 +526,13 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：存算分离集群下主键表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
 - 默认值：0.5
 
+#### lake_compaction_stream_buffer_size_bytes
+
+- 含义：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
+- 单位：字节
+- 默认值：1048576
+- 引入版本：v3.2.3
+
 #### create_tablet_worker_count
 
 - 含义：创建 Tablet 的线程数。自 v3.1.7 起变为动态参数。
