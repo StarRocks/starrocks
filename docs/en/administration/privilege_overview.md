@@ -85,7 +85,7 @@ You can create custom roles to meet specific business requirements and modify th
 
 The following figure shows an example of privilege inheritance.
 
-> Note: The maximum number of inheritance levels for a role is 16. The inheritance relationship cannot be bidirectional.
+> Note: The maximum number of inheritance levels for a role is 16 by default. The inheritance relationship cannot be bidirectional.
 
 ![role inheritance](../assets/privilege-role_inheri.png)
 
