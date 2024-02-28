@@ -337,7 +337,6 @@ set(EXEC_FILES
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
-        ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp
         ./runtime/sorted_chunks_merger_test.cpp
         ./runtime/merge_cascade_test.cpp
