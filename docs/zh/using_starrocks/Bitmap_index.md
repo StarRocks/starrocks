@@ -76,7 +76,11 @@ SHOW ALTER TABLE COLUMN [FROM db_name];
 
 ## 查看索引
 
+<<<<<<< HEAD:docs/zh/using_starrocks/Bitmap_index.md
 查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW_INDEX.md)。
+=======
+查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md)。
+>>>>>>> 7abba9a39e ([Doc] recategorize all commands (backport #41672) (#41809)):docs/zh/table_design/indexes/Bitmap_index.md
 
 ```SQL
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
