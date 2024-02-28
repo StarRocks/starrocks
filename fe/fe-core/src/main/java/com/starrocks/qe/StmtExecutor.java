@@ -1947,21 +1947,21 @@ public class StmtExecutor {
 
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
-            boolean containOlapScanNode = false;
+            boolean needQuery = false;
             for (ScanNode scanNode : scanNodes) {
                 if (scanNode instanceof OlapScanNode) {
                     estimateScanRows += ((OlapScanNode) scanNode).getActualRows();
-                    containOlapScanNode = true;
+                    needQuery = true;
                 }
                 if (scanNode instanceof FileScanNode) {
                     estimateFileNum += ((FileScanNode) scanNode).getFileNum();
                     estimateScanFileSize += ((FileScanNode ) scanNode).getFileTotalSize();
-                    containOlapScanNode = true;
+                    needQuery = true;
                 }
             }
 
             TLoadJobType type;
-            if (containOlapScanNode) {
+            if (needQuery) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
                 type = TLoadJobType.INSERT_QUERY;
             } else {

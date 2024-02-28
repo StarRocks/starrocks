@@ -158,11 +158,11 @@ public class InsertLoadJob extends LoadJob {
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
                 if (this.loadType == TLoadJobType.INSERT_QUERY) {
                     if (loadingStatus.getLoadStatistic().totalFileSizeB != 0) {
-                        // file scan
+                        // progress of file scan
                         progress = (int) ((double) loadingStatus.getLoadStatistic().sourceScanBytes() /
                                 loadingStatus.getLoadStatistic().totalFileSize() * 100);
                     } else {
-                        // table scan
+                        // progress of table scan. Slightly smaller than actual
                         progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadRows()
                                 / (estimateScanRow + 1) * 100);
                     }
