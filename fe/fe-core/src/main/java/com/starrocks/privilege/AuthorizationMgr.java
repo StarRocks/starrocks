@@ -186,7 +186,6 @@ public class AuthorizationMgr {
                     ObjectType.MATERIALIZED_VIEW,
                     ObjectType.RESOURCE,
                     ObjectType.RESOURCE_GROUP,
-                    ObjectTypeEPack.WAREHOUSE,
                     ObjectTypeEPack.MASKING_POLICY,
                     ObjectTypeEPack.ROW_ACCESS_POLICY,
                     ObjectType.FUNCTION,
