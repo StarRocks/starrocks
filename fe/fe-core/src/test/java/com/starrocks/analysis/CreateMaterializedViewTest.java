@@ -3845,4 +3845,29 @@ public class CreateMaterializedViewTest {
         }
         starRocksAssert.dropView("view_1");
     }
+
+    /**
+     * https://github.com/StarRocks/starrocks/issues/40862
+     */
+    @Test
+    public void testSR40862() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            }
+        };
+        starRocksAssert.withTable("CREATE TABLE sr_ods_test_table (\n" +
+                "id bigint(20) NOT NULL COMMENT '主键id' ,\n" +
+                "name string COMMENT '名称'\n" +
+                ")\n" +
+                "PRIMARY KEY (ID)\n" +
+                "DISTRIBUTED BY HASH(ID) " +
+                "PROPERTIES (\"replication_num\" = \"1\")"
+        );
+        starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW sr_dw_test_table\n" +
+                "DISTRIBUTED BY HASH(id)\n" +
+                "REFRESH ASYNC\n" +
+                "AS\n" +
+                "SELECT id,name,str_to_map(CONCAT_WS(':',id,name),';',':') as mapvalue FROM sr_ods_test_table");
+    }
 }
