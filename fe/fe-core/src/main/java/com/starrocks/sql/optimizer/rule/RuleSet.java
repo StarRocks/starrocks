@@ -365,6 +365,7 @@ public class RuleSet {
                 new RewriteSimpleAggToMetaScanRule(),
                 RewriteSimpleAggToHDFSScanRule.HIVE_SCAN,
                 RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN,
+                RewriteSimpleAggToHDFSScanRule.FILE_SCAN,
                 new RewriteSumByAssociativeRule(),
                 new RewriteCountIfFunction()
         ));

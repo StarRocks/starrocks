@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -49,6 +50,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN =
+            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN);
     final OperatorType scanOperatorType;
 
     private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
@@ -115,6 +118,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
         } else if (scanOperator instanceof LogicalIcebergScanOperator) {
             newMetaScan = new LogicalIcebergScanOperator(scanOperator.getTable(),
+                    newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
+        } else if (scanOperator instanceof LogicalFileScanOperator) {
+            newMetaScan = new LogicalFileScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
         } else {
             throw new IllegalStateException("Unknown scan operator: " + scanOperator);
