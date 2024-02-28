@@ -1279,6 +1279,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboEqBaseType;
     }
 
+    public void setCboEqBaseType(String cboEqBaseType) {
+        this.cboEqBaseType = cboEqBaseType;
+    }
+
     @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
     private String followerForwardMode = "";
 
