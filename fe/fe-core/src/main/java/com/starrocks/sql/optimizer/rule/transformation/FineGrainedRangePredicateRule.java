@@ -84,8 +84,10 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
                             .addChildren(Pattern.create(OperatorType.LOGICAL_FILTER)
                                     .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)))));
 
-    private static final Set<String> SUPPORTED_FUNC = ImmutableSet.of(FunctionSet.COUNT, FunctionSet.SUM,
-            FunctionSet.MIN, FunctionSet.MAX);
+    // the supported agg functions should use the middle result from child input to calculate the final result.
+    // Except count/sum, the other agg functions use the same type between their argument and their return result.
+    private static final Set<String> SUPPORTED_FUNC = ImmutableSet.of(FunctionSet.COUNT, FunctionSet.SUM, FunctionSet.MIN,
+            FunctionSet.MAX, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION);
 
     public FineGrainedRangePredicateRule(RuleType type, Pattern pattern) {
         super(type, pattern);
@@ -98,6 +100,10 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
         }
 
         LogicalAggregationOperator aggOp = input.getOp().cast();
+        if (aggOp.getPredicate() != null) {
+            return false;
+        }
+
         // only support count, sum, max, min agg functions.
         for (CallOperator callOperator : aggOp.getAggregations().values()) {
             if (callOperator.isDistinct()) {
@@ -264,11 +270,7 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
                 newGroupByKeys.add(info.getColumnRef());
             } else {
                 CallOperator callOperator = (CallOperator) info.getScalarOp();
-                if (FunctionSet.MIN.equals(callOperator.getFnName()) || FunctionSet.MAX.equals(callOperator.getFnName())) {
-                    CallOperator newAggCall = new CallOperator(callOperator.getFnName(), callOperator.getType(),
-                            Lists.newArrayList(inputCol), callOperator.getFunction());
-                    newAggCalls.put(info.getColumnRef(), newAggCall);
-                } else {
+                if (FunctionSet.SUM.equals(callOperator.getFnName()) || FunctionSet.COUNT.equals(callOperator.getFnName())) {
                     Type[] argTypes = new Type[] {inputCol.getType()};
                     Function newFunc = Expr.getBuiltinFunction(FunctionSet.SUM, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -282,6 +284,10 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
                     Preconditions.checkState(newAggCall.getType().equals(info.getColumnRef().getType()),
                             "the rewrite agg call return type %s should equals with the output col type '%'",
                             newAggCall.getType(), info.getColumnRef().getType());
+                    newAggCalls.put(info.getColumnRef(), newAggCall);
+                } else {
+                    CallOperator newAggCall = new CallOperator(callOperator.getFnName(), callOperator.getType(),
+                            Lists.newArrayList(inputCol), callOperator.getFunction());
                     newAggCalls.put(info.getColumnRef(), newAggCall);
                 }
 
