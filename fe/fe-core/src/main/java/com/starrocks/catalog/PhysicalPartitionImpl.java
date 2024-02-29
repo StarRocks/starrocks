@@ -316,6 +316,15 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     }
 
     @Override
+    public long dataCacheSize() {
+        long dataCacheSize = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            dataCacheSize += mIndex.getDataCacheSize();
+        }
+        return dataCacheSize;
+    }
+
+    @Override
     public long storageReplicaCount() {
         long replicaCount = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {

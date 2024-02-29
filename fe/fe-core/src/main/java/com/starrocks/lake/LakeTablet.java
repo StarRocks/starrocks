@@ -63,6 +63,8 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+    private volatile long dataCacheSize = 0L;
+
     public LakeTablet(long id) {
         super(id);
     }
@@ -77,6 +79,12 @@ public class LakeTablet extends Tablet {
         return dataSize;
     }
 
+    // singleReplica is not used
+    @Override
+    public long getDataCacheSize(boolean singleReplica) {
+        return dataCacheSize;
+    }
+
     public void setDataSize(long dataSize) {
         this.dataSize = dataSize;
     }
@@ -87,6 +95,14 @@ public class LakeTablet extends Tablet {
 
     public long getDataSizeUpdateTime() {
         return dataSizeUpdateTime;
+    }
+
+    public long getDataCacheSize() {
+        return dataCacheSize;
+    }
+
+    public void setDataCacheSize(long dataCacheSize) {
+        this.dataCacheSize = dataCacheSize;
     }
 
     // version is not used

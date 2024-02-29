@@ -225,6 +225,7 @@ add_library(Storage STATIC
     lake/lake_persistent_index.cpp
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
+    lake/staros_cache_stats_collector.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     inverted/index_descriptor.hpp

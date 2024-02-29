@@ -51,6 +51,7 @@ public class PartitionsMetaSystemTable {
                         .column("DATA_SIZE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("ROW_COUNT", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("ENABLE_DATACACHE", ScalarType.createType(PrimitiveType.BOOLEAN))
+                        .column("DATA_CACHE_SIZE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("AVG_CS", ScalarType.createType(PrimitiveType.DOUBLE))
                         .column("P50_CS", ScalarType.createType(PrimitiveType.DOUBLE))
                         .column("MAX_CS", ScalarType.createType(PrimitiveType.DOUBLE))

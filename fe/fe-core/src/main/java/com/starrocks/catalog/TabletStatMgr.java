@@ -205,6 +205,7 @@ public class TabletStatMgr extends FrontendDaemon {
             return;
         }
 
+        long start = System.currentTimeMillis();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -219,6 +220,8 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
             }
         }
+        LOG.info("finished to update lake tablet stat of all databases. cost: {} ms",
+                (System.currentTimeMillis() - start));
     }
 
     private void adjustStatUpdateRows(long tableId, long totalRowCount) {
@@ -262,12 +265,6 @@ public class TabletStatMgr extends FrontendDaemon {
     private CollectTabletStatJob createCollectTabletStatJob(@NotNull Database db, @NotNull OlapTable table,
                                                             @NotNull PhysicalPartition partition) {
         PartitionSnapshot snapshot = createPartitionSnapshot(db, table, partition);
-        long visibleVersionTime = snapshot.visibleVersionTime;
-        snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
-        if (snapshot.tablets.isEmpty()) {
-            LOG.debug("Skipped tablet stat collection of partition {}", snapshot.debugName());
-            return null;
-        }
         return new CollectTabletStatJob(snapshot);
     }
 
@@ -345,6 +342,15 @@ public class TabletStatMgr extends FrontendDaemon {
                 TabletInfo tabletInfo = new TabletInfo();
                 tabletInfo.tabletId = tablet.getId();
                 tabletInfo.version = version;
+                // for cache stat
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                boolean enableCache = true;
+                try {
+                    enableCache = lakeTablet.getShardInfo().getFileCache().getEnableCache();
+                } catch (Exception e) {
+                    LOG.warn("Fail to get shard info of tablet {}: {}", lakeTablet.getId(), e.getMessage());
+                }
+                tabletInfo.enableCache = enableCache;
                 beToTabletInfos.computeIfAbsent(node, k -> Lists.newArrayList()).add(tabletInfo);
             }
 
@@ -375,9 +381,10 @@ public class TabletStatMgr extends FrontendDaemon {
                     if (response != null && response.tabletStats != null) {
                         for (TabletStat stat : response.tabletStats) {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
-                            tablet.setDataSize(stat.dataSize);
+                            tablet.setDataSize(stat.dataSize == null ? 0 : stat.dataSize);
                             tablet.setRowCount(stat.numRows);
                             tablet.setDataSizeUpdateTime(collectStatTime);
+                            tablet.setDataCacheSize(stat.dataCacheSize == null ? 0 : stat.dataCacheSize);
                         }
                     }
                 } catch (InterruptedException e) {

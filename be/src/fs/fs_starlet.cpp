@@ -17,6 +17,7 @@
 
 #include <bvar/bvar.h>
 #include <fmt/core.h>
+#include <fslib/cache_stats_collector.h>
 #include <fslib/configuration.h>
 #include <fslib/file.h>
 #include <fslib/file_system.h>
@@ -60,6 +61,7 @@ using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
 using EntryStat = staros::starlet::fslib::EntryStat;
+using CacheStatCollector = staros::starlet::fslib::CacheStatCollector;
 
 bool is_starlet_uri(std::string_view uri) {
     return HasPrefixString(uri, "staros://");
@@ -558,6 +560,24 @@ public:
             parsed_paths.emplace_back(std::move(pair.first));
         }
         return to_status(fs->delete_files(parsed_paths));
+    }
+
+    StatusOr<int64_t> calculate_cache_size(const std::string& path) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto shard_info = g_worker->retrieve_shard_info(pair.second);
+        if (!shard_info.ok()) {
+            LOG(WARNING) << "Retrive shard info failed for file path: " << path
+                         << ", error msg: " << shard_info.status().ToString();
+            return to_status(shard_info.status());
+        }
+
+        auto collector = CacheStatCollector::instance();
+        absl::StatusOr<int64_t> size_st = collector->collect_cache_size(shard_info.value(), pair.first);
+        if (size_st.ok()) {
+            return size_st.value();
+        } else {
+            return to_status(size_st.status());
+        }
     }
 
 private:

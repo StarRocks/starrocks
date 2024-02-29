@@ -201,6 +201,8 @@ public class TabletStatMgrTest {
         long tablet2NumRows = 21L;
         long tablet1DataSize = 30L;
         long tablet2DataSize = 31L;
+        long tablet1DataCacheSize = 10L;
+        long tablet2DataCacheSize = 20L;
 
         new Expectations() {
             {
@@ -237,11 +239,13 @@ public class TabletStatMgrTest {
                                 stat1.tabletId = tablet1Id;
                                 stat1.numRows = tablet1NumRows;
                                 stat1.dataSize = tablet1DataSize;
+                                stat1.dataCacheSize = tablet1DataCacheSize;
                                 stats.add(stat1);
                                 TabletStat stat2 = new TabletStat();
                                 stat2.tabletId = tablet2Id;
                                 stat2.numRows = tablet2NumRows;
                                 stat2.dataSize = tablet2DataSize;
+                                stat2.dataCacheSize = tablet2DataCacheSize;
                                 stats.add(stat2);
 
                                 TabletStatResponse response = new TabletStatResponse();
@@ -273,6 +277,10 @@ public class TabletStatMgrTest {
         Assert.assertEquals(tablet2.getDataSize(true), tablet2DataSize);
         Assert.assertTrue(tablet1.getDataSizeUpdateTime() >= t1 && tablet1.getDataSizeUpdateTime() <= t2);
         Assert.assertTrue(tablet2.getDataSizeUpdateTime() >= t1 && tablet2.getDataSizeUpdateTime() <= t2);
+        // data cache size
+        Assert.assertEquals(tablet1.getDataCacheSize(true), tablet1DataCacheSize);
+        Assert.assertEquals(tablet2.getDataCacheSize(true), tablet2DataCacheSize);
+
     }
 
     @Test

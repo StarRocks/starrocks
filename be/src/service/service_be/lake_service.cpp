@@ -30,6 +30,9 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
+#ifdef USE_STAROS
+#include "storage/lake/staros_cache_stats_collector.h"
+#endif
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
@@ -637,6 +640,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             }
             for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
                 data_size += file.size();
+                // TODO need cache stat for delvec file?
             }
 
             std::lock_guard l(response_mtx);
@@ -644,6 +648,29 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             tablet_stat->set_tablet_id(tablet_id);
             tablet_stat->set_num_rows(num_rows);
             tablet_stat->set_data_size(data_size);
+#ifdef USE_STAROS
+            if (config::starlet_use_star_cache && config::experimental_lake_enable_collect_cache_stat &&
+                tablet_info.enable_cache()) {
+                std::vector<std::string> files;
+                for (const auto& rowset : (*tablet_metadata)->rowsets()) {
+                    for (const auto& segment : rowset.segments()) {
+                        files.emplace_back(_tablet_mgr->segment_location(tablet_id, segment));
+                    }
+                }
+                if (!files.empty()) {
+                    auto start = std::chrono::steady_clock::now();
+                    auto cache_size_st = starrocks::lake::calculate_cache_size(files);
+                    if (cache_size_st.ok()) {
+                        tablet_stat->set_data_cache_size(cache_size_st.value());
+                    }
+                    auto end = std::chrono::steady_clock::now();
+                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+                    LOG(WARNING) << "Total cache stat size collected, size: " << cache_size_st.value()
+                                 << ", file count: " << files.size() << ", tablet_id: " << tablet_id
+                                 << ", time cost: " << duration.count() << " milliseconds";
+                }
+            }
+#endif
         };
         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:before_submit", nullptr);
         if (auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline); !st.ok()) {

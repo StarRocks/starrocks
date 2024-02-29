@@ -27,12 +27,12 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
@@ -77,8 +77,14 @@ public class LakeTabletsProcNodeTest {
         columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet
-        Tablet tablet1 = new LakeTablet(tablet1Id);
-        Tablet tablet2 = new LakeTablet(tablet2Id);
+        LakeTablet tablet1 = new LakeTablet(tablet1Id);
+        LakeTablet tablet2 = new LakeTablet(tablet2Id);
+
+        // cache size
+        long cacheSize1 = 10;
+        long cacheSize2 = 20;
+        tablet1.setDataCacheSize(cacheSize1);
+        tablet2.setDataCacheSize(cacheSize2);
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
@@ -91,6 +97,8 @@ public class LakeTabletsProcNodeTest {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        DataCacheInfo dataCacheInfo = new DataCacheInfo(false, false);
+        partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
 
         // Lake table
         LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -110,11 +118,17 @@ public class LakeTabletsProcNodeTest {
             Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
             String backendIds = (String) result.get(0).get(1);
             Assert.assertTrue(backendIds.contains("10000") && backendIds.contains("10001"));
+            // cache size
+            ByteSizeValue cacheByteSize = (ByteSizeValue) result.get(0).get(4);
+            Assert.assertEquals(cacheByteSize.getBytes(), cacheSize1);
         }
         {
             Assert.assertEquals((long) result.get(1).get(0), tablet2Id);
             String backendIds = (String) result.get(1).get(1);
             Assert.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
+            // cache size
+            ByteSizeValue cacheByteSize = (ByteSizeValue) result.get(1).get(4);
+            Assert.assertEquals(cacheByteSize.getBytes(), cacheSize2);
         }
 
         { // check show single tablet with tablet id
@@ -135,5 +149,14 @@ public class LakeTabletsProcNodeTest {
             // non-exist tablet id
             Assert.assertThrows(AnalysisException.class, () -> procDir.lookup("123456789"));
         }
+
+        // show partition proc
+        PartitionsProcDir partitionsProcDir = new PartitionsProcDir(db, table, false);
+        ProcResult procResult = partitionsProcDir.fetchResult();
+        Assert.assertEquals(1, procResult.getRows().size());
+        List<String> row = procResult.getRows().get(0);
+        Assert.assertEquals(row.get(0), String.valueOf(partitionId));
+        // data cache size
+        Assert.assertEquals(row.get(13), "30B");
     }
 }
