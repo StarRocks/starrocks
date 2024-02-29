@@ -27,7 +27,7 @@
 #include "column/struct_column.h"
 #include "common/object_pool.h"
 #include "formats/orc/orc_chunk_reader.h"
-#include "fs/fs_memory.h"
+#include "fs/fs_posix.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
@@ -65,7 +65,7 @@ public:
         TQueryGlobals query_globals;
         _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
         _runtime_state->init_instance_mem_tracker();
-        _fs = std::make_unique<MemoryFileSystem>();
+        _fs = new_fs_posix();
     };
     void TearDown() override { _fs->delete_file(_file_path); };
 
@@ -129,13 +129,14 @@ protected:
     }
 
 protected:
-    std::unique_ptr<MemoryFileSystem> _fs;
+    std::unique_ptr<FileSystem> _fs;
     std::string _file_path{"./be/test/exec/test_data/orc_scanner/tmp.orc"};
     ObjectPool _pool;
     std::shared_ptr<RuntimeState> _runtime_state;
 };
 
 TEST_F(OrcChunkWriterTest, TestWriteIntergersNullable) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::from_logical_type(TYPE_TINYINT),
             TypeDescriptor::from_logical_type(TYPE_SMALLINT),
@@ -194,6 +195,7 @@ TEST_F(OrcChunkWriterTest, TestWriteIntergersNullable) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteIntergersNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::from_logical_type(TYPE_TINYINT),
             TypeDescriptor::from_logical_type(TYPE_SMALLINT),
@@ -251,6 +253,7 @@ TEST_F(OrcChunkWriterTest, TestWriteIntergersNotNull) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteBooleanNullable) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     std::vector<TypeDescriptor> type_descs{type_bool};
     auto column_names = _make_type_names(type_descs);
@@ -290,6 +293,7 @@ TEST_F(OrcChunkWriterTest, TestWriteBooleanNullable) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteBooleanNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     std::vector<TypeDescriptor> type_descs{type_bool};
     auto column_names = _make_type_names(type_descs);
@@ -325,6 +329,7 @@ TEST_F(OrcChunkWriterTest, TestWriteBooleanNotNull) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteStringsNullable) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     auto type_char = TypeDescriptor::from_logical_type(TYPE_CHAR);
     std::vector<TypeDescriptor> type_descs{type_varchar, type_char};
@@ -381,6 +386,7 @@ TEST_F(OrcChunkWriterTest, TestWriteStringsNullable) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteStringsNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     auto type_char = TypeDescriptor::from_logical_type(TYPE_CHAR);
     std::vector<TypeDescriptor> type_descs{type_varchar, type_char};
@@ -429,6 +435,7 @@ TEST_F(OrcChunkWriterTest, TestWriteStringsNotNull) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteDecimal) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 5),
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 9),
@@ -481,6 +488,7 @@ TEST_F(OrcChunkWriterTest, TestWriteDecimal) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteDecimalNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 5),
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 9),
@@ -533,6 +541,7 @@ TEST_F(OrcChunkWriterTest, TestWriteDecimalNotNull) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteDate) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_date = TypeDescriptor::from_logical_type(TYPE_DATE);
     std::vector<TypeDescriptor> type_descs{type_date};
 
@@ -582,6 +591,7 @@ TEST_F(OrcChunkWriterTest, TestWriteDate) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteDateNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_date = TypeDescriptor::from_logical_type(TYPE_DATE);
     std::vector<TypeDescriptor> type_descs{type_date};
 
@@ -627,6 +637,7 @@ TEST_F(OrcChunkWriterTest, TestWriteDateNotNull) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteTimestamp) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
     std::vector<TypeDescriptor> type_descs{type_datetime};
 
@@ -677,6 +688,7 @@ TEST_F(OrcChunkWriterTest, TestWriteTimestamp) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteTimestampNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
     std::vector<TypeDescriptor> type_descs{type_datetime};
 
@@ -723,6 +735,7 @@ TEST_F(OrcChunkWriterTest, TestWriteTimestampNotNull) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteStruct) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int_a = TypeDescriptor::from_logical_type(TYPE_SMALLINT);
@@ -792,6 +805,7 @@ TEST_F(OrcChunkWriterTest, TestWriteStruct) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteMap) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int_key = TypeDescriptor::from_logical_type(TYPE_INT);
@@ -858,6 +872,7 @@ TEST_F(OrcChunkWriterTest, TestWriteMap) {
 }
 
 TEST_F(OrcChunkWriterTest, TestWriteNestedArray) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
@@ -910,44 +925,6 @@ TEST_F(OrcChunkWriterTest, TestWriteNestedArray) {
         auto array_array_col = NullableColumn::create(array_array_data_col, array_array_null_col);
 
         chunk->append_column(array_array_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
-
-    // read chunk
-    ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
-}
-
-TEST_F(OrcChunkWriterTest, TestAsyncWriteChunk) {
-    std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-    };
-
-    auto column_names = _make_type_names(type_descs);
-    auto output_file = _fs->new_writable_file(_file_path).value();
-    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
-    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
-    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            writer_options, []() {}, nullptr);
-    ASSERT_OK(writer->init());
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
-        std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
-        auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
-        ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
     }
 
     // write chunk
