@@ -108,6 +108,10 @@ public class StarRocksFE {
             // init config
             new Config().init(starRocksDir + "/conf/fe.conf");
 
+            // check command line options
+            // NOTE: do it before init log4jConfig to avoid unnecessary stdout messages
+            checkCommandLineOptions(cmdLineOpts);
+
             // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
             if (!JdkUtils.checkJavaVersion()) {
                 throw new IllegalArgumentException("Java version doesn't match");
@@ -119,9 +123,6 @@ public class StarRocksFE {
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
             // Need to put if before `GlobalStateMgr.getCurrentState().waitForReady()`, because it may access aws service
             setAWSHttpClient();
-
-            // check command line options
-            checkCommandLineOptions(cmdLineOpts);
 
             // check meta dir
             MetaHelper.checkMetaDir();
@@ -339,6 +340,7 @@ public class StarRocksFE {
             System.out.println("Commit hash: " + Version.STARROCKS_COMMIT_HASH);
             System.out.println("Build type: " + Version.STARROCKS_BUILD_TYPE);
             System.out.println("Build time: " + Version.STARROCKS_BUILD_TIME);
+            System.out.println("Build distributor id: " + Version.STARROCKS_BUILD_DISTRO_ID);
             System.out.println("Build user: " + Version.STARROCKS_BUILD_USER + "@" + Version.STARROCKS_BUILD_HOST);
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
