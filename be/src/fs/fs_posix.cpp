@@ -295,10 +295,13 @@ public:
     }
 
     Status sync() override {
+        MonotonicStopWatch watch;
+        watch.start();
         if (_pending_sync) {
             _pending_sync = false;
             RETURN_IF_ERROR(do_sync(_fd, _filename));
         }
+        IOProfiler::add_sync(watch.elapsed_time());
         return Status::OK();
     }
 
