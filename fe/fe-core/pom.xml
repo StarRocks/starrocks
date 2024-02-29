@@ -108,10 +108,10 @@ under the License.
             <artifactId>commons-cli</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
+        <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
         <dependency>
-            <groupId>commons-net</groupId>
-            <artifactId>commons-net</artifactId>
+            <groupId>com.github.seancfoley</groupId>
+            <artifactId>ipaddress</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/commons-codec/commons-codec -->

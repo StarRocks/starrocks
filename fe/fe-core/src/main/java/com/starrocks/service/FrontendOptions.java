@@ -41,6 +41,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.Storage;
+import inet.ipaddr.IPAddressString;
+import org.apache.commons.net.util.SubnetUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -304,7 +306,10 @@ public class FrontendOptions {
     static boolean isInPriorNetwork(String ip) {
         ip = ip.trim();
         for (String cidr : PRIORITY_CIDRS) {
-            if (NetUtils.isInPriorNetwork(cidr, ip)) {
+            cidr = cidr.trim();
+            IPAddressString network = new IPAddressString(cidr);
+            IPAddressString address = new IPAddressString(ip);
+            if (network.contains(address)) {
                 return true;
             }
         }
