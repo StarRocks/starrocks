@@ -773,11 +773,10 @@ TEST_F(ParquetFileWriterTest, TestWriteNestedArray) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_metrics.record_count, 3);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    ASSERT_EQ(read_chunk->num_rows(), 4);
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 

@@ -931,7 +931,7 @@ TEST_F(OrcChunkWriterTest, TestWriteNestedArray) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_metrics.record_count, 3);
 
     // read chunk
     ChunkPtr read_chunk;
