@@ -86,10 +86,6 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                     continue;
                 }
 
-                if (af.value().equals("Timestamp")) {
-                    continue;
-                }
-
                 // fields related to big queries are not written into audit log by default,
                 // they will be written into big query log.
                 if (af.value().equals("BigQueryLogCPUSecondThreshold") ||
