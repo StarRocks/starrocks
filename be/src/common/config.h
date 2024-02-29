@@ -263,6 +263,9 @@ CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
+// data and index page size, default is 64k
+CONF_Int32(data_page_size, "65536");
+
 // Cache for storage page size
 CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
@@ -820,6 +823,10 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 // For orc tiny stripe optimization
 // Default is 8MB for tiny stripe threshold size
 CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
+
+// When the ORC file file size is smaller than orc_loading_buffer_size,
+// we'll read the whole file at once instead of reading a footer first.
+CONF_Int32(orc_loading_buffer_size, "8388608");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");

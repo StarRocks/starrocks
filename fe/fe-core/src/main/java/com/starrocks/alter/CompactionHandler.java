@@ -77,12 +77,20 @@ public class CompactionHandler extends AlterHandler {
 
         CompactionClause compactionClause = (CompactionClause) alterClause;
         if (RunMode.isSharedDataMode()) {
-            List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
-            for (Partition partition : allPartitions) {
-                PartitionIdentifier partitionIdentifier =
-                        new PartitionIdentifier(db.getId(), olapTable.getId(), partition.getId());
-                CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
-                compactionManager.triggerManualCompaction(partitionIdentifier);
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
+                for (Partition partition : allPartitions) {
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        PartitionIdentifier partitionIdentifier =
+                                new PartitionIdentifier(db.getId(), olapTable.getId(), physicalPartition.getId());
+                        CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
+                        compactionManager.triggerManualCompaction(partitionIdentifier);
+                    }
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
             }
         } else {
             ArrayListMultimap<Long, Long> backendToTablets = ArrayListMultimap.create();
