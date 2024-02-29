@@ -69,7 +69,7 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
 
         // Compile the expression into native code and retrieve the function pointer.
         auto* jit_engine = JITEngine::get_instance();
-        if (!jit_engine->initialized()) {
+        if (!jit_engine->support_jit()) {
             return Status::JitCompileError("JIT is not supported");
         }
         auto expr_name = _expr->jit_func_name();

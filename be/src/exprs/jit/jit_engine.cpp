@@ -141,13 +141,14 @@ Status JITEngine::init() {
         if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
             _initialized = true;
             _support_jit = false;
-            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT";
+            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT. If force enabling jit, "
+                            "please set jit_lru_cache_size be a proper positive value";
             return Status::OK();
         } else {
             jit_lru_cache_size = std::min<int64_t>((1UL << 30), (int64_t)(mem_limit * 0.01));
         }
     }
-    LOG(INFO) << "JIT LRU cache size = " << jit_lru_cache_size;
+    LOG(INFO) << "JIT is enabled with function LRU cache size = " << jit_lru_cache_size;
     _func_cache = new_lru_cache(jit_lru_cache_size);
 #endif
     DCHECK(_func_cache != nullptr);
@@ -164,8 +165,8 @@ Status JITEngine::init() {
 Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* func_cache, Expr* expr,
                                           const std::vector<Expr*>& uncompilable_exprs) {
     auto* instance = JITEngine::get_instance();
-    if (UNLIKELY(!instance->initialized())) {
-        return Status::JitCompileError("JIT engine is not initialized");
+    if (UNLIKELY(!instance->support_jit())) {
+        return Status::JitCompileError("JIT is not supported");
     }
 
     auto cached = instance->lookup_function(func_cache);
