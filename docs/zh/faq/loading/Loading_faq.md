@@ -12,7 +12,7 @@ displayed_sidebar: "Chinese"
 
 - 修改 BE 的配置文件 **be.conf** 的相关配置，通过调整合并策略实现加快合并的目的：
   
-  - 对于明细表，聚合表和更新，可以适当调大 `cumulative_compaction_num_threads_per_disk`、`base_compaction_num_threads_per_disk` 和 `cumulative_compaction_check_interval_seconds` 的值。例如：
+  - 对于明细表，聚合表和更新表，可以适当调大 `cumulative_compaction_num_threads_per_disk`、`base_compaction_num_threads_per_disk` 和 `cumulative_compaction_check_interval_seconds` 的值。例如：
 
       ```Plain
       cumulative_compaction_num_threads_per_disk = 4
