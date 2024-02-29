@@ -436,10 +436,11 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     auto io_stat = scope.current_scoped_tls_io();
     StarRocksMetrics::instance()->segment_flush_total.increment(1);
     StarRocksMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
-    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_stat.write_time_ns / 1000);
+    auto io_time_us = (io_stat.write_time_ns + io_stat.sync_time_ns) / 1000;
+    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_us);
     StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
     VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
-            << ", duration: " << duration_ns / 1000 << "us, io time: " << io_stat.write_time_ns / 1000 << "us";
+            << ", duration: " << duration_ns / 1000 << "us, io_time: " << io_time_us << "us";
     return Status::OK();
 }
 
