@@ -107,7 +107,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     }
 
     LOG(INFO) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
-              << ", statistics: " << _context->to_json_stats();
+              << ", statistics: " << _context->stats->to_json_stats();
 
     return Status::OK();
 }
@@ -169,7 +169,6 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             << ", reader chunk size: " << chunk_size;
 
     int64 reader_time_ns = 0;
-    auto start = MonotonicNanos();
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
@@ -207,23 +206,12 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     RETURN_IF_ERROR(writer->flush_columns());
 
     // add reader stats
-    auto stats = reader.stats();
     _context->stats->reader_time_ns += reader_time_ns;
-    _context->stats->io_ns += stats.io_ns;
-    _context->stats->segment_init_ns += stats.segment_init_ns;
-    _context->stats->column_iterator_init_ns += stats.column_iterator_init_ns;
-    _context->stats->io_count_local_disk += stats.io_count_local_disk;
-    _context->stats->io_count_remote += stats.io_count_remote;
-    _context->stats->compressed_bytes_read += stats.compressed_bytes_read;
+    _context->stats->accumulate(reader.stats());
 
     if (is_key) {
         RETURN_IF_ERROR(mask_buffer->flush());
     }
-
-    auto elapsed = MonotonicNanos() - start;
-    VLOG(3) << "End compacting column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
-            << ", time cost(ms): " << elapsed / 1000000.0;
-
     return Status::OK();
 }
 
