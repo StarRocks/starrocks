@@ -181,15 +181,29 @@ void* my_realloc(void* p, size_t size) __THROW {
 
 // calloc
 void* my_calloc(size_t n, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(n * size);
     // If size is zero, the behavior is implementation defined (null pointer may be returned
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
         return nullptr;
     }
 
-    void* ptr = STARROCKS_CALLOC(n, size);
-    MEMORY_CONSUME_PTR(ptr);
-    return ptr;
+    if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
+        TRY_MEM_CONSUME(n * size, nullptr);
+        void* ptr = STARROCKS_CALLOC(n, size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(n * size);
+        } else {
+            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - n * size);
+        }
+        return ptr;
+    } else {
+        void* ptr = STARROCKS_CALLOC(n, size);
+        MEMORY_CONSUME_PTR(ptr);
+        return ptr;
+    }
 }
 
 void my_cfree(void* ptr) __THROW {
