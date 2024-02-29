@@ -383,9 +383,8 @@ public class NodeMgr {
                     isVersionFileChanged = true;
                 }
                 try {
-                    // Adaptation to IPv6
-                    String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(rightHelperNode.first, Config.http_port);
-                    URL idURL = new URL("http://" + accessibleHostPort + "/check");
+                    URL idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(
+                            rightHelperNode.first, Config.http_port) + "/check");
                     HttpURLConnection conn = null;
                     conn = (HttpURLConnection) idURL.openConnection();
                     conn.setConnectTimeout(2 * 1000);
@@ -476,7 +475,6 @@ public class NodeMgr {
         Pair<String, Integer> rightHelperNode = null;
         for (Pair<String, Integer> helperNode : helperNodes) {
             try {
-                // Adaptation to IPv6
                 String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
                 String encodedAddress = URLEncoder.encode(selfNode.first,
                         StandardCharsets.UTF_8.toString());
@@ -660,9 +658,8 @@ public class NodeMgr {
     }
 
     private boolean getVersionFileFromHelper(Pair<String, Integer> helperNode) throws IOException {
-        // Adaptation to IPv6
-        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
-        String url = "http://" + accessibleHostPort + "/version";
+        String url = "http://" + NetUtils.getHostPortInAccessibleFormat(
+                helperNode.first, Config.http_port) + "/version";
         LOG.info("Downloading version file from {}", url);
         try {
             File dir = new File(this.imageDir);
@@ -687,7 +684,6 @@ public class NodeMgr {
         Storage storage = new Storage(dirStr);
         localImageVersion = storage.getImageJournalId();
 
-        // Adaptation to IPv6
         String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
         URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
         StorageInfo info = getStorageInfo(infoUrl);
