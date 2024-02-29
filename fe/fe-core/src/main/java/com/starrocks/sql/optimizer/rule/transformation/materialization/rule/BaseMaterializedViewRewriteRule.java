@@ -110,8 +110,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 return expressions;
             } else {
                 // in rule phase, only return the best one result
-                BestMvSelector bestMvSelector = new BestMvSelector(
-                        expressions, context, queryExpression.getOp() instanceof LogicalAggregationOperator);
+                BestMvSelector bestMvSelector = new BestMvSelector(expressions, context, queryExpression);
                 return Lists.newArrayList(bestMvSelector.selectBest());
             }
         } catch (Exception e) {
