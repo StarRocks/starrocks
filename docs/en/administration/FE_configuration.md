@@ -596,6 +596,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition. Starting from version 2.5.7, StarRocks supports setting this parameter.
 
+#### enable_experimental_rowstore
+
+- **Description**: Whether to enable the [hybrid row-column storage](../table_design/hybrid_table.md).
+- **Default**: FALSE
+- **Introduced in**: v3.2.3
+
 #### storage_usage_soft_limit_percent
 
 - **Unit**: %

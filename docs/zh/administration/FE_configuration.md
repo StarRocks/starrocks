@@ -533,6 +533,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：TRUE
 - 引入版本：2.5.6
 
+#### enable_experimental_rowstore
+
+- 含义：是否开启[行列混存表](../table_design/hybrid_table.md)功能。
+- 默认值：FALSE
+- 引入版本：3.2.3
+
 #### storage_usage_soft_limit_percent
 
 - 含义：单个 BE 存储目录空间使用率软上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。
