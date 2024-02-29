@@ -29,7 +29,7 @@ public class QueryDebugOptions {
     private int maxRefreshMaterializedViewRetryNum = 1;
 
     @SerializedName(value = "enableMVEagerUnionAllRewrite")
-    private boolean enableMVEagerUnionAllRewrite = false;
+    private boolean enableMVEagerUnionAllRewrite = true;
 
     @SerializedName(value = "enableQueryTraceLog")
     private boolean enableQueryTraceLog = false;

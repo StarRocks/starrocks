@@ -282,7 +282,7 @@ public class PartitionUtil {
     }
 
     // check the partitionColumn exist in the partitionColumns
-    private static int checkAndGetPartitionColumnIndex(List<Column> partitionColumns, Column partitionColumn)
+    public static int checkAndGetPartitionColumnIndex(List<Column> partitionColumns, Column partitionColumn)
             throws AnalysisException {
         int partitionColumnIndex = -1;
         for (int index = 0; index < partitionColumns.size(); ++index) {

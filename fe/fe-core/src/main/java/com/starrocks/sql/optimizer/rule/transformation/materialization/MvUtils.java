@@ -918,6 +918,24 @@ public class MvUtils {
         return listPart;
     }
 
+    /**
+     * Determine whether to the base table is range partitioned.
+     * @param refBaseTable: ref base table of the materialized view
+     * @return: true if the ref base table is range partitioned, otherwise false.
+     */
+    public static boolean isListPartition(Table refBaseTable) {
+        Preconditions.checkState(refBaseTable != null);
+        if (refBaseTable.isUnPartitioned()) {
+            return false;
+        }
+        if (refBaseTable.isNativeTableOrMaterializedView()) {
+            OlapTable olapTable = (OlapTable) refBaseTable;
+            return olapTable.getPartitionInfo().isListPartition();
+        } else {
+            return true;
+        }
+    }
+
     public static List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
         ranges.sort(RangeUtils.RANGE_COMPARATOR);
         List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();

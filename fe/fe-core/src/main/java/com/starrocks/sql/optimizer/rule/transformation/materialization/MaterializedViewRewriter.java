@@ -1551,14 +1551,9 @@ public class MaterializedViewRewriter {
                 });
     }
 
-    private void setAppliedUnionAllRewrite(Operator op) {
+    private static void setAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
         op.setOpRuleMask(opRuleMask);
-    }
-
-    private boolean isAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
     }
 
     private PredicateSplit getUnionRewriteQueryCompensation(RewriteContext rewriteContext,
@@ -1572,12 +1567,7 @@ public class MaterializedViewRewriter {
         if (mvCompensationToQuery != null) {
             return mvCompensationToQuery;
         }
-        // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (isAppliedUnionAllRewrite(rewriteContext.getQueryExpression().getOp())) {
-            return null;
-        }
 
-        logMVRewrite(mvRewriteContext, "Try to pull up query's predicates to make possible for union rewrite");
         // try to pull up query's predicates to make possible for rewrite from mv to query.
         PredicateSplit mvPredicateSplit = rewriteContext.getMvPredicateSplit();
         PredicateSplit queryPredicateSplit = rewriteContext.getQueryPredicateSplit();
@@ -1596,8 +1586,17 @@ public class MaterializedViewRewriter {
                 .orElse(new ColumnRefSet());
         // use union-all rewrite eagerly if union-all rewrite can be used.
         QueryDebugOptions debugOptions  = optimizerContext.getSessionVariable().getQueryDebugOptions();
-        ColumnRefSet queryOutputColumnRefs = debugOptions.isEnableMVEagerUnionAllRewrite() ?
+        // To support more union all rewrite cases, we can pull up query's predicates to make possible for union rewrite.
+        // But if partitions are not pruned, rewritten plan may scan all mv partitions, which is not efficient, so only enable
+        // this when query's partitions have been pruned.
+        // eg:
+        // mv: SELECT dt,sum(num) FROM t2 GROUP BY dt;
+        // mv: SELECT dt,sum(num) FROM t2 GROUP BY dt;
+        boolean isUnionAllRewriteWithPullUp = materializationContext.canUnionAllRewriteWithPullUpPredicates();
+        ColumnRefSet queryOutputColumnRefs = debugOptions.isEnableMVEagerUnionAllRewrite() && isUnionAllRewriteWithPullUp ?
                 rewriteContext.getQueryExpression().getOutputColumns() : null;
+        logMVRewrite(mvRewriteContext, "Try to pull up query's predicates to make possible for union rewrite, pull up:{}",
+                isUnionAllRewriteWithPullUp);
         Set<ScalarOperator> queryExtraPredicates = queryPredicates.stream()
                 .filter(pred -> isPullUpQueryPredicate(pred, mvPredicateUsedColRefs,
                         queryOnPredicateUsedColRefs, queryOutputColumnRefs))

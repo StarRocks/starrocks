@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
 import org.apache.commons.collections4.SetUtils;
@@ -44,7 +45,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.isNeedCompensatePartitionPredicate;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.deducePartitionCompensateType;
 
 public class MaterializationContext {
     private final MaterializedView mv;
@@ -91,7 +92,7 @@ public class MaterializationContext {
     // during one query, so it's safe to cache it and be used for each optimizer rule.
     // But it is different for each materialized view, compensate partition predicate from the plan's
     // `selectedPartitionIds`, and check `isNeedCompensatePartitionPredicate` to get more information.
-    private Optional<Boolean> isCompensatePartitionPredicateOpt = Optional.empty();
+    private Optional<MvPartitionCompensator.PCType> mvPCompensateTypeOpt = Optional.empty();
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
     private Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
 
@@ -422,18 +423,33 @@ public class MaterializationContext {
      *  means MV's partitions can cover all needed partitions from Query.
      * </p>
      */
-    public boolean getOrInitCompensatePartitionPredicate(OptExpression queryExpression) {
-        if (!isCompensatePartitionPredicateOpt.isPresent()) {
+    public MvPartitionCompensator.PCType getOrInitCompensatePartitionPredicate(OptExpression queryExpression) {
+        if (!mvPCompensateTypeOpt.isPresent()) {
             SessionVariable sessionVariable = optimizerContext.getSessionVariable();
+            boolean isNeedCompensate = sessionVariable.isEnableMaterializedViewRewritePartitionCompensate();
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
-            isCompensatePartitionPredicateOpt = sessionVariable.isEnableMaterializedViewRewritePartitionCompensate() ?
-                    isNeedCompensatePartitionPredicate(queryExpression, this) : Optional.of(false);
+            MvPartitionCompensator.PCType pcType = isNeedCompensate ?
+                    deducePartitionCompensateType(queryExpression, this) :
+                    MvPartitionCompensator.PCType.NO_COMPENSATE;
+            logMVRewrite(mv.getName(), "deduce partition compensate type: {}", pcType);
+            mvPCompensateTypeOpt = Optional.of(pcType);
         }
-        return isCompensatePartitionPredicateOpt.orElse(true);
+        return mvPCompensateTypeOpt.get();
+    }
+
+    public boolean canUnionAllRewriteWithPullUpPredicates() {
+        if (!mvPCompensateTypeOpt.isPresent()) {
+            return false;
+        }
+        MvPartitionCompensator.PCType pcType = mvPCompensateTypeOpt.get();
+        return MvPartitionCompensator.PCType.isUnionAllWithPullUpPredicates(pcType);
     }
 
     public boolean isCompensatePartitionPredicate() {
-        return isCompensatePartitionPredicateOpt.orElse(true);
+        if (mvPCompensateTypeOpt.isPresent()) {
+            return MvPartitionCompensator.PCType.isCompensate(mvPCompensateTypeOpt.get());
+        }
+        return true;
     }
 
     public Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {
