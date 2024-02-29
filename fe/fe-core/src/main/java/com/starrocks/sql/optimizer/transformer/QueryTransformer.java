@@ -98,16 +98,8 @@ class QueryTransformer {
         builder = window(builder, analyticExprList);
 
         if (queryBlock.hasOrderByClause()) {
-            if (!queryBlock.hasAggregation()) {
-                //requires both output and source fields to be visible if there are no aggregations
-                builder = projectForOrder(builder,
-                        Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
-                        queryBlock.getOutputExprInOrderByScope(),
-                        queryBlock.getColumnOutputNames(),
-                        builder.getFieldMappings(),
-                        queryBlock.getOrderScope(), false);
-            } else {
-                //requires output fields, groups and translated aggregations to be visible for queries with aggregation
+            if (!queryBlock.getGroupBy().isEmpty() && !queryBlock.getAggregate().isEmpty()) {
+                // requires output fields, groups and translated aggregations to be visible for queries with aggregation
                 List<String> outputNames = new ArrayList<>(queryBlock.getColumnOutputNames());
                 for (int i = 0; i < queryBlock.getOrderSourceExpressions().size(); ++i) {
                     outputNames.add(queryBlock.getOrderSourceExpressions().get(i).toString());
@@ -121,10 +113,21 @@ class QueryTransformer {
                         outputNames,
                         builder.getFieldMappings(),
                         queryBlock.getOrderScope(), true);
+
+            } else {
+                // requires both output and source fields to be visible if there is no aggregation or distinct
+                // if there is a distinct, we still no need to project the orderSourceExpressions because it must
+                // in the outputExpression.
+                builder = projectForOrder(builder,
+                        Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
+                        queryBlock.getOutputExprInOrderByScope(),
+                        queryBlock.getColumnOutputNames(),
+                        builder.getFieldMappings(),
+                        queryBlock.getOrderScope(), queryBlock.isDistinct());
             }
         }
 
-        builder = distinct(builder, queryBlock.isDistinct(), queryBlock.getOutputExpression());
+        builder = distinct(builder, queryBlock.isDistinct(), queryBlock.hasOrderByClause(), queryBlock.getOutputExpression());
         // add project to express order by expression
         builder = project(builder, Iterables.concat(queryBlock.getOrderByExpressions(), queryBlock.getOutputExpression()));
         List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
@@ -230,7 +233,6 @@ class QueryTransformer {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-
         for (Expr expression : expressions) {
             Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
             ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
@@ -591,10 +593,14 @@ class QueryTransformer {
         return subOpt.withNewRoot(sortOperator);
     }
 
-    private OptExprBuilder distinct(OptExprBuilder subOpt, boolean isDistinct, List<Expr> outputExpressions) {
+    private OptExprBuilder distinct(OptExprBuilder subOpt, boolean isDistinct, boolean hasOrderBy,
+                                    List<Expr> outputExpressions) {
         if (isDistinct) {
-            // Add project before DISTINCT to express select item
-            subOpt = project(subOpt, outputExpressions);
+            // Add project before DISTINCT to express select item. If there is an orderByClause,
+            // we can skip this process because we had done it in the previous step.
+            if (!hasOrderBy) {
+                subOpt = project(subOpt, outputExpressions);
+            }
             List<ColumnRefOperator> groupByColumns = Lists.newArrayList();
             for (Expr expr : outputExpressions) {
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator
