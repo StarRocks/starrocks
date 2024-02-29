@@ -79,6 +79,7 @@ std::string get_build_version(bool compact) {
     ss << STARROCKS_VERSION << " " << STARROCKS_BUILD_TYPE << " (build " << STARROCKS_COMMIT_HASH << ")";
     if (!compact) {
         ss << std::endl
+           << "Build distributor id: " << STARROCKS_BUILD_DISTRO_ID << std::endl
            << "Built on " << STARROCKS_BUILD_TIME << " by " << STARROCKS_BUILD_USER << "@" << STARROCKS_BUILD_HOST;
     }
 
