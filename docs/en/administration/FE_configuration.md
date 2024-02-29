@@ -598,7 +598,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### enable_experimental_rowstore
 
-- **Description**: Whether to enable the [Hybrid row-column storage](../table_design/hybrid_table.md).
+- **Description**: Whether to enable the [hybrid row-column storage](../table_design/hybrid_table.md).
 - **Default**: FALSE
 - **Introduced in**: v3.2.3
 
