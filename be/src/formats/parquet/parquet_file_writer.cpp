@@ -425,10 +425,10 @@ ParquetFileWriter::~ParquetFileWriter() {
     }
 }
 
-ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, const string& format,
+ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::string& format,
                                                    const std::map<std::string, std::string>& options,
-                                                   const vector<std::string>& column_names,
-                                                   vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                                                   const std::vector<std::string>& column_names,
+                                                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                                    std::optional<std::vector<formats::FileColumnId>> field_ids,
                                                    PriorityThreadPool* executors)
         : _fs(std::move(fs)),
@@ -446,7 +446,7 @@ Status ParquetFileWriterFactory::_init() {
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const string& path) {
+StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const std::string& path) {
     if (_parsed_options == nullptr) {
         RETURN_IF_ERROR(_init());
     }

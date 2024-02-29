@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "formats/orc/utils.h"
 #include "formats/utils.h"
 
 namespace starrocks::formats {
@@ -659,10 +660,10 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     }
 }
 
-ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, const string& format,
+ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::string& format,
                                            const std::map<std::string, std::string>& options,
-                                           const vector<std::string>& column_names,
-                                           vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                                           const std::vector<std::string>& column_names,
+                                           std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                            PriorityThreadPool* executors)
         : _fs(std::move(fs)),
           _format(format),
@@ -679,7 +680,7 @@ Status ORCFileWriterFactory::_init() {
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const string& path) {
+StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) {
     if (_parsed_options == nullptr) {
         RETURN_IF_ERROR(_init());
     }
