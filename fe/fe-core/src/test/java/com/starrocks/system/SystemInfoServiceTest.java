@@ -320,7 +320,7 @@ public class SystemInfoServiceTest {
     public void testGetHostAndPort() {
         String ipv4 = "192.168.1.2:9050";
         String ipv6 = "[fe80::5054:ff:fec9:dee0]:9050";
-        String ipv6Error = "fe80::5054:ff:fec9:dee0:9050";
+        String ipv6Error = "fe80::5054:ff:fec9:dee0:dee0";
         try {
             Pair<String, Integer> ipv4Addr = SystemInfoService.validateHostAndPort(ipv4, false);
             Assert.assertEquals("192.168.1.2", ipv4Addr.first);

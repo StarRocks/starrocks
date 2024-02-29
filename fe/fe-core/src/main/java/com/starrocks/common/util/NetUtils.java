@@ -37,6 +37,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import inet.ipaddr.IPAddressString;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.io.IOException;
@@ -150,13 +151,10 @@ public class NetUtils {
         if (ip1.equals(ip2)) {
             return true;
         }
-        try {
-            InetAddress addr1 = InetAddress.getByName(ip1);
-            InetAddress addr2 = InetAddress.getByName(ip2);
-            return addr1.equals(addr2);
-        } catch (UnknownHostException e) {
-            return false;
-        }
+        IPAddressString addr1 = new IPAddressString(ip1);
+        IPAddressString addr2 = new IPAddressString(ip2);
+        return addr1.equals(addr2);
+
     }
 
 }
