@@ -297,12 +297,13 @@ Status MemTable::flush(SegmentPB* seg_info) {
     auto io_stat = scope.current_scoped_tls_io();
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
-    StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(io_stat.write_time_ns / 1000);
+    auto io_time_us = (io_stat.write_time_ns + io_stat.sync_time_ns) / 1000;
+    StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(io_time_us);
     auto flush_bytes = memory_usage();
     StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.increment(flush_bytes);
     StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.increment(io_stat.write_bytes);
     VLOG(1) << "memtable of tablet " << _tablet_id << " flush duration: " << duration_ns / 1000 << "us, "
-            << "io time: " << io_stat.write_time_ns / 1000 << "us, memory bytes: " << flush_bytes
+            << "io time: " << io_time_us << "us, memory bytes: " << flush_bytes
             << ", disk bytes: " << io_stat.write_bytes;
     return Status::OK();
 }

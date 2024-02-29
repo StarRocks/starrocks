@@ -51,6 +51,8 @@ public:
         uint64_t write_ops;
         uint64_t write_bytes;
         uint64_t write_time_ns;
+        uint64_t sync_ops;
+        uint64_t sync_time_ns;
     };
 
     static const char* tag_to_string(uint32_t tag);
@@ -119,6 +121,8 @@ public:
         }
     }
 
+    static inline void add_sync(int64_t latency_ns) { _add_tls_sync(latency_ns); }
+
     static StatusOr<std::vector<std::string>> get_topn_read_stats(size_t n);
     static StatusOr<std::vector<std::string>> get_topn_write_stats(size_t n);
     static StatusOr<std::vector<std::string>> get_topn_total_stats(size_t n);
@@ -139,6 +143,7 @@ protected:
     // Update thread local io statistics
     static void _add_tls_read(int64_t bytes, int64_t latency_ns);
     static void _add_tls_write(int64_t bytes, int64_t latency_ns);
+    static void _add_tls_sync(int64_t latency_ns);
 
     // Update io statistics associated with a context, such as tag + tablet_id
     static void _add_context_read(int64_t bytes);
