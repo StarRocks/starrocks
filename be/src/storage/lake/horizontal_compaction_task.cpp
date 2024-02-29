@@ -85,15 +85,6 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 
         _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
         VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();
-        // add reader stats
-        auto stats = reader.stats();
-        _context->stats->reader_time_ns += reader_time_ns;
-        _context->stats->io_ns += stats.io_ns;
-        _context->stats->segment_init_ns += stats.segment_init_ns;
-        _context->stats->column_iterator_init_ns += stats.column_iterator_init_ns;
-        _context->stats->io_count_local_disk += stats.io_count_local_disk;
-        _context->stats->io_count_remote += stats.io_count_remote;
-        _context->stats->compressed_bytes_read += stats.compressed_bytes_read;
     }
 
     // Adjust the progress here for 2 reasons:
@@ -101,6 +92,16 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
     _context->progress.update(100);
     RETURN_IF_ERROR(writer->finish());
+
+    // add reader stats
+    auto stats = reader.stats();
+    _context->stats->reader_time_ns += reader_time_ns;
+    _context->stats->io_ns += stats.io_ns;
+    _context->stats->segment_init_ns += stats.segment_init_ns;
+    _context->stats->column_iterator_init_ns += stats.column_iterator_init_ns;
+    _context->stats->io_count_local_disk += stats.io_count_local_disk;
+    _context->stats->io_count_remote += stats.io_count_remote;
+    _context->stats->compressed_bytes_read += stats.compressed_bytes_read;
 
     // update writer stats
     _context->stats->segment_write_ns += writer->stats().segment_write_ns;
