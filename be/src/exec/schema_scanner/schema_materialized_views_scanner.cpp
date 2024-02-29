@@ -49,6 +49,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"QUERY_REWRITE_STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -88,31 +89,30 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TMaterializedViewStatus& info = _mv_results.materialized_views[_table_index];
     std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
-    DatumArray datum_array{
-            Slice(info.id),
-            Slice(db_name),
-            Slice(info.name),
-            Slice(info.refresh_type),
-            Slice(info.is_active),
-            Slice(info.inactive_reason),
-            Slice(info.partition_type),
-            Slice(info.task_id),
-            Slice(info.task_name),
-            Slice(info.last_refresh_start_time),
-            Slice(info.last_refresh_finished_time),
-            Slice(info.last_refresh_duration),
-            Slice(info.last_refresh_state),
-            Slice(info.last_refresh_force_refresh),
-            Slice(info.last_refresh_start_partition),
-            Slice(info.last_refresh_end_partition),
-            Slice(info.last_refresh_base_refresh_partitions),
-            Slice(info.last_refresh_mv_refresh_partitions),
-            Slice(info.last_refresh_error_code),
-            Slice(info.last_refresh_error_message),
-            Slice(info.rows),
-            Slice(info.text),
-            Slice(info.extra_message),
-    };
+    DatumArray datum_array{Slice(info.id),
+                           Slice(db_name),
+                           Slice(info.name),
+                           Slice(info.refresh_type),
+                           Slice(info.is_active),
+                           Slice(info.inactive_reason),
+                           Slice(info.partition_type),
+                           Slice(info.task_id),
+                           Slice(info.task_name),
+                           Slice(info.last_refresh_start_time),
+                           Slice(info.last_refresh_finished_time),
+                           Slice(info.last_refresh_duration),
+                           Slice(info.last_refresh_state),
+                           Slice(info.last_refresh_force_refresh),
+                           Slice(info.last_refresh_start_partition),
+                           Slice(info.last_refresh_end_partition),
+                           Slice(info.last_refresh_base_refresh_partitions),
+                           Slice(info.last_refresh_mv_refresh_partitions),
+                           Slice(info.last_refresh_error_code),
+                           Slice(info.last_refresh_error_message),
+                           Slice(info.rows),
+                           Slice(info.text),
+                           Slice(info.extra_message),
+                           Slice(info.query_rewrite_status)};
 
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
