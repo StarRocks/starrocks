@@ -73,14 +73,17 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
  * (
  * select sum(k2) as k2 from tbl where k1 >= "2022-01-02" and k1 < "2022-02-01" group by k3
  * union all
- * select sum(k2) as k2 from tbl where k1 >= "2022-02-01" and k1 < "2023-01-01" group by k3
+ * select sum(k2) as k2 from tbl where date_trunc('month', k1) >= "2022-02-01"
+ * and date_trunc('month', k1) < "2023-01-01" group by k3
  * union all
- * select sum(k2) as k2 from tbl where k1 >= "2023-01-01" and k1 < "2024-01-01" group by k3
+ * select sum(k2) as k2 from tbl where date_trunc('year', k1) >= "2023-01-01"
+ * and date_trunc('year', k1) < "2024-01-01" group by k3
  * union all
- * select sum(k2) as k2 from tbl where k1 >= "2024-01-01" and k1 < "2024-05-01" group by k3
+ * select sum(k2) as k2 from tbl where date_trunc('month', k1) >= "2024-01-01"
+ * and date_trunc('month', k1) < "2024-05-01" group by k3
  * union all
  * select sum(k2) as k2 from tbl where k1 >= "2024-05-01" and k1 <= "2024-05-06" group by k3
- * )
+ * ) t
  * group by k3
  * The transformed query is easy to be rewritten by MV on day/month/year dimension.
  */
