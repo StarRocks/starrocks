@@ -68,7 +68,7 @@ std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
     std::future<FileWriter::CommitResult> future = promise->get_future();
 
     auto task = [writer = _writer, output_stream = _output_stream, p = promise, rollback = _rollback_action,
-            row_counter = _row_counter, location = _location] {
+                 row_counter = _row_counter, location = _location] {
         FileWriter::CommitResult result{
                 .io_status = Status::OK(), .format = ORC, .location = location, .rollback_action = rollback};
         try {
@@ -122,79 +122,79 @@ StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(ChunkP
 void ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
                                   const TypeDescriptor& type_desc) {
     switch (type_desc.type) {
-        case TYPE_BOOLEAN: {
-            _write_number<TYPE_BOOLEAN, orc::LongVectorBatch>(orc_column, column);
-            break;
-        }
-        case TYPE_TINYINT: {
-            _write_number<TYPE_TINYINT, orc::LongVectorBatch>(orc_column, column);
-            break;
-        }
-        case TYPE_SMALLINT: {
-            _write_number<TYPE_SMALLINT, orc::LongVectorBatch>(orc_column, column);
-            break;
-        }
-        case TYPE_INT: {
-            _write_number<TYPE_INT, orc::LongVectorBatch>(orc_column, column);
-            break;
-        }
-        case TYPE_BIGINT: {
-            _write_number<TYPE_BIGINT, orc::LongVectorBatch>(orc_column, column);
-            break;
-        }
-        case TYPE_FLOAT: {
-            _write_number<TYPE_FLOAT, orc::DoubleVectorBatch>(orc_column, column);
-        }
-        case TYPE_DOUBLE: {
-            _write_number<TYPE_DOUBLE, orc::DoubleVectorBatch>(orc_column, column);
-        }
-        case TYPE_CHAR:
-            [[fallthrough]];
-        case TYPE_VARCHAR: {
-            _write_string(orc_column, column);
-            break;
-        }
-        case TYPE_DECIMAL: {
-            _write_decimal(orc_column, column, type_desc.precision, type_desc.scale);
-            break;
-        }
-        case TYPE_DECIMAL32: {
-            _write_decimal32or64or128<TYPE_DECIMAL32, orc::Decimal64VectorBatch, int64_t>(
-                    orc_column, column, type_desc.precision, type_desc.scale);
-            break;
-        }
-        case TYPE_DECIMAL64: {
-            _write_decimal32or64or128<TYPE_DECIMAL64, orc::Decimal64VectorBatch, int64_t>(
-                    orc_column, column, type_desc.precision, type_desc.scale);
-            break;
-        }
-        case TYPE_DECIMAL128: {
-            _write_decimal32or64or128<TYPE_DECIMAL128, orc::Decimal128VectorBatch, int128_t>(
-                    orc_column, column, type_desc.precision, type_desc.scale);
-            break;
-        }
-        case TYPE_DATE: {
-            _write_date(orc_column, column);
-            break;
-        }
-        case TYPE_DATETIME: {
-            _write_datetime(orc_column, column);
-            break;
-        }
-        case TYPE_ARRAY: {
-            _write_array_column(orc_column, column, type_desc);
-            break;
-        }
-        case TYPE_STRUCT: {
-            _write_struct_column(orc_column, column, type_desc);
-            break;
-        }
-        case TYPE_MAP: {
-            _write_map_column(orc_column, column, type_desc);
-            break;
-        }
-        default: {
-        }
+    case TYPE_BOOLEAN: {
+        _write_number<TYPE_BOOLEAN, orc::LongVectorBatch>(orc_column, column);
+        break;
+    }
+    case TYPE_TINYINT: {
+        _write_number<TYPE_TINYINT, orc::LongVectorBatch>(orc_column, column);
+        break;
+    }
+    case TYPE_SMALLINT: {
+        _write_number<TYPE_SMALLINT, orc::LongVectorBatch>(orc_column, column);
+        break;
+    }
+    case TYPE_INT: {
+        _write_number<TYPE_INT, orc::LongVectorBatch>(orc_column, column);
+        break;
+    }
+    case TYPE_BIGINT: {
+        _write_number<TYPE_BIGINT, orc::LongVectorBatch>(orc_column, column);
+        break;
+    }
+    case TYPE_FLOAT: {
+        _write_number<TYPE_FLOAT, orc::DoubleVectorBatch>(orc_column, column);
+    }
+    case TYPE_DOUBLE: {
+        _write_number<TYPE_DOUBLE, orc::DoubleVectorBatch>(orc_column, column);
+    }
+    case TYPE_CHAR:
+        [[fallthrough]];
+    case TYPE_VARCHAR: {
+        _write_string(orc_column, column);
+        break;
+    }
+    case TYPE_DECIMAL: {
+        _write_decimal(orc_column, column, type_desc.precision, type_desc.scale);
+        break;
+    }
+    case TYPE_DECIMAL32: {
+        _write_decimal32or64or128<TYPE_DECIMAL32, orc::Decimal64VectorBatch, int64_t>(
+                orc_column, column, type_desc.precision, type_desc.scale);
+        break;
+    }
+    case TYPE_DECIMAL64: {
+        _write_decimal32or64or128<TYPE_DECIMAL64, orc::Decimal64VectorBatch, int64_t>(
+                orc_column, column, type_desc.precision, type_desc.scale);
+        break;
+    }
+    case TYPE_DECIMAL128: {
+        _write_decimal32or64or128<TYPE_DECIMAL128, orc::Decimal128VectorBatch, int128_t>(
+                orc_column, column, type_desc.precision, type_desc.scale);
+        break;
+    }
+    case TYPE_DATE: {
+        _write_date(orc_column, column);
+        break;
+    }
+    case TYPE_DATETIME: {
+        _write_datetime(orc_column, column);
+        break;
+    }
+    case TYPE_ARRAY: {
+        _write_array_column(orc_column, column, type_desc);
+        break;
+    }
+    case TYPE_STRUCT: {
+        _write_struct_column(orc_column, column, type_desc);
+        break;
+    }
+    case TYPE_MAP: {
+        _write_map_column(orc_column, column, type_desc);
+        break;
+    }
+    default: {
+    }
     }
 }
 
@@ -546,73 +546,73 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema(const std::vect
 
 StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const TypeDescriptor& type_desc) {
     switch (type_desc.type) {
-        case TYPE_BOOLEAN: {
-            return orc::createPrimitiveType(orc::TypeKind::BOOLEAN);
-        }
-        case TYPE_TINYINT: {
-            return orc::createPrimitiveType(orc::TypeKind::BYTE);
-        }
-        case TYPE_SMALLINT: {
-            return orc::createPrimitiveType(orc::TypeKind::SHORT);
-        }
-        case TYPE_INT: {
-            return orc::createPrimitiveType(orc::TypeKind::INT);
-        }
-        case TYPE_BIGINT: {
-            return orc::createPrimitiveType(orc::TypeKind::LONG);
-        }
-        case TYPE_FLOAT: {
-            return orc::createPrimitiveType(orc::TypeKind::FLOAT);
-        }
-        case TYPE_DOUBLE: {
-            return orc::createPrimitiveType(orc::TypeKind::DOUBLE);
-        }
-        case TYPE_CHAR:
-            [[fallthrough]];
-        case TYPE_VARCHAR: {
-            return orc::createPrimitiveType(orc::TypeKind::STRING);
-        }
-        case TYPE_DECIMAL:
-            [[fallthrough]];
-        case TYPE_DECIMAL32:
-            [[fallthrough]];
-        case TYPE_DECIMAL64:
-            [[fallthrough]];
-        case TYPE_DECIMAL128: {
-            return orc::createDecimalType(type_desc.precision, type_desc.scale);
-        }
-        case TYPE_DATE: {
-            return orc::createPrimitiveType(orc::TypeKind::DATE);
-        }
-        case TYPE_DATETIME:
-            [[fallthrough]];
-        case TYPE_TIME: {
-            return orc::createPrimitiveType(orc::TypeKind::TIMESTAMP);
-        }
-        case TYPE_STRUCT: {
-            auto struct_type = orc::createStructType();
-            for (size_t i = 0; i < type_desc.children.size(); ++i) {
-                const TypeDescriptor& child_type = type_desc.children[i];
-                ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> child_orc_type, _make_schema_node(child_type));
-                struct_type->addStructField(type_desc.field_names[i], std::move(child_orc_type));
-            }
-            return struct_type;
-        }
-        case TYPE_MAP: {
-            const TypeDescriptor& key_type = type_desc.children[0];
-            const TypeDescriptor& value_type = type_desc.children[1];
-            ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> key_orc_type, _make_schema_node(key_type));
-            ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> value_orc_type, _make_schema_node(value_type));
-            return orc::createMapType(std::move(key_orc_type), std::move(value_orc_type));
-        }
-        case TYPE_ARRAY: {
-            const TypeDescriptor& child_type = type_desc.children[0];
+    case TYPE_BOOLEAN: {
+        return orc::createPrimitiveType(orc::TypeKind::BOOLEAN);
+    }
+    case TYPE_TINYINT: {
+        return orc::createPrimitiveType(orc::TypeKind::BYTE);
+    }
+    case TYPE_SMALLINT: {
+        return orc::createPrimitiveType(orc::TypeKind::SHORT);
+    }
+    case TYPE_INT: {
+        return orc::createPrimitiveType(orc::TypeKind::INT);
+    }
+    case TYPE_BIGINT: {
+        return orc::createPrimitiveType(orc::TypeKind::LONG);
+    }
+    case TYPE_FLOAT: {
+        return orc::createPrimitiveType(orc::TypeKind::FLOAT);
+    }
+    case TYPE_DOUBLE: {
+        return orc::createPrimitiveType(orc::TypeKind::DOUBLE);
+    }
+    case TYPE_CHAR:
+        [[fallthrough]];
+    case TYPE_VARCHAR: {
+        return orc::createPrimitiveType(orc::TypeKind::STRING);
+    }
+    case TYPE_DECIMAL:
+        [[fallthrough]];
+    case TYPE_DECIMAL32:
+        [[fallthrough]];
+    case TYPE_DECIMAL64:
+        [[fallthrough]];
+    case TYPE_DECIMAL128: {
+        return orc::createDecimalType(type_desc.precision, type_desc.scale);
+    }
+    case TYPE_DATE: {
+        return orc::createPrimitiveType(orc::TypeKind::DATE);
+    }
+    case TYPE_DATETIME:
+        [[fallthrough]];
+    case TYPE_TIME: {
+        return orc::createPrimitiveType(orc::TypeKind::TIMESTAMP);
+    }
+    case TYPE_STRUCT: {
+        auto struct_type = orc::createStructType();
+        for (size_t i = 0; i < type_desc.children.size(); ++i) {
+            const TypeDescriptor& child_type = type_desc.children[i];
             ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> child_orc_type, _make_schema_node(child_type));
-            return orc::createListType(std::move(child_orc_type));
+            struct_type->addStructField(type_desc.field_names[i], std::move(child_orc_type));
         }
-        default:
-            return Status::NotSupported(
-                    fmt::format("ORC writer does not support to write {} type yet", type_desc.debug_string()));
+        return struct_type;
+    }
+    case TYPE_MAP: {
+        const TypeDescriptor& key_type = type_desc.children[0];
+        const TypeDescriptor& value_type = type_desc.children[1];
+        ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> key_orc_type, _make_schema_node(key_type));
+        ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> value_orc_type, _make_schema_node(value_type));
+        return orc::createMapType(std::move(key_orc_type), std::move(value_orc_type));
+    }
+    case TYPE_ARRAY: {
+        const TypeDescriptor& child_type = type_desc.children[0];
+        ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> child_orc_type, _make_schema_node(child_type));
+        return orc::createListType(std::move(child_orc_type));
+    }
+    default:
+        return Status::NotSupported(
+                fmt::format("ORC writer does not support to write {} type yet", type_desc.debug_string()));
     }
 }
 

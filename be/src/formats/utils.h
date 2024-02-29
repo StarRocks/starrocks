@@ -48,9 +48,9 @@ bool is_ready(std::future<R> const& f) {
 
 namespace formats {
 
-    inline static const std::string PARQUET = "parquet";
-    inline static const std::string ORC = "orc";
-    inline static const std::string CSV = "csv";
+inline static const std::string PARQUET = "parquet";
+inline static const std::string ORC = "orc";
+inline static const std::string CSV = "csv";
 
 } // namespace formats
 } // namespace starrocks
