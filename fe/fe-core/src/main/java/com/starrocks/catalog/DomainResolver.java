@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.NetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -143,7 +144,7 @@ public class DomainResolver extends FrontendDaemon {
         }
 
         for (InetAddress addr : address) {
-            resolvedIPs.add(addr.getHostAddress());
+            resolvedIPs.add(NetUtils.removeScope(addr.getHostAddress()));
         }
         return true;
     }

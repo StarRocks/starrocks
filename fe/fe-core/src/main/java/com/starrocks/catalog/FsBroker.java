@@ -152,7 +152,8 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
             InetAddress thisAddress = InetAddress.getByName(ip);
             InetAddress otherAddress = InetAddress.getByName(ip);
             
-            ret = thisAddress.getHostAddress().compareTo(otherAddress.getHostAddress());
+            ret = NetUtils.removeScope(thisAddress.getHostAddress())
+                    .compareTo(NetUtils.removeScope(otherAddress.getHostAddress()));
         } catch (UnknownHostException e) {
             ret = ip.compareTo(o.ip);
         }
