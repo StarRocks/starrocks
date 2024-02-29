@@ -869,9 +869,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             && backendReportVersion < currentBackendReportVersion) {
                         continue;
                     } else if (diskInfo == null) {
-                        LOG.info("disk of path hash {} dose not exist, delete its tablets from meta", replica.getPathHash());
+                        LOG.info("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
                     } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
-                        LOG.info("disk of path hash {} not available, delete its tablets from meta", replica.getPathHash());
+                        LOG.info("disk of path hash {} not available, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
                     }
 
                     ReplicaState state = replica.getState();
