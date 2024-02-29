@@ -47,8 +47,6 @@ import com.starrocks.system.HeartbeatResponse.HbStatus;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 
 public class FsBroker implements Writable, Comparable<FsBroker> {
     @SerializedName(value = "ip")
@@ -147,16 +145,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
 
     @Override
     public int compareTo(FsBroker o) {
-        int ret;
-        try {
-            InetAddress thisAddress = InetAddress.getByName(ip);
-            InetAddress otherAddress = InetAddress.getByName(ip);
-            
-            ret = NetUtils.removeScope(thisAddress.getHostAddress())
-                    .compareTo(NetUtils.removeScope(otherAddress.getHostAddress()));
-        } catch (UnknownHostException e) {
-            ret = ip.compareTo(o.ip);
-        }
+        int ret = ip.compareTo(o.ip);
         if (ret != 0) {
             return ret;
         }
