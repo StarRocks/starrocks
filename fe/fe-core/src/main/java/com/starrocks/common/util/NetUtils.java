@@ -40,16 +40,12 @@ import com.starrocks.common.Pair;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.io.IOException;
-import java.math.BigInteger;
-import java.net.Inet4Address;
-import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;

@@ -42,7 +42,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.Storage;
 import inet.ipaddr.IPAddressString;
-import org.apache.commons.net.util.SubnetUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
