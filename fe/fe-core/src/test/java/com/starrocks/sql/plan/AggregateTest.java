@@ -2679,4 +2679,12 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "aggregate: array_agg_distinct[([6: t1f, DOUBLE, true]); " +
                 "args: DOUBLE; result: ARRAY<DOUBLE>; args nullable: true; result nullable: true]");
     }
+
+    @Test
+    public void testCountIfTypeCheck() throws Exception {
+        String sql = "select count_if(v1 is null) from t0";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "aggregate: count[(if[([4: expr, BOOLEAN, false], 1, NULL); " +
+                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]);");
+    }
 }
