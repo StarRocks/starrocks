@@ -55,7 +55,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             return null;
         }
 
-        return new RewriteEquivalentContext(call, input);
+        return new RewriteEquivalentContext(call.getChild(0), input);
     }
 
     private static boolean isArrayAggDistinct(CallOperator call) {
@@ -70,30 +70,39 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator call = (CallOperator) newInput;
         String fn = call.getFnName();
 
-        String mapped = MAPPING.get(fn);
-        if (mapped != null && (call.isDistinct() || fn.equalsIgnoreCase(MULTI_DISTINCT_COUNT))) {
-            Type newInputArgType = call.getChild(0).getType();
-            Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
-            Function.CompareMode compareMode = Function.CompareMode.IS_IDENTICAL;
-            Function replaced = Expr.getBuiltinFunction(mapped, argTypes, compareMode);
-            if (replaced == null) {
-                return null;
-            }
-            CallOperator res = null;
-            if (shuttleContext.isRollup()) {
-                // rollup into fn(array_unique_agg(col))
-                Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
-                res = new CallOperator(
-                        FunctionSet.ARRAY_UNIQUE_AGG,
-                        new ArrayType(newInputArgType),
-                        Lists.newArrayList(replace),
-                        rollup);
-                res = new CallOperator(mapped, call.getType(), Lists.newArrayList(res), replaced);
+        if (call.isDistinct() || fn.equalsIgnoreCase(MULTI_DISTINCT_COUNT)) {
+            String mapped = MAPPING.get(fn);
+            if (mapped == null) {
+                return new CallOperator(fn, call.getType(), Lists.newArrayList(replace), call.getFunction());
             } else {
-                // rewrite into fn(col)
-                res = new CallOperator(mapped, call.getType(), Lists.newArrayList(replace), replaced);
+                ScalarOperator arg0 = call.getChild(0);
+                if (!arg0.equals(eq)) {
+                    return null;
+                }
+
+                Type newInputArgType = call.getChild(0).getType();
+                Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
+                Function.CompareMode compareMode = Function.CompareMode.IS_IDENTICAL;
+                Function replaced = Expr.getBuiltinFunction(mapped, argTypes, compareMode);
+                if (replaced == null) {
+                    return null;
+                }
+                CallOperator res = null;
+                if (shuttleContext.isRollup()) {
+                    // rollup into fn(array_unique_agg(col))
+                    Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
+                    res = new CallOperator(
+                            FunctionSet.ARRAY_UNIQUE_AGG,
+                            new ArrayType(newInputArgType),
+                            Lists.newArrayList(replace),
+                            rollup);
+                    res = new CallOperator(mapped, call.getType(), Lists.newArrayList(res), replaced);
+                } else {
+                    // rewrite into fn(col)
+                    res = new CallOperator(mapped, call.getType(), Lists.newArrayList(replace), replaced);
+                }
+                return res;
             }
-            return res;
         }
         return null;
     }
