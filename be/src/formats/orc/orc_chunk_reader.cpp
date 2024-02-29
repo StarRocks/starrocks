@@ -924,9 +924,17 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
     auto* ref = down_cast<ColumnRef*>(slot);
-    SlotId slot_id = ref->slot_id();
-    std::string name = _slot_id_to_desc[slot_id]->col_name();
-    orc::PredicateDataType pred_type = _supported_primitive_types[slot->type().type];
+    const SlotId& slot_id = ref->slot_id();
+    const std::string& name = _slot_id_to_desc[slot_id]->col_name();
+
+    orc::PredicateDataType pred_type = orc::PredicateDataType::LONG;
+    auto type_it = _supported_primitive_types.find(slot->type().type);
+    if (type_it != _supported_primitive_types.end()) {
+        pred_type = type_it->second;
+    } else {
+        return Status::NotSupported(
+                fmt::format("orc chunk reader don't support {}.", std::to_string(slot->type().type)));
+    }
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
         Expr* lit = conjunct->get_child(1);
