@@ -330,7 +330,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                                 "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
                     } else {
                         // if user has not requested persistent index, switch it to false
-                        table.setEnablePersistentIndex(false);
+                        enablePersistentIndex = false;
                     }
                 } else {
                     try {
