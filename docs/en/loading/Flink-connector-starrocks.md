@@ -10,7 +10,7 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 > **NOTICE**
 >
-> Loading data into StarRocks tables with Flink connector needs SELECT and INSERT privileges. If you do not have these privileges, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant these privileges to the user that you use to connect to your StarRocks cluster.
+> Loading data into StarRocks tables with Flink connector needs SELECT and INSERT privileges on the target StarRocks table. If you do not have these privileges, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant these privileges to the user that you use to connect to your StarRocks cluster.
 
 ## Version requirements
 
@@ -99,13 +99,13 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
-**Description**: The address that is used to connect to the MySQL server of the FE.  You can specify multiple addresses, which must be separated by a comma (,). Format: `jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>,<fe_host3>:<fe_query_port3>`.
+**Description**: The address that is used to connect to the MySQL server of the FE. You can specify multiple addresses, which must be separated by a comma (,). Format: `jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>,<fe_host3>:<fe_query_port3>`.
 
 ###  load-url
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
-**Description**: The address that is used to connect to the HTTP server of the FE. You can specify multiple URLs, which must be separated by a semicolon (;). Format: `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`.
+**Description**: The address that is used to connect to the HTTP server of the FE. You can specify multiple addresses, which must be separated by a semicolon (;). Format: `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`.
 
 ###  database-name
 
@@ -123,7 +123,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
-**Description**:  The username of the account that you want to use to load data into StarRocks. The account needs [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md).
+**Description**: The username of the account that you want to use to load data into StarRocks. The account needs [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md) on the target StarRocks table.
 
 ### password
 
