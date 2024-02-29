@@ -24,6 +24,7 @@
 namespace starrocks {
 
 // a convenience class to abstract away complexities of handling expr and its context
+// take chunk as input, and output column
 class ColumnEvaluator {
 public:
     static Status init(const std::vector<std::unique_ptr<ColumnEvaluator>>& source) {
