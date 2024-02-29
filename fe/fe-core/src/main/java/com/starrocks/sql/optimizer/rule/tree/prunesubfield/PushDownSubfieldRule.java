@@ -230,6 +230,8 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
         public OptExpression visitLogicalJoin(OptExpression optExpression, Context context) {
             LogicalJoinOperator join = optExpression.getOp().cast();
             ColumnRefSet checkColumns = new ColumnRefSet();
+            ColumnRefSet leftOutput = optExpression.inputAt(0).getOutputColumns();
+            ColumnRefSet rightOutput = optExpression.inputAt(1).getOutputColumns();
 
             // check on-predicate used columns
             Optional<ScalarOperator> onPredicate = Optional.empty();
@@ -238,8 +240,12 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 join.getOnPredicate().accept(collector, null);
                 for (ScalarOperator expr : collector.getComplexExpressions()) {
                     // the expression in on-predicate must was push down to children
+                    ColumnRefSet complexUsedCols = expr.getUsedColumns();
                     if (expr.isColumnRef()) {
-                        checkColumns.union(expr.getUsedColumns());
+                        checkColumns.union(complexUsedCols);
+                    } else if (leftOutput.containsAny(complexUsedCols) && rightOutput.containsAny(complexUsedCols)) {
+                        // like a[b], a from left child, b from right child, can't push down
+                        checkColumns.union(complexUsedCols);
                     }
                 }
 
@@ -262,10 +268,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             Context rightContext = new Context();
             Context localContext = new Context();
 
-            ColumnRefSet leftOutput = optExpression.inputAt(0).getOutputColumns();
-            ColumnRefSet rightOutput = optExpression.inputAt(1).getOutputColumns();
             ColumnRefSet childSubfieldOutputs = new ColumnRefSet();
-
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
                 ColumnRefOperator index = entry.getKey();
                 ScalarOperator subfieldExpr = entry.getValue();
