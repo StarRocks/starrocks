@@ -10,9 +10,9 @@ displayed_sidebar: "Chinese"
 
 - 增大单次导入的数据量，降低导入频率。
 
-- 修改 BE 的配置文件 **be.conf** 的相关配置，通过调整合并策略实现加快合并的目的：
+- 修改 BE 配置文件 **be.conf** 中相关参数的配置，以加快 Compaction：
   
-  - 对于明细表，聚合表和更新表，可以适当调大 `cumulative_compaction_num_threads_per_disk`、`base_compaction_num_threads_per_disk` 和 `cumulative_compaction_check_interval_seconds` 的值。例如：
+  - 对于明细表、聚合表和更新表，可以适当调大 `cumulative_compaction_num_threads_per_disk`、`base_compaction_num_threads_per_disk` 和 `cumulative_compaction_check_interval_seconds` 的值。例如：
 
       ```Plain
       cumulative_compaction_num_threads_per_disk = 4
@@ -20,7 +20,7 @@ displayed_sidebar: "Chinese"
       cumulative_compaction_check_interval_seconds = 2
       ```
 
-  - 对于主键表：可以适当调大 `update_compaction_num_threads_per_disk` 的值。适当调小 `update_compaction_per_tablet_min_interval_seconds` 的值。
+  - 对于主键表，可以适当调大 `update_compaction_num_threads_per_disk` 的值。适当调小 `update_compaction_per_tablet_min_interval_seconds` 的值。
 
   修改完成后，需要观察内存和 I/O，确保内存和 I/O 正常。
 

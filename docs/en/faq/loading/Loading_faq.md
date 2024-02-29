@@ -10,9 +10,9 @@ You were running load jobs too frequently, and the data was not compacted in a t
 
 - Increase the amount of data loaded in each individual job, thereby reducing loading frequency.
 
-- Modify the configuration items in the BE configuration file **be.conf** of each BE as follows, thereby accelerating data compactions:
+- Modify the configuration items in the BE configuration file **be.conf** of each BE as follows, to accelerate compactions:
    
-  - For Duplicate key tables, Aggregate Key tables, and Unique Key tables, you can appropriately increase the values of `cumulative_compaction_num_threads_per_disk`, `base_compaction_num_threads_per_disk`, and `cumulative_compaction_check_interval_seconds`. For example:
+  - For Duplicate Key tables, Aggregate tables, and Unique Key tables, you can appropriately increase the values of `cumulative_compaction_num_threads_per_disk`, `base_compaction_num_threads_per_disk`, and `cumulative_compaction_check_interval_seconds`. Example:
 
     ```Plain
     cumulative_compaction_num_threads_per_disk = 4
@@ -20,7 +20,7 @@ You were running load jobs too frequently, and the data was not compacted in a t
     cumulative_compaction_check_interval_seconds = 2
     ```
 
-  - For Primary key tables, you can appropriately increase the value of `update_compaction_num_threads_per_disk` and decrease the value of `update_compaction_per_tablet_min_interval_seconds`.
+  - For Primary Key tables, you can appropriately increase the value of `update_compaction_num_threads_per_disk` and decrease the value of `update_compaction_per_tablet_min_interval_seconds`.
 
   After you modify the settings of the preceding configuration items, you must observe the memory and I/O to ensure that they are normal.
 
