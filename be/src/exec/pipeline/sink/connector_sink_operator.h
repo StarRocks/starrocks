@@ -14,15 +14,10 @@
 
 #pragma once
 
-#include <exec/pipeline/scan/connector_scan_operator.h>
-#include <gen_cpp/DataSinks_types.h>
-#include <parquet/arrow/writer.h>
-
 #include <utility>
 
 #include "common/logging.h"
 #include "connector_sink/connector_chunk_sink.h"
-#include "exec/parquet_writer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "fs/fs.h"

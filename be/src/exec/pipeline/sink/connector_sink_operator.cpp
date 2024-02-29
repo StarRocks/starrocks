@@ -14,9 +14,7 @@
 
 #include "connector_sink_operator.h"
 
-#include "formats/parquet/parquet_file_writer.h"
 #include "glog/logging.h"
-#include "util/url_coding.h"
 
 namespace starrocks::pipeline {
 
