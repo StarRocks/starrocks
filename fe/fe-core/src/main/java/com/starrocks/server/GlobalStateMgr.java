@@ -310,9 +310,6 @@ public class GlobalStateMgr {
     // for example: OBSERVER transfer to UNKNOWN, then isReady will be set to false, but canRead can still be true
     private final AtomicBoolean canRead = new AtomicBoolean(false);
 
-    // false if default_cluster is not created.
-    private boolean isDefaultClusterCreated = false;
-
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
 
@@ -473,13 +470,13 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo(Integer clusterId) {
-        return createNodesInfo(clusterId, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    public TNodesInfo createNodesInfo() {
+        return createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
-    public TNodesInfo createNodesInfo(Integer clusterId, long warehouseId) {
+    public TNodesInfo createNodesInfo(long warehouseId) {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = nodeMgr.getOrCreateSystemInfo(clusterId);
+        SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
         Warehouse warehouse = warehouseMgr.getWarehouse(warehouseId);
         // TODO: need to refactor after be split into cn + dn
         if (warehouse != null && RunMode.isSharedDataMode()) {
@@ -613,8 +610,6 @@ public class GlobalStateMgr {
         this.functionSet.init();
 
         this.metaReplayState = new MetaReplayState();
-
-        this.isDefaultClusterCreated = false;
 
         this.resourceMgr = new ResourceMgr();
 
@@ -1203,10 +1198,6 @@ public class GlobalStateMgr {
                 editLog.logAddFirstFrontend(self);
             }
 
-            if (!isDefaultClusterCreated) {
-                initDefaultCluster();
-            }
-
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
@@ -1279,7 +1270,7 @@ public class GlobalStateMgr {
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
 
         // heartbeat mgr
-        heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
+        heartbeatMgr.setLeader(nodeMgr.getToken(), epoch);
         heartbeatMgr.start();
         // New load scheduler
         pendingLoadTaskScheduler.start();
@@ -1413,9 +1404,8 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
-    public void loadImage(String imageDir) throws IOException, DdlException {
+    public void loadImage(String imageDir) throws IOException {
         Storage storage = new Storage(imageDir);
-        nodeMgr.setClusterId(storage.getClusterID());
         File curFile = storage.getCurrentImageFile();
         if (!curFile.exists()) {
             // image.0 may not exist
@@ -1563,7 +1553,6 @@ public class GlobalStateMgr {
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
-        isDefaultClusterCreated = header.isDefaultClusterCreated();
         LOG.info("finished to replay header from image");
     }
 
@@ -1649,7 +1638,6 @@ public class GlobalStateMgr {
         ImageHeader header = new ImageHeader();
         long id = idGenerator.getBatchEndId();
         header.setBatchEndId(id);
-        header.setDefaultClusterCreated(isDefaultClusterCreated);
         Text.writeString(dos, GsonUtils.GSON.toJson(header));
     }
 
@@ -2226,10 +2214,6 @@ public class GlobalStateMgr {
         return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
-    public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
-        this.isDefaultClusterCreated = isDefaultClusterCreated;
-    }
-
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
         TableName tableName = stmt.getTableName();
         List<String> partitionNames = stmt.getPartitions();
@@ -2337,11 +2321,6 @@ public class GlobalStateMgr {
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
-    }
-
-    // TODO [meta-format-change] deprecated
-    public void initDefaultCluster() {
-        localMetastore.initDefaultCluster();
     }
 
     public void initDefaultWarehouse() {

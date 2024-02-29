@@ -49,9 +49,7 @@ import java.io.File;
 
 public class MetaBaseAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(MetaBaseAction.class);
-    private static String CONTENT_DISPOSITION = "Content-disposition";
-
-    public static final String CLUSTER_ID = "cluster_id";
+    private static final String CONTENT_DISPOSITION = "Content-disposition";
     public static final String TOKEN = "token";
     public static final String RUN_MODE = "run_mode";
 

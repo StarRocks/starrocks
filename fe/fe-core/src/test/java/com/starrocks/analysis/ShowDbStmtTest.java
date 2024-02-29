@@ -29,6 +29,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
@@ -89,6 +90,7 @@ public class ShowDbStmtTest {
 
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
+        ctx.setCurrentUserIdentity(new UserIdentity("testUser", "%"));
         ctx.setQualifiedUser("testCluster:testUser");
 
         new Expectations(ctx) {

@@ -98,7 +98,6 @@ public class GlobalStateMgrTestUtil {
         globalStateMgr.setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().clear();
-        globalStateMgr.initDefaultCluster();
 
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);

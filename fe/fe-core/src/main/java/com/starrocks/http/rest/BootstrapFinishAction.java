@@ -82,27 +82,8 @@ public class BootstrapFinishAction extends RestBaseAction {
         BootstrapResult result;
         if (isReady) {
             result = new BootstrapResult();
-            String clusterIdStr = request.getSingleParameter(CLUSTER_ID);
             String token = request.getSingleParameter(TOKEN);
-            if (!Strings.isNullOrEmpty(clusterIdStr) && !Strings.isNullOrEmpty(token)) {
-                // cluster id or token is provided, return more info
-                int clusterId = 0;
-                try {
-                    clusterId = Integer.parseInt(clusterIdStr);
-                } catch (NumberFormatException e) {
-                    result.status = ActionStatus.FAILED;
-                    LOG.info("invalid cluster id format: {}", clusterIdStr);
-                    result.msg = "invalid parameter";
-                }
-
-                if (result.status == ActionStatus.OK) {
-                    if (clusterId != GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()) {
-                        result.status = ActionStatus.FAILED;
-                        LOG.info("invalid cluster id: {}", clusterIdStr);
-                        result.msg = "invalid parameter";
-                    }
-                }
-
+            if (!Strings.isNullOrEmpty(token)) {
                 if (result.status == ActionStatus.OK) {
                     if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
                         result.status = ActionStatus.FAILED;

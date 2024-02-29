@@ -204,7 +204,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) throws Exception {
+                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -261,7 +261,7 @@ public class OlapTableSinkTest {
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getNodeMgr().getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
@@ -273,9 +273,8 @@ public class OlapTableSinkTest {
         tPartition.setId(partitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), partitionParam, false, 
+                table, partitionParam, false,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
-
         System.out.println(param);
 
         // Check
@@ -290,7 +289,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testReplicatedStorageWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) throws Exception {
+                                                     @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -350,7 +349,7 @@ public class OlapTableSinkTest {
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getNodeMgr().getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
@@ -362,9 +361,8 @@ public class OlapTableSinkTest {
         tPartition.setId(partitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), partitionParam, true,
+                table, partitionParam, true,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
-
         System.out.println(param);
 
         // Check

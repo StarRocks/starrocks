@@ -116,11 +116,6 @@ public class StorageTest {
         Storage storage1 = new Storage(1, "token", "test");
         Assert.assertEquals(1, storage1.getClusterID());
         Assert.assertEquals("test", storage1.getMetaDir());
-
-        Storage storage2 = new Storage(1, "token", 2, "test");
-        Assert.assertEquals(1, storage2.getClusterID());
-        Assert.assertEquals(2, storage2.getImageJournalId());
-        Assert.assertEquals("test", storage2.getMetaDir());
     }
 
     @Test
@@ -129,9 +124,6 @@ public class StorageTest {
         addFiles(0, 10);
 
         Storage storage = new Storage("storageTestDir");
-        Assert.assertEquals(966271669, storage.getClusterID());
-        storage.setClusterID(1234);
-        Assert.assertEquals(1234, storage.getClusterID());
         Assert.assertEquals(0, storage.getImageJournalId());
 
         Assert.assertTrue(storage.getCurrentImageFile().equals(new File("storageTestDir/image.0")));

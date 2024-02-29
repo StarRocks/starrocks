@@ -22,7 +22,7 @@ const i64 IS_SET_DEFAULT_ROWSET_TO_BETA_BIT = 0x01;
 
 struct TMasterInfo {
     1: required Types.TNetworkAddress network_address
-    2: required Types.TClusterId cluster_id
+    2: optional Types.TClusterId cluster_id     //deprecated
     3: required Types.TEpoch epoch
     4: optional string token 
     5: optional string backend_ip

@@ -45,8 +45,7 @@ public class SchemaTableSink extends DataSink {
     protected TDataSink toThrift() {
         TDataSink tDataSink = new TDataSink(TDataSinkType.SCHEMA_TABLE_SINK);
         TSchemaTableSink sink = new TSchemaTableSink();
-        TNodesInfo info = GlobalStateMgr.getCurrentState()
-                .createNodesInfo(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(), warehouseId);
+        TNodesInfo info = GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId);
         sink.setTable(tableName);
         sink.setNodes_info(info);
         tDataSink.setSchema_table_sink(sink);

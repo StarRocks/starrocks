@@ -118,7 +118,7 @@ public class HeartbeatMgrTest {
         };
 
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "test", "192.168.1.1", 9010);
-        FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(fe, 12345, "abcd");
+        FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(fe, "abcd");
         HeartbeatResponse response = handler.call();
 
         Assert.assertTrue(response instanceof FrontendHbResponse);
@@ -131,7 +131,7 @@ public class HeartbeatMgrTest {
         Assert.assertEquals("2.0-ac45651a", hbResponse.getFeVersion());
 
         Frontend fe2 = new Frontend(FrontendNodeType.FOLLOWER, "test2", "192.168.1.2", 9010);
-        handler = new FrontendHeartbeatHandler(fe2, 12345, "abcd");
+        handler = new FrontendHeartbeatHandler(fe2, "abcd");
         response = handler.call();
 
         Assert.assertTrue(response instanceof FrontendHbResponse);
@@ -228,7 +228,7 @@ public class HeartbeatMgrTest {
         };
 
         // call setLeader() to init the MASTER_INFO
-        new HeartbeatMgr(false).setLeader(1, "123", 1);
+        new HeartbeatMgr(false).setLeader("123", 1);
 
         ComputeNode cn = new ComputeNode(1, "192.168.1.1", 8111);
         HeartbeatMgr.BackendHeartbeatHandler handler = new HeartbeatMgr.BackendHeartbeatHandler(cn);

@@ -773,14 +773,6 @@ public class Config extends ConfigBase {
     public static String mysql_server_version = "5.1.0";
 
     /**
-     * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
-     * Cluster id is usually a random integer generated when master FE start at first time.
-     * You can also specify one.
-     */
-    @ConfField
-    public static int cluster_id = -1;
-
-    /**
      * If a backend is down for *max_backend_down_time_second*, a BACKEND_DOWN event will be triggered.
      * Do not set this if you know what you are doing.
      */
