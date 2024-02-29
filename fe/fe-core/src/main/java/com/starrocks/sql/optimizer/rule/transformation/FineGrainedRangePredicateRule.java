@@ -67,6 +67,22 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
  *                                   |       |      |
  *                                filter1 filter2  ...
  *
+ * For query like select sum(k2) from tbl where  k1 >= "2022-01-02" and  k1 <= "2024-05-06" group by k3
+ * The rule will change the query like :
+ * select sum(k2) from
+ * (
+ * select sum(k2) as k2 from tbl where k1 >= "2022-01-02" and k1 < "2022-02-01" group by k3
+ * union all
+ * select sum(k2) as k2 from tbl where k1 >= "2022-02-01" and k1 < "2023-01-01" group by k3
+ * union all
+ * select sum(k2) as k2 from tbl where k1 >= "2023-01-01" and k1 < "2024-01-01" group by k3
+ * union all
+ * select sum(k2) as k2 from tbl where k1 >= "2024-01-01" and k1 < "2024-05-01" group by k3
+ * union all
+ * select sum(k2) as k2 from tbl where k1 >= "2024-05-01" and k1 <= "2024-05-06" group by k3
+ * )
+ * group by k3
+ * The transformed query is easy to be rewritten by MV on day/month/year dimension.
  */
 
 public class FineGrainedRangePredicateRule extends TransformationRule {
@@ -135,7 +151,7 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
             return Lists.newArrayList();
         }
 
-        // only handle [,]/(,]/[/)/[]
+        // only handle ranges like [,] or (,] or [,) or (,)
         Iterator<Map.Entry<ColumnRefOperator, List<BinaryPredicateOperator>>> iterator =
                 columnToRange.entrySet().iterator();
         while (iterator.hasNext()) {
