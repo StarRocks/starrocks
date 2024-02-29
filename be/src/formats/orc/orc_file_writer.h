@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include <orc/Writer.hh>
 #include <orc/OrcFile.hh>
+#include <orc/Writer.hh>
 #include <util/priority_thread_pool.hpp>
 
 #include "formats/file_writer.h"
