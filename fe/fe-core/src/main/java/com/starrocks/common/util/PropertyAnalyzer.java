@@ -197,6 +197,7 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+    public static final String PROPERTY_MV_ENABLE_QUERY_REWRITE = "enable_query_rewrite";
 
     /**
      * Materialized View sort keys

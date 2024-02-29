@@ -620,6 +620,7 @@ public class ShowExecutor {
             mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
             // task run status
             mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
+            mvStatus.setQueryRewriteStatus(mvTable.getQueryRewriteStatus());
             rowSets.add(mvStatus);
         }
 
