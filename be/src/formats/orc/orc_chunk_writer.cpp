@@ -47,26 +47,25 @@ const std::string& OrcOutputStream::getName() const {
 
 void OrcOutputStream::write(const void* buf, size_t length) {
     if (_is_closed) {
-        throw "The output stream is closed but there are still inputs";
+        throw std::runtime_error("The output stream is closed but there are still inputs");
     }
     const char* ch = reinterpret_cast<const char*>(buf);
     Status st = _wfile->append(Slice(ch, length));
     if (!st.ok()) {
-        throw "write to orc failed: " + st.to_string();
+        throw std::runtime_error("write to orc failed: " + st.to_string());
     }
     return;
 }
 
 void OrcOutputStream::close() {
     if (_is_closed) {
-        throw "The output stream is already closed";
-    }
-    Status st = _wfile->close();
-    if (!st.ok()) {
-        throw "close orc output stream failed: " + st.to_string();
+        return;
     }
     _is_closed = true;
-    return;
+
+    if (auto st = _wfile->close(); !st.ok()) {
+        throw std::runtime_error("close orc output stream failed: " + st.to_string());
+    }
 }
 
 OrcChunkWriter::OrcChunkWriter(std::unique_ptr<WritableFile> writable_file,
