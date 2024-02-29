@@ -127,7 +127,7 @@ class QueryTransformer {
             }
         }
 
-        builder = distinct(builder, queryBlock.isDistinct(), queryBlock.hasOrderByClause(), queryBlock.getOutputExpression());
+        builder = distinct(builder, queryBlock.isDistinct(), queryBlock.getOutputExpression());
         // add project to express order by expression
         builder = project(builder, Iterables.concat(queryBlock.getOrderByExpressions(), queryBlock.getOutputExpression()));
         List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
@@ -593,14 +593,10 @@ class QueryTransformer {
         return subOpt.withNewRoot(sortOperator);
     }
 
-    private OptExprBuilder distinct(OptExprBuilder subOpt, boolean isDistinct, boolean hasOrderBy,
-                                    List<Expr> outputExpressions) {
+    private OptExprBuilder distinct(OptExprBuilder subOpt, boolean isDistinct, List<Expr> outputExpressions) {
         if (isDistinct) {
-            // Add project before DISTINCT to express select item. If there is an orderByClause,
-            // we can skip this process because we had done it in the previous step.
-            if (!hasOrderBy) {
-                subOpt = project(subOpt, outputExpressions);
-            }
+            // Add project before DISTINCT to express select item
+            subOpt = project(subOpt, outputExpressions);
             List<ColumnRefOperator> groupByColumns = Lists.newArrayList();
             for (Expr expr : outputExpressions) {
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator
