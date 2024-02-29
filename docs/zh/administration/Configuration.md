@@ -65,6 +65,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |background_refresh_metadata_interval_millis| 600000 |接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。自 v2.5.5 起支持。|
 |background_refresh_metadata_time_secs_since_last_access_secs|86400|Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。自 v2.5.5 起支持。|
 
+#### 用户，角色，权限
+
+##### privilege_max_total_roles_per_user
+
+- 含义：每个用户最多可以拥有的角色数量。
+- 默认值：64
+- 引入版本：v3.0.0
+
+##### privilege_max_role_depth
+
+- 含义：每个角色最多的嵌套层数。
+- 默认值：16
+- 引入版本：v3.0.0
+
 #### Query engine
 
 |配置项|默认值|描述|

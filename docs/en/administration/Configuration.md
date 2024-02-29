@@ -124,6 +124,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ---
 
+#### User, role, privilege
+
+##### privilege_max_total_roles_per_user
+
+- **Unit**: -
+- **Default**: 64
+- **Description**: The maximum number of roles a user can have.
+- **Introduced in**: v3.0.0
+
+##### privilege_max_role_depth
+
+- **Unit**: -
+- **Default**: 16
+- **Description**: The maximum role depth (level of inheritance) of a role.
+- **Introduced in**: v3.0.0
+
 #### Query engine
 
 ##### max_allowed_in_element_num_of_delete
