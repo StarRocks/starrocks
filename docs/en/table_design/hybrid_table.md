@@ -17,7 +17,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 ### Create a table that uses hybrid row-column storage
 
-1. Enable the FE configuration `enable_experimental_rowstore`.
+1. Enable the FE configuration item `enable_experimental_rowstore`.
 
    ```SQL
    ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
