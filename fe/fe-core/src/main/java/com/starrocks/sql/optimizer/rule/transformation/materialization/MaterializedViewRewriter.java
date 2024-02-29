@@ -1587,11 +1587,9 @@ public class MaterializedViewRewriter {
         // use union-all rewrite eagerly if union-all rewrite can be used.
         QueryDebugOptions debugOptions  = optimizerContext.getSessionVariable().getQueryDebugOptions();
         // To support more union all rewrite cases, we can pull up query's predicates to make possible for union rewrite.
-        // But if partitions are not pruned, rewritten plan may scan all mv partitions, which is not efficient, so only enable
-        // this when query's partitions have been pruned.
-        // eg:
-        // mv: SELECT dt,sum(num) FROM t2 GROUP BY dt;
-        // mv: SELECT dt,sum(num) FROM t2 GROUP BY dt;
+        // But rewritten plan may scan all mv partitions when:
+        //  - mv has no partitions which query's plan to scan: PCType.NO_REWRITE
+        //  - query's partitions have been pruned(we cannot decide whether to pull up or not): PCType.NO_PRUNED_COMPENSATE
         boolean isUnionAllRewriteWithPullUp = materializationContext.canUnionAllRewriteWithPullUpPredicates();
         ColumnRefSet queryOutputColumnRefs = debugOptions.isEnableMVEagerUnionAllRewrite() && isUnionAllRewriteWithPullUp ?
                 rewriteContext.getQueryExpression().getOutputColumns() : null;

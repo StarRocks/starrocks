@@ -431,7 +431,7 @@ public class MaterializationContext {
             MvPartitionCompensator.PCType pcType = isNeedCompensate ?
                     deducePartitionCompensateType(queryExpression, this) :
                     MvPartitionCompensator.PCType.NO_COMPENSATE;
-            logMVRewrite(mv.getName(), "deduce partition compensate type: {}", pcType);
+            logMVRewrite(mv.getName(), "Deduce partition compensate type: {}", pcType);
             mvPCompensateTypeOpt = Optional.of(pcType);
         }
         return mvPCompensateTypeOpt.get();

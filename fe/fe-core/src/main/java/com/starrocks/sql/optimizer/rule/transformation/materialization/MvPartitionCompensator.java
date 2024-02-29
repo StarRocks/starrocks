@@ -295,8 +295,8 @@ public class MvPartitionCompensator {
         }
         Set<String> refTablePartitionNamesToRefresh = mvPartitionNameToRefresh.stream()
                 .map(mvPartitionNameToRefTablePartitionNames::get)
-                .flatMap(x -> x.stream())
                 .filter(Objects::nonNull)
+                .flatMap(x -> x.stream())
                 .collect(Collectors.toSet());
         if (refScanOperator instanceof LogicalOlapScanOperator) {
             Map<String, MaterializedView.BasePartitionInfo> baseTableVisibleVersionMap =
@@ -423,7 +423,14 @@ public class MvPartitionCompensator {
         MaterializedView mv = mvContext.getMv();
         for (LogicalScanOperator scanOperator : scanOperators) {
             if (!SUPPORTED_PARTITION_COMPENSATE_SCAN_TYPES.contains(scanOperator.getOpType())) {
-                continue;
+                // If the scan operator is not supported, then return null when compensate type is not NO_COMPENSATE
+                // which means the query cannot be rewritten only when all partitions are refreshed.
+                // Change query_rewrite_consistency=loose to no check query rewrite consistency.
+                if (MvPartitionCompensator.PCType.isNoCompensate(pcType)) {
+                    continue;
+                } else {
+                    return null;
+                }
             }
             List<ScalarOperator> partitionPredicate = scanOperatorScalarOperatorMap
                     .computeIfAbsent(Pair.create(scanOperator, isCompensatePartition), x -> {
