@@ -19,6 +19,7 @@ add_library(Formats STATIC
         csv/array_reader.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp
+        csv/csv_file_writer.cpp
         csv/csv_reader.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp

@@ -350,9 +350,10 @@ public class InsertStmt extends DmlStmt {
                     "Use any of (parquet, orc).");
         }
 
-        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
+        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")
+                && !format.equalsIgnoreCase("csv")) {
             throw new SemanticException("format " + format + " is not supported. " +
-                    "Use any of (parquet, orc).");
+                    "Use any of (parquet, orc, csv).");
         }
 
         // if compression codec is not specified, use compression codec from session

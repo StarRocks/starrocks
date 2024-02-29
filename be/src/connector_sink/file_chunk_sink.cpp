@@ -19,12 +19,12 @@
 #include "column/datum.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
-#include "exprs/expr_context.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "util/url_coding.h"
 #include "utils.h"
+#include "formats/csv/csv_file_writer.h"
 
 namespace starrocks::connector {
 
@@ -111,6 +111,10 @@ std::unique_ptr<ConnectorChunkSink> FileChunkSinkProvider::create_chunk_sink(
                 ctx->executor);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
+                std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),
+                ctx->executor);
+    } else if (boost::iequals(ctx->format, formats::CSV)) {
+        file_writer_factory = std::make_unique<formats::CSVFileWriterFactory>(
                 std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),
                 ctx->executor);
     } else {
