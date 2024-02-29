@@ -30,13 +30,19 @@ namespace starrocks {
     stat.write_bytes += bytes;                  \
     stat.write_time_ns += time_ns
 
-#define ASSERT_IO_STAT_EQ(expect, actual)                \
-    ASSERT_EQ(expect.read_ops, actual.read_ops);         \
-    ASSERT_EQ(expect.read_bytes, actual.read_bytes);     \
-    ASSERT_EQ(expect.read_time_ns, actual.read_time_ns); \
-    ASSERT_EQ(expect.write_ops, actual.write_ops);       \
-    ASSERT_EQ(expect.write_bytes, actual.write_bytes);   \
-    ASSERT_EQ(expect.write_time_ns, actual.write_time_ns)
+#define ADD_SYNC_IO_STAT(stat, time_ns) \
+    stat.sync_ops += 1;                 \
+    stat.sync_time_ns += time_ns
+
+#define ASSERT_IO_STAT_EQ(expect, actual)                  \
+    ASSERT_EQ(expect.read_ops, actual.read_ops);           \
+    ASSERT_EQ(expect.read_bytes, actual.read_bytes);       \
+    ASSERT_EQ(expect.read_time_ns, actual.read_time_ns);   \
+    ASSERT_EQ(expect.write_ops, actual.write_ops);         \
+    ASSERT_EQ(expect.write_bytes, actual.write_bytes);     \
+    ASSERT_EQ(expect.write_time_ns, actual.write_time_ns); \
+    ASSERT_EQ(expect.sync_ops, actual.sync_ops);           \
+    ASSERT_EQ(expect.sync_time_ns, actual.sync_time_ns)
 
 TEST(IOProfilerTest, test_tls_io) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 1);
@@ -62,6 +68,11 @@ TEST(IOProfilerTest, test_tls_io) {
     ADD_READ_IO_STAT(expect, 1048576, 1000000);
     auto actual4 = scope.current_scoped_tls_io();
     ASSERT_IO_STAT_EQ(expect, actual4);
+
+    IOProfiler::add_sync(9883);
+    ADD_SYNC_IO_STAT(expect, 9883);
+    auto actual5 = scope.current_scoped_tls_io();
+    ASSERT_IO_STAT_EQ(expect, actual5);
 }
 
 TEST(IOProfilerTest, test_context_io) {
