@@ -52,7 +52,7 @@ private:
 
     Status build_iceberg_delete_builder();
     Status build_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes);
-    Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);
+    Status check_is_tiny_stripe(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);
     Status resolve_columns(orc::Reader* reader);
 
     // disable orc search argument would be much easier for

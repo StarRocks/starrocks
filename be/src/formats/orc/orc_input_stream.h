@@ -76,6 +76,13 @@ public:
     Status setIORanges(const std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
                        const bool coalesce_active_lazy_column = true);
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() override;
+    bool isTinyStripe() override {
+        return _is_tiny_stripe;
+    }
+
+    void setTinyStripe(bool isTinyStripe) {
+        _is_tiny_stripe = isTinyStripe;
+    }
 
 private:
     RandomAccessFile* _file;
@@ -83,5 +90,6 @@ private:
     io::SharedBufferedInputStream* _sb_stream;
     std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
     HdfsScanStats* _app_stats = nullptr;
+    bool _is_tiny_stripe = false;
 };
 } // namespace starrocks

@@ -1043,6 +1043,7 @@ void RowReaderImpl::startNextStripe() {
     if (sargsApplier && !sargsApplier->evaluateFileStatistics(*footer, numRowGroupsInStripeRange)) {
         // skip the entire file
         markEndOfFile();
+        std::cout << "orc eval to skip the file by file metadata" << std::endl;
         return;
     }
 
@@ -1103,12 +1104,29 @@ void RowReaderImpl::startNextStripe() {
             contents->stream->releaseToOffset(currentStripeInfo.offset());
         }
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
-        // We need to check this stripe is already set in shared buffer(tiny stripe optimize) to avoid shared buffer overlap
+        // We need to check this stripe is already set in shared buffer(tiny file optimize) to avoid shared buffer overlap
+        // Because for broker load, if target file is small, we will set the entire file into one IORange in orc_scanner.cpp
         if (isIOCoalesceEnabled &&
             !contents->stream->isAlreadyCollectedInSharedBuffer(currentStripeInfo.offset(), stripeSize)) {
-            std::vector<InputStream::IORange> io_ranges;
-            buildIORanges(&io_ranges);
-            contents->stream->setIORanges(io_ranges);
+            if (contents->stream->isTinyStripe()) {
+                std::cout << "is tiny stripe" << std::endl;
+                // set row index first
+                if (currentStripeInfo.indexlength() > 0) {
+                    std::vector<InputStream::IORange> io_ranges;
+                    io_ranges.emplace_back(currentStripeInfo.offset(), currentStripeInfo.indexlength());
+                    contents->stream->setIORanges(io_ranges);
+                }
+
+                if (currentStripeInfo.datalength() > 0) {
+                    std::vector<InputStream::IORange> io_ranges;
+                    io_ranges.emplace_back(currentStripeInfo.offset() + currentStripeInfo.indexlength(), currentStripeInfo.datalength());
+                    contents->stream->setIORanges(io_ranges);
+                }
+            } else {
+                std::vector<InputStream::IORange> io_ranges;
+                buildIORanges(&io_ranges);
+                contents->stream->setIORanges(io_ranges);
+            }
         }
 
         if (sargsApplier) {
@@ -1600,6 +1618,10 @@ void InputStream::setIORanges(std::vector<InputStream::IORange>& io_ranges) {}
 
 std::atomic<int32_t>* InputStream::get_lazy_column_coalesce_counter() {
     return nullptr;
+}
+
+bool InputStream::isTinyStripe() {
+    return false;
 }
 
 } // namespace orc

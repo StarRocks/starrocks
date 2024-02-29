@@ -337,7 +337,6 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
 
 Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes) {
     uint64_t stripe_number = reader->getNumberOfStripes();
-    std::vector<DiskRange> stripe_disk_ranges{};
 
     const auto* scan_range = _scanner_ctx.scan_range;
     size_t scan_start = scan_range->offset;
@@ -362,26 +361,16 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     return Status::OK();
 }
 
-Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes) {
-    bool tiny_stripe_read = true;
+Status HdfsOrcScanner::check_is_tiny_stripe(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes) {
+    int64_t total_tiny_stripe_size = 0;
     for (const DiskRange& disk_range : stripes) {
         if (disk_range.length > config::orc_tiny_stripe_threshold_size) {
-            tiny_stripe_read = false;
-            break;
+            return Status::OK();
         }
+        total_tiny_stripe_size += disk_range.length;
     }
-    // we need to start tiny stripe optimization if all stripe's size smaller than config::orc_tiny_stripe_threshold_size
-    if (tiny_stripe_read) {
-        std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
-        DiskRangeHelper::mergeAdjacentDiskRanges(io_ranges, stripes, config::io_coalesce_read_max_distance_size,
-                                                 config::orc_tiny_stripe_threshold_size);
-        std::cout << "print merged tiny stripe" << std::endl;
-        for (const auto& it : io_ranges) {
-            std::cout << "offset: " << it.offset << " size: " << it.size << std::endl;
-            _app_stats.orc_total_tiny_stripe_size += it.size;
-        }
-        RETURN_IF_ERROR(file_stream->setIORanges(io_ranges));
-    }
+    file_stream->setTinyStripe(true);
+    _app_stats.orc_total_tiny_stripe_size += total_tiny_stripe_size;
     return Status::OK();
 }
 
@@ -485,7 +474,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
+    RETURN_IF_ERROR(check_is_tiny_stripe(orc_hdfs_file_stream, stripes));
     RETURN_IF_ERROR(resolve_columns(reader.get()));
     if (_should_skip_file) {
         return Status::OK();

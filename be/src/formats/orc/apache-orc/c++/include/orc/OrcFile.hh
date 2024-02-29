@@ -97,6 +97,7 @@ public:
     virtual bool isIOAdaptiveCoalesceEnabled() const;
     virtual void releaseToOffset(const int64_t offset);
     virtual void setIORanges(std::vector<InputStream::IORange>& io_ranges);
+    virtual bool isTinyStripe();
 };
 
 /**
