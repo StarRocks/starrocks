@@ -93,10 +93,6 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnableFineGrainedRangePredicate()) {
-            return false;
-        }
-
         if (!MvUtils.isLogicalSPJG(input)) {
             return false;
         }
