@@ -824,5 +824,4 @@ TEST_F(ParquetFileWriterTest, TestWriteVarbinary) {
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-
 } // namespace starrocks::formats
