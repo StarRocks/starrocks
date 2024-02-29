@@ -47,7 +47,7 @@ if [ -f $PID_DIR/fe.pid ]; then
     mv $PID_DIR/fe.pid $PID_DIR/fe.pid.bak
 fi
 
-$JAVA com.starrocks.StarRocksFE -v 2>/dev/null | tail -5
+$JAVA com.starrocks.StarRocksFE -v
 
 if [ -f $PID_DIR/fe.pid.bak ]; then 
     mv $PID_DIR/fe.pid.bak $PID_DIR/fe.pid 

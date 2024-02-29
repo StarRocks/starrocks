@@ -16,9 +16,12 @@
 import argparse
 import hashlib
 import os
+import re
 import subprocess
 
 from datetime import datetime
+
+OS_RELEASE_PATH = "/etc/os-release"
 
 def get_version():
     version = os.getenv("STARROCKS_VERSION")
@@ -51,8 +54,30 @@ def get_hostname():
     if os.path.exists('/.dockerenv'):
         return "docker"
     res = subprocess.Popen(["hostname", "-f"], stdout=subprocess.PIPE)
-    out, err = res.communicate()
+    out, _ = res.communicate()
     return out.decode('utf-8').strip()
+
+def get_build_distro_info():
+    """ parse /etc/os-release and load the info into a dictionary
+    Different linux distributor may have different contents in the file.
+    This script is only interested in `ID` and `PRETTY_NAME` which are available
+    on both centos7 and ubuntu22.04.
+    """
+    distro_info = dict()
+    if not os.path.exists(OS_RELEASE_PATH):
+        return distro_info
+    with open(OS_RELEASE_PATH) as fp_handle:
+        line_pattern = re.compile(r'^(?P<name>\w+)=(?P<value>.*)$')
+        for line in fp_handle:
+            result = line_pattern.match(line.strip())
+            if result:
+                key = result.group("name").strip()
+                value = result.group("value").strip()
+                if value.startswith('"') and value.endswith('"'):
+                    # expect the value is well-formatted, either with "" or without
+                    value = value[1:-1]
+                distro_info[key] = value
+    return distro_info
 
 def get_java_version():
     java_home = os.getenv("JAVA_HOME")
@@ -72,7 +97,6 @@ def skip_write_if_fingerprint_unchanged(file_name, file_content, fingerprint):
     if os.path.exists(file_name):
         with open(file_name) as fh:
             data = fh.read()
-            import re
             m = re.search(r"FINGERPRINT: (?P<fingerprint>\w+)", data)
             old_fingerprint = m.group('fingerprint') if m else None
             print('gen_build_version.py {}: old fingerprint = {}, new fingerprint = {}'.format(file_name, old_fingerprint, fingerprint))
@@ -81,11 +105,8 @@ def skip_write_if_fingerprint_unchanged(file_name, file_content, fingerprint):
     with open(file_name, 'w') as fh:
         fh.write(file_content)
 
-def generate_java_file(java_path, version, commit_hash, build_type, build_time, user, host, java_version):
+def generate_java_file(java_path, version, commit_hash, build_type, build_time, user, host, java_version, build_distro_id):
     file_format = '''
-
-package com.starrocks.common;
-
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -103,6 +124,9 @@ package com.starrocks.common;
 // This is a generated file, DO NOT EDIT IT.
 // FINGERPRINT: {FINGERPRINT}
 
+package com.starrocks.common;
+
+
 public class Version {{
     public static final String STARROCKS_VERSION = "{VERSION}";
     public static final String STARROCKS_COMMIT_HASH = "{COMMIT_HASH}";
@@ -110,13 +134,14 @@ public class Version {{
     public static final String STARROCKS_BUILD_TIME = "{BUILD_TIME}";
     public static final String STARROCKS_BUILD_USER = "{BUILD_USER}";
     public static final String STARROCKS_BUILD_HOST = "{BUILD_HOST}";
+    public static final String STARROCKS_BUILD_DISTRO_ID = "{BUILD_DISTRO_ID}";
     public static final String STARROCKS_JAVA_COMPILE_VERSION = "{JAVA_VERSION}";
 }}
 '''
-    fingerprint = get_fingerprint([version, commit_hash, build_type, user, host, java_version])
+    fingerprint = get_fingerprint([version, commit_hash, build_type, user, host, java_version, build_distro_id])
     file_content = file_format.format(VERSION=version, COMMIT_HASH=commit_hash,
                                       BUILD_TYPE=build_type, BUILD_TIME=build_time,
-                                      BUILD_USER=user, BUILD_HOST=host,
+                                      BUILD_USER=user, BUILD_HOST=host, BUILD_DISTRO_ID=build_distro_id,
                                       JAVA_VERSION=java_version, FINGERPRINT=fingerprint)
 
     file_name = java_path + "/com/starrocks/common/Version.java"
@@ -125,7 +150,7 @@ public class Version {{
         os.makedirs(d)
     skip_write_if_fingerprint_unchanged(file_name, file_content, fingerprint)
 
-def generate_cpp_file(cpp_path, version, commit_hash, build_type, build_time, user, host):
+def generate_cpp_file(cpp_path, version, commit_hash, build_type, build_time, user, host, build_distro_id):
     file_format = '''
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
@@ -151,13 +176,14 @@ const char* STARROCKS_COMMIT_HASH = "{COMMIT_HASH}";
 const char* STARROCKS_BUILD_TIME = "{BUILD_TIME}";
 const char* STARROCKS_BUILD_USER = "{BUILD_USER}";
 const char* STARROCKS_BUILD_HOST = "{BUILD_HOST}";
+const char* STARROCKS_BUILD_DISTRO_ID = "{BUILD_DISTRO_ID}";
 }}
 
 '''
-    fingerprint = get_fingerprint([version, commit_hash, build_type, user, host])
+    fingerprint = get_fingerprint([version, commit_hash, build_type, user, host, build_distro_id])
     file_content = file_format.format(VERSION=version, COMMIT_HASH=commit_hash,
                                       BUILD_TYPE=build_type, BUILD_TIME=build_time,
-                                      BUILD_USER=user, BUILD_HOST=host, FINGERPRINT=fingerprint)
+                                      BUILD_USER=user, BUILD_HOST=host, BUILD_DISTRO_ID=build_distro_id, FINGERPRINT=fingerprint)
 
     file_name = cpp_path + "/version.cpp"
     d = os.path.dirname(file_name)
@@ -175,13 +201,17 @@ def main():
     commit_hash = get_commit_hash()
     build_type = get_build_type()
     build_time = get_current_time()
+    distro_info = get_build_distro_info()
+    build_distro_id = distro_info.get("ID", "unknown")
+    build_pretty_name = distro_info.get("PRETTY_NAME", build_distro_id)
     user = get_user()
-    hostname = get_hostname()
+    # append build distro pretty name into hostname
+    hostname = '%s (%s)' % (get_hostname(), build_pretty_name)
 
     java_version = get_java_version()
 
-    generate_cpp_file(args.cpp_path, version, commit_hash, build_type, build_time, user, hostname)
-    generate_java_file(args.java_path, version, commit_hash, build_type, build_time, user, hostname, java_version)
+    generate_cpp_file(args.cpp_path, version, commit_hash, build_type, build_time, user, hostname, build_distro_id)
+    generate_java_file(args.java_path, version, commit_hash, build_type, build_time, user, hostname, java_version, build_distro_id)
 
 if __name__ == '__main__':
     main()
