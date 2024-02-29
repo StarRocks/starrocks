@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "formats/parquet/parquet_file_writer.h"
+
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -25,7 +27,6 @@
 #include "column/struct_column.h"
 #include "common/statusor.h"
 #include "formats/parquet/file_reader.h"
-#include "formats/parquet/parquet_file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
