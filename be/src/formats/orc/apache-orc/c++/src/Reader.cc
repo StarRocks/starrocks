@@ -1061,6 +1061,12 @@ void RowReaderImpl::startNextStripe() {
             throw ParseError(msg.str());
         }
 
+        std::cout << "StripeInformation at stripe index " << currentStripe << ": fileLength=" << fileLength
+                << ", StripeInfo=(offset=" << currentStripeInfo.offset()
+                << ", indexLength=" << currentStripeInfo.indexlength()
+                << ", dataLength=" << currentStripeInfo.datalength()
+                << ", footerLength=" << currentStripeInfo.footerlength() << ")" << std::endl;
+
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
 
         bool skipStripe = false;
@@ -1071,6 +1077,7 @@ void RowReaderImpl::startNextStripe() {
                 sargsApplier->getRowReaderFilter()->filterOnOpeningStripe(currentStripe, &currentStripeInfo)) {
                 skipStripe = true;
                 skipStripeByScanRangeMisMatch = true;
+                std::cout << "orc eval to skip the stripe by scan range mismatch" << std::endl;
                 goto end;
             }
 
@@ -1085,6 +1092,7 @@ void RowReaderImpl::startNextStripe() {
                         (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
                 if (!sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount)) {
                     skipStripe = true;
+                    std::cout << "orc eval to skip the stripe by stripe stats" << std::endl;
                     goto end;
                 }
             }

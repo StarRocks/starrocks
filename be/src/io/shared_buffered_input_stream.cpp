@@ -219,6 +219,7 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
             _shared_align_io_bytes += sb.size - sb.raw_size;
         }
         sb.buffer.reserve(sb.size);
+        std::cout << sb.debug_string() << std::endl;
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
     *buffer = sb.buffer.data() + offset - sb.offset;
@@ -241,6 +242,7 @@ Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64
         _direct_io_count += 1;
         _direct_io_bytes += count;
         RETURN_IF_ERROR(_stream->read_at_fully(offset, out, count));
+        std::cout << strings::Substitute("shared buffer[direct] offset: $0, size: $1", offset, count) << std::endl;
         return Status::OK();
     }
     const uint8_t* buffer = nullptr;

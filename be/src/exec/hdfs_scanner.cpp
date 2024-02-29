@@ -208,6 +208,7 @@ Status HdfsScanner::open_random_access_file() {
     CHECK(_file == nullptr) << "File has already been opened";
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file,
                      _scanner_params.fs->new_random_access_file(_scanner_params.path))
+    std::cout << strings::Substitute("start to open file $0, file size is $1", _scanner_params.path, _scanner_params.file_size) << std::endl;
     const int64_t file_size = _scanner_params.file_size;
     raw_file->set_size(file_size);
     const std::string& filename = raw_file->filename();

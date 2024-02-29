@@ -1198,6 +1198,7 @@ Status OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*
         builder->end();
         std::unique_ptr<orc::SearchArgument> sargs = builder->build();
         VLOG_FILE << "OrcChunkReader::set_conjuncts. search argument = " << sargs->toString();
+        std::cout << "build search argument success " << sargs->toString() << std::endl;
         _row_reader_options.searchArgument(std::move(sargs));
     }
     return Status::OK();

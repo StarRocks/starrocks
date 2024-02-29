@@ -375,7 +375,9 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
         std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
         DiskRangeHelper::mergeAdjacentDiskRanges(io_ranges, stripes, config::io_coalesce_read_max_distance_size,
                                                  config::orc_tiny_stripe_threshold_size);
+        std::cout << "print merged tiny stripe" << std::endl;
         for (const auto& it : io_ranges) {
+            std::cout << "offset: " << it.offset << " size: " << it.size << std::endl;
             _app_stats.orc_total_tiny_stripe_size += it.size;
         }
         RETURN_IF_ERROR(file_stream->setIORanges(io_ranges));
