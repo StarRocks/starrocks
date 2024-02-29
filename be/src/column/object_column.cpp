@@ -37,8 +37,8 @@ size_t ObjectColumn<T>::byte_size(size_t from, size_t size) const {
 
 template <typename T>
 size_t ObjectColumn<T>::byte_size(size_t idx) const {
-    DCHECK(false) << "Don't support object column byte size";
-    return 0;
+    DCHECK_LE(idx, this->size()) << "Range error";
+    return _pool[idx].serialize_size();
 }
 
 template <typename T>
@@ -169,8 +169,7 @@ void ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
 
 template <typename T>
 uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) {
-    DCHECK(false) << "Don't support object column serialize";
-    return 0;
+    return static_cast<uint32_t>(get_object(idx)->serialize(pos));
 }
 
 template <typename T>
@@ -182,7 +181,9 @@ uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) {
 template <typename T>
 void ObjectColumn<T>::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                       uint32_t max_one_row_size) {
-    DCHECK(false) << "Don't support object column serialize batch";
+    for (size_t i = 0; i < chunk_size; ++i) {
+        slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
+    }
 }
 
 template <typename T>
@@ -192,14 +193,26 @@ const uint8_t* ObjectColumn<T>::deserialize_and_append(const uint8_t* pos) {
 }
 
 template <typename T>
+bool ObjectColumn<T>::deserialize_and_append(const Slice& src) {
+    if constexpr (std::is_same_v<T, BitmapValue>) {
+        return _pool.emplace_back().valid_and_deserialize(src.data, src.size);
+    } else if constexpr (std::is_same_v<T, HyperLogLog>) {
+        return _pool.emplace_back().deserialize(src);
+    } else if constexpr (std::is_same_v<T, PercentileValue>) {
+        _pool.emplace_back(src);
+        return true;
+    }
+    return false;
+}
+
+template <typename T>
 void ObjectColumn<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     DCHECK(false) << "Don't support object column deserialize and append";
 }
 
 template <typename T>
 uint32_t ObjectColumn<T>::serialize_size(size_t idx) const {
-    DCHECK(false) << "Don't support object column byte size";
-    return 0;
+    return static_cast<uint32_t>(get_object(idx)->serialize_size());
 }
 
 template <typename T>

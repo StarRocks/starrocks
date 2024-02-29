@@ -26,11 +26,17 @@ import java.util.Map;
 
 public class AWSCloudConfiguration extends CloudConfiguration {
 
+    private static final int DEFAULT_NUM_OF_PARTITIONED_PREFIX = 256;
+
     private final AWSCloudCredential awsCloudCredential;
 
     private boolean enablePathStyleAccess = false;
 
     private boolean enableSSL = true;
+
+    private boolean enablePartitionedPrefix = false;
+
+    private int numOfPartitionedPrefix = 0;
 
     public AWSCloudConfiguration(AWSCloudCredential awsCloudCredential) {
         this.awsCloudCredential = awsCloudCredential;
@@ -81,6 +87,35 @@ public class AWSCloudConfiguration extends CloudConfiguration {
     }
 
     @Override
+    public void loadCommonFields(Map<String, String> properties) {
+        super.loadCommonFields(properties);
+        enablePartitionedPrefix = Boolean.parseBoolean(
+                properties.getOrDefault(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "false"));
+        String value = properties.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX);
+        if (enablePartitionedPrefix) {
+            this.numOfPartitionedPrefix = DEFAULT_NUM_OF_PARTITIONED_PREFIX;
+            if (value != null) {
+                try {
+                    int val = Integer.parseInt(value);
+                    if (val < 0) {
+                        throw new IllegalArgumentException(
+                                String.format(
+                                        "Invalid integer value '%s' for property: '%s', must be a positive integer.",
+                                        value,
+                                        CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+                    } else if (val > 0) {
+                        this.numOfPartitionedPrefix = val;
+                    }
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException(
+                            String.format("Invalid integer value '%s' for property: '%s'", value,
+                                    CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+                }
+            }
+        }
+    }
+
+    @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
@@ -98,11 +133,17 @@ public class AWSCloudConfiguration extends CloudConfiguration {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        return awsCloudCredential.toFileStoreInfo();
+        FileStoreInfo.Builder builder = awsCloudCredential.toFileStoreInfo().toBuilder();
+        // update the FileStoreInfo with enablePartitionedPrefix and numOfPartitionedPrefix
+        builder.getS3FsInfoBuilder()
+                .setPartitionedPrefixEnabled(enablePartitionedPrefix)
+                .setNumPartitionedPrefix(numOfPartitionedPrefix);
+        return builder.build();
     }
 
     @Override
     public String toConfString() {
+        // TODO: add enable_partitioned_prefix, num_partitioned_prefix output
         return "AWSCloudConfiguration{" + getCommonFieldsString() +
                 ", cred=" + awsCloudCredential.toCredString() +
                 ", enablePathStyleAccess=" + enablePathStyleAccess +

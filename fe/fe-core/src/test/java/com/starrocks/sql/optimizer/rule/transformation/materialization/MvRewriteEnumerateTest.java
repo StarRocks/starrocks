@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.Lists;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -38,7 +39,28 @@ public class MvRewriteEnumerateTest extends MvRewriteTestBase {
 
     @ParameterizedTest(name = "{index}-{0}-{1}-{2}")
     @MethodSource("generateArguments_ArrayAgg")
-    public void testRollup_ArrayAgg(String select, String predicate, String groupBy) throws Exception {
+    public void testArrayAgg(String select, String predicate, String groupBy) throws Exception {
+        String mvName = "mv_array";
+        starRocksAssert.useTable("json_tbl");
+        createAndRefreshMv("CREATE MATERIALIZED VIEW IF NOT EXISTS `mv_array`\n" +
+                "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
+                "REFRESH ASYNC\n" +
+                "AS \n" +
+                "SELECT \n" +
+                "    get_json_string(`d_user`, 'region') AS `region`, \n" +
+                "    get_json_string(`d_user`, 'gender') AS `gender`, \n" +
+                "    array_agg_distinct(get_json_string(d_user, 'gender') ) AS `distinct_gender`, \n" +
+                "    array_agg_distinct(get_json_int(d_user, 'age') ) AS `distinct_age`, \n" +
+                "    array_agg_distinct(cast(get_json_string(d_user, 'age') as int) ) AS `distinct_string_age`\n" +
+                "FROM `json_tbl`\n" +
+                "GROUP BY region, `gender`");
+
+        String query = String.format("select %s from json_tbl  %s  %s", select, predicate, groupBy);
+        starRocksAssert.query(query).explainContains(mvName);
+    }
+
+    @Test
+    public void testArrayAgg_NotSupport() throws Exception {
         String mvName = "mv_array";
         starRocksAssert.useTable("json_tbl");
         createAndRefreshMv("CREATE MATERIALIZED VIEW IF NOT EXISTS `mv_array`\n" +
@@ -52,8 +74,19 @@ public class MvRewriteEnumerateTest extends MvRewriteTestBase {
                 "FROM `json_tbl`\n" +
                 "GROUP BY region, `gender`");
 
-        String query = String.format("select %s from json_tbl  %s  %s", select, predicate, groupBy);
-        starRocksAssert.query(query).explainContains(mvName);
+        // different group by key
+        starRocksAssert.query("SELECT " +
+                " get_json_string(d_user, 'sss'), " +
+                " count(distinct get_json_string(d_user, 'gender')) " +
+                "FROM json_tbl " +
+                "GROUP BY 1 ").explainWithout(mvName);
+
+        // different aggregation
+        starRocksAssert.query("SELECT " +
+                " get_json_string(d_user, 'region'), " +
+                " count(distinct get_json_string(d_user, 'age')) " +
+                "FROM json_tbl " +
+                "GROUP BY 1 ").explainWithout(mvName);
     }
 
     private static Stream<Arguments> generateArguments_ArrayAgg() {
@@ -62,7 +95,8 @@ public class MvRewriteEnumerateTest extends MvRewriteTestBase {
                 "array_sort(array_agg_distinct(get_json_string(d_user, 'gender') ))",
                 "array_length(array_agg_distinct(get_json_string(d_user, 'gender') ))",
                 "count(distinct get_json_string(d_user, 'gender') )",
-                "sum(distinct get_json_string(d_user, 'gender') )"
+                "sum(distinct get_json_int(d_user, 'age') )",
+                "sum(distinct cast(get_json_string(d_user, 'age') as int) )"
         );
         List<String> predicatelist = List.of("", "where get_json_string(d_user, 'gender') = 'male'");
         List<String> groupList = List.of(

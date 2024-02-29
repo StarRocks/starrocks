@@ -126,6 +126,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：false
 - 引入版本：3.1.5
 
+### 用户，角色，权限
+
+#### privilege_max_total_roles_per_user
+
+- 含义：每个用户最多可以拥有的角色数量。
+- 默认值：64
+- 引入版本：v3.0.0
+
+#### privilege_max_role_depth
+
+- 含义：每个角色最多的嵌套层数。
+- 默认值：16
+- 引入版本：v3.0.0
+
 ### Query engine
 
 #### max_allowed_in_element_num_of_delete
@@ -521,14 +535,25 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### storage_usage_soft_limit_percent
 
-- 含义：如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。
+- 含义：单个 BE 存储目录空间使用率软上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。
 - 默认值：90
 
 #### storage_usage_soft_limit_reserve_bytes
 
-- 含义：默认 200 GB，单位为 Byte，如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。
+- 含义：单个 BE 存储目录剩余空间软限制。默认 200 GB，单位为 Byte。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。
 - 单位：字节
 - 默认值：200 \* 1024 \* 1024 \* 1024
+
+#### storage_usage_hard_limit_percent
+
+- 含义：单个 BE 存储目录空间使用率硬上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_hard_limit_reserve_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数`storage_flood_stage_usage_percent` 才能使配置生效。
+- 默认值：95
+
+#### storage_usage_hard_limit_reserve_bytes
+
+- 含义：单个 BE 存储目录剩余空间硬限制。默认 100 GB，单位为 Byte。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_hard_limit_percent`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数 `storage_flood_stage_left_capacity_bytes` 才能使配置生效。
+- 单位：字节
+- 默认值：100 \* 1024 \* 1024 \* 1024
 
 #### catalog_trash_expire_second
 

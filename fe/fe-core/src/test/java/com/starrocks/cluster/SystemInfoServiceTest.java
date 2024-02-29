@@ -64,12 +64,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -141,14 +136,6 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
-            }
-        };
-
-        new Expectations(localMetastore) {
-            {
-                localMetastore.getCluster();
-                minTimes = 0;
-                result = new Cluster("cluster", 1);
             }
         };
 
@@ -370,34 +357,6 @@ public class SystemInfoServiceTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
-    }
-
-    @Test
-    public void testSaveLoadBackend() throws Exception {
-        clearAllBackend();
-        String dir = "testLoadBackend";
-        mkdir(dir);
-        File file = new File(dir, "image");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        Backend back1 = new Backend(1L, "localhost", 3);
-        back1.updateOnce(4, 6, 8);
-        systemInfoService.replayAddBackend(back1);
-        long checksum1 = systemInfoService.saveBackends(dos, 0);
-        globalStateMgr.clear();
-        globalStateMgr = null;
-        dos.close();
-
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(file)));
-        long checksum2 = systemInfoService.loadBackends(dis, 0);
-        Assert.assertEquals(checksum1, checksum2);
-        Assert.assertEquals(1, systemInfoService.getIdToBackend().size());
-        Backend back2 = systemInfoService.getBackend(1);
-        Assert.assertTrue(back1.equals(back2));
-        dis.close();
-
-        deleteDir(dir);
     }
 
     @Test

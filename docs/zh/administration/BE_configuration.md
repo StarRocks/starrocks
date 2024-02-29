@@ -409,13 +409,13 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### storage_flood_stage_usage_percent
 
-- 含义：如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。
+- 含义：BE 存储目录整体磁盘空间使用率的硬上限。如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_percent` 才能使配置生效。
 - 单位：%
 - 默认值：95
 
 #### storage_flood_stage_left_capacity_bytes
 
-- 含义：如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。
+- 含义：BE 存储目录整体磁盘剩余空间的硬限制。如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_reserve_bytes` 才能使配置生效。
 - 单位：字节
 - 默认值：107374182400
 
@@ -525,6 +525,13 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：存算分离集群下主键表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
 - 默认值：0.5
+
+#### lake_compaction_stream_buffer_size_bytes
+
+- 含义：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
+- 单位：字节
+- 默认值：1048576
+- 引入版本：v3.2.3
 
 #### create_tablet_worker_count
 

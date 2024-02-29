@@ -377,12 +377,12 @@ BE dynamic parameters are as follows.
 #### storage_flood_stage_usage_percent
 
 - **Default:** 95
-- **Description:** If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected.
+- **Description:** Hard limit of the storage usage percentage in all BE directories. If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected. You need to set this item together with the FE configuration item `storage_usage_hard_limit_percent` to allow the configurations to take effect.
 
 #### storage_flood_stage_left_capacity_bytes
 
 - **Default:** 107,374,182,400 Bytes (Remaining Storage Space Threshold for Load and Restore Job Rejection)
-- **Description:** If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected.
+- **Description:** Hard limit of the remaining storage space in all BE directories. If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected. You need to set this item together with the FE configuration item `storage_usage_hard_limit_reserve_bytes` to allow the configurations to take effect.
 
 #### tablet_meta_checkpoint_min_new_rowsets_num
 
@@ -471,6 +471,13 @@ BE dynamic parameters are as follows.
 
 - **Default:** 0.5
 - **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
+#### lake_compaction_stream_buffer_size_bytes
+
+- **Default:** 1048576
+- **Unit**: Bytes
+- **Description:** The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1 MB. You can increase this value to accelerate the compaction process.
+- **Introduced in:** v3.2.3
 
 #### create_tablet_worker_count
 
