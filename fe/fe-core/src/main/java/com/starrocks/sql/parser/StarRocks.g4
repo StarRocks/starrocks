@@ -618,10 +618,13 @@ columnNameWithComment
 
 submitTaskStatement
     : SUBMIT TASK qualifiedName?
-        ( properties?
-          | taskScheduleDesc?
-        )
-    AS (createTableAsSelectStatement | insertStatement )
+        taskClause*
+        AS (createTableAsSelectStatement | insertStatement )
+    ;
+
+taskClause
+    : properties
+    | taskScheduleDesc
     ;
 
 dropTaskStatement

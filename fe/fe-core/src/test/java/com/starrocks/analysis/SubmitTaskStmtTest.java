@@ -250,7 +250,7 @@ public class SubmitTaskStmtTest {
                     "as insert overwrite tbl1 select * from tbl1");
             Task task = tm.getTask("t2");
             Assert.assertNotNull(task);
-            Assert.assertEquals("START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
             Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
             Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
             connectContext.executeSql("drop task t2");
@@ -264,6 +264,32 @@ public class SubmitTaskStmtTest {
             Assert.assertEquals("Getting syntax error from line 1, column 15 to line 1, column 80. " +
                             "Detail message: Invalid date literal 1997-01-01 00:00:00 PST.",
                     e.getMessage());
+        }
+        {
+            // multiple clauses
+            connectContext.executeSql("submit task t4 " +
+                    "properties('session.query_timeout'='1') " +
+                    "schedule start('1997-01-01 00:00:00') every(interval 1 minute) " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Task task = tm.getTask("t4");
+            Assert.assertNotNull(task);
+            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            connectContext.executeSql("drop task t4");
+        }
+        {
+            // multiple clauses
+            connectContext.executeSql("submit task t4 " +
+                    "schedule start('1997-01-01 00:00:00') every(interval 1 minute) " +
+                    "properties('session.query_timeout'='1') " +
+                    "as insert overwrite tbl1 select * from tbl1");
+            Task task = tm.getTask("t4");
+            Assert.assertNotNull(task);
+            Assert.assertEquals(" START(1997-01-01T00:00) EVERY(1 MINUTES)", task.getSchedule().toString());
+            Assert.assertEquals(Constants.TaskSource.INSERT, task.getSource());
+            Assert.assertEquals(Constants.TaskType.PERIODICAL, task.getType());
+            connectContext.executeSql("drop task t4");
         }
 
         {

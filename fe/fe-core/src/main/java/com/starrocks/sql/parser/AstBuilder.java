@@ -1468,6 +1468,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return schedule;
     }
 
+    private void parseTaskClause(List<StarRocksParser.TaskClauseContext> clauses, SubmitTaskStmt stmt) {
+        for (var clause : clauses) {
+            if (clause.properties() != null) {
+                stmt.getProperties().putAll(buildProperties(clause.properties()));
+            } else if (clause.taskScheduleDesc() != null) {
+                stmt.setSchedule(parseTaskSchedule(clause.taskScheduleDesc()));
+            }
+        }
+    }
+
     @Override
     public ParseNode visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
         QualifiedName qualifiedName = null;
@@ -1475,15 +1485,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             qualifiedName = getQualifiedName(context.qualifiedName());
         }
 
-        // schedule
-        TaskSchedule schedule = null;
-        if (context.taskScheduleDesc() != null) {
-            schedule = parseTaskSchedule(context.taskScheduleDesc());
-        }
-
-        // properties
-        Map<String, String> properties = buildProperties(context.properties());
-        properties.putAll(extractVarHintValues(hintMap.get(context)));
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
         if (context.createTableAsSelectStatement() != null) {
@@ -1506,11 +1507,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             taskName = qualifiedNameToTaskName(qualifiedName);
         }
+        SubmitTaskStmt res;
         if (createTableAsSelectStmt != null) {
-            return new SubmitTaskStmt(taskName, properties, startIndex, schedule, createTableAsSelectStmt, pos);
+            res = new SubmitTaskStmt(taskName, startIndex, createTableAsSelectStmt, pos);
         } else {
-            return new SubmitTaskStmt(taskName, properties, startIndex, schedule, insertStmt, pos);
+            res = new SubmitTaskStmt(taskName, startIndex, insertStmt, pos);
         }
+        res.getProperties().putAll(extractVarHintValues(hintMap.get(context)));
+        parseTaskClause(context.taskClause(), res);
+        return res;
     }
 
     @Override
