@@ -98,7 +98,7 @@ class QueryTransformer {
         builder = window(builder, analyticExprList);
 
         if (queryBlock.hasOrderByClause()) {
-            if (!queryBlock.getGroupBy().isEmpty() && !queryBlock.getAggregate().isEmpty()) {
+            if (!queryBlock.getGroupBy().isEmpty() || !queryBlock.getAggregate().isEmpty()) {
                 // requires output fields, groups and translated aggregations to be visible for queries with aggregation
                 List<String> outputNames = new ArrayList<>(queryBlock.getColumnOutputNames());
                 for (int i = 0; i < queryBlock.getOrderSourceExpressions().size(); ++i) {
