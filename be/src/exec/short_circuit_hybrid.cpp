@@ -106,6 +106,9 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
             }
         }
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
+        if (result_chunk->num_rows() == 0) {
+            *eos = true;
+        }
     } else {
         *eos = true;
     }

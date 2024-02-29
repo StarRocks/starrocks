@@ -47,6 +47,9 @@ select * from t1_var where k1 = 3 and k2 = 3;
 -- result:
 3	3	e2222222	e2222222	2222-12-22	100
 -- !result
+select k1, k2, v3, v4 from t1_var where k1 = 3 and k2 = 3 and v1 = 'a2222222';
+-- result:
+-- !result
 set enable_short_circuit = false;
 -- result:
 []
