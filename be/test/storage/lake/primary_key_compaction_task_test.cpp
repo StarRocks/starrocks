@@ -998,13 +998,13 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
     EXPECT_TRUE(pick_level_ptr != nullptr);
     EXPECT_EQ(pick_level_ptr->rowsets.size(), 4);
-    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 2);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_meta_ptr->id(), 2);
     pick_level_ptr->rowsets.pop();
-    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_meta_ptr->id(), 4);
     pick_level_ptr->rowsets.pop();
-    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 3);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_meta_ptr->id(), 3);
     pick_level_ptr->rowsets.pop();
-    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 1);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_meta_ptr->id(), 1);
     pick_level_ptr->rowsets.pop();
     rowset_metas.clear();
     rowset_vec.clear();
