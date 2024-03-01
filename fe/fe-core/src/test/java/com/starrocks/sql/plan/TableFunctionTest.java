@@ -235,4 +235,26 @@ public class TableFunctionTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: t2");
     }
+
+    @Test
+    public void testTableFunctionAlias() throws Exception {
+        String sql = "select t.*, unnest from test_all_type t, unnest(split(t1a, ','))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "TableValueFunction");
+
+        sql = "select table_function_unnest.*, unnest from test_all_type table_function_unnest, unnest(split(t1a, ','))";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "TableValueFunction");
+
+        sql = "select t.*, unnest from test_all_type t, unnest(split(t1a, ',')) unnest";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "TableValueFunction");
+
+        sql = "select t.*, unnest.v1, unnest.v2 from (select * from test_all_type join t0_not_null) t, " +
+                "unnest(split(t1a, ','), v3) as unnest (v1, v2)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "TableValueFunction");
+
+
+    }
 }
