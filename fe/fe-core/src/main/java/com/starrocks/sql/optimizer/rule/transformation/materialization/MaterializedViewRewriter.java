@@ -2336,10 +2336,10 @@ public class MaterializedViewRewriter {
         if (materializationContext.getMVUsedCount() > 0) {
             OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
             mvOptExpr = duplicator.duplicate(mvOptExpr);
-            Map<ColumnRefOperator, ScalarOperator> replacedOutputMapping = duplicator.getColumnMapping();
+            Map<ColumnRefOperator, ColumnRefOperator> replacedOutputMapping = duplicator.getColumnMapping();
             Map<ColumnRefOperator, ColumnRefOperator> newOutputMapping = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : outputMapping.entrySet()) {
-                ColumnRefOperator newDuplicatorColRef = (ColumnRefOperator) replacedOutputMapping.get(entry.getValue());
+                ColumnRefOperator newDuplicatorColRef = replacedOutputMapping.get(entry.getValue());
                 if (newDuplicatorColRef != null) {
                     newOutputMapping.put(entry.getKey(), newDuplicatorColRef);
                 }

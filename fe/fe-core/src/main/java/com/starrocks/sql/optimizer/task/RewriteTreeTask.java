@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.task;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -36,10 +35,10 @@ import java.util.List;
  *
  */
 public class RewriteTreeTask extends OptimizerTask {
-    private final OptExpression planTree;
-    private final boolean onlyOnce;
-    private final List<Rule> rules;
-    private long change = 0;
+    protected final OptExpression planTree;
+    protected final boolean onlyOnce;
+    protected final List<Rule> rules;
+    protected long change = 0;
 
     public RewriteTreeTask(TaskContext context, OptExpression root, List<Rule> rules, boolean onlyOnce) {
         super(context);
@@ -65,8 +64,7 @@ public class RewriteTreeTask extends OptimizerTask {
         }
     }
 
-    private void rewrite(OptExpression parent, int childIndex, OptExpression root) {
-        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
+    protected void rewrite(OptExpression parent, int childIndex, OptExpression root) {
 
         for (Rule rule : rules) {
             if (rule.exhausted(context.getOptimizerContext())) {
@@ -100,7 +98,7 @@ public class RewriteTreeTask extends OptimizerTask {
         }
     }
 
-    private boolean match(Pattern pattern, OptExpression root) {
+    protected boolean match(Pattern pattern, OptExpression root) {
         if (!pattern.matchWithoutChild(root)) {
             return false;
         }
@@ -130,7 +128,7 @@ public class RewriteTreeTask extends OptimizerTask {
         return true;
     }
 
-    private void deriveLogicalProperty(OptExpression root) {
+    protected void deriveLogicalProperty(OptExpression root) {
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
         }
