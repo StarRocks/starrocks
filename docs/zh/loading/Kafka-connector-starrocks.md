@@ -20,8 +20,8 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 支持自建 Apache Kafka 集群和 Confluent cloud：
 
-- 如果使用自建 Apache Kafka 集群，请确保已部署 Apache Kafka 集群和 Kafka Connect 集群，并创建 Topic。
-- 如果使用 Confluent cloud，请确保已拥有 Confluent 账号，并已经创建集群和 Topic。
+- 如果使用自建 Apache Kafka 集群，您可以参考 [Apache Kafka quickstart](https://kafka.apache.org/quickstart) 快速部署 Kafka，Kafka Connect 已集成在 Kafka 中。
+- 如果使用 Confluent cloud，请确保已拥有 Confluent 账号并已经创建集群。
 
 ### 安装 Kafka connector
 
@@ -29,80 +29,140 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 - 自建 Kafka 集群
 
-  - 下载并解压压缩包 [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
-  - 将解压后的目录复制到 `plugin.path` 属性所指的路径中。`plugin.path` 属性包含在 Kafka Connect 集群 worker 节点配置文件中。
+  下载并解压压缩包 [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
+
 - Confluent cloud
 
   > **说明**
   >
   > Kafka connector 目前尚未上传到 Confluent Hub，您需要将其压缩包上传到 Confluent cloud。
 
-### 创建 StarRocks 表
-
-您需要根据 Kafka Topic 以及数据在 StarRocks 中创建对应的表。
-
 ## 使用示例
 
-本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 并启动 Kafka Connect 服务（无需重启 Kafka 服务），导入数据至 StarRocks。
+本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 并启动 Kafka connect，导入数据至 StarRocks。
 
-1. 创建 Kafka connector 配置文件 **connect-StarRocks-sink.properties**，并配置对应参数。参数和相关说明，参见[参数说明](#参数说明)。
+#### 数据集
 
-    ```Properties
-    name=starrocks-kafka-connector
-    connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
-    topics=dbserver1.inventory.customers
-    starrocks.http.url=192.168.xxx.xxx:8030,192.168.xxx.xxx:8030
-    starrocks.username=root
-    starrocks.password=123456
-    starrocks.database.name=inventory
-    key.converter=io.confluent.connect.json.JsonSchemaConverter
-    value.converter=io.confluent.connect.json.JsonSchemaConverter
-    sink.properties.strip_outer_array=true
-    ```
+假设 Kafka 集群的 Topic `test` 中存在如下 JSON 格式的数据。
+
+```JSON
+{"id":1,"city":"New York"}
+{"id":2,"city":"Los Angeles"}
+{"id":3,"city":"Chicago"}
+```
+
+#### 目标数据库和表
+
+根据 JSON 数据中需要导入的 key，在 StarRocks 集群的目标数据库 `example_db` 中创建表 `test_tbl` 。
+
+```SQL
+CREATE DATABASE example_db;
+USE example_db;
+CREATE TABLE test_tbl (id INT, city STRING);
+```
+
+#### 配置 Kafka connector 和 kafka Connect，然后启动 Kafka Connect 导入数据
+
+##### 通过 Standalone 模式启动 Kafka Connect
+
+1. 配置 Kafka connector。在 Kafka 安装目录下的 **config** 目录，创建 Kafka connector 的配置文件 **connect-StarRocks-sink.properties**，并配置对应参数。参数和相关说明，参见[参数说明](#参数说明)。
+
+      ```yaml
+      name=starrocks-kafka-connector
+      connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
+      topics=test
+      key.converter=org.apache.kafka.connect.json.JsonConverter
+      value.converter=org.apache.kafka.connect.json.JsonConverter
+      key.converter.schemas.enable=true
+      value.converter.schemas.enable=false
+      # StarRocks FE 的 HTTP Server 地址，默认端口 8030
+      starrocks.http.url=192.168.xxx.xxx:8030
+      # 当 Kafka Topic 的名称与 StarRocks 表名不一致时，配置两者的映射关系
+      starrocks.topic2table.map=test:test_tbl
+      # StarRocks 用户名
+      starrocks.username=user1
+      # StarRocks 用户密码
+      starrocks.password=123456
+      starrocks.database.name=example_db
+      sink.properties.strip_outer_array=true
+      ```
 
     > **注意**
     >
     > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
-2. 启动 Kafka Connect 服务（无需重启 Kafka 服务）。命令中的参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
+2. 配置并启动 Kafka Connect。
 
-   1. Standalone 模式
+  1. 配置 Kafka Connect。修改 config 目录中的 `config/connect-standalone.properties` 配置文件。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
 
-      ```Shell
-      bin/connect-standalone worker.properties connect-StarRocks-sink.properties [connector2.properties connector3.properties ...]
-      ```
-
-   2. 分布式模式
-
-      > **说明**
-      >
-      > 生产环境中建议您使用分布式模式。
-
-      1. 启动 worker：
-
-          ```Shell
-          bin/connect-distributed worker.properties
-          ```
-
-      2. 注意，分布式模式不支持启动时在命令行配置 Kafka connector。您需要通过调用 REST API 来配置 Kafka connector 和启动 Kafka connect:
-
-        ```Shell
-        curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
-          "name":"starrocks-kafka-connector",
-          "config":{
-            "connector.class":"com.starrocks.connector.kafka.SinkConnector",
-            "topics":"dbserver1.inventory.customers",
-            "starrocks.http.url":"192.168.xxx.xxx:8030,192.168.xxx.xxx:8030",
-            "starrocks.user":"root",
-            "starrocks.password":"123456",
-            "starrocks.database.name":"inventory",
-            "key.converter":"io.confluent.connect.json.JsonSchemaConverter",
-            "value.converter":"io.confluent.connect.json.JsonSchemaConverter"
-          }
-        }
+        ```yaml
+        # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
+        # 注意本示例使用 PLAINTEXT 的方式访问 Kafka 集群，如果使用其他鉴方式访问 kafka集群，则您需要在本文件中配置相关鉴权信息。
+        bootstrap.servers=<kafka_broker_ip>:9092
+        offset.storage.file.filename=/tmp/connect.offsets
+        offset.flush.interval.ms=10000
+        key.converter=org.apache.kafka.connect.json.JsonConverter
+        value.converter=org.apache.kafka.connect.json.JsonConverter
+        key.converter.schemas.enable=true
+        value.converter.schemas.enable=false
+        # 修改 starrocks-kafka-connector 为解压后的绝对路径，例如：
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
-3. 查询 StarRocks 表中的数据。
+  2. 启动 Kafka Connect。
+
+        ```Bash
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
+        ```
+##### 通过 Distributed 模式启动 Kafka Connect
+
+1. 启动 Kafka Connect。
+
+   1. 
+
+   2. ```Shell
+      CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
+      ```
+
+2. 配置并创建 Kafka connector。注意，在 Distributed 模式下您需要通过 REST API 来配置并创建 Kafka Connector。参数和相关说明，参见[参数说明](#参数说明)。
+
+   1. ```Shell
+      curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
+        "name":"starrocks-kafka-connector",
+        "config":{
+          "connector.class":"com.starrocks.connector.kafka.StarRocksSinkConnector",
+          "topics":"lilyliuyitest4json2",
+          "starrocks.http.url":"172.26.93.209:8030",
+          "starrocks.topic2table.map":"lilyliuyitest4json2:test_tbl",
+          "starrocks.username":"root",
+          "starrocks.password":"123456",
+          "starrocks.database.name":"example_db",
+          "sink.properties.strip_outer_array":"true",
+          "key.converter":"org.apache.kafka.connect.json.JsonConverter",
+          "value.converter":"org.apache.kafka.connect.json.JsonConverter",
+          "key.converter.schemas.enable":"true",
+          "value.converter.schemas.enable":"false"
+        }
+      }'
+      ```
+    > **注意**
+    >
+    > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
+#### 查询 StarRocks 表中的数据
+
+查询 StarRocks 目标表 `test_tbl`，返回如下结果则表示数据已经成功导入。
+
+```mysql
+MySQL [example_db]> select * from test_tbl;
++------+-------------+
+| id   | city        |
++------+-------------+
+|    1 | New York    |
+|    2 | Los Angeles |
+|    3 | Chicago     |
++------+-------------+
+3 rows in set (0.01 sec)
+```
 
 ## **参数说明**
 
