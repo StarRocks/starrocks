@@ -159,21 +159,34 @@ void* my_realloc(void* p, size_t size) __THROW {
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
 
     if (IS_BAD_ALLOC_CATCHED()) {
+        size_t new_size = STARROCKS_NALLOX(size, 0);
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
-        TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0) - old_size, nullptr);
-        void* ptr = STARROCKS_REALLOC(p, size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0) - old_size);
+        if (new_size >= old_size) {
+            TRY_MEM_CONSUME(new_size - old_size, nullptr);
+            void* ptr = STARROCKS_REALLOC(p, size);
+            if (UNLIKELY(ptr == nullptr)) {
+                SET_EXCEED_MEM_TRACKER();
+                MEMORY_RELEASE_SIZE(new_size - old_size);
+            }
+            return ptr;
+        } else {
+            void* ptr = STARROCKS_REALLOC(p, size);
+            if (UNLIKELY(ptr == nullptr)) {
+                SET_EXCEED_MEM_TRACKER();
+            } else {
+                MEMORY_RELEASE_SIZE(old_size - new_size);
+            }
+            return ptr;
         }
-        return ptr;
     } else {
         void* ptr = STARROCKS_REALLOC(p, size);
         if (ptr != nullptr) {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - old_size);
-        } else {
-            // nothing to do.
-            // If tc_realloc() fails the original block is left untouched; it is not freed or moved
+            size_t new_size = STARROCKS_MALLOC_SIZE(ptr);
+            if (new_size >= old_size) {
+                MEMORY_CONSUME_SIZE(new_size - old_size);
+            } else {
+                MEMORY_RELEASE_SIZE(old_size - new_size);
+            }
         }
         return ptr;
     }
