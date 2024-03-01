@@ -67,6 +67,7 @@
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
+#include "util/network_util.h"
 
 namespace starrocks {
 
@@ -75,7 +76,7 @@ std::string to_load_error_http_path(const std::string& file_name) {
         return "";
     }
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_load_error_log?"
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
@@ -223,7 +224,7 @@ void FragmentExecState::callback(const Status& status, RuntimeProfile* profile, 
 
 std::string FragmentExecState::to_http_path(const std::string& file_name) {
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_download_load?"
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_download_load?"
         << "token=" << _exec_env->token() << "&file=" << file_name;
     return url.str();
 }

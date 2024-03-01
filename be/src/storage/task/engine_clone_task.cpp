@@ -64,6 +64,7 @@
 #include "util/defer_op.h"
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
+#include "util/network_util.h"
 
 using std::set;
 using std::stringstream;
@@ -401,9 +402,8 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             continue;
         }
 
-        std::string download_url = strings::Substitute("http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/", src.host,
-                                                       src.http_port, HTTP_REQUEST_PREFIX, token, snapshot_path,
-                                                       _clone_req.tablet_id, _clone_req.schema_hash);
+        std::string download_url = strings::Substitute("http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/", get_host_port(src.host, src.http_port),
+                                                       HTTP_REQUEST_PREFIX, token, snapshot_path, _clone_req.tablet_id, _clone_req.schema_hash);
 
         st = _download_files(&data_dir, download_url, local_path);
         (void)_release_snapshot(src.host, src.be_port, snapshot_path);
