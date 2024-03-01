@@ -23,17 +23,17 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 - 如果使用自建 Apache Kafka 集群，您可以参考 [Apache Kafka quickstart](https://kafka.apache.org/quickstart) 快速部署 Kafka。Kafka Connect 已集成在 Kafka 中。
 - 如果使用 Confluent cloud，请确保已拥有 Confluent 账号并已经创建集群。
 
-### 安装 Kafka connector
+### 下载 Kafka connector
 
 安装 Kafka connector 至 Kafka connect。
 
 - 自建 Kafka 集群
 
-  下载并解压压缩包 [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
+  下载并解压 [starrocks-kafka-connector-${connector_version}.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) 。
 
 - Confluent cloud
 
-  Kafka connector 目前尚未上传到 Confluent Hub，您需要将其压缩包上传到 Confluent cloud。
+  Kafka connector 目前尚未上传到 Confluent Hub，您需要下载并解压 [starrocks-kafka-connector-${connector_version}.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) ，打包成 zip 文件并上传到 Confluent cloud。
 
 ## 使用示例
 
