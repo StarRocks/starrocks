@@ -158,6 +158,9 @@ public class NetUtils {
     }
 
     public static String removeScope(String hostAddress) {
+        if (hostAddress  == null) {
+            return null;
+        }
         if (hostAddress.contains("%")) {
             return hostAddress.split("%")[0];
         } else {
