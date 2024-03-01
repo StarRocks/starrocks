@@ -164,7 +164,6 @@ protected:
 template <typename T, typename = void>
 class FieldImpl;
 
-//// FieldImpl<bool/int16_t/int32_t/int64_t/double>
 template <typename T>
 class FieldImpl<T> final : public Field {
 public:
