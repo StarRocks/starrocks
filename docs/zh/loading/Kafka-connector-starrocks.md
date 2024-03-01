@@ -93,7 +93,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. 配置并启动 Kafka Connect。
 
-  1. 配置 Kafka Connect。修改 **config** 目录中的 `config/connect-standalone.properties` 配置文件。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
+  1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-standalone.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
 
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
@@ -116,7 +116,23 @@ CREATE TABLE test_tbl (id INT, city STRING);
         ```
 ##### 通过 Distributed 模式启动 Kafka Connect
 
-1. 启动 Kafka Connect。
+1. 配置并启动 Kafka Connect。
+   1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-distributed.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。     
+        ```yaml
+        # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
+        # 注意本示例使用 PLAINTEXT 的方式访问 Kafka 集群，如果使用其他鉴方式访问 kafka集群，则您需要在本文件中配置相关鉴权信息。
+        bootstrap.servers=<kafka_broker_ip>:9092
+        offset.storage.file.filename=/tmp/connect.offsets
+        offset.flush.interval.ms=10000
+        key.converter=org.apache.kafka.connect.json.JsonConverter
+        value.converter=org.apache.kafka.connect.json.JsonConverter
+        key.converter.schemas.enable=true
+        value.converter.schemas.enable=false
+        # 修改 starrocks-kafka-connector 为解压后的绝对路径，例如：
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+        ```
+  
+  2. 启动 Kafka Connect。
 
       ```BASH
       CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
