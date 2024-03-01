@@ -1,17 +1,17 @@
 -- name: test conditional functions: coalesce, case...when.., if, ifnull, nullif on nested types
-CREATE TABLE `tc` (   `i` int(11) NULL COMMENT "",   `ai` array<int(11)> NULL COMMENT "",   `ass` array<varchar(100)> NULL COMMENT "",   `mi` map<int(11),int> NULL COMMENT "",   `ms` map<int(11),varchar(100)> NULL COMMENT "" ) ENGINE=OLAP DUPLICATE KEY(`i`) COMMENT "OLAP" DISTRIBUTED BY HASH(`i`) BUCKETS 2 PROPERTIES ( "replication_num" = "1" );
+CREATE TABLE `tc` (   `i` int(11) NULL COMMENT "",   `ai` array<int(11)> NULL COMMENT "",   `ass` array<varchar(100)> NULL COMMENT "",   `mi` map<int(11),int> NULL COMMENT "",   `ms` map<int(11),varchar(100)> NULL COMMENT "",   `sis` struct<col1 int(11),col2 varchar(100)> NULL COMMENT "",   `ssi` struct<col1 varchar(100),col2 int(11)> NULL COMMENT "" ) ENGINE=OLAP DUPLICATE KEY(`i`) COMMENT "OLAP" DISTRIBUTED BY HASH(`i`) BUCKETS 2 PROPERTIES ( "replication_num" = "1" );
 -- result:
 -- !result
-insert into tc values (4, null,null, null,null);
+insert into tc values (4, null,null, null,null, null,null);
 -- result:
 -- !result
-insert into tc values (3, null,['a','b'], null,map{1:null,null:null});
+insert into tc values (3, null,['a','b'], null,map{1:null,null:null}, null,struct('a',1));
 -- result:
 -- !result
-insert into tc values (1, [1,2],null, map{1:1,null:2},null);
+insert into tc values (1, [1,2],null, map{1:1,null:2},null, struct(1,'a'),null);
 -- result:
 -- !result
-insert into tc values (2, [1,2],['a','b'], map{1:1,null:2},map{1:'b',null:null});
+insert into tc values (2, [1,2],['a','b'], map{1:1,null:2},map{1:'b',null:null}, struct(1,'a'),struct('a',1));
 -- result:
 -- !result
 select case i when 1 then ai when 3 then ass else ai end from tc order by i;
@@ -112,6 +112,27 @@ select ifnull(ai, null) from tc order by i;
 None
 None
 -- !result
+select ifnull(sss, sii), sss,sii from tc order by i;
+-- result:
+{"col1":"1","col2":"2"}	None    {"col1":"1","col2":"2"}
+{"col1":"a","col2":"b"} {"col1":"a","col2":"b"} None
+{"col1":"a","col2":"b"} None    None
+None    None    None
+-- !result
+select ifnull(null, sii), null,sii from tc order by i;
+-- result:
+{"col1":1,"col2":2} None    {"col1":1,"col2":2}
+{"col1":1,"col2":2} None    {"col1":1,"col2":2}
+None    None    None
+None    None    None
+-- !result
+select ifnull(sii, null), sii,null from tc order by i;
+-- result:
+{"col1":1,"col2":2} {"col1":1,"col2":2} None
+{"col1":1,"col2":2} {"col1":1,"col2":2} None
+None    None    None
+None    None    None
+-- !result
 select if(i>2, ms, mi) from tc order by i;
 -- result:
 {null:"2",1:"1"}
@@ -126,10 +147,31 @@ select if(i>2, ass, ai) from tc order by i;
 ["a","b"]
 None
 -- !result
+select if(i>2, sss, sii) from tc order by i;
+-- result:
+{"col1":"1","col2":"2"}
+{"col1":"a","col2":"b"}
+{"col1":"a","col2":"b"}
+None
+-- !result
 select if(ai is not null, map_from_arrays(['a', 'b'], [1, 2]), null) from tc order by i;
 -- result:
 {"a":1,"b":2}
 {"a":1,"b":2}
+None
+None
+-- !result
+select if(ai is not null, sii, null) from tc order by i;
+-- result:
+{"col1":1,"col2":2}
+{"col1":1,"col2":2}
+None
+None
+-- !result
+select if(ai is not null, null, sii) from tc order by i;
+-- result:
+None
+None
 None
 None
 -- !result
@@ -145,5 +187,26 @@ select nullif(ai, ass), ai, ass from tc order by i;
 ["1","2"]	[1,2]	None
 ["1","2"]	[1,2]	["a","b"]
 None	None	["a","b"]
+None	None	None
+-- !result
+select nullif(sii, sss), sii, sss from tc order by i;
+-- result:
+{"col1":"1","col2":"2"}	{"col1":1,"col2":2}	None
+{"col1":"1","col2":"2"}	{"col1":1,"col2":2}	{"col1":"a","col2":"b"}
+None	None	{"col1":"a","col2":"b"}
+None	None	None
+-- !result
+select nullif(null, sii), null, sii from tc order by i;
+-- result:
+None	None	{"col1":1,"col2":2}
+None	None	{"col1":1,"col2":2}
+None	None	None
+None	None	None
+-- !result
+select nullif(sii, null), sii, null from tc order by i;
+-- result:
+{"col1":1,"col2":2}	{"col1":1,"col2":2}	None
+{"col1":1,"col2":2}	{"col1":1,"col2":2}	None
+None	None	None
 None	None	None
 -- !result
