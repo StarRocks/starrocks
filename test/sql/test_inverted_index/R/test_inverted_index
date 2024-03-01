@@ -180,14 +180,6 @@ select count(*) from t_test_gin_index_query where query_english like '%teria%';
 -- result:
 1
 -- !result
-select count(*) from test.t_test_gin_index_query where query_chinese = '你好';
--- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test.t_test_gin_index_query'.")
--- !result
-select count(*) from test.t_test_gin_index_query where query_none_analyzer = '中文测试';
--- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test.t_test_gin_index_query'.")
--- !result
 drop table t_test_gin_index_query;
 -- result:
 -- !result

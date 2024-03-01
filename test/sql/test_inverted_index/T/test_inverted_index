@@ -120,9 +120,6 @@ select count(*) from t_test_gin_index_query where query_none_analyzer like '%ed 
 -- split terms and index, match by term
 select count(*) from t_test_gin_index_query where query_english like '%ed vi%';
 select count(*) from t_test_gin_index_query where query_english like '%teria%';
--- chinese
-select count(*) from test.t_test_gin_index_query where query_chinese = '你好';
-select count(*) from test.t_test_gin_index_query where query_none_analyzer = '中文测试';
 
 drop table t_test_gin_index_query;
 
