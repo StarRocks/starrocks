@@ -212,7 +212,6 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
             file.find(".tii", 0) != std::string::npos || file.find(".tis", 0) != std::string::npos ||
             file.find("null_bitmap", 0) != std::string::npos || file.find("segments_2", 0) != std::string::npos ||
             file.find("segments.gen", 0) != std::string::npos) {
-
             auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
             auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
             auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
