@@ -82,28 +82,30 @@ TEST_F(CompactionTaskContextTest, test_accumulate) {
 }
 
 TEST_F(CompactionTaskContextTest, test_to_json_stats) {
+    static constexpr long TIME_UNIT_NS_PER_SECOND = 1000000000;
+
     // Set up some stats to test the JSON output
-    context.stats->reader_time_ns = 30000000;
-    context.stats->io_ns = 12000000;
-    context.stats->io_ns_remote = 1100000;
-    context.stats->io_ns_local_disk = 9100000;
-    context.stats->segment_init_ns = 2000000;
+    context.stats->reader_time_ns = 30 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->io_ns = 12 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->io_ns_remote = 1 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->io_ns_local_disk = 9 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->segment_init_ns = 2 * TIME_UNIT_NS_PER_SECOND;
     context.stats->io_count_remote = 3;
     context.stats->io_count_local_disk = 2;
     context.stats->compressed_bytes_read = 1024;
-    context.stats->segment_init_ns = 3000000;
-    context.stats->column_iterator_init_ns = 4000000;
-    context.stats->segment_write_ns = 5000000;
+    context.stats->segment_init_ns = 3 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->column_iterator_init_ns = 4 * TIME_UNIT_NS_PER_SECOND;
+    context.stats->segment_write_ns = 5 * TIME_UNIT_NS_PER_SECOND;
 
     // Call the method under test
     std::string json_stats = context.stats->to_json_stats();
 
     // Verify the JSON output
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_total_time_ms":30)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_ms":12)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_ms_remote":1)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_ms_local_disk":9)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_total_time_second":30)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_second":12)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_second_remote":1)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_second_local_disk":9)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("reader_io_count_remote":3)"));
-    EXPECT_THAT(json_stats, testing::HasSubstr(R"("segment_write_ms":5)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("segment_write_second":5)"));
 }
 } // namespace starrocks::lake

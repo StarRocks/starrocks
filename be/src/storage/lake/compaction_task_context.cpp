@@ -22,6 +22,8 @@
 
 namespace starrocks::lake {
 
+static constexpr long TIME_UNIT_NS_PER_SECOND = 1000000000;
+
 void CompactionTaskStats::accumulate(const OlapReaderStatistics& reader_stats) {
     io_ns += reader_stats.io_ns;
     io_ns_remote += reader_stats.io_ns_remote;
@@ -38,16 +40,18 @@ std::string CompactionTaskStats::to_json_stats() {
     root.SetObject();
     auto& allocator = root.GetAllocator();
     // add stats
-    root.AddMember("reader_total_time_ms", rapidjson::Value(reader_time_ns / 1000000), allocator);
-    root.AddMember("reader_io_ms", rapidjson::Value(io_ns / 1000000), allocator);
-    root.AddMember("reader_io_ms_remote", rapidjson::Value(io_ns_remote / 1000000), allocator);
-    root.AddMember("reader_io_ms_local_disk", rapidjson::Value(io_ns_local_disk / 1000000), allocator);
+    root.AddMember("reader_total_time_second", rapidjson::Value(reader_time_ns / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("reader_io_second", rapidjson::Value(io_ns / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("reader_io_second_remote", rapidjson::Value(io_ns_remote / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("reader_io_second_local_disk", rapidjson::Value(io_ns_local_disk / TIME_UNIT_NS_PER_SECOND),
+                   allocator);
     root.AddMember("reader_io_count_remote", rapidjson::Value(io_count_remote), allocator);
     root.AddMember("reader_io_count_local_disk", rapidjson::Value(io_count_local_disk), allocator);
     root.AddMember("compressed_bytes_read", rapidjson::Value(compressed_bytes_read), allocator);
-    root.AddMember("segment_init_ms", rapidjson::Value(segment_init_ns / 1000000), allocator);
-    root.AddMember("column_iterator_init_ms", rapidjson::Value(column_iterator_init_ns / 1000000), allocator);
-    root.AddMember("segment_write_ms", rapidjson::Value(segment_write_ns / 1000000), allocator);
+    root.AddMember("segment_init_second", rapidjson::Value(segment_init_ns / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("column_iterator_init_second", rapidjson::Value(column_iterator_init_ns / TIME_UNIT_NS_PER_SECOND),
+                   allocator);
+    root.AddMember("segment_write_second", rapidjson::Value(segment_write_ns / TIME_UNIT_NS_PER_SECOND), allocator);
 
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
