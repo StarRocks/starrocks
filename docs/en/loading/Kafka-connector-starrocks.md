@@ -37,7 +37,7 @@ Submit the Kafka connector into Kafka Connect:
 
 ### Examples
 
-The section uses a self-managed Kafka cluster as an example to explain how to configure the Kafka connector and run the Kafka Connect to load data into StarRocks.
+This section uses a self-managed Kafka cluster as an example to explain how to configure the Kafka connector and the Kafka connect, and then run the Kafka Connect to load data into StarRocks.
 
 #### Prepare a dataset
 
@@ -138,7 +138,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
     
-2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka Connector through the REST API. For parameters and descrioptions, see [Parameters](#Parameters).
+2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka connector through the REST API. For parameters and descriptions, see [Parameters](#Parameters).
 
       ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
@@ -162,36 +162,6 @@ CREATE TABLE test_tbl (id INT, city STRING);
       > **NOTICE**
       >
       > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
-
-    - Distributed mode
-
-      > **NOTE**
-      >
-      > It is recommended to use the distributed mode in the production environment.
-
-    - Start the worker.
-
-        ```shell
-        bin/connect-distributed worker.properties
-        ```
-
-    - Note that in distributed mode the connector configurations are not passed on the command line. Instead, use the REST API described below to configure the Kafka connector and run the Kafka connect.
-
-        ```Shell
-        curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
-        "name":"starrocks-kafka-connector",
-        "config":{
-            "connector.class":"com.starrocks.connector.kafka.SinkConnector",
-            "topics":"dbserver1.inventory.customers",
-            "starrocks.http.url":"192.168.xxx.xxx:8030,192.168.xxx.xxx:8030",
-            "starrocks.user":"root",
-            "starrocks.password":"123456",
-            "starrocks.database.name":"inventory",
-            "key.converter":"io.confluent.connect.json.JsonSchemaConverter",
-            "value.converter":"io.confluent.connect.json.JsonSchemaConverter"
-        }
-        }
-        ```
 
 #### Query StarRocks table
 
@@ -328,7 +298,7 @@ MySQL [example_db]> select * from test_tbl;
 ## Limits
 
 - It is not supported to flatten a single message from a Kafka topic into multiple data rows and load into StarRocks.
-- The Kafka Connector's Sink guarantees at-least-once semantics.
+- The Kafka connector's Sink guarantees at-least-once semantics.
 
 ## Best practices
 

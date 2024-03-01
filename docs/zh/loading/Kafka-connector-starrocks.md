@@ -20,7 +20,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 支持自建 Apache Kafka 集群和 Confluent cloud：
 
-- 如果使用自建 Apache Kafka 集群，您可以参考 [Apache Kafka quickstart](https://kafka.apache.org/quickstart) 快速部署 Kafka。Kafka Connect 已集成在 Kafka 中。
+- 如果使用自建 Apache Kafka 集群，您可以参考 [Apache Kafka quickstart](https://kafka.apache.org/quickstart) 快速部署 Kafka 集群。Kafka Connect 已集成在 Kafka 中。
 - 如果使用 Confluent cloud，请确保已拥有 Confluent 账号并已经创建集群。
 
 ### 下载 Kafka connector
@@ -29,7 +29,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 - 自建 Kafka 集群
 
-  下载并解压 [starrocks-kafka-connector-${connector_version}.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) 。
+  下载并解压 [starrocks-kafka-connector-${connector_version}.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
 
 - Confluent cloud
 
@@ -37,7 +37,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 ## 使用示例
 
-本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 并启动 Kafka connect，导入数据至 StarRocks。
+本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 和 Kafka connect，然后启动 Kafka connect 导入数据至 StarRocks。
 
 #### 数据集
 
@@ -136,7 +136,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
 
-2. 配置并创建 Kafka connector。注意，在 Distributed 模式下您需要通过 REST API 来配置并创建 Kafka Connector。参数和相关说明，参见[参数说明](#参数说明)。
+2. 配置并创建 Kafka connector。注意，在 Distributed 模式下您需要通过 REST API 来配置并创建 Kafka connector。参数和相关说明，参见[参数说明](#参数说明)。
 
       ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
@@ -204,7 +204,7 @@ MySQL [example_db]> select * from test_tbl;
 ## 使用限制
 
 - 不支持将 Kafka topic 里的一条消息展开成多条导入到 StarRocks。
-- Kafka Connector 的 Sink 保证 at-least-once 语义。
+- Kafka connector 的 Sink 保证 at-least-once 语义。
 
 ## 最佳实践
 
