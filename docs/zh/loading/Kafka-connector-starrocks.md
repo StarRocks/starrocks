@@ -20,7 +20,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 支持自建 Apache Kafka 集群和 Confluent cloud：
 
-- 如果使用自建 Apache Kafka 集群，您可以参考 [Apache Kafka quickstart](https://kafka.apache.org/quickstart) 快速部署 Kafka，Kafka Connect 已集成在 Kafka 中。
+- 如果使用自建 Apache Kafka 集群，您可以参考 [Apache Kafka quickstart](https://kafka.apache.org/quickstart) 快速部署 Kafka。Kafka Connect 已集成在 Kafka 中。
 - 如果使用 Confluent cloud，请确保已拥有 Confluent 账号并已经创建集群。
 
 ### 安装 Kafka connector
@@ -146,7 +146,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
     > **注意**
     >
     > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
-    
+
 #### 查询 StarRocks 表中的数据
 
 查询 StarRocks 目标表 `test_tbl`，返回如下结果则表示数据已经成功导入。
