@@ -660,13 +660,12 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     }
 }
 
-ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::string& format,
+ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs,
                                            const std::map<std::string, std::string>& options,
                                            const std::vector<std::string>& column_names,
                                            std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                            PriorityThreadPool* executors)
         : _fs(std::move(fs)),
-          _format(format),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),

@@ -425,14 +425,13 @@ ParquetFileWriter::~ParquetFileWriter() {
     }
 }
 
-ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::string& format,
+ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs,
                                                    const std::map<std::string, std::string>& options,
                                                    const std::vector<std::string>& column_names,
                                                    std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                                    std::optional<std::vector<formats::FileColumnId>> field_ids,
                                                    PriorityThreadPool* executors)
         : _fs(std::move(fs)),
-          _format(format),
           _field_ids(field_ids),
           _options(options),
           _column_names(column_names),
