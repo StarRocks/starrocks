@@ -1759,7 +1759,7 @@ Status OlapTableSink::try_close(RuntimeState* state) {
 
                 bool is_initial_node_channel_finished = true;
                 index_channel->for_each_initial_node_channel([&is_initial_node_channel_finished](NodeChannel* ch) {
-                    is_initial_node_channel_finished &= ch->is_close_done();
+                    is_initial_node_channel_finished &= ch->is_finished();
                 });
 
                 // initial node channel not finish, can not close incremental node channel
