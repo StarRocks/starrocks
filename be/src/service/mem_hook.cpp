@@ -230,23 +230,9 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 
 // valloc
 void* my_valloc(size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
-    if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
-        TRY_MEM_CONSUME(size, nullptr);
-        void* ptr = STARROCKS_VALLOC(size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(size);
-        } else {
-            MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
-        }
-        return ptr;
-    } else {
-        void* ptr = STARROCKS_VALLOC(size);
-        MEMORY_CONSUME_PTR(ptr);
-        return ptr;
-    }
+    void* ptr = STARROCKS_VALLOC(size);
+    MEMORY_CONSUME_PTR(ptr);
+    return ptr;
 }
 
 // pvalloc
