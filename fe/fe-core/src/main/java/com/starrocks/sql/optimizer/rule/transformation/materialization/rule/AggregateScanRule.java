@@ -44,6 +44,10 @@ public class AggregateScanRule extends BaseMaterializedViewRewriteRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
+        if (isAppliedUnionAllRewrite(input.getOp())) {
+            return false;
+        }
         if (!MvUtils.isLogicalSPJG(input)) {
             return false;
         }

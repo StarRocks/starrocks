@@ -81,7 +81,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         return input.getInputs().stream().allMatch(this::checkOlapScanWithoutTabletOrPartitionHints);
     }
 
-    private boolean isAppliedUnionAllRewrite(Operator op) {
+    protected boolean isAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask();
         return (opRuleMask & OP_UNION_ALL_BIT) != 0;
     }
