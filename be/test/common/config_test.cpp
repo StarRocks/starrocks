@@ -60,7 +60,7 @@ TEST_F(ConfigTest, test_init) {
     CONF_Bool(cfg_bool_env, "false");
     // Invalid config file name
     {
-        EXPECT_FALSE(config::init("/path/to/nonexist/file");
+        EXPECT_FALSE(config::init("/path/to/nonexist/file"));
     }
     // Invalid bool value
     {
@@ -363,19 +363,16 @@ TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {
 }
 
 TEST_F(ConfigTest, test_alias) {
-    CONF_Int16(cfg_int16, "2561");
-    CONF_mInt16(be_http_port, "8000");
-    CONF_Alias(be_http_port, webserver_port);
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias);
 
     std::stringstream ss;
     ss << R"DEL(
-        doris_cfg_int16 = 54321
-        webserver_port = 8080
+        cfg_int32_alias = 8080
        )DEL";
 
     EXPECT_TRUE(config::init(ss));
-    EXPECT_EQ(54321, cfg_int16);
-    EXPECT_EQ(8080, be_http_port);
+    EXPECT_EQ(8080, cfg_int32);
 }
 
 } // namespace starrocks

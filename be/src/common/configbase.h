@@ -17,14 +17,15 @@
 
 #pragma once
 
+#include <butil/containers/doubly_buffered_data.h>
+#include <fmt/format.h>
+
 #include <iostream>
 #include <map>
 #include <string>
 #include <vector>
 
 #ifdef __IN_CONFIGBASE_CPP__
-#include <butil/containers/doubly_buffered_data.h>
-#include <fmt/format.h>
 
 #include <cassert>
 #include <optional>
@@ -62,17 +63,6 @@ inline std::ostream& operator<<(std::ostream& os, const ConfigInfo& info) {
        << "mutable=" << info.valmutable << "}";
     return os;
 }
-
-#ifdef __IN_CONFIGBASE_CPP__
-class MutableString;
-
-bool strtox(const std::string& valstr, bool& retval);
-bool strtox(const std::string& valstr, int16_t& retval);
-bool strtox(const std::string& valstr, int32_t& retval);
-bool strtox(const std::string& valstr, int64_t& retval);
-bool strtox(const std::string& valstr, double& retval);
-bool strtox(const std::string& valstr, std::string& retval);
-bool strtox(const std::string& valstr, MutableString& retval);
 
 // A wrapper on std::string, it's safe to read/write MutableString concurrently.
 class MutableString {
@@ -115,6 +105,15 @@ inline MutableString& MutableString::operator=(std::string s) {
 inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
     return os << s.value();
 }
+
+#ifdef __IN_CONFIGBASE_CPP__
+bool strtox(const std::string& valstr, bool& retval);
+bool strtox(const std::string& valstr, int16_t& retval);
+bool strtox(const std::string& valstr, int32_t& retval);
+bool strtox(const std::string& valstr, int64_t& retval);
+bool strtox(const std::string& valstr, double& retval);
+bool strtox(const std::string& valstr, std::string& retval);
+bool strtox(const std::string& valstr, MutableString& retval);
 
 class Field {
 public:
@@ -212,8 +211,12 @@ public:
 class Alias {
 public:
     explicit Alias(const char* alias, Field* field) {
+        assert(strcmp(field->name(), alias) != 0);
         [[maybe_unused]] auto [_, ok] = Field::fields().emplace(std::string(alias), field);
-        assert(ok);
+        if (!ok) {
+            std::cerr << fmt::format("The alias '{}' for config '{}' already exists\n", alias, field->name());
+            std::abort();
+        }
     }
 };
 
@@ -284,11 +287,9 @@ void TEST_clear_configs();
 } // namespace config
 } // namespace starrocks
 
-#ifdef __IN_CONFIGBASE_CPP__
 template <>
 struct fmt::formatter<starrocks::config::MutableString> : formatter<std::string> {
     auto format(const starrocks::config::MutableString& s, format_context& ctx) {
         return formatter<std::string>::format(s.value(), ctx);
     }
 };
-#endif
