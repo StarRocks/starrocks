@@ -62,7 +62,6 @@ private:
         MemCacheManager(MemCacheManager&&) = delete;
 
         void consume(int64_t size) {
-            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -74,7 +73,6 @@ private:
         bool try_mem_consume(int64_t size) {
             MemTracker* cur_tracker = _loader();
             int64_t prev_reserved = _reserved_bytes;
-            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -167,17 +165,6 @@ private:
         int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
 
     private:
-        int64_t _consume_from_reserved(int64_t size) {
-            if (_reserved_bytes > size) {
-                _reserved_bytes -= size;
-                size = 0;
-            } else {
-                size -= _reserved_bytes;
-                _reserved_bytes = 0;
-            }
-            return size;
-        }
-
         const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
         std::function<MemTracker*()> _loader;
