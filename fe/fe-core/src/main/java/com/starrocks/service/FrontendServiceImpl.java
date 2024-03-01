@@ -2010,15 +2010,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
+            LOG.warn("partitionName: {}", partitionName);
             // get partition info from snapshot
             TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition().get(partitionName);
             if (tPartition != null) {
                 partitions.add(tPartition);
+                LOG.warn("add partiton: {}", tPartition);
                 for (TOlapTableIndexTablets index : tPartition.getIndexes()) {
                     for (long tabletId : index.getTablets()) {
                         TTabletLocation tablet = txnState.getTabletIdToTTabletLocation().get(tabletId);
                         if (tablet != null) {
                             tablets.add(tablet);
+                            LOG.warn("add tablet: {}", tablet);
                         }
                     }
                 }
@@ -2029,6 +2032,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
+            LOG.warn("add partiton: {}", tPartition);
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
@@ -2041,6 +2045,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
                                     Collections.singletonList(primaryId));
                             tablets.add(tabletLocation);
+                            LOG.warn("add tablet: {}", tablet);
                             txnState.getTabletIdToTTabletLocation().put(tablet.getId(), tabletLocation);
                         } catch (UserException exception) {
                             errorStatus.setError_msgs(Lists.newArrayList(
@@ -2082,6 +2087,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(olapTable.getClusterId());
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
+
+        LOG.warn("TCreatePartitionResult: {}", result);
         return result;
     }
 
