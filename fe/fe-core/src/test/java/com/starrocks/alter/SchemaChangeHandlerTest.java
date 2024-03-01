@@ -209,17 +209,6 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
 
-        String addRollUpStmtStr = "alter table test.sc_agg add rollup agg_rollup(user_id, max_dwell_time);";
-        AlterTableStmt addRollUpStmt = (AlterTableStmt) parseAndAnalyzeStmt(addRollUpStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addRollUpStmt);
-        // 2. check alter job
-        Map<Long, AlterJobV2> materializedViewAlterJobs = GlobalStateMgr.getCurrentState().getRollupHandler()
-                .getAlterJobsV2();
-        waitAlterJobDone(materializedViewAlterJobs);
-        Assertions.assertEquals(1, materializedViewAlterJobs.size());
-
-        LOG.info("getIndexIdToSchema 2: {}", tbl.getIndexIdToSchema());
-
         //process agg drop value column with rollup schema change
         String dropRollUpValColStmtStr = "alter table test.sc_agg drop column max_dwell_time";
         AlterTableStmt dropRollUpValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropRollUpValColStmtStr);
@@ -228,7 +217,6 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         //check alter job, need create job
         LOG.info("alterJobs:{}", alterJobs);
         Assertions.assertEquals(jobSize, alterJobs.size());
-        waitAlterJobDone(materializedViewAlterJobs);
 
         locker.lockDatabase(db, LockType.READ);
         try {
@@ -240,15 +228,41 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
+    }
 
-        //process agg add mul value column schema change
-        String addMultiValColStmtStr
-                = "alter table test.sc_agg add column new_v2 int MAX default '0', add column new_v3 int MAX default '1';";
-        AlterTableStmt addMultiValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addMultiValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addMultiValColStmt);
+    @Test 
+    public void testAddOrDropColumnWithRollup() throws Exception {
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("sc_dup");
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            Assertions.assertNotNull(tbl);
+            System.out.println(tbl.getName());
+            Assertions.assertEquals("StarRocks", tbl.getEngine());
+            Assertions.assertEquals(6, tbl.getBaseSchema().size());
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+
+        String addRollUpStmtStr = "alter table test.sc_dup add rollup dup_rollup(type, op_id);";
+        AlterTableStmt addRollUpStmt = (AlterTableStmt) parseAndAnalyzeStmt(addRollUpStmtStr);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addRollUpStmt);
+        Map<Long, AlterJobV2> materializedViewAlterJobs = GlobalStateMgr.getCurrentState().getRollupHandler()
+                .getAlterJobsV2();
         jobSize++;
-        //check alter job, do not create job
-        Assertions.assertEquals(jobSize, alterJobs.size());
+        waitAlterJobDone(materializedViewAlterJobs);
+        Assertions.assertEquals(1, materializedViewAlterJobs.size());
+
+        LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
+
+        //process agg drop value column with rollup schema change
+        String dropRollUpValColStmtStr = "alter table test.sc_dup drop column op_id";
+        AlterTableStmt dropRollUpValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropRollUpValColStmtStr);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropRollUpValColStmt);
+        waitAlterJobDone(materializedViewAlterJobs);
     }
 
     @Test
@@ -322,7 +336,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
-            Assertions.assertEquals(6, tbl.getBaseSchema().size());
+            Assertions.assertEquals(5, tbl.getBaseSchema().size());
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -339,7 +353,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         locker.lockDatabase(db, LockType.READ);
         try {
-            Assertions.assertEquals(7, tbl.getBaseSchema().size());
+            Assertions.assertEquals(6, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
@@ -357,7 +371,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Assertions.assertEquals(jobSize, alterJobs.size());
         locker.lockDatabase(db, LockType.READ);
         try {
-            Assertions.assertEquals(6, tbl.getBaseSchema().size());
+            Assertions.assertEquals(5, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
