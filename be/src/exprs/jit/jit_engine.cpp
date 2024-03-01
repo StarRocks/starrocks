@@ -141,14 +141,13 @@ Status JITEngine::init() {
         if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
             _initialized = true;
             _support_jit = false;
-            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT. If force enabling jit, "
-                            "please set jit_lru_cache_size be a proper positive value";
+            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT";
             return Status::OK();
         } else {
             jit_lru_cache_size = std::min<int64_t>((1UL << 30), (int64_t)(mem_limit * 0.01));
         }
     }
-    LOG(INFO) << "JIT is enabled with function LRU cache size = " << jit_lru_cache_size;
+    LOG(INFO) << "JIT LRU cache size = " << jit_lru_cache_size;
     _func_cache = new_lru_cache(jit_lru_cache_size);
 #endif
     DCHECK(_func_cache != nullptr);
@@ -165,8 +164,8 @@ Status JITEngine::init() {
 Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* func_cache, Expr* expr,
                                           const std::vector<Expr*>& uncompilable_exprs) {
     auto* instance = JITEngine::get_instance();
-    if (UNLIKELY(!instance->support_jit())) {
-        return Status::JitCompileError("JIT is not supported");
+    if (UNLIKELY(!instance->initialized())) {
+        return Status::JitCompileError("JIT engine is not initialized");
     }
 
     auto cached = instance->lookup_function(func_cache);
@@ -379,23 +378,41 @@ llvm::Module* JITEngine::Engine::module() const {
     return _module.get();
 }
 
-static void optimize_module(llvm::Module& module) {
-    llvm::legacy::FunctionPassManager fpm(&module);
-    llvm::PassManagerBuilder pass_manager_builder;
-    llvm::legacy::PassManager pass_manager;
-    pass_manager_builder.OptLevel = 3;
-    pass_manager_builder.SLPVectorize = true;
-    pass_manager_builder.LoopVectorize = true;
-    pass_manager_builder.VerifyInput = true;
-    pass_manager_builder.VerifyOutput = true;
-    pass_manager_builder.populateModulePassManager(pass_manager);
-    pass_manager_builder.populateFunctionPassManager(fpm);
+static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
+    // Setup an optimiser pipeline
+    llvm::PassBuilder pass_builder;
+    llvm::LoopAnalysisManager loop_am;
+    llvm::FunctionAnalysisManager function_am;
+    llvm::CGSCCAnalysisManager cgscc_am;
+    llvm::ModuleAnalysisManager module_am;
 
-    fpm.doInitialization();
-    for (auto& function : module) {
-        fpm.run(function);
-    }
-    fpm.doFinalization();
+    function_am.registerPass([&] { return target_analysis; });
+
+    // Register required analysis managers
+    pass_builder.registerModuleAnalyses(module_am);
+    pass_builder.registerCGSCCAnalyses(cgscc_am);
+    pass_builder.registerFunctionAnalyses(function_am);
+    pass_builder.registerLoopAnalyses(loop_am);
+    pass_builder.crossRegisterProxies(loop_am, function_am, cgscc_am, module_am);
+
+    pass_builder.registerPipelineStartEPCallback(
+            [&](llvm::ModulePassManager& module_pm, llvm::OptimizationLevel Level) {
+                module_pm.addPass(llvm::ModuleInlinerPass());
+
+                llvm::FunctionPassManager function_pm;
+                function_pm.addPass(llvm::InstCombinePass());
+                function_pm.addPass(llvm::PromotePass());
+                function_pm.addPass(llvm::GVNPass());
+                function_pm.addPass(llvm::NewGVNPass());
+                function_pm.addPass(llvm::SimplifyCFGPass());
+                function_pm.addPass(llvm::LoopVectorizePass());
+                function_pm.addPass(llvm::SLPVectorizerPass());
+                module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
+
+                module_pm.addPass(llvm::GlobalOptPass());
+            });
+
+    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3).run(module, module_am);
 }
 
 // Optimise and compile the module.
@@ -405,7 +422,8 @@ Status JITEngine::Engine::optimize_and_finalize_module() {
     if (llvm::verifyModule(*_module, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to generate scalar function IR, errors: {}", errs.str()));
     }
-    optimize_module(*_module);
+    auto target_analysis = _target_machine->getTargetIRAnalysis();
+    optimize_module(*_module, std::move(target_analysis));
 
     if (llvm::verifyModule(*_module, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));

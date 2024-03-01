@@ -98,6 +98,10 @@ public:
      */
     static StatusOr<llvm::Value*> cast_to_type(llvm::IRBuilder<>& b, llvm::Value* value, const LogicalType& from_type,
                                                const LogicalType& to_type);
+
+    static llvm::Value* build_if_else(llvm::Value* condition, llvm::Type* return_type,
+                                      std::function<llvm::Value*()> then_func, std::function<llvm::Value*()> else_func,
+                                      llvm::IRBuilder<>* builder);
 };
 
 } // namespace starrocks
