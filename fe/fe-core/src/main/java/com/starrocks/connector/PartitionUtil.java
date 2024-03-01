@@ -619,9 +619,12 @@ public class PartitionUtil {
      * @param stringLiteral: input string literal to convert.
      * @return             : date literal if string literal can be converted, otherwise throw SemanticException.
      */
-    public static DateLiteral convertToDateLiteral(LiteralExpr stringLiteral) throws SemanticException {
+    public static LiteralExpr convertToDateLiteral(LiteralExpr stringLiteral) throws SemanticException {
         if (stringLiteral == null) {
             return null;
+        }
+        if (stringLiteral.isConstantNull()) {
+            return NullLiteral.create(Type.DATE);
         }
         try {
             String dateLiteral = stringLiteral.getStringValue();
@@ -640,7 +643,7 @@ public class PartitionUtil {
     private static PartitionKey convertToDate(PartitionKey partitionKey) throws SemanticException {
         PartitionKey newPartitionKey = new PartitionKey();
         try {
-            DateLiteral dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
+            LiteralExpr dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
             newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
             return newPartitionKey;
         } catch (SemanticException e) {
