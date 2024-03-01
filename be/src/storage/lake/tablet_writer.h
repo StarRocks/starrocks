@@ -29,6 +29,8 @@ class Column;
 class TabletSchema;
 class ThreadPool;
 
+struct OlapWriterStatistics;
+
 namespace lake {
 
 class TabletManager;
@@ -114,6 +116,8 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
+    const OlapWriterStatistics& stats() const { return _stats; }
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -125,6 +129,7 @@ protected:
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+    OlapWriterStatistics _stats;
 };
 
 } // namespace lake
