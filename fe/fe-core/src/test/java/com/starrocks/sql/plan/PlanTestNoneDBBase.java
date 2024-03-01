@@ -203,7 +203,7 @@ public class PlanTestNoneDBBase {
 
     public static void assertContains(String text, List<String> patterns) {
         for (String s : patterns) {
-            Assert.assertTrue(text, text.contains(s));
+            Assert.assertTrue(s + "\n" + text, text.contains(s));
         }
     }
 
