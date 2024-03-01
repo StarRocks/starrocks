@@ -260,7 +260,10 @@ public class MetaService {
                 return;
             }
 
-            GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            // When subDirStr is empty, image belongs to LocalMetaStore and others belong to staros.
+            if (Strings.isNullOrEmpty(subDirStr)) {
+                GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            }
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(realDir);
