@@ -308,8 +308,8 @@ struct ArithmeticBinaryOperator {
                 auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
                 if constexpr (may_cause_fpe<ResultType> && may_cause_fpe<LType> && may_cause_fpe<RType>) {
                     // fpe = l == signed_minimum<LType> && r == -1;
-                    auto* cond_left = b.CreateICmpEQ(
-                            l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>, is_signed));
+                    auto* cond_left =
+                            b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>, is_signed));
                     auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1, is_signed));
                     auto* fpe = b.CreateAnd(cond_left, cond_right);
                     auto if_lambda = [&]() { return llvm::ConstantInt::get(l->getType(), 0, is_signed); };
