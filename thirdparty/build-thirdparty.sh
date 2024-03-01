@@ -1246,8 +1246,8 @@ build_clucene() {
 
 # libunistring 
 build_libunistring() {
-    check_if_source_exist $LIBFUNISTRING_SOURCE
-    cd $TP_SOURCE_DIR/$LIBFUNISTRING_SOURCE
+    check_if_source_exist $LIBUNISTRING_SOURCE
+    cd $TP_SOURCE_DIR/$LIBUNISTRING_SOURCE
     ./configure --prefix=${TP_INSTALL_DIR} --disable-shared
     make -j$PARALLEL
     make install
