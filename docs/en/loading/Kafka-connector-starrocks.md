@@ -35,11 +35,11 @@ Submit the Kafka connector into Kafka Connect:
 
   The Kafka connector is not currently uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a zip file and upload the zip file to Confluent cloud.
 
-### Examples
+## Usage
 
 This section uses a self-managed Kafka cluster as an example to explain how to configure the Kafka connector and the Kafka connect, and then run the Kafka Connect to load data into StarRocks.
 
-#### Prepare a dataset
+### Prepare a dataset
 
 Suppose that JSON-format data exists in the topic `test` in a Kafka cluster.
 
@@ -49,7 +49,7 @@ Suppose that JSON-format data exists in the topic `test` in a Kafka cluster.
 {"id":3,"city":"Chicago"}
 ```
 
-#### Create a table
+### Create a table
 
 According to the keys of the JSON-format data, create the table `test_tbl` in the database `example_db` in the StarRocks cluster.
 
@@ -59,31 +59,31 @@ USE example_db;
 CREATE TABLE test_tbl (id INT, city STRING);
 ```
 
-#### Configure Kafka connector and Kafka Connect, and then run Kafka Connect to load data
+### Configure Kafka connector and Kafka Connect, and then run Kafka Connect to load data
 
 ##### Run Kafka Connect in standalone mode
 
 1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and dsescriptions, see [Parameters](#Parameters).
 
-  ```yaml
-  name=starrocks-kafka-connector
-  connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
-  topics=test
-  key.converter=org.apache.kafka.connect.json.JsonConverter
-  value.converter=org.apache.kafka.connect.json.JsonConverter
-  key.converter.schemas.enable=true
-  value.converter.schemas.enable=false
-  # The HTTP URL of the FE in your StarRocks cluster. The default port is 8030.
-  starrocks.http.url=192.168.xxx.xxx:8030
-  # When the Kafka Topic name is different from the StarRocks table name, the mapping relationship between them needs to be configured.
-  starrocks.topic2table.map=test:test_tbl
-  # StarRocks username
-  starrocks.username=user1
-  # StarRocks password
-  starrocks.password=123456
-  starrocks.database.name=example_db
-  sink.properties.strip_outer_array=true
-  ```
+    ```yaml
+    name=starrocks-kafka-connector
+    connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
+    topics=test
+    key.converter=org.apache.kafka.connect.json.JsonConverter
+    value.converter=org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable=true
+    value.converter.schemas.enable=false
+    # The HTTP URL of the FE in your StarRocks cluster. The default port is 8030.
+    starrocks.http.url=192.168.xxx.xxx:8030
+    # When the Kafka Topic name is different from the StarRocks table name, the mapping relationship between them needs to be configured.
+    starrocks.topic2table.map=test:test_tbl
+    # StarRocks username
+    starrocks.username=user1
+    # StarRocks password. you must set 
+    starrocks.password=123456
+    starrocks.database.name=example_db
+    sink.properties.strip_outer_array=true
+    ```
    
     > **NOTICE**
     >

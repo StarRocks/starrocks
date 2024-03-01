@@ -39,7 +39,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 和 Kafka connect，然后启动 Kafka connect 导入数据至 StarRocks。
 
-#### 数据集
+### 数据集
 
 假设 Kafka 集群的 Topic `test` 中存在如下 JSON 格式的数据。
 
@@ -49,7 +49,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 {"id":3,"city":"Chicago"}
 ```
 
-#### 目标数据库和表
+### 目标数据库和表
 
 根据 JSON 数据中需要导入的 key，在 StarRocks 集群的目标数据库 `example_db` 中创建表 `test_tbl` 。
 
@@ -59,9 +59,9 @@ USE example_db;
 CREATE TABLE test_tbl (id INT, city STRING);
 ```
 
-#### 配置 Kafka connector 和 Kafka Connect，然后启动 Kafka Connect 导入数据
+### 配置 Kafka connector 和 Kafka Connect，然后启动 Kafka Connect 导入数据
 
-##### 通过 Standalone 模式启动 Kafka Connect
+#### 通过 Standalone 模式启动 Kafka Connect
 
 1. 配置 Kafka connector。在 Kafka 安装目录下的 **config** 目录，创建 Kafka connector 的配置文件 **connect-StarRocks-sink.properties**，并配置对应参数。参数和相关说明，参见[参数说明](#参数说明)。
 
@@ -112,7 +112,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         ```Bash
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
-##### 通过 Distributed 模式启动 Kafka Connect
+#### 通过 Distributed 模式启动 Kafka Connect
 
 1. 配置并启动 Kafka Connect。
    1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-distributed.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。     
