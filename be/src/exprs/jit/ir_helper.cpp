@@ -168,8 +168,8 @@ StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value*
 }
 
 llvm::Value* IRHelper::build_if_else(llvm::Value* condition, llvm::Type* return_type,
-                                     std::function<llvm::Value*()> then_func, std::function<llvm::Value*()> else_func,
-                                     llvm::IRBuilder<>* builder) {
+                                     const std::function<llvm::Value*()>& then_func,
+                                     const std::function<llvm::Value*()>& else_func, llvm::IRBuilder<>* builder) {
     auto* head = builder->GetInsertBlock();
     DCHECK_NE(head, nullptr);
 
