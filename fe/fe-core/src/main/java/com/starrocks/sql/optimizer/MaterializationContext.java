@@ -45,6 +45,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.isNeedCompensatePartitionPredicate;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.isAppliedUnionAllRewrite;
 
 public class MaterializationContext {
     private final MaterializedView mv;
@@ -220,6 +221,11 @@ public class MaterializationContext {
         final List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         final List<Table> mvTables = getBaseTables();
         final OperatorType queryOp = queryExpression.getOp().getOpType();
+
+        // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
+        if (isAppliedUnionAllRewrite(queryExpression.getOp())) {
+            return false;
+        }
 
         if (!checkOperatorCompatible(queryOp)) {
             return false;

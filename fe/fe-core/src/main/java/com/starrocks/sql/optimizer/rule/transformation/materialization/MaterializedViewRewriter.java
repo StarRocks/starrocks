@@ -96,6 +96,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.setAppliedUnionAllRewrite;
 
 /*
  * SPJG materialized view rewriter, based on
@@ -111,7 +112,6 @@ public class MaterializedViewRewriter {
     protected final OptimizerContext optimizerContext;
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
-    public static final int OP_UNION_ALL_BIT = 1 << 0;
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -1551,16 +1551,6 @@ public class MaterializedViewRewriter {
                 });
     }
 
-    private void setAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
-        op.setOpRuleMask(opRuleMask);
-    }
-
-    private boolean isAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
-    }
-
     private PredicateSplit getUnionRewriteQueryCompensation(RewriteContext rewriteContext,
                                                             ColumnRewriter columnRewriter) {
         final PredicateSplit mvCompensationToQuery = getCompensationPredicates(columnRewriter,
@@ -1571,10 +1561,6 @@ public class MaterializedViewRewriter {
                 false);
         if (mvCompensationToQuery != null) {
             return mvCompensationToQuery;
-        }
-        // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (isAppliedUnionAllRewrite(rewriteContext.getQueryExpression().getOp())) {
-            return null;
         }
 
         logMVRewrite(mvRewriteContext, "Try to pull up query's predicates to make possible for union rewrite");
@@ -1742,6 +1728,7 @@ public class MaterializedViewRewriter {
         //                                       /      \
         //                                  EXTRA-OP    MV-SCAN
         setAppliedUnionAllRewrite(queryInput.getOp());
+        setAppliedUnionAllRewrite(viewInput.getOp());
 
         // createUnion will return the union all result of queryInput and viewInput
         //           Union
