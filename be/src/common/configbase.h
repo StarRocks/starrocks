@@ -40,8 +40,6 @@ class Status;
 
 namespace config {
 
-class MutableString;
-
 struct ConfigInfo {
     std::string name;
     std::string value;
