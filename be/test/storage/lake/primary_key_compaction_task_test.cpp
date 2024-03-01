@@ -48,41 +48,9 @@ namespace starrocks::lake {
 class LakePrimaryKeyCompactionTest : public TestBase, public testing::WithParamInterface<CompactionParam> {
 public:
     LakePrimaryKeyCompactionTest() : TestBase(kTestDirectory), _partition_id(next_id()) {
-        _tablet_metadata = std::make_shared<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        _tablet_metadata->set_cumulative_point(0);
-        _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(PRIMARY_KEYS);
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(next_id());
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(next_id());
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-            c1->set_aggregation("REPLACE");
-        }
-
-        _tablet_schema = TabletSchema::create(*schema);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -1010,7 +978,7 @@ static void generate_test_rowsets(std::vector<int64_t> bytes, std::vector<Rowset
 TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     const bool old_val = config::enable_pk_size_tiered_compaction_strategy;
     config::enable_pk_size_tiered_compaction_strategy = true;
-    // Example-1
+    // Case-1
     // 1000MB, 200MB, 40MB, 8MB, 1MB, 200KB, 10KB
     std::vector<RowsetMetadataPB> rowset_metas;
     std::vector<RowsetCandidate> rowset_vec;
@@ -1036,7 +1004,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     rowset_metas.clear();
     rowset_vec.clear();
 
-    // Example-2
+    // Case-2
     // 500MB, 500MB, 400MB, 100KB, 100KB, 50KB, 10KB
     generate_test_rowsets(
             {500 * 1024 * 1024, 500 * 1024 * 1024, 400 * 1024 * 1024, 100 * 1024, 100 * 1024, 50 * 1024, 10 * 1024},
@@ -1055,7 +1023,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     rowset_metas.clear();
     rowset_vec.clear();
 
-    // Example-3
+    // Case-3
     // 400MB, 100KB, 100KB, 50KB, 10KB, 500MB, 500MB
     generate_test_rowsets(
             {400 * 1024 * 1024, 100 * 1024, 100 * 1024, 50 * 1024, 10 * 1024, 500 * 1024 * 1024, 500 * 1024 * 1024},
@@ -1074,7 +1042,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     rowset_metas.clear();
     rowset_vec.clear();
 
-    // Example-4
+    // Case-4
     // 127KB, 50KB, 10KB, 1KB, 128
     generate_test_rowsets({127 * 1024, 50 * 1024, 10 * 1024, 1024, 128}, &rowset_metas, &rowset_vec);
     ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
@@ -1089,6 +1057,25 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 1);
     pick_level_ptr->rowsets.pop();
     EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 0);
+    pick_level_ptr->rowsets.pop();
+    rowset_metas.clear();
+    rowset_vec.clear();
+
+    // Case-5
+    // 400MB, 100KB, 10KB, 50KB, 40KB, 500MB, 500MB
+    generate_test_rowsets(
+            {400 * 1024 * 1024, 100 * 1024, 10 * 1024, 50 * 1024, 40 * 1024, 500 * 1024 * 1024, 500 * 1024 * 1024},
+            &rowset_metas, &rowset_vec);
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    EXPECT_TRUE(pick_level_ptr != nullptr);
+    EXPECT_EQ(pick_level_ptr->rowsets.size(), 4);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 2);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 3);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 1);
     pick_level_ptr->rowsets.pop();
     rowset_metas.clear();
     rowset_vec.clear();

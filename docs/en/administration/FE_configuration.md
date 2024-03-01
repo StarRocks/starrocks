@@ -122,6 +122,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: false
 - **Description**: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics. This parameter is supported from v3.1.5 onwards.
 
+### User, role, privilege
+
+#### privilege_max_total_roles_per_user
+
+- **Unit**: -
+- **Default**: 64
+- **Description**: The maximum number of roles a user can have.
+- **Introduced in**: v3.0.0
+
+#### privilege_max_role_depth
+
+- **Unit**: -
+- **Default**: 16
+- **Description**: The maximum role depth (level of inheritance) of a role.
+- **Introduced in**: v3.0.0
+
 ### Query engine
 
 #### max_allowed_in_element_num_of_delete
@@ -579,6 +595,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Description**: Whether to automatically set the number of buckets.
   - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition. Starting from version 2.5.7, StarRocks supports setting this parameter.
+
+#### enable_experimental_rowstore
+
+- **Description**: Whether to enable the [hybrid row-column storage](../table_design/hybrid_table.md).
+- **Default**: FALSE
+- **Introduced in**: v3.2.3
 
 #### storage_usage_soft_limit_percent
 

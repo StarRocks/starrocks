@@ -126,6 +126,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：false
 - 引入版本：3.1.5
 
+### 用户，角色，权限
+
+#### privilege_max_total_roles_per_user
+
+- 含义：每个用户最多可以拥有的角色数量。
+- 默认值：64
+- 引入版本：v3.0.0
+
+#### privilege_max_role_depth
+
+- 含义：每个角色最多的嵌套层数。
+- 默认值：16
+- 引入版本：v3.0.0
+
 ### Query engine
 
 #### max_allowed_in_element_num_of_delete
@@ -518,6 +532,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
 - 默认值：TRUE
 - 引入版本：2.5.6
+
+#### enable_experimental_rowstore
+
+- 含义：是否开启[行列混存表](../table_design/hybrid_table.md)功能。
+- 默认值：FALSE
+- 引入版本：3.2.3
 
 #### storage_usage_soft_limit_percent
 

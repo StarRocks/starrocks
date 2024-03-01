@@ -75,6 +75,7 @@ import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -1726,6 +1727,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             info.setBucketNum(inferredBucketNum);
         }
+    }
+
+    /**
+     * Return the status and reason about query rewrite
+     */
+    public String getQueryRewriteStatus() {
+        Pair<Boolean, String> status =
+                MvRewritePreprocessor.isMVValidToRewriteQuery(ConnectContext.get(), this, true, Sets.newHashSet());
+        if (status.first) {
+            return "VALID";
+        }
+        return "INVALID: " + status.second;
     }
 
     @Override
