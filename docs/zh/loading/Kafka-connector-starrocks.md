@@ -61,7 +61,7 @@ USE example_db;
 CREATE TABLE test_tbl (id INT, city STRING);
 ```
 
-#### 配置 Kafka connector 和 kafka Connect，然后启动 Kafka Connect 导入数据
+#### 配置 Kafka connector 和 Kafka Connect，然后启动 Kafka Connect 导入数据
 
 ##### 通过 Standalone 模式启动 Kafka Connect
 
@@ -77,7 +77,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
       value.converter.schemas.enable=false
       # StarRocks FE 的 HTTP Server 地址，默认端口 8030
       starrocks.http.url=192.168.xxx.xxx:8030
-      # 当 Kafka Topic 的名称与 StarRocks 表名不一致时，配置两者的映射关系
+      # 当 Kafka Topic 的名称与 StarRocks 表名不一致时，需要配置两者的映射关系
       starrocks.topic2table.map=test:test_tbl
       # StarRocks 用户名
       starrocks.username=user1
@@ -93,7 +93,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. 配置并启动 Kafka Connect。
 
-  1. 配置 Kafka Connect。修改 config 目录中的 `config/connect-standalone.properties` 配置文件。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
+  1. 配置 Kafka Connect。修改 **config** 目录中的 `config/connect-standalone.properties` 配置文件。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
 
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
@@ -118,36 +118,35 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 1. 启动 Kafka Connect。
 
-   1. 
-
-   2. ```Shell
+      ```BASH
       CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
       ```
 
 2. 配置并创建 Kafka connector。注意，在 Distributed 模式下您需要通过 REST API 来配置并创建 Kafka Connector。参数和相关说明，参见[参数说明](#参数说明)。
 
-   1. ```Shell
+      ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
         "name":"starrocks-kafka-connector",
         "config":{
           "connector.class":"com.starrocks.connector.kafka.StarRocksSinkConnector",
-          "topics":"lilyliuyitest4json2",
-          "starrocks.http.url":"172.26.93.209:8030",
-          "starrocks.topic2table.map":"lilyliuyitest4json2:test_tbl",
-          "starrocks.username":"root",
-          "starrocks.password":"123456",
-          "starrocks.database.name":"example_db",
-          "sink.properties.strip_outer_array":"true",
+          "topics":"test",
           "key.converter":"org.apache.kafka.connect.json.JsonConverter",
           "value.converter":"org.apache.kafka.connect.json.JsonConverter",
           "key.converter.schemas.enable":"true",
-          "value.converter.schemas.enable":"false"
+          "value.converter.schemas.enable":"false",
+          "starrocks.http.url":"192.168.xxx.xxx:8030",
+          "starrocks.topic2table.map":"test:test_tbl",
+          "starrocks.username":"user1",
+          "starrocks.password":"123456",
+          "starrocks.database.name":"example_db",
+          "sink.properties.strip_outer_array":"true"
         }
       }'
       ```
     > **注意**
     >
     > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
+    
 #### 查询 StarRocks 表中的数据
 
 查询 StarRocks 目标表 `test_tbl`，返回如下结果则表示数据已经成功导入。
