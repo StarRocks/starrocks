@@ -1257,7 +1257,7 @@ build_libunistring() {
 build_gmp() {
     check_if_source_exist $GMP_SOURCE
     cd $TP_SOURCE_DIR/$GMP_SOURCE
-    CFLAGS="-fPIC"
+    export CFLAGS="-fPIC"
     ./configure --enable-static --disable-shared --with-pic --prefix=${TP_INSTALL_DIR}
     make -j$PARALLEL
     make install
