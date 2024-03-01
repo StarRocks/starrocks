@@ -29,11 +29,11 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 - 自建 Kafka 集群
 
-  下载并解压 [starrocks-kafka-connector-${connector_version}.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
+  下载并解压 [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
 
 - Confluent cloud
 
-  Kafka connector 目前尚未上传到 Confluent Hub，您需要下载并解压 [starrocks-kafka-connector-${connector_version}.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) ，打包成 zip 文件并上传到 Confluent cloud。
+  Kafka connector 目前尚未上传到 Confluent Hub，您需要下载并解压 [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) ，打包成 zip 文件并上传到 Confluent cloud。
 
 ## 使用示例
 

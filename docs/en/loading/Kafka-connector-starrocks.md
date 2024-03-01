@@ -29,11 +29,11 @@ Submit the Kafka connector into Kafka Connect:
 
 - Self-managed Kafka cluster:
 
-  Download and extract [starrocks-kafka-connector-${connector_version}.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases).
+  Download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases).
 
 - Confluent cloud:
 
-  The Kafka connector is not currently uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-${connector_version}.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a zip file and upload the zip file to Confluent cloud.
+  The Kafka connector is not currently uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a zip file and upload the zip file to Confluent cloud.
 
 ### Examples
 
@@ -59,7 +59,7 @@ USE example_db;
 CREATE TABLE test_tbl (id INT, city STRING);
 ```
 
-#### Configure Kafka connector and Kafka connect, then run Kafka Connect to load data
+#### Configure Kafka connector and Kafka Connect, and then run Kafka Connect to load data
 
 ##### Run Kafka Connect in standalone mode
 
