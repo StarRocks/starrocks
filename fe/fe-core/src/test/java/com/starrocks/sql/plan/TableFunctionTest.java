@@ -254,7 +254,5 @@ public class TableFunctionTest extends PlanTestBase {
                 "unnest(split(t1a, ','), v3) as unnest (v1, v2)";
         plan = getFragmentPlan(sql);
         assertContains(plan, "TableValueFunction");
-
-
     }
 }
