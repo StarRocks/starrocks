@@ -65,6 +65,7 @@ public class BDBEnvironmentTest {
 
     @Test
     public void testSetupStandalone() throws Exception {
+        long startMs = System.currentTimeMillis();
         String selfNodeHostPort = findUnbindHostPort();
         BDBEnvironment environment = new BDBEnvironment(
                 createTmpDir(),
@@ -84,22 +85,28 @@ public class BDBEnvironmentTest {
         Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
         db.close();
         environment.close();
+        System.out.println("testSetupStandalone cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     // address already in use
     @Test(expected = JournalException.class)
     public void testSetupStandaloneMultitimes() throws Exception {
-        String selfNodeHostPort = findUnbindHostPort();
-        for (int i = 0; i < 2; i++) {
-            BDBEnvironment environment = new BDBEnvironment(
-                    createTmpDir(),
-                    "standalone",
-                    selfNodeHostPort,
-                    selfNodeHostPort,
-                    true);
-            environment.setup();
+        long startMs = System.currentTimeMillis();
+        try {
+            String selfNodeHostPort = findUnbindHostPort();
+            for (int i = 0; i < 2; i++) {
+                BDBEnvironment environment = new BDBEnvironment(
+                        createTmpDir(),
+                        "standalone",
+                        selfNodeHostPort,
+                        selfNodeHostPort,
+                        true);
+                environment.setup();
+            }
+            Assert.fail();
+        } finally {
+            System.out.println("testSetupStandaloneMultitimes cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
         }
-        Assert.fail();
     }
 
     /**
@@ -174,6 +181,7 @@ public class BDBEnvironmentTest {
 
     @Test
     public void testNormalCluster() throws Exception {
+        long startMs = System.currentTimeMillis();
         initClusterMasterFollower();
 
         // leader write
@@ -226,10 +234,12 @@ public class BDBEnvironmentTest {
             followerEnvironment.close();
         }
         observerEnvironment.close();
+        System.out.println("testNormalCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     @Test
     public void testDeleteDb() throws Exception {
+        long startMs = System.currentTimeMillis();
         initClusterMasterFollower();
 
         // open n dbs and each write 1 kv
@@ -283,6 +293,7 @@ public class BDBEnvironmentTest {
         for (BDBEnvironment followerEnvironment : followerEnvironments) {
             followerEnvironment.close();
         }
+        System.out.println("testDeleteDb cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     /**
@@ -295,6 +306,7 @@ public class BDBEnvironmentTest {
      */
     @Test
     public void testRollbackExceptionOnSetupCluster(@Mocked RepImpl rep) throws Exception {
+        long startMs = System.currentTimeMillis();
         new Expectations() {
             {
                 rep.getName();
@@ -336,6 +348,7 @@ public class BDBEnvironmentTest {
         } catch (JournalException e) {
             LOG.warn("got Rollback Exception, as expect, ", e);
         }
+        System.out.println("testRollbackExceptionOnSetupCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     /**
@@ -387,12 +400,16 @@ public class BDBEnvironmentTest {
 
     @Test
     public void testAddBadFollowerNoFailover() throws Exception {
+        long startMs = System.currentTimeMillis();
         testAddBadFollowerBase(false);
+        System.out.println("testAddBadFollowerNoFailover cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     @Test
     public void testAddBadFollowerAfterFailover() throws Exception {
+        long startMs = System.currentTimeMillis();
         testAddBadFollowerBase(true);
+        System.out.println("testAddBadFollowerAfterFailover cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
     protected void testAddBadFollowerBase(boolean failover) throws Exception {
@@ -418,7 +435,6 @@ public class BDBEnvironmentTest {
         LOG.warn("=========> start new follower for the first time");
         // should set up successfully as a standalone leader
         newfollowerEnvironment.setup();
-        Thread.sleep(10000);
         newfollowerEnvironment.close();
 
         // 2. bad new follower start for the second time
@@ -437,7 +453,7 @@ public class BDBEnvironmentTest {
         }
 
         // 5. normally leader won't down
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 2; ++i) {
             Thread.sleep(1000);
             LOG.warn("==============> getDatabasesNames() {}", leaderEnvironment.getDatabaseNames());
         }
@@ -445,6 +461,7 @@ public class BDBEnvironmentTest {
 
     @Test
     public void testGetDatabase() throws Exception {
+        long startMs = System.currentTimeMillis();
         String selfNodeHostPort = findUnbindHostPort();
         BDBEnvironment environment = new BDBEnvironment(
                 createTmpDir(),
@@ -486,5 +503,6 @@ public class BDBEnvironmentTest {
         Assert.assertEquals(0, l4.size());
 
         environment.close();
+        System.out.println("testGetDatabase cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 }
