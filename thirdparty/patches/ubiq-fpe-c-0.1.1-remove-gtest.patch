@@ -8,3 +8,4 @@ index 6479d03..2b44341 100644
  
  function(strip_target TARGET)
    set(CMAKE_STRIP_COMMAND /usr/bin/strip)
+   
