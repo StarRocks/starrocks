@@ -96,6 +96,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.setAppliedUnionAllRewrite;
 
 /*
  * SPJG materialized view rewriter, based on
@@ -111,7 +112,6 @@ public class MaterializedViewRewriter {
     protected final OptimizerContext optimizerContext;
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
-    public static final int OP_UNION_ALL_BIT = 1 << 0;
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -1551,10 +1551,6 @@ public class MaterializedViewRewriter {
                 });
     }
 
-    private static void setAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
-        op.setOpRuleMask(opRuleMask);
-    }
 
     private PredicateSplit getUnionRewriteQueryCompensation(RewriteContext rewriteContext,
                                                             ColumnRewriter columnRewriter) {

@@ -54,7 +54,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.metric.MaterializedViewMetricsEntity.isUpdateMaterializedViewMetrics;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.OP_UNION_ALL_BIT;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.isAppliedUnionAllRewrite;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
@@ -79,11 +79,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             return true;
         }
         return input.getInputs().stream().allMatch(this::checkOlapScanWithoutTabletOrPartitionHints);
-    }
-
-    protected boolean isAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
     }
 
     @Override

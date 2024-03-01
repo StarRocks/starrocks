@@ -25,6 +25,8 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Aggregate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.isAppliedUnionAllRewrite;
+
 /**
  * Materialized View Rewrite Rule for pattern:
  * - Aggregate
