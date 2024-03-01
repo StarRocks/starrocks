@@ -20,7 +20,7 @@ The Kafka connector can seamlessly integrate with Kafka Connect, which allows St
 
 Both self-managed Apache Kafka clusters and Confluent cloud are supported.
 
-- For a self-managed Apache Kafka cluster, you can refer to the [Apache Kafka quickstart](https://kafka.apache.org/quickstart) to quickly deploy a Kafka cluster. Kafka Connect is already integrated into Kafka.
+- For a self-managed Apache Kafka cluster, you can refer to [Apache Kafka quickstart](https://kafka.apache.org/quickstart) to quickly deploy a Kafka cluster. Kafka Connect is already integrated into Kafka.
 - For Confluent cloud, make sure that you have a Confluent account and create a cluster.
 
 ### Download Kafka connector
@@ -37,17 +37,21 @@ Submit the Kafka connector into Kafka Connect:
 
 ### Examples
 
-The section uses a self-managed Kafka cluster as an example to explain how to configure the Kafka connector and run Kafka Connect to load data into StarRocks.
+The section uses a self-managed Kafka cluster as an example to explain how to configure the Kafka connector and run the Kafka Connect to load data into StarRocks.
 
 #### Prepare a dataset
 
-The following steps take a self-managed Kafka cluster as an example to demonstrate how to configure the Kafka connector and run the Kafka Connect (no need to restart the Kafka service) in order to load data into StarRocks.
-
 Suppose that JSON-format data exists in the topic `test` in a Kafka cluster.
+
+```JSON
+{"id":1,"city":"New York"}
+{"id":2,"city":"Los Angeles"}
+{"id":3,"city":"Chicago"}
+```
 
 #### Create a table
 
-According to the keys of the JSON-format data, create the table `test_tbl` in the database `example_db`.
+According to the keys of the JSON-format data, create the table `test_tbl` in the database `example_db` in the StarRocks cluster.
 
 ```SQL
 CREATE DATABASE example_db;
@@ -55,7 +59,7 @@ USE example_db;
 CREATE TABLE test_tbl (id INT, city STRING);
 ```
 
-#### Configure Kafka Connector and Kafka Connect, then run Kafka Connect to load data
+#### Configure Kafka connector and Kafka connect, then run Kafka Connect to load data
 
 ##### Run Kafka Connect in standalone mode
 
@@ -88,7 +92,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. Configure and run the Kafka Connect.
 
-   1. Configure Kafka Connect. In the configuration file **config/connect-standalone.properties** in the **config** directory, configure the following parameters. For more parameters and descriptions, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
+   1. Configure the Kafka Connect. In the configuration file **config/connect-standalone.properties** in the **config** directory, configure the following parameters. For more parameters and descriptions, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
 
         ```yaml
         # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
@@ -111,9 +115,9 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 ##### Run Kafka Connect in distributed mode
 
-1. Configure and run Kafka Connect.
+1. Configure and run the Kafka Connect.
     
-    1. Configure Kafka Connect. In the configuration file `config/connect-distributed.properties` in the **config** directory, configure the following parameters. For more parameters and descriptions, refer to [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
+    1. Configure the Kafka Connect. In the configuration file `config/connect-distributed.properties` in the **config** directory, configure the following parameters. For more parameters and descriptions, refer to [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
 
         ```yaml
         # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
@@ -134,7 +138,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
     
-2. Configure and create the Kafka connector. Note that in Distributed mode, you need to configure and create the Kafka Connector through the REST API. For parameters and descrioptions, see [Parameters](#Parameters).
+2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka Connector through the REST API. For parameters and descrioptions, see [Parameters](#Parameters).
 
       ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
