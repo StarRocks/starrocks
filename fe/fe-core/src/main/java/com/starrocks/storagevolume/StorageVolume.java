@@ -120,7 +120,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             if (enablePartitionedPrefix) {
                 for (String location : locations) {
                     URI uri = URI.create(location);
-                    if (!uri.getPath().isEmpty()) {
+                    if (!uri.getPath().isEmpty() && !"/".equals(uri.getPath())) {
                         throw new DdlException(String.format(
                                 "Storage volume '%s' has '%s'='true', the location '%s'" +
                                         " should not contain sub path after bucket name!",

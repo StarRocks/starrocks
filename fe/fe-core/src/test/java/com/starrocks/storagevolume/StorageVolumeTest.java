@@ -26,6 +26,7 @@ import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.hadoop.HadoopExt;
@@ -499,7 +500,10 @@ public class StorageVolumeTest {
                 .setEndpoint("endpoint")
                 .setRegion("region")
                 .setCredential(awsCredBuilder);
-        fsInfoBuilder.setFsKey("0").setFsType(FileStoreType.S3);
+
+        fsInfoBuilder.setFsKey("0")
+                .setFsType(FileStoreType.S3)
+                .addLocations("s3://bucket");
 
         {
             FileStoreInfo fs = fsInfoBuilder.build();
@@ -518,6 +522,20 @@ public class StorageVolumeTest {
             Assert.assertTrue(params.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX));
             Assert.assertTrue(params.containsKey(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
             Assert.assertEquals("32", params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+        }
+
+        // It's OK to have trailing '/' after bucket name
+        fsInfoBuilder.addLocations("s3://bucket/");
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            ExceptionChecker.expectThrowsNoException(() -> StorageVolume.fromFileStoreInfo(fs));
+        }
+
+        // can't have more after bucket name
+        fsInfoBuilder.addLocations("s3://bucket/abc");
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Assert.assertThrows(DdlException.class, () -> StorageVolume.fromFileStoreInfo(fs));
         }
     }
 
