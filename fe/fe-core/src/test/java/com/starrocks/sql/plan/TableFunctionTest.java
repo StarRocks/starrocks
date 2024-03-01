@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.analyzer.SemanticException;
+import org.junit.Assert;
 import org.junit.Test;
 
 public class TableFunctionTest extends PlanTestBase {
@@ -254,5 +256,13 @@ public class TableFunctionTest extends PlanTestBase {
                 "unnest(split(t1a, ','), v3) as unnest (v1, v2)";
         plan = getFragmentPlan(sql);
         assertContains(plan, "TableValueFunction");
+
+        Exception e = Assert.assertThrows(SemanticException.class, () -> {
+            String sql1 = "select table_function_unnest.*, unnest.v1, unnest.v2 from (select * from test_all_type join t0_not_null) " +
+                    "table_function_unnest, unnest(split(t1a, ','))";
+            getFragmentPlan(sql1);
+        });
+
+        Assert.assertTrue(e.getMessage().contains("Not unique table/alias: 'table_function_unnest'"));
     }
 }
