@@ -226,7 +226,7 @@ public:
     FIELD_TYPE FIELD_NAME;                                                         \
     static FieldImpl<FIELD_TYPE> field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE);
 
-#define DEFINE_ALIAS(REAL_NAME, ALIAS_NAME) static Alias alias_##ALIAS_NAME(#REAL_NAME, &(field_##REAL_NAME));
+#define DEFINE_ALIAS(REAL_NAME, ALIAS_NAME) static Alias alias_##ALIAS_NAME(#ALIAS_NAME, &(field_##REAL_NAME));
 
 #define DECLARE_FIELD(FIELD_TYPE, FIELD_NAME) extern FIELD_TYPE FIELD_NAME;
 

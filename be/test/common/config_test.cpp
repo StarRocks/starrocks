@@ -59,9 +59,7 @@ TEST_F(ConfigTest, test_init) {
     CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
     CONF_Bool(cfg_bool_env, "false");
     // Invalid config file name
-    {
-        EXPECT_FALSE(config::init("/path/to/nonexist/file"));
-    }
+    { EXPECT_FALSE(config::init("/path/to/nonexist/file")); }
     // Invalid bool value
     {
         std::stringstream ss;
@@ -154,20 +152,20 @@ TEST_F(ConfigTest, test_unknown_config) {
     EXPECT_EQ(10, cfg_int32);
 }
 
-TEST_F(ConfigTest, test_empty_value) {
-    CONF_Int32(cfg_int32, "10");
+TEST_F(ConfigTest, test_empty_string_value) {
+    CONF_String(cfg_string, "10");
     std::stringstream ss;
-    ss << "cfg_int32 =\n";
+    ss << "cfg_string=\n";
     ASSERT_TRUE(config::init(ss));
-    EXPECT_EQ(10, cfg_int32);
+    EXPECT_EQ("", cfg_string);
 }
 
-TEST_F(ConfigTest, test_no_value) {
-    CONF_Int32(cfg_int32, "10");
+TEST_F(ConfigTest, test_no_string_value) {
+    CONF_String(cfg_string, "10");
     std::stringstream ss;
-    ss << "cfg_int32\n";
+    ss << "cfg_string\n";
     ASSERT_TRUE(config::init(ss));
-    EXPECT_EQ(10, cfg_int32);
+    EXPECT_EQ("", cfg_string);
 }
 
 TEST_F(ConfigTest, test_duplicate_assignment) {
