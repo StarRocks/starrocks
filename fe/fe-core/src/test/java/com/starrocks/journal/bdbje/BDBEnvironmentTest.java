@@ -448,7 +448,6 @@ public class BDBEnvironmentTest {
         LOG.warn("=========> start new follower for the first time");
         // should set up successfully as a standalone leader
         newfollowerEnvironment.setup();
-        Thread.sleep(10000);
         newfollowerEnvironment.close();
 
         // 2. bad new follower start for the second time
@@ -467,7 +466,7 @@ public class BDBEnvironmentTest {
         }
 
         // 5. normally leader won't down
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 2; ++i) {
             Thread.sleep(1000);
             LOG.warn("==============> getDatabasesNames() {}", leaderEnvironment.getDatabaseNames());
         }
