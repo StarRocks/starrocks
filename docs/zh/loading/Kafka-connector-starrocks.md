@@ -33,9 +33,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 - Confluent cloud
 
-  > **说明**
-  >
-  > Kafka connector 目前尚未上传到 Confluent Hub，您需要将其压缩包上传到 Confluent cloud。
+  Kafka connector 目前尚未上传到 Confluent Hub，您需要将其压缩包上传到 Confluent cloud。
 
 ## 使用示例
 
@@ -93,7 +91,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. 配置并启动 Kafka Connect。
 
-  1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-standalone.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
+   1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-standalone.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
 
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
@@ -109,7 +107,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
-  2. 启动 Kafka Connect。
+   2. 启动 Kafka Connect。
 
         ```Bash
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
@@ -132,11 +130,11 @@ CREATE TABLE test_tbl (id INT, city STRING);
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
   
-  2. 启动 Kafka Connect。
+    2. 启动 Kafka Connect。
 
-      ```BASH
-      CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
-      ```
+        ```BASH
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
+        ```
 
 2. 配置并创建 Kafka connector。注意，在 Distributed 模式下您需要通过 REST API 来配置并创建 Kafka Connector。参数和相关说明，参见[参数说明](#参数说明)。
 
