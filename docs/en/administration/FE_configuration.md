@@ -2370,7 +2370,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 
 ##### enable_fast_schema_evolution
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -3565,7 +3565,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 <!--
 ##### default_automatic_bucket_size
 
-- Default: 4 * 1024 * 1024 * 1024
+- Default: 0
 - Type: Long
 - Unit:
 - Is mutable: Yes
