@@ -30,12 +30,22 @@ class TabletWriter;
 
 class HorizontalCompactionTask : public CompactionTask {
 public:
+<<<<<<< HEAD
     explicit HorizontalCompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<Tablet> tablet,
                                       std::vector<std::shared_ptr<Rowset>> input_rowsets)
             : CompactionTask(txn_id, version, std::move(tablet), std::move(input_rowsets)) {}
     ~HorizontalCompactionTask() override = default;
 
     Status execute(Progress* progress, CancelFunc cancel_func) override;
+=======
+    explicit HorizontalCompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                                      CompactionTaskContext* context)
+            : CompactionTask(std::move(tablet), std::move(input_rowsets), context) {}
+
+    ~HorizontalCompactionTask() override = default;
+
+    Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
+>>>>>>> 60da7ccc83 ([Enhancement] Print compaction task statistics logs for cloud native table (#37616))
 
 private:
     StatusOr<int32_t> calculate_chunk_size();

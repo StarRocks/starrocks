@@ -172,11 +172,11 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
-    CompactionTask::Progress progress;
-    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
-    EXPECT_EQ(100, progress.value());
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -199,10 +199,11 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
-    CompactionTask::Progress progress;
-    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
-    EXPECT_EQ(100, progress.value());
+    auto tablet_id = _tablet_metadata->id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     ASSERT_EQ(0, read(version));
@@ -302,21 +303,21 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Cancelled compaction task
     {
         auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
-        CompactionTask::Progress progress;
-        auto st = task->execute(&progress, CompactionTask::kCancelledFn);
-        EXPECT_EQ(0, progress.value());
+        auto st = task->execute(CompactionTask::kCancelledFn);
+        EXPECT_EQ(0, task_context->progress.value());
         EXPECT_TRUE(st.is_cancelled()) << st;
     }
     // Completed compaction task without error
     {
         auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
-        CompactionTask::Progress progress;
-        ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
-        EXPECT_EQ(100, progress.value());
+        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+        EXPECT_EQ(100, task_context->progress.value());
         ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
         version++;
         ASSERT_EQ(kChunkSize * 6, read(version));
@@ -444,11 +445,11 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
-    CompactionTask::Progress progress;
-    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
-    EXPECT_EQ(100, progress.value());
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
@@ -579,11 +580,11 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     }
 
     auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
-    CompactionTask::Progress progress;
-    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
-    EXPECT_EQ(100, progress.value());
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));

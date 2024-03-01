@@ -539,6 +539,7 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     }
 }
 
+<<<<<<< HEAD
 Status TabletManager::put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
     auto path = tablet_metadata_lock_location(tablet_id, version, expire_time);
     TabletMetadataLockPB lock;
@@ -550,6 +551,20 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
     auto location = tablet_metadata_lock_location(tablet_id, version, expire_time);
     auto st = fs::delete_file(location);
     return st.is_not_found() ? Status::OK() : st;
+=======
+StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
+    ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
+    auto tablet_metadata = tablet.metadata();
+    ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create(this, tablet_metadata));
+    ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
+    ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
+    if (algorithm == VERTICAL_COMPACTION) {
+        return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context);
+    } else {
+        DCHECK(algorithm == HORIZONTAL_COMPACTION);
+        return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context);
+    }
+>>>>>>> 60da7ccc83 ([Enhancement] Print compaction task statistics logs for cloud native table (#37616))
 }
 
 // Store a copy of the tablet schema in a separate schema file named SCHEMA_{indexId}.

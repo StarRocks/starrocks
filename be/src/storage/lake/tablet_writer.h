@@ -27,6 +27,8 @@ class Chunk;
 class Column;
 class TabletSchema;
 
+struct OlapWriterStatistics;
+
 namespace lake {
 
 enum WriterType : int { kHorizontal = 0, kVertical = 1 };
@@ -103,6 +105,8 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(std::shared_ptr<const TabletSchema> schema) { _schema = std::move(schema); }
 
+    const OlapWriterStatistics& stats() const { return _stats; }
+
 protected:
     Tablet _tablet;
     std::shared_ptr<const TabletSchema> _schema;
@@ -112,6 +116,7 @@ protected:
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+    OlapWriterStatistics _stats;
 };
 
 } // namespace lake

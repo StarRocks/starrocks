@@ -18,6 +18,7 @@
 
 namespace starrocks::lake {
 
+<<<<<<< HEAD
 CompactionTask::CompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<Tablet> tablet,
                                std::vector<std::shared_ptr<Rowset>> input_rowsets)
         : _txn_id(txn_id),
@@ -27,5 +28,16 @@ CompactionTask::CompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<
           _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
                                                     "Compaction-" + std::to_string(_tablet->id()),
                                                     GlobalEnv::GetInstance()->compaction_mem_tracker())) {}
+=======
+CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                               CompactionTaskContext* context)
+        : _txn_id(context->txn_id),
+          _tablet(std::move(tablet)),
+          _input_rowsets(std::move(input_rowsets)),
+          _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
+                                                    "Compaction-" + std::to_string(_tablet.metadata()->id()),
+                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())),
+          _context(context) {}
+>>>>>>> 60da7ccc83 ([Enhancement] Print compaction task statistics logs for cloud native table (#37616))
 
 } // namespace starrocks::lake

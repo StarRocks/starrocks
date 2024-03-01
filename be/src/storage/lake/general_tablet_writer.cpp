@@ -38,7 +38,12 @@ Status HorizontalGeneralTabletWriter::open() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data) {
+=======
+Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, SegmentPB* segment) {
+    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
+>>>>>>> 60da7ccc83 ([Enhancement] Print compaction task statistics logs for cloud native table (#37616))
     if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
         _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
         RETURN_IF_ERROR(flush_segment_writer());
@@ -53,8 +58,14 @@ Status HorizontalGeneralTabletWriter::flush() {
     return flush_segment_writer();
 }
 
+<<<<<<< HEAD
 Status HorizontalGeneralTabletWriter::finish() {
     RETURN_IF_ERROR(flush_segment_writer());
+=======
+Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
+    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
+    RETURN_IF_ERROR(flush_segment_writer(segment));
+>>>>>>> 60da7ccc83 ([Enhancement] Print compaction task statistics logs for cloud native table (#37616))
     _finished = true;
     return Status::OK();
 }
@@ -111,6 +122,7 @@ Status VerticalGeneralTabletWriter::open() {
 
 Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes,
                                                   bool is_key) {
+    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
     const size_t chunk_num_rows = data.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
@@ -182,6 +194,7 @@ Status VerticalGeneralTabletWriter::flush() {
 }
 
 Status VerticalGeneralTabletWriter::flush_columns() {
+    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
     if (_segment_writers.empty()) {
         return Status::OK();
     }
@@ -192,7 +205,12 @@ Status VerticalGeneralTabletWriter::flush_columns() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status VerticalGeneralTabletWriter::finish() {
+=======
+Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
+    SCOPED_RAW_TIMER(&_stats.segment_write_ns);
+>>>>>>> 60da7ccc83 ([Enhancement] Print compaction task statistics logs for cloud native table (#37616))
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;

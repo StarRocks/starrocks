@@ -234,11 +234,23 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     context->runs.fetch_add(1, std::memory_order_relaxed);
 
     auto status = Status::OK();
-    auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
+    auto task_or = _tablet_mgr->compact(context.get());
     if (task_or.ok()) {
         auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
+<<<<<<< HEAD
         status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
+=======
+        ThreadPool* flush_pool = nullptr;
+        if (config::lake_enable_compaction_async_write) {
+            // CAUTION: we reuse delta writer's memory table flush pool here
+            flush_pool = StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
+            if (UNLIKELY(flush_pool == nullptr)) {
+                return Status::InternalError("Get memory table flush pool failed");
+            }
+        }
+        status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
+>>>>>>> 60da7ccc83 ([Enhancement] Print compaction task statistics logs for cloud native table (#37616))
     } else {
         status.update(task_or.status());
     }

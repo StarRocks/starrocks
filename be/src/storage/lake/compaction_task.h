@@ -19,6 +19,7 @@
 #include <ostream>
 
 #include "common/status.h"
+#include "compaction_task_context.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks::lake {
@@ -28,25 +29,23 @@ class Tablet;
 
 class CompactionTask {
 public:
-    class Progress {
-    public:
-        int value() const { return _value.load(std::memory_order_acquire); }
-
-        void update(int value) { _value.store(value, std::memory_order_release); }
-
-    private:
-        std::atomic<int> _value{0};
-    };
-
     // CancelFunc is a function that used to tell the compaction task whether the task
     // should be cancelled.
     using CancelFunc = std::function<bool()>;
 
+<<<<<<< HEAD
     explicit CompactionTask(int64_t txn_id, int64_t version, std::shared_ptr<Tablet> tablet,
                             std::vector<std::shared_ptr<Rowset>> input_rowsets);
     virtual ~CompactionTask() = default;
 
     virtual Status execute(Progress* stats, CancelFunc cancel_func) = 0;
+=======
+    explicit CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                            CompactionTaskContext* context);
+    virtual ~CompactionTask() = default;
+
+    virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
+>>>>>>> 60da7ccc83 ([Enhancement] Print compaction task statistics logs for cloud native table (#37616))
 
     inline static const CancelFunc kNoCancelFn = []() { return false; };
     inline static const CancelFunc kCancelledFn = []() { return true; };
@@ -57,6 +56,7 @@ protected:
     std::shared_ptr<Tablet> _tablet = nullptr;
     std::vector<std::shared_ptr<Rowset>> _input_rowsets;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    CompactionTaskContext* _context;
 };
 
 } // namespace starrocks::lake
