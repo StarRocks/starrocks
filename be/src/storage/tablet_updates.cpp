@@ -2679,7 +2679,6 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
         }
     }
 
-    int64_t total_segments = 0;
     int64_t total_rows = 0;
     int64_t total_bytes = 0;
     int32_t compaction_level = -1;
@@ -2688,28 +2687,28 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
         if (level == -1) {
             continue;
         }
+        int64_t total_segments = 0;
+        int64_t del_rows = 0;
         int64_t level_score = 0;
         for (auto& e : candidates) {
             level_score += e.score_per_row * (e.num_rows - e.num_dels);
+            total_segments += e.num_segments;
+            del_rows += e.num_dels;
         }
-        if (level_score > max_score) {
+        if (level_score > max_score && (total_segments > 1 || del_rows > 0)) {
             compaction_level = level;
             max_score = level_score;
         }
     }
 
-    auto iter = candidates_by_level.find(compaction_level);
-    // should not happened
-    if (iter == candidates_by_level.end()) {
-        string msg = strings::Substitute("tablet:$0 can not find level $1 candidate rowsets", _tablet.tablet_id(),
-                                         compaction_level);
-        _compaction_running = false;
-        return Status::InternalError(msg);
-    }
+    int64_t total_merged_segments = 0;
     RowsetStats stat;
     std::set<int32_t> compaction_level_candidate;
     do {
         auto iter = candidates_by_level.find(compaction_level);
+        if (iter == candidates_by_level.end()) {
+            break;
+        }
         for (auto& e : iter->second) {
             size_t new_rows = stat.num_rows + e.num_rows - e.num_dels;
             size_t new_bytes = stat.byte_size;
@@ -2726,7 +2725,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
             stat.byte_size = new_bytes;
             total_rows += e.num_rows;
             total_bytes += e.bytes;
-            total_segments += e.num_segments;
+            total_merged_segments += e.num_segments;
         }
         compaction_level_candidate.insert(compaction_level);
         compaction_level = _calc_compaction_level(&stat);
@@ -2735,9 +2734,12 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
              compaction_level_candidate.find(compaction_level) == compaction_level_candidate.end() &&
              candidates_by_level.find(compaction_level) != candidates_by_level.end());
 
-    if (compaction_level_candidate.find(-1) != compaction_level_candidate.end()) {
-        for (auto& e : candidates_by_level[-1]) {
-            info->inputs.emplace_back(e.rowsetid);
+    if (compaction_level_candidate.find(-1) == compaction_level_candidate.end()) {
+        if (candidates_by_level[-1].size() > 0) {
+            for (auto& e : candidates_by_level[-1]) {
+                info->inputs.emplace_back(e.rowsetid);
+                total_merged_segments += e.num_segments;
+            }
             compaction_level_candidate.insert(-1);
         }
     }
@@ -2754,18 +2756,22 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
         _last_compaction_time_ms = UnixMillis() + rand() % 10000;
     }
 
-    if (info->inputs.empty()) {
+    int64_t del_rows = total_rows - stat.num_rows;
+    // 1. no candidate rowsets, skip compaction
+    // 2. only an empty rowset, skip compaction
+    if (info->inputs.empty() || (info->inputs.size() <= 1 && compaction_level == -1 && del_rows == 0)) {
         LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
     }
+
     std::sort(info->inputs.begin(), info->inputs.end());
     std::vector<int32_t> levels(compaction_level_candidate.begin(), compaction_level_candidate.end());
     LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
               << " version:" << info->start_version.to_string() << " score:" << max_score
               << " merge levels:" << int_list_to_string(levels) << " pick:" << info->inputs.size()
               << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
-              << int_list_to_string(info->inputs) << " #pick_segments:" << total_segments
+              << int_list_to_string(info->inputs) << " #pick_segments:" << total_merged_segments
               << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->" << stat.num_rows
               << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
               << PrettyPrinter::print(stat.byte_size, TUnit::BYTES) << "(estimate)";
