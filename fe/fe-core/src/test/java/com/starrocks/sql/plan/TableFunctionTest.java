@@ -258,7 +258,8 @@ public class TableFunctionTest extends PlanTestBase {
         assertContains(plan, "TableValueFunction");
 
         Exception e = Assert.assertThrows(SemanticException.class, () -> {
-            String sql1 = "select table_function_unnest.*, unnest.v1, unnest.v2 from (select * from test_all_type join t0_not_null) " +
+            String sql1 = "select table_function_unnest.*, unnest.v1, unnest.v2 from " +
+                    "(select * from test_all_type join t0_not_null) " +
                     "table_function_unnest, unnest(split(t1a, ','))";
             getFragmentPlan(sql1);
         });
