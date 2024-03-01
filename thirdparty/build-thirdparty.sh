@@ -1268,9 +1268,9 @@ build_libfpe() {
     mkdir -p $TP_SOURCE_DIR/$LIBFPE_SOURCE/build
     cd $TP_SOURCE_DIR/$LIBFPE_SOURCE/build
     
-    # export C_INCLUDE_PATH=/home/botao/dev/starrocks/thirdparty/installed/include
-    # export LIBRARY_PATH=/home/botao/dev/starrocks/thirdparty/installed/lib
-    # export LD_LIBRARY_PATH=/home/botao/dev/starrocks/thirdparty/installed/lib
+    export C_INCLUDE_PATH=$TP_INSTALL_DIR/include
+    export LIBRARY_PATH=$TP_INSTALL_DIR/lib
+    export LD_LIBRARY_PATH=$TP_INSTALL_DIR/lib
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
         -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \

@@ -104,6 +104,7 @@ set(EXPR_FILES
   runtime_filter_layout.cpp
   dictionary_get_expr.cpp
   ngram.cpp
+  fpe.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})
