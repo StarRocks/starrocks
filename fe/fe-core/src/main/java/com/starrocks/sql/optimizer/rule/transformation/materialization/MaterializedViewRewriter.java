@@ -1739,6 +1739,7 @@ public class MaterializedViewRewriter {
         //                                       /      \
         //                                  EXTRA-OP    MV-SCAN
         setAppliedUnionAllRewrite(queryInput.getOp());
+        setAppliedUnionAllRewrite(viewInput.getOp());
 
         // createUnion will return the union all result of queryInput and viewInput
         //           Union
