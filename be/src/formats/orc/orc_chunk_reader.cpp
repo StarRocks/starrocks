@@ -797,20 +797,20 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
             return false;
         }
 
-        if (node_type == TExprNodeType::IS_NULL_PRED) {
-            // null predicate only has one child
-            return true;
-        }
-
-        if (node_type == TExprNodeType::FUNCTION_CALL) {
-            // check is null & is not null
-            // null predicate only has one child
-            std::string null_str;
-            return conjunct->is_null_scalar_function(null_str);
-        }
-
         if (conjunct->get_num_children() == 1) {
-            return false;
+            if (node_type == TExprNodeType::IS_NULL_PRED) {
+                // null predicate only has one child
+                // we don't need to return false
+            } else if (node_type == TExprNodeType::FUNCTION_CALL) {
+                // null predicate only has one child
+                // check is null & is not null
+                std::string null_str;
+                if (!conjunct->is_null_scalar_function(null_str)) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
         }
 
         for (int i = 1; i < conjunct->get_num_children(); i++) {
@@ -915,7 +915,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         } else if (op_type == TExprOpcode::COMPOUND_NOT) {
             builder->startNot();
         } else {
-            CHECK(false) << "unexpected op_type in compound_pred type. op_type = " << std::to_string(op_type);
+            return Status::InternalError("unexpected op_type in compound_pred type. op_type = " +
+                                         std::to_string(op_type));
         }
         for (Expr* c : conjunct->children()) {
             RETURN_IF_ERROR(_add_conjunct(c, builder));
@@ -997,7 +998,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
             break;
 
         default:
-            CHECK(false) << "unexpected op_type in binary_pred type. op_type = " << std::to_string(op_type);
+            return Status::InternalError("unexpected op_type in binary_pred type. op_type = " +
+                                         std::to_string(op_type));
         }
         return Status::OK();
     }
@@ -1034,8 +1036,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         return Status::OK();
     }
 
-    CHECK(false) << "unexpected node_type = " << std::to_string(node_type);
-    return Status::OK();
+    return Status::InternalError("unexpected node_type = " + std::to_string(node_type));
 }
 
 #define ADD_RF_TO_BUILDER                                            \
