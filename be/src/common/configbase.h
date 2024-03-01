@@ -16,17 +16,17 @@
 // under the License.
 
 #pragma once
-#include <butil/containers/doubly_buffered_data.h>
-#include <fmt/format.h>
 
-#include <cassert>
-#include <cstdint>
+#include <iostream>
 #include <map>
-#include <mutex>
 #include <string>
 #include <vector>
 
 #ifdef __IN_CONFIGBASE_CPP__
+#include <butil/containers/doubly_buffered_data.h>
+#include <fmt/format.h>
+
+#include <cassert>
 #include <optional>
 
 #include "gutil/strings/join.h"
@@ -38,6 +38,8 @@ namespace starrocks {
 class Status;
 
 namespace config {
+
+class MutableString;
 
 struct ConfigInfo {
     std::string name;
@@ -60,6 +62,17 @@ inline std::ostream& operator<<(std::ostream& os, const ConfigInfo& info) {
        << "mutable=" << info.valmutable << "}";
     return os;
 }
+
+#ifdef __IN_CONFIGBASE_CPP__
+class MutableString;
+
+bool strtox(const std::string& valstr, bool& retval);
+bool strtox(const std::string& valstr, int16_t& retval);
+bool strtox(const std::string& valstr, int32_t& retval);
+bool strtox(const std::string& valstr, int64_t& retval);
+bool strtox(const std::string& valstr, double& retval);
+bool strtox(const std::string& valstr, std::string& retval);
+bool strtox(const std::string& valstr, MutableString& retval);
 
 // A wrapper on std::string, it's safe to read/write MutableString concurrently.
 class MutableString {
@@ -103,16 +116,6 @@ inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
     return os << s.value();
 }
 
-#ifdef __IN_CONFIGBASE_CPP__
-
-bool strtox(const std::string& valstr, bool& retval);
-bool strtox(const std::string& valstr, int16_t& retval);
-bool strtox(const std::string& valstr, int32_t& retval);
-bool strtox(const std::string& valstr, int64_t& retval);
-bool strtox(const std::string& valstr, double& retval);
-bool strtox(const std::string& valstr, std::string& retval);
-bool strtox(const std::string& valstr, MutableString& retval);
-
 class Field {
 public:
     explicit Field(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
@@ -139,16 +142,20 @@ public:
 
     bool valmutable() const { return _valmutable; }
 
-    virtual std::string value() const = 0;
+    bool set_value(std::string value);
 
-    virtual bool parse_value(const std::string& value) = 0;
+    virtual std::string value() const = 0;
 
     static void clear_fields() { _s_field_map.clear(); }
 
     static std::map<std::string, Field*>& fields() { return _s_field_map; }
 
+    static std::optional<Field*> get(const std::string& name_or_alias);
+
 protected:
     inline static std::map<std::string, Field*> _s_field_map{};
+
+    virtual bool parse_value(const std::string& value) = 0;
 
     const char* _type;
     const char* _name;
@@ -202,15 +209,26 @@ public:
     }
 };
 
+class Alias {
+public:
+    explicit Alias(const char* alias, Field* field) {
+        [[maybe_unused]] auto [_, ok] = Field::fields().emplace(std::string(alias), field);
+        assert(ok);
+    }
+};
+
 #endif // __IN_CONFIGBASE_CPP__
 
 #define DEFINE_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME) \
     FIELD_TYPE FIELD_NAME;                                                         \
-    static FieldImpl<FIELD_TYPE> reg_field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE);
+    static FieldImpl<FIELD_TYPE> field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE);
+
+#define DEFINE_ALIAS(REAL_NAME, ALIAS_NAME) static Alias alias_##ALIAS_NAME(#REAL_NAME, &(field_##REAL_NAME));
 
 #define DECLARE_FIELD(FIELD_TYPE, FIELD_NAME) extern FIELD_TYPE FIELD_NAME;
 
 #ifdef __IN_CONFIGBASE_CPP__
+#define CONF_Alias(name, alias) DEFINE_ALIAS(name, alias)
 #define CONF_Bool(name, defaultstr) DEFINE_FIELD(bool, name, defaultstr, false, "bool")
 #define CONF_Int16(name, defaultstr) DEFINE_FIELD(int16_t, name, defaultstr, false, "int16")
 #define CONF_Int32(name, defaultstr) DEFINE_FIELD(int32_t, name, defaultstr, false, "int32")
@@ -230,6 +248,7 @@ public:
 #define CONF_mDouble(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, true, "double")
 #define CONF_mString(name, defaultstr) DEFINE_FIELD(MutableString, name, defaultstr, true, "string")
 #else
+#define CONF_Alias(name, alias)
 #define CONF_Bool(name, defaultstr) DECLARE_FIELD(bool, name)
 #define CONF_Int16(name, defaultstr) DECLARE_FIELD(int16_t, name)
 #define CONF_Int32(name, defaultstr) DECLARE_FIELD(int32_t, name)
@@ -265,9 +284,11 @@ void TEST_clear_configs();
 } // namespace config
 } // namespace starrocks
 
+#ifdef __IN_CONFIGBASE_CPP__
 template <>
 struct fmt::formatter<starrocks::config::MutableString> : formatter<std::string> {
     auto format(const starrocks::config::MutableString& s, format_context& ctx) {
         return formatter<std::string>::format(s.value(), ctx);
     }
 };
+#endif

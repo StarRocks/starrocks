@@ -58,7 +58,10 @@ TEST_F(ConfigTest, test_init) {
     CONF_Strings(cfg_strings, "s1,s2,s3");
     CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
     CONF_Bool(cfg_bool_env, "false");
-
+    // Invalid config file name
+    {
+        EXPECT_FALSE(config::init("/path/to/nonexist/file");
+    }
     // Invalid bool value
     {
         std::stringstream ss;
@@ -68,7 +71,6 @@ TEST_F(ConfigTest, test_init) {
 
         EXPECT_FALSE(config::init(ss));
     }
-
     // Invalid numeric value
     {
         std::stringstream ss;
@@ -104,14 +106,12 @@ TEST_F(ConfigTest, test_init) {
 
            cfg_string = test string
            
+           cfg_mstring = key =value 
+           
            cfg_int32s = 123, 456, 789 
       
            cfg_strings = text1, hello world , StarRocks
            
-           unknown_config
-           
-           unknown_config2 = 10
-
            cfg_bool_env = ${ConfigTestEnv2}
            )DEL";
 
@@ -130,7 +130,7 @@ TEST_F(ConfigTest, test_init) {
     EXPECT_EQ(4294967296123, cfg_int64);
     EXPECT_EQ(-4294967296123, cfg_mint64);
     EXPECT_EQ("test string", cfg_string);
-    EXPECT_EQ("test_mstring", cfg_mstring.value());
+    EXPECT_EQ("key =value", cfg_mstring.value());
     EXPECT_THAT(cfg_bools, ElementsAre(true, false, true));
     EXPECT_THAT(cfg_doubles, ElementsAre(0.1, 0.2, 0.3));
     EXPECT_THAT(cfg_int16s, ElementsAre(1, 2, 3));
@@ -139,6 +139,56 @@ TEST_F(ConfigTest, test_init) {
     EXPECT_THAT(cfg_strings, ElementsAre("text1", "hello world", "StarRocks"));
     EXPECT_EQ("prefix/env1_value/suffix", cfg_string_env);
     EXPECT_EQ(true, cfg_bool_env);
+}
+
+TEST_F(ConfigTest, test_invalid_default_value) {
+    CONF_Int32(cfg_int32, "false");
+    ASSERT_FALSE(config::init(nullptr));
+}
+
+TEST_F(ConfigTest, test_unknown_config) {
+    CONF_Int32(cfg_int32, "10");
+    std::stringstream ss;
+    ss << "x = y\n";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ(10, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_empty_value) {
+    CONF_Int32(cfg_int32, "10");
+    std::stringstream ss;
+    ss << "cfg_int32 =\n";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ(10, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_no_value) {
+    CONF_Int32(cfg_int32, "10");
+    std::stringstream ss;
+    ss << "cfg_int32\n";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ(10, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_duplicate_assignment) {
+    CONF_Int32(cfg_int32, "10");
+    std::stringstream ss;
+    ss << R"(cfg_int32 = 1
+             cfg_int32 = 2
+            )";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ(2, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_duplicate_alias_assignment) {
+    CONF_Int32(cfg_int32, "10");
+    CONF_Alias(cfg_int32, cfg_int32_alias);
+    std::stringstream ss;
+    ss << R"(cfg_int32 = 1
+             cfg_int32_alias = 2
+            )";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ(2, cfg_int32);
 }
 
 TEST_F(ConfigTest, test_list_configs) {
@@ -161,7 +211,7 @@ TEST_F(ConfigTest, test_list_configs) {
     CONF_Int64s(cfg_int64s, "100,200,300");
     CONF_Strings(cfg_strings, "s1,s2,s3");
 
-    config::init(nullptr);
+    ASSERT_TRUE(config::init(nullptr));
 
     std::vector<ConfigInfo> exp_configs = {
             // name,value,type,default,mutable
@@ -310,6 +360,22 @@ TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {
     for (auto& t : threads) {
         t.join();
     }
+}
+
+TEST_F(ConfigTest, test_alias) {
+    CONF_Int16(cfg_int16, "2561");
+    CONF_mInt16(be_http_port, "8000");
+    CONF_Alias(be_http_port, webserver_port);
+
+    std::stringstream ss;
+    ss << R"DEL(
+        doris_cfg_int16 = 54321
+        webserver_port = 8080
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(54321, cfg_int16);
+    EXPECT_EQ(8080, be_http_port);
 }
 
 } // namespace starrocks

@@ -126,27 +126,7 @@ bool strtox(const std::string& valstr, MutableString& retval) {
     return true;
 }
 
-// Configuration properties load from config file.
-class Properties {
-public:
-    bool load(std::istream& input);
-
-    std::optional<std::string> get(const std::string& key) const;
-
-private:
-    std::map<std::string, std::string> _configs;
-};
-
-inline std::optional<std::string> Properties::get(const std::string& key) const {
-    auto it = _configs.find(key);
-    if (it == _configs.end()) {
-        return {};
-    } else {
-        return {it->second};
-    }
-}
-
-inline bool Properties::load(std::istream& input) {
+inline bool parse_key_value_pairs(std::istream& input, std::map<std::string, std::string>* kvs) {
     std::string line;
     std::string key;
     std::string value;
@@ -172,59 +152,74 @@ inline bool Properties::load(std::istream& input) {
         // compatible with doris_config
         kv.first = std::regex_replace(kv.first, doris_start, "");
 
-        if (kv.first.compare("webserver_port") == 0) {
-            kv.first = "be_http_port";
-        }
-
-        auto [_, ok] = _configs.insert(kv);
+        auto [_, ok] = kvs->insert(kv);
         if (!ok) {
-            std::cerr << "Duplicate configuration item encountered: " << kv.first << '\n';
+            std::cerr << fmt::format("Duplicate assignment to config '{}', previous assignmet will be ignored\n",
+                                     kv.first);
+            (*kvs)[kv.first] = kv.second;
+        }
+    }
+    return true;
+}
+
+std::optional<Field*> Field::get(const std::string& name_or_alias) {
+    auto ret = std::optional<Field*>();
+    auto it = fields().find(name_or_alias);
+    if (it != fields().end()) {
+        ret.emplace(it->second);
+    }
+    return ret;
+}
+
+bool Field::set_value(std::string value) {
+    if (auto st = replaceenv(value); !st.ok()) {
+        return false;
+    }
+    StripWhiteSpace(&value);
+    return parse_value(value);
+}
+
+// Init conf fields.
+bool init(const char* filename) {
+    std::ifstream input;
+    if (filename != nullptr) {
+        input.open(filename);
+        if (input.fail()) {
+            std::cerr << "Fail to open " << filename << std::endl;
+            return false;
+        }
+    }
+    return init(input);
+}
+
+inline bool init_from_default_values() {
+    for (const auto& [name, field] : Field::fields()) {
+        if (!field->set_value(field->defval())) {
+            std::cerr << fmt::format("Invalid default value of config '{}': '{}'\n", name, field->defval());
             return false;
         }
     }
     return true;
 }
 
-// Init conf fields.
-bool init(const char* filename) {
-    if (filename == nullptr) {
-        // Init configurations by default values
-        std::istringstream empty_input;
-        return init(empty_input);
-    }
-
-    // Open the conf file
-    std::ifstream input(filename);
-    if (!input.is_open()) {
-        std::cerr << "config::load() failed to open the file:" << filename << std::endl;
-        return false;
-    }
-
-    bool ret = init(input);
-
-    // Close the conf file.
-    input.close();
-
-    return ret;
-}
-
 bool init(std::istream& input) {
-    Properties props;
-    if (!props.load(input)) {
+    if (!init_from_default_values()) {
         return false;
     }
 
-    // Set conf fields.
-    for (const auto& [name, field] : Field::fields()) {
-        std::string value = props.get(name).value_or(field->defval());
-        auto st = replaceenv(value);
-        if (!st.ok()) {
-            std::cerr << st << '\n';
-            return false;
+    std::map<std::string, std::string> configs;
+    if (!parse_key_value_pairs(input, &configs)) {
+        return false;
+    }
+
+    for (const auto& [k, v] : configs) {
+        auto op_field = Field::get(k);
+        if (!op_field.has_value()) {
+            std::cerr << fmt::format("Ignored unknown config: {}\n", k);
+            continue;
         }
-        StripWhiteSpace(&value);
-        if (!field->parse_value(value)) {
-            std::cerr << fmt::format("Invalid value of config '{}': '{}'", name, value) << '\n';
+        if (bool r = op_field.value()->set_value(v); !r) {
+            std::cerr << fmt::format("Invalid value of config '{}': '{}'\n", k, v);
             return false;
         }
     }
@@ -239,9 +234,7 @@ Status set_config(const std::string& field, const std::string& value) {
     if (!it->second->valmutable()) {
         return Status::NotSupported(fmt::format("'{}' is immutable", field));
     }
-    std::string real_value = value;
-    RETURN_IF_ERROR(replaceenv(real_value));
-    if (!it->second->parse_value(real_value)) {
+    if (!it->second->set_value(value)) {
         return Status::InvalidArgument(fmt::format("Invalid value of config '{}': '{}'", field, value));
     }
     return Status::OK();
