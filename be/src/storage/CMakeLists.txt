@@ -181,6 +181,7 @@ add_library(Storage STATIC
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/compaction_task_context.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp

@@ -293,6 +293,11 @@ struct OlapReaderStatistics {
     // ------ for lake tablet ------
 };
 
+// OlapWriterStatistics used to collect statistics when write data to storage
+struct OlapWriterStatistics {
+    int64_t segment_write_ns = 0;
+};
+
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";
 const char* const kBytesReadRemote = "bytes_read_remote";
 const char* const kIOCountLocalDisk = "io_count_local_disk";
