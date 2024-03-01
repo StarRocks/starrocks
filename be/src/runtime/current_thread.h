@@ -114,16 +114,6 @@ private:
             return true;
         }
 
-        bool try_mem_reserve(int64_t reserve_bytes, MemTracker* tracker, int64_t limit) {
-            DCHECK(_reserved_bytes == 0);
-            DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes, tracker, limit)) {
-                _reserved_bytes = reserve_bytes;
-                return true;
-            }
-            return false;
-        }
-
         void release_reserved() {
             if (_reserved_bytes) {
                 release(_reserved_bytes);
@@ -252,13 +242,6 @@ public:
     bool try_mem_consume(int64_t size) {
         if (_mem_cache_manager.try_mem_consume(size)) {
             _operator_mem_cache_manager.consume(size);
-            return true;
-        }
-        return false;
-    }
-
-    bool try_mem_reserve(int64_t size, MemTracker* tracker, int64_t limit) {
-        if (_mem_cache_manager.try_mem_reserve(size, tracker, limit)) {
             return true;
         }
         return false;
