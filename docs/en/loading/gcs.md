@@ -442,6 +442,7 @@ The system returns a query result similar to the following, indicating that the 
 |    142 | 3031639 |    3607361 | pv           | 2017-11-25 15:19:25 |
 +--------+---------+------------+--------------+---------------------+
 ```
+
 ## Use Pipe
 
 Starting from v3.2, StarRocks provides the Pipe loading method, which currently supports only the Parquet and ORC file formats.
