@@ -206,8 +206,8 @@ public class BestMvSelector {
                     return null;
                 }
                 int sortScore = calcSortScore(mv, equivalenceColumns, nonEquivalenceColumns);
-                CandidateContext candidateContext =
-                        new CandidateContext(expression.getStatistics(), scanOperator.getTable().getBaseSchema().size(), sortScore);
+                CandidateContext candidateContext = new CandidateContext(
+                        expression.getStatistics(), scanOperator.getTable().getBaseSchema().size(), sortScore);
                 if (isAggregate) {
                     List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
                             mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
