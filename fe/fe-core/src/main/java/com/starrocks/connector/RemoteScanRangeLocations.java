@@ -52,14 +52,16 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class RemoteScanRangeLocations {
     private static final Logger LOG = LogManager.getLogger(RemoteScanRangeLocations.class);
 
-    private final List<TScanRangeLocations> result = new ArrayList<>();
+    private final Set<TScanRangeLocations> result = new HashSet<>();
     private final List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = new ArrayList<>();
     private boolean forceScheduleLocal = false;
 
@@ -269,7 +271,7 @@ public class RemoteScanRangeLocations {
         return Optional.of(dataCacheOptions);
     }
 
-    public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
+    public Set<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
                                            HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
         HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
