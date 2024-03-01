@@ -25,8 +25,6 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Aggregate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.isAppliedUnionAllRewrite;
-
 /**
  * Materialized View Rewrite Rule for pattern:
  * - Aggregate
@@ -46,11 +44,6 @@ public class AggregateScanRule extends BaseMaterializedViewRewriteRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (isAppliedUnionAllRewrite(input.getOp())) {
-            return false;
-        }
-
         if (!MvUtils.isLogicalSPJG(input)) {
             return false;
         }
