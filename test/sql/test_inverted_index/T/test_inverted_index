@@ -274,7 +274,7 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column <= "this"
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IN ("this") OR text_column IN ("abc");
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column NOT IN ("this") AND text_column NOT IN ("abc");
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" OR text_column LIKE "abc";
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" AND text_column LIKE "is";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
 
 DROP TABLE t_gin_index_multiple_predicate_english;
 

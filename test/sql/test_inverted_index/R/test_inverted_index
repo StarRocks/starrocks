@@ -523,7 +523,10 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IS NOT NU
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column <= "this" AND text_column >= "abc";
 -- result:
+1	ABC
 2	abc
+3	ABD
+4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IN ("this") OR text_column IN ("abc");
 -- result:
@@ -533,9 +536,8 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IN ("this
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column NOT IN ("this") AND text_column NOT IN ("abc");
 -- result:
-1	ABC
 3	ABD
-4	This is Gin Index
+5	None
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" OR text_column LIKE "abc";
 -- result:
@@ -543,8 +545,9 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "thi
 2	abc
 4	This is Gin Index
 -- !result
-SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" AND text_column LIKE "is";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
 -- result:
+4	This is Gin Index
 -- !result
 DROP TABLE t_gin_index_multiple_predicate_english;
 -- result:
