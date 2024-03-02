@@ -214,7 +214,8 @@ public:
         assert(strcmp(field->name(), alias) != 0);
         [[maybe_unused]] auto [_, ok] = Field::fields().emplace(std::string(alias), field);
         if (!ok) {
-            std::cerr << fmt::format("The alias '{}' for config '{}' already exists\n", alias, field->name());
+            std::cerr << fmt::format("The alias name '{}' for config '{}' already used, please choose another one\n",
+                                     alias, field->name());
             std::abort();
         }
     }
@@ -231,6 +232,7 @@ public:
 #define DECLARE_FIELD(FIELD_TYPE, FIELD_NAME) extern FIELD_TYPE FIELD_NAME;
 
 #ifdef __IN_CONFIGBASE_CPP__
+// NOTE: alias configs must be defined after the true config, otherwise there will be a compile error
 #define CONF_Alias(name, alias) DEFINE_ALIAS(name, alias)
 #define CONF_Bool(name, defaultstr) DEFINE_FIELD(bool, name, defaultstr, false, "bool")
 #define CONF_Int16(name, defaultstr) DEFINE_FIELD(int16_t, name, defaultstr, false, "int16")
@@ -251,6 +253,7 @@ public:
 #define CONF_mDouble(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, true, "double")
 #define CONF_mString(name, defaultstr) DEFINE_FIELD(MutableString, name, defaultstr, true, "string")
 #else
+// NOTE: alias configs must be defined after the true config, otherwise there will be a compile error
 #define CONF_Alias(name, alias)
 #define CONF_Bool(name, defaultstr) DECLARE_FIELD(bool, name)
 #define CONF_Int16(name, defaultstr) DECLARE_FIELD(int16_t, name)

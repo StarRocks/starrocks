@@ -22,9 +22,8 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <list>
-#include <map>
 #include <regex>
+#include <set>
 #include <string>
 
 #define __IN_CONFIGBASE_CPP__
@@ -126,12 +125,13 @@ bool strtox(const std::string& valstr, MutableString& retval) {
     return true;
 }
 
-inline bool parse_key_value_pairs(std::istream& input, std::map<std::string, std::string>* kvs) {
+inline bool parse_key_value_pairs(std::istream& input) {
     std::string line;
     std::string key;
     std::string value;
     std::regex doris_start("^doris_");
     line.reserve(512);
+    std::set<Field*> assigned_fields;
     while (input) {
         // Read one line at a time.
         std::getline(input, line);
@@ -147,16 +147,24 @@ inline bool parse_key_value_pairs(std::istream& input, std::map<std::string, std
         // Read key and value.
         std::pair<std::string, std::string> kv = strings::Split(line, strings::delimiter::Limit("=", 1));
         StripWhiteSpace(&kv.first);
-        StripWhiteSpace(&kv.second);
 
         // compatible with doris_config
         kv.first = std::regex_replace(kv.first, doris_start, "");
 
-        auto [_, ok] = kvs->insert(kv);
-        if (!ok) {
+        auto op_field = Field::get(kv.first);
+        if (!op_field.has_value()) {
+            std::cerr << fmt::format("Ignored unknown config: {}\n", kv.first);
+            continue;
+        }
+        auto field = op_field.value();
+        if (assigned_fields.count(field) > 0) {
             std::cerr << fmt::format("Duplicate assignment to config '{}', previous assignmet will be ignored\n",
-                                     kv.first);
-            (*kvs)[kv.first] = kv.second;
+                                     field->name());
+        }
+        assigned_fields.insert(field);
+        if (bool r = field->set_value(kv.second); !r) {
+            std::cerr << fmt::format("Invalid value of config '{}': '{}'\n", kv.first, kv.second);
+            return false;
         }
     }
     return true;
@@ -207,23 +215,7 @@ bool init(std::istream& input) {
         return false;
     }
 
-    std::map<std::string, std::string> configs;
-    if (!parse_key_value_pairs(input, &configs)) {
-        return false;
-    }
-
-    for (const auto& [k, v] : configs) {
-        auto op_field = Field::get(k);
-        if (!op_field.has_value()) {
-            std::cerr << fmt::format("Ignored unknown config: {}\n", k);
-            continue;
-        }
-        if (bool r = op_field.value()->set_value(v); !r) {
-            std::cerr << fmt::format("Invalid value of config '{}': '{}'\n", k, v);
-            return false;
-        }
-    }
-    return true;
+    return parse_key_value_pairs(input);
 }
 
 Status set_config(const std::string& field, const std::string& value) {

@@ -380,13 +380,58 @@ TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {
     }
 }
 
-TEST_F(ConfigTest, test_alias) {
+TEST_F(ConfigTest, test_alias01) {
     CONF_mInt16(cfg_int32, "8000");
     CONF_Alias(cfg_int32, cfg_int32_alias);
 
     std::stringstream ss;
     ss << R"DEL(
         cfg_int32_alias = 8080
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(8080, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_alias02) {
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias);
+
+    std::stringstream ss;
+    ss << R"DEL(
+        cfg_int32_alias = 8080
+        cfg_int32 = 8001
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(8001, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_alias03) {
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias1);
+    CONF_Alias(cfg_int32, cfg_int32_alias2);
+
+    std::stringstream ss;
+    ss << R"DEL(
+        cfg_int32_alias1 = 8080
+        cfg_int32_alias2 = 8090
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(8090, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_alias04) {
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias1);
+    CONF_Alias(cfg_int32, cfg_int32_alias2);
+
+    // Different assgnment order from test_alias03
+    std::stringstream ss;
+    ss << R"DEL(
+        cfg_int32_alias2 = 8090
+        cfg_int32_alias1 = 8080
        )DEL";
 
     EXPECT_TRUE(config::init(ss));
