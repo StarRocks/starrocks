@@ -142,6 +142,7 @@ void* my_realloc(void* p, size_t size) __THROW {
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
+        CHECK(false);
         return nullptr;
     }
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
