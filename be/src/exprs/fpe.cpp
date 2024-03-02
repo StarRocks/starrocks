@@ -58,8 +58,8 @@ Status FPE::encrypt(const std::string_view& num_str, const std::string_view& key
         fpe_key[i] = static_cast<uint8_t>(key[i]);
     }
 
-    struct ff1_ctx* ctx;
-    auto defer = DeferOp([&]{ if (ctx != nullptr) ff1_ctx_destroy(ctx);});
+    struct ff1_ctx* ctx = nullptr;
+    DeferOp op([&]{ if (ctx != nullptr) ff1_ctx_destroy(ctx);});
 
     std::string tmp;
     tmp.resize(num_str_length);
@@ -70,18 +70,15 @@ Status FPE::encrypt(const std::string_view& num_str, const std::string_view& key
                              0, SIZE_MAX,
                              radix);
     if (res != 0) {
-        free(out);
         return Status::RuntimeError("ff1_ctx_create failed");
     }
     res = ff1_encrypt(ctx, out, fixed_num_str.c_str(), NULL, 0);
     if (res != 0) {
-        free(out);
         return Status::RuntimeError("ff1_encrypt failed");
     }
 
     std::string result(out);
     value = result;
-    free(out);
 
     return Status::OK();
 }
@@ -131,8 +128,8 @@ Status FPE::decrypt(const std::string_view& num_str, const std::string_view& key
         fpe_key[i] = static_cast<uint8_t>(key[i]);
     }
 
-    struct ff1_ctx* ctx;
-    auto defer = DeferOp([&]{ if (ctx != nullptr) ff1_ctx_destroy(ctx);});
+    struct ff1_ctx* ctx = nullptr;
+    DeferOp op([&]{ if (ctx != nullptr) ff1_ctx_destroy(ctx);});
 
     std::string tmp;
     tmp.resize(num_str_length);
@@ -143,18 +140,15 @@ Status FPE::decrypt(const std::string_view& num_str, const std::string_view& key
                              0, SIZE_MAX,
                              radix);
     if (res != 0) {
-        free(out);
         return Status::RuntimeError("ff1_ctx_create failed");
     }
     res = ff1_decrypt(ctx, out, num_str.data(), NULL, 0);
     if (res != 0) {
-        free(out);
         return Status::RuntimeError("ff1_encrypt failed");
     }
 
     std::string result(out);
     value = result;
-    free(out);
 
     return Status::OK();
 }

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exprs/function_helper.h"
 #include "exprs/encryption_functions.h"
 #include "exprs/fpe.h"
 
@@ -420,6 +421,8 @@ Status EncryptionFunctions::sha2_close(FunctionContext* context, FunctionContext
 }
 
 StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
@@ -433,6 +436,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
             result.append_null();
             continue;
         }
+
         auto src_value = src_viewer.value(row);
         auto key_value = key_viewer.value(row);
         auto key_size = key_value.size;
@@ -453,6 +457,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
 }
 
 StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
@@ -486,6 +492,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, c
 }
 
 StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
@@ -519,6 +527,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
 }
 
 StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt_num(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
