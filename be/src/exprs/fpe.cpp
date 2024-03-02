@@ -24,9 +24,9 @@
 
 namespace starrocks {
 
-const std::string FPE::DEFAULT_KEY = "abcdefghijk12345abcdefghijk12345";
+const std::string_view FPE::DEFAULT_KEY = "abcdefghijk12345abcdefghijk12345";
 
-std::string FPE::trim_leading_zeros(const std::string &str) {
+std::string_view FPE::trim_leading_zeros(const std::string_view& str) {
     size_t start = str.find_first_not_of('0');
     if (start == std::string::npos) {
         return "0";
@@ -34,7 +34,7 @@ std::string FPE::trim_leading_zeros(const std::string &str) {
     return str.substr(start);
 }
 
-std::string FPE::trim_trailing_zeros(const std::string &str) {
+std::string_view FPE::trim_trailing_zeros(const std::string_view& str) {
     size_t end = str.find_last_not_of('0');
     if (end == std::string::npos) {
         return str;
@@ -42,9 +42,9 @@ std::string FPE::trim_trailing_zeros(const std::string &str) {
     return str.substr(0, end + 1);
 }
 
-Status FPE::encrypt(const std::string& num_str, const std::string key, std::string& value, int radix = 10) {
+Status FPE::encrypt(const std::string_view& num_str, const std::string_view& key, std::string& value, int radix = 10) {
     int num_str_length = num_str.length();
-    std::string fixed_num_str = num_str;
+    std::string fixed_num_str(num_str);
     if (num_str_length < MIN_LENGTH) {
         std::string padding(MIN_LENGTH - num_str_length, '0');
         fixed_num_str = padding + fixed_num_str;
@@ -58,10 +58,11 @@ Status FPE::encrypt(const std::string& num_str, const std::string key, std::stri
     }
 
     struct ff1_ctx* ctx;
-    char* out = (char *) calloc(num_str_length + 1, sizeof(char));
-    if (out == NULL) {
-        return Status::MemoryAllocFailed("encrypt calloc memory Failed");
-    }
+    auto defer = DeferOp([&]{ if (ctx != nullptr) ff1_ctx_destroy(ctx);});
+
+    std::string tmp;
+    tmp.resize(num_str_length);
+    char* out = tmp.data();
 
     int res = ff1_ctx_create(&ctx, fpe_key.data(),
                              fpe_key_length, TWEAK, sizeof(TWEAK),
@@ -76,7 +77,6 @@ Status FPE::encrypt(const std::string& num_str, const std::string key, std::stri
         free(out);
         return Status::RuntimeError("ff1_encrypt failed");
     }
-    ff1_ctx_destroy(ctx);
 
     std::string result(out);
     value = result;
@@ -85,14 +85,14 @@ Status FPE::encrypt(const std::string& num_str, const std::string key, std::stri
     return Status::OK();
 }
 
-Status FPE::encrypt_num(const std::string& num_str,const std::string key, std::string& value) {
+Status FPE::encrypt_num(const std::string_view& num_str,const std::string_view& key, std::string& value) {
     std::string num_flag;
     if (num_str[0] == '-') {
         num_flag = "-";
     }
 
     size_t dot_pos = num_str.find('.');
-    std::string int_part = num_str.substr(0, dot_pos);
+    std::string_view int_part = num_str.substr(0, dot_pos);
     Status status;
     std::string encrypted_int_part;
     status = encrypt(int_part, key, encrypted_int_part, DEFAULT_RADIX);
@@ -102,9 +102,11 @@ Status FPE::encrypt_num(const std::string& num_str,const std::string key, std::s
 
     std::string encrypted_dec_part;
     if (dot_pos != std::string::npos) {
-        std::string dec_part = num_str.substr(dot_pos + 1);
-        dec_part = "0." + dec_part;
-        double dec_part_num = std::stod(dec_part);
+        std::string_view dec_part = num_str.substr(dot_pos + 1);
+        std::string dec_part_str(dec_part);
+        dec_part_str = "0." + dec_part_str;
+
+        double dec_part_num = std::stod(dec_part_str);
         dec_part_num = dec_part_num * EXPANDED;
         auto dec_int_part = static_cast<long long>(dec_part_num);
         status = encrypt(std::to_string(dec_int_part), key, encrypted_dec_part, DEFAULT_RADIX);
@@ -119,7 +121,7 @@ Status FPE::encrypt_num(const std::string& num_str,const std::string key, std::s
     return Status::OK();
 }
 
-Status FPE::decrypt(const std::string& num_str, const std::string key, std::string& value, int radix= 10) {
+Status FPE::decrypt(const std::string_view& num_str, const std::string_view& key, std::string& value, int radix= 10) {
     int num_str_length = num_str.length();
     int fpe_key_length = key.length();
 
@@ -129,10 +131,11 @@ Status FPE::decrypt(const std::string& num_str, const std::string key, std::stri
     }
 
     struct ff1_ctx* ctx;
-    char* out = (char *) calloc(num_str_length + 1, sizeof(char));
-    if (out == NULL) {
-        return Status::MemoryAllocFailed("encrypt calloc memory Failed");
-    }
+    auto defer = DeferOp([&]{ if (ctx != nullptr) ff1_ctx_destroy(ctx);});
+
+    std::string tmp;
+    tmp.resize(num_str_length);
+    char* out = tmp.data();
 
     int res = ff1_ctx_create(&ctx, fpe_key.data(),
                              fpe_key_length, TWEAK, sizeof(TWEAK),
@@ -142,12 +145,11 @@ Status FPE::decrypt(const std::string& num_str, const std::string key, std::stri
         free(out);
         return Status::RuntimeError("ff1_ctx_create failed");
     }
-    res = ff1_decrypt(ctx, out, num_str.c_str(), NULL, 0);
+    res = ff1_decrypt(ctx, out, num_str.data(), NULL, 0);
     if (res != 0) {
         free(out);
         return Status::RuntimeError("ff1_encrypt failed");
     }
-    ff1_ctx_destroy(ctx);
 
     std::string result(out);
     value = result;
@@ -156,9 +158,9 @@ Status FPE::decrypt(const std::string& num_str, const std::string key, std::stri
     return Status::OK();
 }
 
-Status FPE::decrypt_num(const std::string& num_str, const std::string key, std::string& value) {
+Status FPE::decrypt_num(const std::string_view& num_str, const std::string_view& key, std::string& value) {
     std::string num_flag;
-    std::string decrypt_num_str = num_str;
+    std::string decrypt_num_str(num_str);
     if (decrypt_num_str[0] == '-') {
         num_flag = "-";
         decrypt_num_str = decrypt_num_str.substr(1);
@@ -172,7 +174,7 @@ Status FPE::decrypt_num(const std::string& num_str, const std::string key, std::
     if (!status.ok()) {
         return Status::RuntimeError("decrypt_num int_part failed");
     }
-    std::string decrypted_int_part = trim_leading_zeros(encrypted_dec_part);
+    std::string_view decrypted_int_part = trim_leading_zeros(encrypted_dec_part);
 
     std::string decrypted_dec_part;
     if (dot_pos != std::string::npos) {
@@ -188,7 +190,7 @@ Status FPE::decrypt_num(const std::string& num_str, const std::string key, std::
         decrypted_dec_part = '.' + decrypted_dec_part;
     }
 
-    std::string decrypted_num = num_flag + decrypted_int_part + decrypted_dec_part;
+    std::string decrypted_num = num_flag + std::string(decrypted_int_part) + decrypted_dec_part;
     value = decrypted_num;
 
     return Status::OK();

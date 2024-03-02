@@ -15,6 +15,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include "util/slice.h"
 #include "common/status.h"
 
@@ -24,15 +25,15 @@ class FPE {
 public:
     FPE() = delete;
 
-    static std::string trim_leading_zeros(const std::string& str);
-    static std::string trim_trailing_zeros(const std::string& str);
-    static Status encrypt(const std::string& num_str, const std::string key, std::string& value, int radix);
-    static Status encrypt_num(const std::string& num_str, const std::string key, std::string& value);
-    static Status decrypt(const std::string& num_str, const std::string key, std::string& value, int radix);
-    static Status decrypt_num(const std::string& num_str,const std::string key, std::string& value);
+    static std::string_view trim_leading_zeros(const std::string_view& str);
+    static std::string_view trim_trailing_zeros(const std::string_view& str);
+    static Status encrypt(const std::string_view& num_str, const std::string_view& key, std::string& value, int radix);
+    static Status encrypt_num(const std::string_view& num_str, const std::string_view& key, std::string& value);
+    static Status decrypt(const std::string_view& num_str, const std::string_view& key, std::string& value, int radix);
+    static Status decrypt_num(const std::string_view& num_str,const std::string_view& key, std::string& value);
 
 public:
-    static const std::string DEFAULT_KEY;
+    static const std::string_view DEFAULT_KEY;
     static const int DEFAULT_RADIX = 10;
 
 private:
