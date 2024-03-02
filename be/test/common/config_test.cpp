@@ -253,6 +253,26 @@ TEST_F(ConfigTest, test_list_configs) {
     }
 }
 
+TEST_F(ConfigTest, test_empty_list) {
+    CONF_Strings(cfg_strings, "");
+    CONF_Int32s(cfg_int32s, "");
+    ASSERT_TRUE(config::init(nullptr));
+    EXPECT_EQ(0, cfg_strings.size());
+    EXPECT_EQ(0, cfg_int32s.size());
+}
+
+TEST_F(ConfigTest, test_list_with_spaces) {
+    CONF_Strings(cfg_strings, "");
+    CONF_Int32s(cfg_int32s, "");
+    std::stringstream ss;
+    ss << R"(cfg_strings=,s1,,s2, s3,s4 
+             cfg_int32s=,10,, 12, 14 
+          )";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_THAT(cfg_strings, ElementsAre("s1", "s2", "s3", "s4"));
+    EXPECT_THAT(cfg_int32s, ElementsAre(10, 12, 14));
+}
+
 TEST_F(ConfigTest, test_set_config) {
     CONF_Bool(cfg_bool_immutable, "true");
     CONF_mBool(cfg_bool, "false");

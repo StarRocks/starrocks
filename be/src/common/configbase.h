@@ -194,6 +194,9 @@ public:
         for (auto& part : parts) {
             T v;
             StripWhiteSpace(&part);
+            if (part.empty()) {
+                continue;
+            }
             if (!strtox(part, v)) {
                 return false;
             }
