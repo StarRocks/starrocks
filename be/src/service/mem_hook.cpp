@@ -115,27 +115,16 @@ DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
-    if (IS_BAD_ALLOC_CATCHED()) {
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
-        // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
-        // call the `my_malloc`, and result in a deadloop.
-        TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0), nullptr);
-        void* ptr = STARROCKS_MALLOC(size);
-        if (UNLIKELY(ptr == nullptr)) {
-            SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0));
-        }
-        return ptr;
-    } else {
-        void* ptr = STARROCKS_MALLOC(size);
-        // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
-        // call the `my_malloc`, and result in a deadloop.
-        if (LIKELY(ptr != nullptr)) {
-            MEMORY_CONSUME_SIZE(STARROCKS_NALLOX(size, 0));
-        }
-        return ptr;
+    void* ptr = STARROCKS_MALLOC(size);
+    // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
+    // call the `my_malloc`, and result in a deadloop.
+    if (LIKELY(ptr != nullptr)) {
+        size_t old_size = STARROCKS_NALLOX(size, 0);
+        size_t new_size = STARROCKS_MALLOC_SIZE(ptr);
+        CHECK(old_size == new_size);
+        MEMORY_CONSUME_SIZE(old_size);
     }
+    return ptr;
 }
 
 // free
@@ -149,7 +138,6 @@ void my_free(void* p) __THROW {
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
-    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     // If new_size is zero, the behavior is implementation defined
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
@@ -158,38 +146,16 @@ void* my_realloc(void* p, size_t size) __THROW {
     }
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
 
-    if (IS_BAD_ALLOC_CATCHED()) {
-        size_t new_size = STARROCKS_NALLOX(size, 0);
-        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
+    void* ptr = STARROCKS_REALLOC(p, size);
+    if (ptr != nullptr) {
+        size_t new_size = STARROCKS_MALLOC_SIZE(ptr);
         if (new_size >= old_size) {
-            TRY_MEM_CONSUME(new_size - old_size, nullptr);
-            void* ptr = STARROCKS_REALLOC(p, size);
-            if (UNLIKELY(ptr == nullptr)) {
-                SET_EXCEED_MEM_TRACKER();
-                MEMORY_RELEASE_SIZE(new_size - old_size);
-            }
-            return ptr;
+            MEMORY_CONSUME_SIZE(new_size - old_size);
         } else {
-            void* ptr = STARROCKS_REALLOC(p, size);
-            if (UNLIKELY(ptr == nullptr)) {
-                SET_EXCEED_MEM_TRACKER();
-            } else {
-                MEMORY_RELEASE_SIZE(old_size - new_size);
-            }
-            return ptr;
+            MEMORY_RELEASE_SIZE(old_size - new_size);
         }
-    } else {
-        void* ptr = STARROCKS_REALLOC(p, size);
-        if (ptr != nullptr) {
-            size_t new_size = STARROCKS_MALLOC_SIZE(ptr);
-            if (new_size >= old_size) {
-                MEMORY_CONSUME_SIZE(new_size - old_size);
-            } else {
-                MEMORY_RELEASE_SIZE(old_size - new_size);
-            }
-        }
-        return ptr;
     }
+    return ptr;
 }
 
 // calloc
