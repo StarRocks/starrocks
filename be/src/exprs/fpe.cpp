@@ -21,6 +21,7 @@
 #include <iomanip>
 
 #include "exprs/fpe.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
