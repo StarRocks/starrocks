@@ -155,6 +155,8 @@ void* my_realloc(void* p, size_t size) __THROW {
         } else {
             MEMORY_RELEASE_SIZE(old_size - new_size);
         }
+    } else {
+        CHECK(false);
     }
     return ptr;
 }
