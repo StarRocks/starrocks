@@ -445,11 +445,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        status = FPE::encrypt(src_value.data, key, value, FPE::DEFAULT_RADIX);
-        if (!status.ok() || value.empty()) {
-            result.append(Slice(status.to_string()));
-            continue;
-        }
+        RETURN_IF_ERROR(FPE::encrypt(src_value.data, key, value, FPE::DEFAULT_RADIX));
+
         result.append(Slice(value));
     }
 
@@ -480,11 +477,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, c
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        status = FPE::encrypt_num(src_value.data, key, value);
-        if (!status.ok() || value.empty()) {
-            result.append(Slice(status.to_string()));
-            continue;
-        }
+        RETURN_IF_ERROR(FPE::encrypt_num(src_value.data, key, value));
+
         result.append(Slice(value));
     }
 
@@ -515,11 +509,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        status = FPE::decrypt(src_value.data, key, value, FPE::DEFAULT_RADIX);
-        if (!status.ok() || value.empty()) {
-            result.append(Slice(status.to_string()));
-            continue;
-        }
+        RETURN_IF_ERROR(FPE::decrypt(src_value.data, key, value, FPE::DEFAULT_RADIX));
+
         result.append(Slice(value));
     }
 
@@ -550,11 +541,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt_num(FunctionContext* ctx, c
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        status = FPE::decrypt_num(src_value.data, key, value);
-        if (!status.ok() || value.empty()) {
-            result.append(Slice(status.to_string()));
-            continue;
-        }
+        RETURN_IF_ERROR(FPE::decrypt_num(src_value.data, key, value));
+
         result.append(Slice(value));
     }
 
