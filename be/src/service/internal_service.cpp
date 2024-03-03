@@ -415,6 +415,16 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
+    if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
+        return Status::InvalidArgument("batch_size is not set");
+    }
+    auto batch_size = t_request.query_options.batch_size;
+    if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+        return Status::InvalidArgument(
+                fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                            MAX_CHUNK_SIZE, batch_size));
+    }
+
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
               << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
