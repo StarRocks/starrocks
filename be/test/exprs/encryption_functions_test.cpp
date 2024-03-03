@@ -854,15 +854,20 @@ TEST_P(EncryptionFunctionsTest, fpe_ff1_encryptTest) {
 
     const std::string origin = "0504327939";
     const std::string key = "abcdefghijk12345abcdefghijk12345";
+    int radix = 10;
     const std::string expected = "8585819134";
 
     std::string plains[] = {origin, key};
     std::string results[] = {expected};
+    ColumnPtr radix_column =  ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
 
     for (auto& j: plains) {
-        plain->append(j);
+    plain->append(j);
         columns.emplace_back(plain);
     }
+
+    columns.emplace_back(radix_column);
+
     ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     for (int i = 0; i < sizeof(results)/sizeof(results[0]); ++i) {

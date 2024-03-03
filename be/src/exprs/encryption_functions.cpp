@@ -425,6 +425,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
 
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto length_viewer = ColumnViewer<TYPE_INT>(columns[2]);
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -439,13 +440,14 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
 
         auto src_value = src_viewer.value(row);
         auto key_value = key_viewer.value(row);
+        auto length = length_viewer.value(row);
         auto key_size = key_value.size;
         if (key_size != 16 && key_size != 24 && key_size != 32) {
             throw std::runtime_error("key size must 16 or 24 or 32");
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::encrypt(src_value.data, key, value, FPE::DEFAULT_RADIX));
+        RETURN_IF_ERROR(FPE::encrypt(src_value.data, key, value, length));
 
         result.append(Slice(value));
     }
@@ -490,6 +492,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
 
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto length_viewer = ColumnViewer<TYPE_INT>(columns[2]);
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -503,13 +506,14 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
         }
         auto src_value = src_viewer.value(row);
         auto key_value = key_viewer.value(row);
+        auto length = length_viewer.value(row);
         auto key_size = key_value.size;
         if (key_size != 16 && key_size != 24 && key_size != 32) {
             throw std::runtime_error("key size must 16 or 24 or 32");
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::decrypt(src_value.data, key, value, FPE::DEFAULT_RADIX));
+        RETURN_IF_ERROR(FPE::decrypt(src_value.data, key, value, length));
 
         result.append(Slice(value));
     }
