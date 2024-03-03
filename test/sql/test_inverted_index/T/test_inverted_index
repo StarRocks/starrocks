@@ -485,3 +485,25 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
+-- name: test_clone_for_gin
+CREATE TABLE `t_clone_for_gin` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "2",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_clone_for_gin VALUES (1, "abc"),(2, "ABC");
+SELECT * FROM t_clone_for_gin ORDER BY id1;
+
+function: set_first_tablet_bad_and_recover("t_clone_for_gin")
+
+SELECT * FROM t_clone_for_gin ORDER BY id1;
