@@ -801,7 +801,9 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
         ASSERT_EQ(results[j], v->get_data()[j]);
     }
+
 }
+
 
 class ShaTestFixture : public ::testing::TestWithParam<std::tuple<std::string, int, std::string>> {};
 
@@ -847,34 +849,6 @@ TEST_P(ShaTestFixture, test_sha2) {
                         .ok());
 }
 
-TEST_P(EncryptionFunctionsTest, fpe_ff1_encryptTest) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns columns;
-    auto plain = BinaryColumn::create();
-
-    const std::string origin = "0504327939";
-    const std::string key = "abcdefghijk12345abcdefghijk12345";
-    int radix = 10;
-    const std::string expected = "8585819134";
-
-    std::string plains[] = {origin, key};
-    std::string results[] = {expected};
-    ColumnPtr radix_column =  ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
-
-    for (auto& j: plains) {
-    plain->append(j);
-        columns.emplace_back(plain);
-    }
-
-    columns.emplace_back(radix_column);
-
-    ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
-    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-    for (int i = 0; i < sizeof(results)/sizeof(results[0]); ++i) {
-        ASSERT_EQ(results[i], v->get_data()[i].to_string());
-    }
-}
-
 INSTANTIATE_TEST_SUITE_P(
         ShaTest, ShaTestFixture,
         ::testing::Values(
@@ -900,5 +874,31 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple("20211119", 512,
                                 "eaf18d26b2976216790d95b2942d15b7db5f926c7d62d35f24c98b8eedbe96f2e6241e5e4fdc6b7d9e7893"
                                 "d94d86cd8a6f3bb6b1804c22097b337ecc24f6015e")));
+
+class FpeTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int, std::string>> {};
+
+TEST_P(FpeTestFixture, fpe_ff1_encryptTest) {
+    auto [str, key, radix, expected] = GetParam();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    auto plain = BinaryColumn::create();
+    plain->append(str);
+    plain->append(key);
+
+    ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
+    columns.emplace_back(plain);
+    columns.emplace_back(radix_column);
+
+    ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    EXPECT_EQ(expected, v->get_data()[0].to_string());
+}
+INSTANTIATE_TEST_SUITE_P(
+        FpeTest, FpeTestFixture,
+        ::testing::Values(
+            std::make_tuple("0504327939", "abcdefghijk12345abcdefghijk12345", 10, "8585819134")
+        )
+);
 
 } // namespace starrocks
