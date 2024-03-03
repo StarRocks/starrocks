@@ -1450,7 +1450,7 @@ class StarrocksSQLApiLib(object):
             "SHOW TABLET FROM %s" % table_name,
             True,
         )
-        print(len(res["result"]))
+
         tablet_id = res["result"][0][0]
         backend_id = res["result"][0][2]
 
@@ -1458,16 +1458,8 @@ class StarrocksSQLApiLib(object):
             "ADMIN SET REPLICA STATUS PROPERTIES('tablet_id' = '%s', 'backend_id' = '%s', 'status' = 'bad')" % (tablet_id, backend_id),
             True,
         )
-
-        while True:
-            res = self.execute_sql(
-                "SHOW TABLET FROM %s" % table_name,
-                True,
-            )
-            if len(res["result"]) == 2:
-                time.sleep(0.5)
-            elif len(res["result"]) == 1:
-                break
+        
+        time.sleep(20)
         
         while True:
             res = self.execute_sql(
