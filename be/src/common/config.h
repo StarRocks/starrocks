@@ -370,6 +370,7 @@ CONF_Int64(max_row_source_mask_memory_bytes, "209715200");
 
 // Port to start debug http server in BE
 CONF_Int32(be_http_port, "8040");
+CONF_Alias(be_http_port, webserver_port);
 // Number of http workers in BE
 CONF_Int32(be_http_num_workers, "48");
 // Period to update rate counters and sampling counters in ms.
