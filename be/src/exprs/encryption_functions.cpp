@@ -443,7 +443,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
         auto length = length_viewer.value(row);
         auto key_size = key_value.size;
         if (key_size != 16 && key_size != 24 && key_size != 32) {
-            throw std::runtime_error("key size must 16 or 24 or 32");
+            return Status::InvalidArgument("key size must 16 or 24 or 32");
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
@@ -475,7 +475,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, c
         auto key_value = key_viewer.value(row);
         auto key_size = key_value.size;
         if (key_size != 16 && key_size != 24 && key_size != 32) {
-            throw std::runtime_error("key size must 16 or 24 or 32");
+            return Status::InvalidArgument("key size must 16 or 24 or 32");
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
@@ -509,7 +509,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
         auto length = length_viewer.value(row);
         auto key_size = key_value.size;
         if (key_size != 16 && key_size != 24 && key_size != 32) {
-            throw std::runtime_error("key size must 16 or 24 or 32");
+            return Status::InvalidArgument("key size must 16 or 24 or 32");
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
@@ -541,7 +541,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt_num(FunctionContext* ctx, c
         auto key_value = key_viewer.value(row);
         auto key_size = key_value.size;
         if (key_size != 16 && key_size != 24 && key_size != 32) {
-            throw std::runtime_error("key size must 16 or 24 or 32");
+            return Status::InvalidArgument("key size must 16 or 24 or 32");
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
