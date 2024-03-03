@@ -847,6 +847,29 @@ TEST_P(ShaTestFixture, test_sha2) {
                         .ok());
 }
 
+TEST_P(EncryptionFunctionsTest, fpe_ff1_encryptTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    const std::string origin = "0504327939";
+    const std::string key = "abcdefghijk12345abcdefghijk12345";
+    const std::string expected = "8585819134";
+
+    std::string plains[] = {origin, key};
+    std::string results[] = {expected};
+
+    for (auto& j: plains) {
+        plain->append(j);
+        columns.emplace_back(plain);
+    }
+    ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    for (int i = 0; i < sizeof(results)/sizeof(results[0]); ++i) {
+        ASSERT_EQ(results[i], v->get_data()[i].to_string());
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(
         ShaTest, ShaTestFixture,
         ::testing::Values(
