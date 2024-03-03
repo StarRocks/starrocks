@@ -8,20 +8,20 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 使用 Kafka connector 可以更好的融入 Kafka 生态，StarRocks 可以与 Kafka Connect 无缝对接。为 StarRocks 准实时接入链路提供了更多的选择。相比于 Routine Load，您可以在以下场景中优先考虑使用 Kafka connector 导入数据：
 
-- 相比于 Routine Load 仅支持导入 CSV、JSON、Avro 格式的数据，Kafka connector 支持导入更丰富的数据格式。只要数据能通过 Kafka connect 的 converters 转换成 JSON 和 CSV 格式，就可以通过 Kafka connector 导入，例如 Protobuf 格式的数据。
+- 相比于 Routine Load 仅支持导入 CSV、JSON、Avro 格式的数据，Kafka connector 支持导入更丰富的数据格式。只要数据能通过 Kafka Connect 的 converters 转换成 JSON 和 CSV 格式，就可以通过 Kafka connector 导入，例如 Protobuf 格式的数据。
 - 需要对数据做自定义的 transform 操作，例如 Debezium CDC 格式的数据。
 - 从多个 Kafka Topic 导入数据。
-- 从 Confluent cloud 导入数据。
+- 从 Confluent Cloud 导入数据。
 - 需要更精细化的控制导入的批次大小，并行度等参数，以求达到导入速率和资源使用之间的平衡。
 
 ## 环境准备
 
 ### 准备 Kafka 环境
 
-支持自建 Apache Kafka 集群和 Confluent cloud：
+支持自建 Apache Kafka 集群和 Confluent Cloud：
 
 - 如果使用自建 Apache Kafka 集群，您可以参考 [Apache Kafka quickstart](https://kafka.apache.org/quickstart) 快速部署 Kafka 集群。Kafka Connect 已集成在 Kafka 中。
-- 如果使用 Confluent cloud，请确保已拥有 Confluent 账号并已经创建集群。
+- 如果使用 Confluent Cloud，请确保已拥有 Confluent 账号并已经创建集群。
 
 ### 下载 Kafka connector
 
@@ -31,13 +31,13 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
   下载并解压 [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)。
 
-- Confluent cloud
+- Confluent Cloud
 
-  Kafka connector 目前尚未上传到 Confluent Hub，您需要下载并解压 [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) ，打包成 zip 文件并上传到 Confluent cloud。
+  Kafka connector 目前尚未上传到 Confluent Hub，您需要下载并解压 [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) ，打包成 zip 文件并上传到 Confluent Cloud。
 
 ## 使用示例
 
-本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 和 Kafka connect，然后启动 Kafka connect 导入数据至 StarRocks。
+本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 和 Kafka connect，然后启动 Kafka Connect 导入数据至 StarRocks。
 
 ### 数据集
 
@@ -79,7 +79,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
       starrocks.topic2table.map=test:test_tbl
       # StarRocks 用户名
       starrocks.username=user1
-      # StarRocks 用户密码
+      # StarRocks 用户密码。您必须输入用户密码。
       starrocks.password=123456
       starrocks.database.name=example_db
       sink.properties.strip_outer_array=true
@@ -95,7 +95,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
-        # 注意本示例使用 PLAINTEXT 的方式访问 Kafka 集群，如果使用其他鉴方式访问 kafka集群，则您需要在本文件中配置相关鉴权信息。
+        # 注意本示例使用 PLAINTEXT  安全协议访问 Kafka 集群，如果使用其他安全协议访问 Kafka 集群，则您需要在本文件中配置相关信息。
         bootstrap.servers=<kafka_broker_ip>:9092
         offset.storage.file.filename=/tmp/connect.offsets
         offset.flush.interval.ms=10000
@@ -118,8 +118,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
    1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-distributed.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。     
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
-        # 注意本示例使用 PLAINTEXT 的方式访问 Kafka 集群，如果使用其他鉴方式访问 kafka集群，则您需要在本文件中配置相关鉴权信息。
-        bootstrap.servers=<kafka_broker_ip>:9092
+        # 注意本示例使用 PLAINTEXT  安全协议访问 Kafka 集群，如果使用其他安全协议访问 Kafka 集群，则您需要在本文件中配置相关信息。        bootstrap.servers=<kafka_broker_ip>:9092
         offset.storage.file.filename=/tmp/connect.offsets
         offset.flush.interval.ms=10000
         key.converter=org.apache.kafka.connect.json.JsonConverter

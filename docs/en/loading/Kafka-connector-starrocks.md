@@ -11,17 +11,17 @@ The Kafka connector can seamlessly integrate with Kafka Connect, which allows St
 - Compared with Routine Load which only supports loading data in CSV, JSON, and Avro formats, Kafka connector can load data in more formats, such as Protobuf. As long as data can be converted into JSON and CSV formats using Kafka Connect's converters, data can be loaded into StarRocks via the Kafka connector.
 - Customize data transformation, such as Debezium-formatted CDC data.
 - Load data from multiple Kafka topics.
-- Load data from Confluent cloud.
+- Load data from Confluent Cloud.
 - Need finer control over load batch sizes, parallelism, and other parameters to achieve a balance between load speed and resource utilization.
 
 ## Preparations
 
 ### Set up Kafka environment
 
-Both self-managed Apache Kafka clusters and Confluent cloud are supported.
+Both self-managed Apache Kafka clusters and Confluent Cloud are supported.
 
 - For a self-managed Apache Kafka cluster, you can refer to [Apache Kafka quickstart](https://kafka.apache.org/quickstart) to quickly deploy a Kafka cluster. Kafka Connect is already integrated into Kafka.
-- For Confluent cloud, make sure that you have a Confluent account and create a cluster.
+- For Confluent Cloud, make sure that you have a Confluent account and have created a cluster.
 
 ### Download Kafka connector
 
@@ -31,13 +31,13 @@ Submit the Kafka connector into Kafka Connect:
 
   Download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases).
 
-- Confluent cloud:
+- Confluent Cloud:
 
-  The Kafka connector is not currently uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a zip file and upload the zip file to Confluent cloud.
+  Currently, the Kafka connector is not uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a zip file and upload the zip file to Confluent Cloud.
 
 ## Usage
 
-This section uses a self-managed Kafka cluster as an example to explain how to configure the Kafka connector and the Kafka connect, and then run the Kafka Connect to load data into StarRocks.
+This section uses a self-managed Kafka cluster as an example to explain how to configure the Kafka connector and the Kafka Connect, and then run the Kafka Connect to load data into StarRocks.
 
 ### Prepare a dataset
 
@@ -51,7 +51,7 @@ Suppose that JSON-format data exists in the topic `test` in a Kafka cluster.
 
 ### Create a table
 
-According to the keys of the JSON-format data, create the table `test_tbl` in the database `example_db` in the StarRocks cluster.
+Create the table `test_tbl` in the database `example_db` in the StarRocks cluster according to the keys of the JSON-format data, .
 
 ```SQL
 CREATE DATABASE example_db;
@@ -61,7 +61,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 ### Configure Kafka connector and Kafka Connect, and then run Kafka Connect to load data
 
-##### Run Kafka Connect in standalone mode
+#### Run Kafka Connect in standalone mode
 
 1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and dsescriptions, see [Parameters](#Parameters).
 
@@ -75,11 +75,11 @@ CREATE TABLE test_tbl (id INT, city STRING);
     value.converter.schemas.enable=false
     # The HTTP URL of the FE in your StarRocks cluster. The default port is 8030.
     starrocks.http.url=192.168.xxx.xxx:8030
-    # When the Kafka Topic name is different from the StarRocks table name, the mapping relationship between them needs to be configured.
+    # If the Kafka topic name is different from the StarRocks table name, you need to configure the mapping relationship between them.
     starrocks.topic2table.map=test:test_tbl
     # StarRocks username
     starrocks.username=user1
-    # StarRocks password. you must set 
+    # StarRocks password. You must enter the password.
     starrocks.password=123456
     starrocks.database.name=example_db
     sink.properties.strip_outer_array=true
@@ -96,7 +96,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
         ```yaml
         # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
-        # Note that this example uses PLAINTEXT to access the Kafka cluster. If you are using other authentication methods to access the Kafka cluster, you need to configure the relevant authentication information in this file.
+        # Note that this example uses PLAINTEXT as the security protocol to access the Kafka cluster. If you are using other security protocol to access the Kafka cluster, you need to configure the relevant information in this file.
         bootstrap.servers=<kafka_broker_ip>:9092
         offset.storage.file.filename=/tmp/connect.offsets
         offset.flush.interval.ms=10000
@@ -113,7 +113,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
 
-##### Run Kafka Connect in distributed mode
+#### Run Kafka Connect in distributed mode
 
 1. Configure and run the Kafka Connect.
     
@@ -121,7 +121,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
         ```yaml
         # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
-        # Note that this example uses PLAINTEXT to access the Kafka cluster. If you are using other authentication methods to access the Kafka cluster, you need to configure the relevant authentication information in this file.
+        # Note that this example uses PLAINTEXT as the security protocol to access the Kafka cluster. If you are using other security protocol to access the Kafka cluster, you need to configure the relevant information in this file.
         bootstrap.servers=<kafka_broker_ip>:9092
         offset.storage.file.filename=/tmp/connect.offsets
         offset.flush.interval.ms=10000
