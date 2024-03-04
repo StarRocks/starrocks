@@ -118,6 +118,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.warehouse.Warehouse;
@@ -307,7 +308,18 @@ public class UtFrameUtils {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
 
+<<<<<<< HEAD
         // add be
+=======
+    public static ComputeNode addMockComputeNode(int backendId) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend("127.0.108.1");
+        // add be
+        return addMockComputeNode(backend, backendId);
+    }
+
+    private static Backend addMockBackend(MockedBackend backend, int backendId) {
+>>>>>>> 6c4f5cdae5 ([BugFix] create table with local persistent index by mistake when CN doesn't have local disk (#41933))
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
@@ -330,6 +342,25 @@ public class UtFrameUtils {
             GlobalStateMgr.getCurrentStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
         }
         return be;
+    }
+
+    private static ComputeNode addMockComputeNode(MockedBackend backend, int backendId) {
+        ComputeNode cn = new ComputeNode(backendId, backend.getHost(), backend.getHeartBeatPort());
+        cn.setAlive(true);
+        cn.setBePort(backend.getBeThriftPort());
+        cn.setBrpcPort(backend.getBrpcPort());
+        cn.setHttpPort(backend.getHttpPort());
+        cn.setStarletPort(backend.getStarletPort());
+        cn.setIsStoragePath(false);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = backend.getStarletPort();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            String workerAddress = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress, workerGroupId);
+        }
+        return cn;
     }
 
     public static void addBroker(String brokerName) throws Exception {
