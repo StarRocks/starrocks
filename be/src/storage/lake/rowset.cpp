@@ -241,7 +241,7 @@ std::vector<SegmentSharedPtr> Rowset::get_segments() {
 
     auto segments_or = segments(true);
     if (!segments_or.ok()) {
-        return std::vector<SegmentSharedPtr>();
+        return {};
     }
     _segments = std::move(segments_or.value());
     return _segments;
