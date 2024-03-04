@@ -119,7 +119,6 @@ public:
 
     void add_values(const void* values, size_t count) override {
         if constexpr (is_string_type(field_type)) {
-            DCHECK(_field != nullptr && _index_writer != nullptr);
             auto* _val = (Slice*)values;
             for (int i = 0; i < count; ++i) {
                 new_fulltext_field(_val->data, _val->size);
@@ -157,8 +156,6 @@ public:
         _null_bitmap.addRange(_rid, _rid + count);
         _rid += count;
         if constexpr (is_string_type(field_type)) {
-            DCHECK(_field != nullptr && _index_writer != nullptr);
-
             for (int i = 0; i < count; ++i) {
                 new_fulltext_field(empty_value.c_str(), 0);
                 _index_writer->addDocument(_doc.get());

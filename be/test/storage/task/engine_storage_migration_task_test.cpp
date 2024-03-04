@@ -206,6 +206,20 @@ public:
         k2.column_type.type = TPrimitiveType::VARCHAR;
         request->tablet_schema.columns.push_back(k2);
 
+        TOlapTableIndex olap_table_index;
+        std::vector<std::string> columns;
+        columns.emplace_back("k2");
+        std::map<std::string, std::string> common_map;
+        common_map.emplace("imp_type", "clucene");
+        olap_table_index.__set_index_id(0);
+        olap_table_index.__set_index_name("test_index");
+        olap_table_index.__set_columns(columns);
+        olap_table_index.__set_common_properties(common_map);
+        olap_table_index.__set_index_type(TIndexType::GIN);
+        std::vector<TOlapTableIndex> indexes;
+        indexes.emplace_back(std::move(olap_table_index));
+        request->tablet_schema.indexes = indexes;
+
         TColumn v;
         v.column_name = "v1";
         v.__set_is_key(false);
@@ -311,6 +325,7 @@ public:
     }
 
     void do_cycle_migration(int64_t tablet_id, int32_t schema_hash) {
+        sleep(20);
         TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
         TabletSharedPtr tablet = tablet_manager->get_tablet(tablet_id);
         ASSERT_TRUE(tablet != nullptr);
