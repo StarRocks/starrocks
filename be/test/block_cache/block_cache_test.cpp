@@ -14,6 +14,7 @@
 
 #include "block_cache/block_cache.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <cstring>
@@ -22,6 +23,7 @@
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
+#include "storage/options.h"
 
 namespace starrocks {
 
@@ -35,6 +37,7 @@ protected:
     void TearDown() override {}
 };
 
+<<<<<<< HEAD
 TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     std::unique_ptr<BlockCache> cache(new BlockCache);
     const size_t block_size = 1024 * 1024;
@@ -79,6 +82,8 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     cache->shutdown();
 }
 
+=======
+>>>>>>> d729b827c2 ([BugFix] Format the datacache path configurations before checking it instead of returning error directly. (#41921))
 TEST_F(BlockCacheTest, copy_to_iobuf) {
     // Create an iobuffer which contains 3 blocks
     const size_t buf_block_size = 100;
@@ -107,7 +112,7 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
     ASSERT_EQ(memcmp(result, expect, size), 0);
 }
 
-TEST_F(BlockCacheTest, parse_cache_space_str) {
+TEST_F(BlockCacheTest, parse_cache_space_size_str) {
     uint64_t mem_size = 10;
     ASSERT_EQ(parse_mem_size("10"), mem_size);
     mem_size *= 1024;
@@ -136,6 +141,29 @@ TEST_F(BlockCacheTest, parse_cache_space_str) {
     std::error_code ec;
     auto space_info = std::filesystem::space(disk_path, ec);
     ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * space_info.capacity));
+}
+
+TEST_F(BlockCacheTest, parse_cache_space_paths) {
+    const std::string cwd = std::filesystem::current_path().string();
+    const std::string s_normal_path = fmt::format("{}/block_disk_cache/cache1;{}/block_disk_cache/cache2", cwd, cwd);
+    std::vector<std::string> paths;
+    ASSERT_TRUE(parse_conf_datacache_paths(s_normal_path, &paths).ok());
+    ASSERT_EQ(paths.size(), 2);
+
+    paths.clear();
+    const std::string s_space_path = fmt::format(" {}/block_disk_cache/cache3 ; {}/block_disk_cache/cache4 ", cwd, cwd);
+    ASSERT_TRUE(parse_conf_datacache_paths(s_space_path, &paths).ok());
+    ASSERT_EQ(paths.size(), 2);
+
+    paths.clear();
+    const std::string s_empty_path = fmt::format("//;{}/block_disk_cache/cache4 ", cwd, cwd);
+    ASSERT_FALSE(parse_conf_datacache_paths(s_empty_path, &paths).ok());
+    ASSERT_EQ(paths.size(), 1);
+
+    paths.clear();
+    const std::string s_invalid_path = fmt::format(" /block_disk_cache/cache5;{}/+/cache6", cwd, cwd);
+    ASSERT_FALSE(parse_conf_datacache_paths(s_invalid_path, &paths).ok());
+    ASSERT_EQ(paths.size(), 0);
 }
 
 #ifdef WITH_STARCACHE
