@@ -232,6 +232,36 @@ public class CreateLakeTableTest {
 
             Assert.assertFalse(resultSet.getResultRows().isEmpty());
         }
+
+        UtFrameUtils.addMockComputeNode(50001);
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Cannot create cloud native table with local persistent index",
+                () -> createTable(
+                "create table lake_test.table_with_persistent_index2\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_persistent_index' = 'true');"));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.table_in_be_and_cn\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "table_in_be_and_cn");
+            // check table persistentIndex
+            boolean enablePersistentIndex = lakeTable.enablePersistentIndex();
+            Assert.assertFalse(enablePersistentIndex);
+
+            String sql = "show create table lake_test.table_in_be_and_cn";
+            ShowCreateTableStmt showCreateTableStmt =
+                    (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
+            ShowResultSet resultSet = executor.execute();
+
+            Assert.assertNotEquals(0, resultSet.getResultRows().size());
+        }
     }
 
     @Test
