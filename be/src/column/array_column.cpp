@@ -439,7 +439,7 @@ void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* 
     output->resize(rows);
     for (size_t i = 0; i < rows; i++) {
         int res = compare_at(i, i, rhs_column, 1);
-        (*output)[i] = res == 0 ? 0 : (res < 0 ? -1 : 1);
+        (*output)[i] = (res > 0) - (res < 0);
     }
 }
 
