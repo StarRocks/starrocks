@@ -14,6 +14,7 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <butil/time.h>
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/chunk_helper.h"
@@ -22,6 +23,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/sstable/lake_persistent_index_sst.h"
 #include "storage/primary_key_encoder.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -45,6 +47,7 @@ LakePersistentIndex::~LakePersistentIndex() {
 
 Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, IndexValue* values,
                                               KeyIndexesInfo* key_indexes_info, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_from_sstables_us");
     if (key_indexes_info->size() == 0) {
         return Status::OK();
     }
@@ -53,6 +56,7 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
         return Status::OK();
     }
     std::sort(key_indexes_info->key_index_infos.begin(), key_indexes_info->key_index_infos.end());
+    TRACE_COUNTER_INCREMENT("sstable_size", sstable_size);
     for (size_t i = sstable_size; i > 0; --i) {
         if (key_indexes_info->size() == 0) {
             break;
@@ -65,21 +69,30 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
             if (key_indexes_info->size() == 0) {
                 break;
             }
+            auto start_ts = butil::gettimeofday_us();
             RandomAccessFileOptions opts{.skip_fill_local_cache = true};
             ASSIGN_OR_RETURN(
                     auto rf,
                     fs::new_random_access_file(
                             opts, _tablet_mgr->sst_location(
                                           _tablet_id, _sstable_meta->sstables(i - 1).sstables(j - 1).filename())));
+            auto end_ts = butil::gettimeofday_us();
+            TRACE_COUNTER_INCREMENT("random_access_file", end_ts - start_ts);
             auto pindex_sst = std::make_unique<LakePersistentIndexSstable>();
+            start_ts = butil::gettimeofday_us();
             RETURN_IF_ERROR(pindex_sst->init(rf.get(), _sstable_meta->sstables(i - 1).sstables(j - 1).filesz()));
+            end_ts = butil::gettimeofday_us();
+            TRACE_COUNTER_INCREMENT("sst_init", end_ts - start_ts);
             KeyIndexesInfo found_key_indexes_info;
             RETURN_IF_ERROR(pindex_sst->get(n, keys, values, key_indexes_info, &found_key_indexes_info, version));
+            start_ts = butil::gettimeofday_us();
             if (found_key_indexes_info.size() != 0) {
                 std::sort(found_key_indexes_info.key_index_infos.begin(), found_key_indexes_info.key_index_infos.end());
                 // modify key_indexess_info
                 key_indexes_info->set_difference(found_key_indexes_info);
             }
+            end_ts = butil::gettimeofday_us();
+            TRACE_COUNTER_INCREMENT("set_difference", end_ts - start_ts);
         }
     }
     return Status::OK();
@@ -87,21 +100,26 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
 
 Status LakePersistentIndex::get_from_immutable_memtable(size_t n, const Slice* keys, IndexValue* values,
                                                         KeyIndexesInfo* key_indexes_info, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_from_immutable_memtable_us");
     if (_immutable_memtable == nullptr || key_indexes_info->size() == 0) {
         return Status::OK();
     }
     std::sort(key_indexes_info->key_index_infos.begin(), key_indexes_info->key_index_infos.end());
     KeyIndexesInfo found_key_indexes_info;
     RETURN_IF_ERROR(_immutable_memtable->get(n, keys, values, key_indexes_info, &found_key_indexes_info, version));
+    auto start_ts = butil::gettimeofday_us();
     if (found_key_indexes_info.size() != 0) {
         std::sort(found_key_indexes_info.key_index_infos.begin(), found_key_indexes_info.key_index_infos.end());
         // modify key_indexess_info
         key_indexes_info->set_difference(found_key_indexes_info);
     }
+    auto end_ts = butil::gettimeofday_us();
+    TRACE_COUNTER_INCREMENT("set_difference", end_ts - start_ts);
     return Status::OK();
 }
 
 Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_us");
     KeyIndexesInfo not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, &num_found, version));
@@ -115,6 +133,7 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values,
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                    IOStat* stat, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("upsert_us");
     KeyIndexesInfo not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, version));
@@ -141,6 +160,7 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
 }
 
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("erase_us");
     KeyIndexesInfo not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, version));
@@ -154,6 +174,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
 
 Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                         const uint32_t max_src_rssid, std::vector<uint32_t>* failed, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("try_replace_us");
     std::vector<IndexValue> found_values;
     found_values.resize(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
@@ -171,11 +192,13 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
 }
 
 void LakePersistentIndex::flush_to_immutable_memtable() {
+    TRACE_COUNTER_SCOPE_LATENCY_US("flush_to_immutable_memtable_us");
     _immutable_memtable = std::move(_memtable);
     _memtable = std::make_unique<PersistentIndexMemtable>(_tablet_mgr, _tablet_id);
 }
 
 Status LakePersistentIndex::minor_compact() {
+    TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_us");
     if (_immutable_memtable != nullptr) {
         SstablePB sstable;
         RETURN_IF_ERROR(_immutable_memtable->flush(_txn_id, &sstable));

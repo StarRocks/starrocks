@@ -18,6 +18,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/sstable/lake_persistent_index_sst.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -26,6 +27,7 @@ PersistentIndexMemtable::PersistentIndexMemtable(TabletManager* tablet_mgr, int6
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                        KeyIndexesInfo* not_found, size_t* num_found, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("persistent_index_memtable_upsert");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
@@ -74,6 +76,7 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
 
 Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexesInfo* not_found,
                                       size_t* num_found, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("persistent_index_memtable_erase");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
@@ -98,6 +101,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
 
 Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* values,
                                         const std::vector<size_t>& replace_idxes, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("persistent_index_memtale_replace");
     for (unsigned long idx : replace_idxes) {
         auto key = keys[idx].to_string();
         const auto value = values[idx];
@@ -116,6 +120,7 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
 
 Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found,
                                     size_t* num_found, int64_t version) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("persistent_index_memtable_get");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = std::string_view(keys[i]);

@@ -4,6 +4,7 @@
 
 #include "storage/lake/sstable/table.h"
 
+#include <butil/time.h> // NOLINT
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/lake/key_index.h"
@@ -14,6 +15,7 @@
 #include "storage/lake/sstable/format.h"
 #include "storage/lake/sstable/options.h"
 #include "storage/lake/sstable/two_level_iterator.h"
+#include "util/trace.h"
 
 namespace starrocks {
 namespace lake {
@@ -190,24 +192,42 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
 Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, KeyIndexesInfo* key_indexes_info,
                        std::vector<std::string>& values) {
     Status s;
+    auto start_ts = butil::gettimeofday_us();
     Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+    auto end_ts = butil::gettimeofday_us();
+    TRACE_COUNTER_INCREMENT("index_block_new_iterator", end_ts - start_ts);
     const auto& key_index_infos = key_indexes_info->key_index_infos;
     for (size_t i = 0; i < key_index_infos.size(); ++i) {
         auto& k = keys[key_index_infos[i]];
+        start_ts = butil::gettimeofday_us();
         iiter->Seek(k);
+        end_ts = butil::gettimeofday_us();
+        TRACE_COUNTER_INCREMENT("seek1", end_ts - start_ts);
         if (iiter->Valid()) {
             Slice handle_value = iiter->value();
             FilterBlockReader* filter = rep_->filter;
             BlockHandle handle;
+            start_ts = butil::gettimeofday_us();
             if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
                 !filter->KeyMayMatch(handle.offset(), k)) {
                 // Not found
             } else {
+                end_ts = butil::gettimeofday_us();
+                TRACE_COUNTER_INCREMENT("decode and key match", end_ts - start_ts);
+                start_ts = butil::gettimeofday_us();
                 Iterator* block_iter = BlockReader(this, options, iiter->value());
+                end_ts = butil::gettimeofday_us();
+                TRACE_COUNTER_INCREMENT("new_block_reader", end_ts - start_ts);
+                start_ts = butil::gettimeofday_us();
                 block_iter->Seek(k);
+                end_ts = butil::gettimeofday_us();
+                TRACE_COUNTER_INCREMENT("seek2", end_ts - start_ts);
+                start_ts = butil::gettimeofday_us();
                 if (block_iter->Valid() && k == block_iter->key()) {
                     values[key_index_infos[i]] = block_iter->value().to_string();
                 }
+                end_ts = butil::gettimeofday_us();
+                TRACE_COUNTER_INCREMENT("key_compare", end_ts - start_ts);
                 s = block_iter->status();
                 delete block_iter;
             }
