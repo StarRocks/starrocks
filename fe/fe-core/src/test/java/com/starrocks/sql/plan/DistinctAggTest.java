@@ -16,8 +16,8 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import org.junit.Test;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -35,13 +35,13 @@ public class DistinctAggTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("sqlWithDistinctLimit")
-    public void testSqlWithDistinctLimit(String sql, String expectedPlan) throws Exception {
+    void testSqlWithDistinctLimit(String sql, String expectedPlan) throws Exception {
         String plan = getFragmentPlan(sql);
         assertContains(plan, expectedPlan);
     }
 
     @Test
-    public void testDistinctConstants() throws Exception {
+    void testDistinctConstants() throws Exception {
         String sql = "select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), " +
                 "group_concat(distinct 1, 2 order by 1), array_agg(distinct 1 order by 1) from t0 group by v2;";
         String plan = getFragmentPlan(sql);
@@ -67,6 +67,15 @@ public class DistinctAggTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update serialize)\n" +
                 "  |  output: group_concat(DISTINCT '1.33', ',')");
+
+        sql = "select  distinct 111 as id, 111 as id from t0 order by id + 1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:Project\n" +
+                "  |  <slot 5> : 5: expr\n" +
+                "  |  \n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 6> 6: expr ASC\n" +
+                "  |  offset: 0");
     }
 
     private static Stream<Arguments> sqlWithDistinctLimit() {
