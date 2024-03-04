@@ -57,9 +57,7 @@ In the following sections, "batch" or "batch loading" refers the loading of a la
 
 #### [Stream Load](../StreamLoad.md)
 
-**Business scenario:**
-
-Batch load data from a local file system.
+**Business scenario:** Batch load data from a local file system.
 
 **File format:** CSV and JSON
 
@@ -78,9 +76,7 @@ Batch load data from a local file system.
 
 #### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
 
-**Business scenario:**
-
-Batch load or stream data from HDFS or AWS S3.
+**Business scenario:** Batch load or stream data from HDFS or AWS S3.
 
 :::note
 
@@ -94,9 +90,7 @@ This loading method is supported from v3.2 onwards.
 
 #### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
 
-**Business scenario:**
-
-Stream data from Kafka.
+**Business scenario:** Stream data from Kafka.
 
 **File format:** CSV, JSON, and Avro (supported since v3.0.1)
 
@@ -104,9 +98,7 @@ Stream data from Kafka.
 
 #### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
 
-**Business scenario:**
-
-Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters.
+**Business scenario:** Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters.
 
 **File format:** CSV, Parquet (supported since v2.0), and ORC (supported since v2.0)
 
@@ -116,53 +108,37 @@ Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters.
 
 #### [Kafka connector](../Kafka-connector-starrocks.md)
 
-**Business scenario:**
-
-Stream data from Kafka.
+**Business scenario:** Stream data from Kafka.
 
 #### [Spark connector](../Spark-connector-starrocks.md)
 
-**Business scenario:**
-
-Batch load data from Spark.
+**Business scenario:** Batch load data from Spark.
 
 #### [Flink connector](../Flink-connector-starrocks.md)
 
-**Business scenario:**
-
-Stream data from Flink.
+**Business scenario:** Stream data from Flink.
 
 #### [SMT](../../integrations/loading_tools/SMT.md)
 
-**Business scenario:**
-
-Load data from data sources such as MySQL, PostgreSQL, SQL Server, Oracle, Hive, ClickHouse, and TiDB through Flink.
+**Business scenario:** Load data from data sources such as MySQL, PostgreSQL, SQL Server, Oracle, Hive, ClickHouse, and TiDB through Flink.
 
 #### [DataX](../../integrations/loading_tools/DataX-starrocks-writer.md)
 
-**Business scenario:**
-
-Synchronize data between various heterogeneous data sources, including relational databases (MySQL, Oracle, etc.), HDFS, and Hive.
+**Business scenario:** Synchronize data between various heterogeneous data sources, including relational databases (MySQL, Oracle, etc.), HDFS, and Hive.
 
 #### [CloudCanal](../../integrations/loading_tools/CloudCanal.md)
 
-**Business scenario:**
-
-Migrate or synchronize data from source databases (for example, MySQL, Oracle, and PostgreSQL) to StarRocks.
+**Business scenario:** Migrate or synchronize data from source databases (for example, MySQL, Oracle, and PostgreSQL) to StarRocks.
 
 #### [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
 
-**Business scenario:**
-
-Integrate with Kettle. By combining Kettle's robust data processing and transformation capabilities with StarRocks's high-performance data storage and analytical abilities, more flexible and efficient data processing workflows can be achieved.
+**Business scenario:** Integrate with Kettle. By combining Kettle's robust data processing and transformation capabilities with StarRocks's high-performance data storage and analytical abilities, more flexible and efficient data processing workflows can be achieved.
 
 ### API
 
 #### Stream Load transaction interface
 
-**Business scenario:**
-
-Implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Flink and Kafka, while improving the performance of highly concurrent stream loads. This feature is supported from v2.4 onwards.
+**Business scenario:** Implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Flink and Kafka, while improving the performance of highly concurrent stream loads. This feature is supported from v2.4 onwards.
 
 **File format:** CSV and JSON
 
