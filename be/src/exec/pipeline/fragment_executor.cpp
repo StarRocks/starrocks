@@ -714,8 +714,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 
-        RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
         RETURN_IF_ERROR(_prepare_global_dict(request));
+        RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     }
     {
         SCOPED_RAW_TIMER(&profiler.prepare_pipeline_driver_time);
