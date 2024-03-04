@@ -36,27 +36,21 @@ StarRocks 提供以下各种导入方案供您选择：
 **适用场景:**
 
 - INSERT INTO VALUES：往内部表写入少量数据。
-
 - INSERT INTO SELECT：
-
   - INSERT INTO SELECT FROM `<table_name>`：往目标表写入另外一张表（内部表或外部表）的查询结果。
-
   - INSERT INTO SELECT FROM FILES()：往目标表写入远端存储的数据文件的查询结果。
 
     :::note
 
     该特性自 3.1 版本起支持 AWS S3 数据源，自 3.2 版本起支持 HDFS、Microsoft Azure Storage、Google GCS、及其他兼容 S3 协议的对象存储（如 MinIO）等数据源。
 
-     :::
+    :::
 
 **支持的文件格式:**
 
 - INSERT INTO VALUES：SQL
-
 - INSERT INTO SELECT：
-
   - INSERT INTO SELECT FROM `<table_name>`：StarRocks 表
-
   - INSERT INTO SELECT FROM FILES()：Parquet 和 ORC
 
 **单次导入数据量限制:** 根据内存大小的不同而不同
@@ -120,21 +114,59 @@ StarRocks 提供以下各种导入方案供您选择：
 
 ### 生态工具
 
-| **工具**                                                     | **适用场景**                                                 |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| [Kafka connector](../loading/Kafka-connector-starrocks.md)                                       | 从 Kafka 实时导入数据。                                      |
-| [Spark connector](../loading/Spark-connector-starrocks.md)                                       | 从 Spark 批量导入数据。                                      |
-| [Flink connector](../loading/Flink-connector-starrocks.md)                                       | 从 Flink 实时导入数据。                                      |
-| [SMT](../integrations/loading_tools/SMT.md)                                                   | 通过 Flink 从 MySQL、PostgreSQL、SQL Server、Oracle、Hive、ClickHouse、TiDB 等数据源导入数据。 |
-| [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)                                                 | 在 MySQL、Oracle 等关系型数据库、HDFS、及 Hive 等各种数据源之间同步数据。 |
-| [CloudCanal](../integrations/loading_tools/CloudCanal.md)                                            | 从 MySQL、Oracle、PostgreSQL 等数据库往 StarRocks 迁移或同步数据。 |
-| [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle) | 集成 Kettle。通过 Kettle 强大的数据处理和转换功能与 StarRocks 高性能的数据存储和分析能力，实现更加灵活和高效的数据处理流程。 |
+#### [Kafka connector](../loading/Kafka-connector-starrocks.md)
+
+**适用场景:**
+
+从 Kafka 实时导入数据。
+
+#### [Spark connector](../loading/Spark-connector-starrocks.md)
+
+**适用场景:**
+
+从 Spark 批量导入数据。
+
+#### [Flink connector](../loading/Flink-connector-starrocks.md)
+
+**适用场景:**
+
+从 Flink 实时导入数据。
+
+#### [SMT](../integrations/loading_tools/SMT.md)
+
+**适用场景:**
+
+通过 Flink 从 MySQL、PostgreSQL、SQL Server、Oracle、Hive、ClickHouse、TiDB 等数据源导入数据。
+
+#### [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)
+
+**适用场景:**
+
+在 MySQL、Oracle 等关系型数据库、HDFS、及 Hive 等各种数据源之间同步数据。
+
+#### [CloudCanal](../integrations/loading_tools/CloudCanal.md)
+
+**适用场景:**
+
+从 MySQL、Oracle、PostgreSQL 等数据库往 StarRocks 迁移或同步数据。
+
+#### [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
+
+**适用场景:**
+
+集成 Kettle。通过 Kettle 强大的数据处理和转换功能与 StarRocks 高性能的数据存储和分析能力，实现更加灵活和高效的数据处理流程。
 
 ### API
 
-| **API**                                  | **适用场景**                                                 | **支持的文件格式** | **单次导入数据量限制** |
-| ---------------------------------------- | ------------------------------------------------------------ | ------------------ | ---------------------- |
-| [Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md) | 从 Apache Flink®、Apache Kafka® 等外部系统导入数据时，实现跨系统的两阶段（2PC）提交。该特性自 2.4 版本起支持。 | CSVJSON            | 10 GB 以内             |
+#### [Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md)
+
+**适用场景:**
+
+从 Apache Flink®、Apache Kafka® 等外部系统导入数据时，实现跨系统的两阶段（2PC）提交。该特性自 2.4 版本起支持。
+
+**支持的文件格式:** CSV and JSON
+
+**单次导入数据量限制:** 10 GB 以内
 
 ## 导入方案选择
 
