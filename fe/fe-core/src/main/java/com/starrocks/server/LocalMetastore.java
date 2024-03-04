@@ -1592,13 +1592,13 @@ public class LocalMetastore implements ConnectorMetadata {
             if (partitionDesc instanceof MultiRangePartitionDesc) {
 
                 if (!(partitionInfo instanceof RangePartitionInfo)) {
-                    throw new DdlException("Batch creation of partitions only support range partition tables.");
+                    throw new DdlException("Batch deletion of partitions only support range partition tables.");
                 }
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
                 List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
                 if (partitionColumns.size() != 1) {
-                    throw new DdlException("Alter batch build partition only support single range column.");
+                    throw new DdlException("Alter batch drop partition only support single range column.");
                 }
 
                 Column firstPartitionColumn = partitionColumns.get(0);
