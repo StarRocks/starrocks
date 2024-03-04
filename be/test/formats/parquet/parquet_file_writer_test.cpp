@@ -207,7 +207,7 @@ TEST_F(ParquetFileWriterTest, TestWriteIntegralTypes) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -258,7 +258,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDecimal) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -297,7 +297,7 @@ TEST_F(ParquetFileWriterTest, TestWriteBoolean) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -337,7 +337,7 @@ TEST_F(ParquetFileWriterTest, TestWriteFloat) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -377,7 +377,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDouble) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -426,7 +426,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDate) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -475,7 +475,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetime) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -517,7 +517,7 @@ TEST_F(ParquetFileWriterTest, TestWriteVarchar) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -572,7 +572,7 @@ TEST_F(ParquetFileWriterTest, TestWriteArray) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -640,7 +640,7 @@ TEST_F(ParquetFileWriterTest, TestWriteStruct) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -705,7 +705,7 @@ TEST_F(ParquetFileWriterTest, TestWriteMap) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -773,7 +773,7 @@ TEST_F(ParquetFileWriterTest, TestWriteNestedArray) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 3);
+    ASSERT_EQ(result.file_statistics.record_count, 3);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -815,7 +815,7 @@ TEST_F(ParquetFileWriterTest, TestWriteVarbinary) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
@@ -856,7 +856,7 @@ TEST_F(ParquetFileWriterTest, TestFlushRowgroup) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 8);
+    ASSERT_EQ(result.file_statistics.record_count, 8);
 }
 
 TEST_F(ParquetFileWriterTest, TestFlushRowgroupWithExecutors) {
@@ -893,7 +893,7 @@ TEST_F(ParquetFileWriterTest, TestFlushRowgroupWithExecutors) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 8);
+    ASSERT_EQ(result.file_statistics.record_count, 8);
 }
 
 TEST_F(ParquetFileWriterTest, TestWriteWithFieldID) {
@@ -929,7 +929,7 @@ TEST_F(ParquetFileWriterTest, TestWriteWithFieldID) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 8);
+    ASSERT_EQ(result.file_statistics.record_count, 8);
 }
 
 TEST_F(ParquetFileWriterTest, TestFactory) {
