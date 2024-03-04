@@ -33,7 +33,7 @@ Submit the Kafka connector into Kafka Connect:
 
 - Confluent Cloud:
 
-  Currently, the Kafka connector is not uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a zip file and upload the zip file to Confluent Cloud.
+  Currently, the Kafka connector is not uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a ZIP file and upload the ZIP file to Confluent Cloud.
 
 ## Usage
 
@@ -51,7 +51,7 @@ Suppose that JSON-format data exists in the topic `test` in a Kafka cluster.
 
 ### Create a table
 
-Create the table `test_tbl` in the database `example_db` in the StarRocks cluster according to the keys of the JSON-format data, .
+Create the table `test_tbl` in the database `example_db` in the StarRocks cluster according to the keys of the JSON-format data.
 
 ```SQL
 CREATE DATABASE example_db;
@@ -77,9 +77,9 @@ CREATE TABLE test_tbl (id INT, city STRING);
     starrocks.http.url=192.168.xxx.xxx:8030
     # If the Kafka topic name is different from the StarRocks table name, you need to configure the mapping relationship between them.
     starrocks.topic2table.map=test:test_tbl
-    # StarRocks username
+    # Enter the StarRocks username.
     starrocks.username=user1
-    # StarRocks password. You must enter the password.
+    # Enter the StarRocks password.
     starrocks.password=123456
     starrocks.database.name=example_db
     sink.properties.strip_outer_array=true
@@ -165,10 +165,11 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 #### Query StarRocks table
 
-Query the target StarRocks table `test_tbl`. The data is successfully loaded when the fowllowing result is returned.
+Query the target StarRocks table `test_tbl`.
 
 ```mysql
 MySQL [example_db]> select * from test_tbl;
+
 +------+-------------+
 | id   | city        |
 +------+-------------+
@@ -178,6 +179,7 @@ MySQL [example_db]> select * from test_tbl;
 +------+-------------+
 3 rows in set (0.01 sec)
 ```
+The data is successfully loaded when the above result is returned.
 
 ## Parameters
 
@@ -191,7 +193,7 @@ MySQL [example_db]> select * from test_tbl;
 
 **Required**: YES<br/>
 **Default value**: <br/>
-**Description**: Class used by this Kafka connector's sink: `com.starrocks.connector.kafka.StarRocksSinkConnector`.
+**Description**: Class used by this Kafka connector's sink. Set the value to `com.starrocks.connector.kafka.StarRocksSinkConnector`.
 ### topics                              
 
 **Required**: YES<br/>
@@ -298,7 +300,7 @@ MySQL [example_db]> select * from test_tbl;
 ## Limits
 
 - It is not supported to flatten a single message from a Kafka topic into multiple data rows and load into StarRocks.
-- The Kafka connector's Sink guarantees at-least-once semantics.
+- The Kafka connector's sink guarantees at-least-once semantics.
 
 ## Best practices
 
