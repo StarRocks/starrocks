@@ -231,7 +231,7 @@ private:
     //     Part one: Put chunk to queue, which is performed at the brpc thread
     //     Part two: Get chunk from queue, which is performed at the pipeline's working thread
     // We know excatly about the parallelism of the pipeline's working threads, but we cannot know the
-    // concurrency of the brpc threads, so we let the size of _metrics to be the same as the pipeline's dop,
+    // concurrency of the brpc threads, so we let the size of _statistics to be the same as the pipeline's dop,
     // and use round-robin to choose the metrics for each brpc thread.
     std::vector<Metrics> _metrics;
     std::atomic<size_t> _rpc_round_roubin_index = 0;

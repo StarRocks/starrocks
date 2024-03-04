@@ -128,8 +128,8 @@ std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
         }
 
         if (result.io_status.ok()) {
-            result.file_metrics.record_count = row_counter;
-            result.file_metrics.file_size = output_stream->getLength();
+            result.file_statistics.record_count = row_counter;
+            result.file_statistics.file_size = output_stream->getLength();
         }
 
         p->set_value(result);

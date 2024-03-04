@@ -74,8 +74,8 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
         }
 
         if (result.io_status.ok()) {
-            result.file_metrics = _metrics(writer->metadata().get(), has_field_id);
-            result.file_metrics.file_size = output_stream->Tell().MoveValueUnsafe();
+            result.file_statistics = _statistics(writer->metadata().get(), has_field_id);
+            result.file_statistics.file_size = output_stream->Tell().MoveValueUnsafe();
         }
 
         p->set_value(result);
@@ -163,19 +163,19 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
     }
 }
 
-FileWriter::FileMetrics ParquetFileWriter::_metrics(const ::parquet::FileMetaData* meta, bool has_field_id) {
-    DCHECK(meta != nullptr);
-    FileWriter::FileMetrics file_metrics;
-    file_metrics.record_count = meta->num_rows();
+FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id) {
+    DCHECK(meta_data != nullptr);
+    FileWriter::FileStatistics file_statistics;
+    file_statistics.record_count = meta_data->num_rows();
 
     if (!has_field_id) {
-        return file_metrics;
+        return file_statistics;
     }
 
     // rowgroup split offsets
     std::vector<int64_t> split_offsets;
-    for (int i = 0; i < meta->num_row_groups(); i++) {
-        auto first_column_meta = meta->RowGroup(i)->ColumnChunk(0);
+    for (int i = 0; i < meta_data->num_row_groups(); i++) {
+        auto first_column_meta = meta_data->RowGroup(i)->ColumnChunk(0);
         int64_t dict_page_offset = first_column_meta->dictionary_page_offset();
         int64_t first_data_page_offset = first_column_meta->data_page_offset();
         int64_t split_offset = dict_page_offset > 0 && dict_page_offset < first_data_page_offset
@@ -183,7 +183,7 @@ FileWriter::FileMetrics ParquetFileWriter::_metrics(const ::parquet::FileMetaDat
                                        : first_data_page_offset;
         split_offsets.push_back(split_offset);
     }
-    file_metrics.split_offsets = split_offsets;
+    file_statistics.split_offsets = split_offsets;
 
     // field_id -> column_stat
     std::map<int32_t, std::shared_ptr<::parquet::Statistics>> column_stats;
@@ -196,11 +196,11 @@ FileWriter::FileMetrics ParquetFileWriter::_metrics(const ::parquet::FileMetaDat
     bool has_min_max = false;
 
     // traverse stat of column chunk in each row group
-    for (int col_idx = 0; col_idx < meta->num_columns(); col_idx++) {
-        auto field_id = meta->schema()->Column(col_idx)->schema_node()->field_id();
+    for (int col_idx = 0; col_idx < meta_data->num_columns(); col_idx++) {
+        auto field_id = meta_data->schema()->Column(col_idx)->schema_node()->field_id();
 
-        for (int rg_idx = 0; rg_idx < meta->num_row_groups(); rg_idx++) {
-            auto column_chunk_meta = meta->RowGroup(rg_idx)->ColumnChunk(col_idx);
+        for (int rg_idx = 0; rg_idx < meta_data->num_row_groups(); rg_idx++) {
+            auto column_chunk_meta = meta_data->RowGroup(rg_idx)->ColumnChunk(col_idx);
             column_sizes[field_id] += column_chunk_meta->total_compressed_size();
 
             if (column_chunk_meta->is_stats_set()) {
@@ -227,17 +227,17 @@ FileWriter::FileMetrics ParquetFileWriter::_metrics(const ::parquet::FileMetaDat
         }
     }
 
-    file_metrics.column_sizes = std::move(column_sizes);
-    file_metrics.value_counts = std::move(value_counts);
+    file_statistics.column_sizes = std::move(column_sizes);
+    file_statistics.value_counts = std::move(value_counts);
     if (has_null_count) {
-        file_metrics.null_value_counts = std::move(null_value_counts);
+        file_statistics.null_value_counts = std::move(null_value_counts);
     }
     if (has_min_max) {
-        file_metrics.lower_bounds = std::move(lower_bounds);
-        file_metrics.upper_bounds = std::move(upper_bounds);
+        file_statistics.lower_bounds = std::move(lower_bounds);
+        file_statistics.upper_bounds = std::move(upper_bounds);
     }
 
-    return file_metrics;
+    return file_statistics;
 }
 
 ParquetFileWriter::ParquetFileWriter(const std::string& location,

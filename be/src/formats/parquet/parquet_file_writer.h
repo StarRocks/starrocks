@@ -81,7 +81,7 @@ private:
                                                                        ::parquet::Repetition::type rep_type,
                                                                        FileColumnId file_column_id);
 
-    static FileMetrics _metrics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
+    static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 
     std::future<Status> _flush_row_group();
 

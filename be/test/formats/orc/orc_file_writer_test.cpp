@@ -185,7 +185,7 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNullable) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -244,7 +244,7 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNotNull) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -283,7 +283,7 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNullable) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -319,7 +319,7 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNotNull) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -376,7 +376,7 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -425,7 +425,7 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -478,7 +478,7 @@ TEST_F(OrcFileWriterTest, TestWriteDecimal) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -531,7 +531,7 @@ TEST_F(OrcFileWriterTest, TestWriteDecimalNotNull) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -581,7 +581,7 @@ TEST_F(OrcFileWriterTest, TestWriteDate) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -627,7 +627,7 @@ TEST_F(OrcFileWriterTest, TestWriteDateNotNull) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -678,7 +678,7 @@ TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -725,7 +725,7 @@ TEST_F(OrcFileWriterTest, TestWriteTimestampNotNull) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -795,7 +795,7 @@ TEST_F(OrcFileWriterTest, TestWriteStruct) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -862,7 +862,7 @@ TEST_F(OrcFileWriterTest, TestWriteMap) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -932,7 +932,7 @@ TEST_F(OrcFileWriterTest, TestWriteNestedArray) {
     ASSERT_OK(writer->write(chunk).get());
     auto result = writer->commit().get();
     ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_metrics.record_count, 3);
+    ASSERT_EQ(result.file_statistics.record_count, 3);
 
     // read chunk
     ChunkPtr read_chunk;
@@ -975,7 +975,7 @@ TEST_F(OrcFileWriterTest, TestWriteWithExecutors) {
     auto result = writer->commit().get();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_metrics.record_count, 8);
+    ASSERT_EQ(result.file_statistics.record_count, 8);
 }
 
 TEST_F(OrcFileWriterTest, TestFactory) {
