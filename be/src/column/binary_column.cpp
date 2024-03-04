@@ -19,8 +19,8 @@
 #endif
 
 #include "column/bytes.h"
-#include "column/const_column.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "gutil/bits.h"
