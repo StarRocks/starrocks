@@ -17,7 +17,7 @@ t1	SUBMITTED
 -- !result
 select TASK_NAME, `SCHEDULE`, DEFINITION from information_schema.tasks where `DATABASE`='test_task_${uuid0}' and task_name ='t1';
 -- result:
-t1	PERIODICALSTART(2024-01-01T08:00) EVERY(10 SECONDS)	insert into t1 select * from t1;
+t1	PERIODICAL START(2024-01-01T00:00) EVERY(10 SECONDS)	insert into t1 select * from t1;
 -- !result
 select TASK_NAME from information_schema.task_runs where `DATABASE` = 'test_task_${uuid0}' and task_name='t1';
 -- result:
@@ -28,6 +28,7 @@ select sleep(mod(second(now()), 10) + 1);
 -- !result
 select TASK_NAME from information_schema.task_runs where `DATABASE` = 'test_task_${uuid0}' and task_name='t1';
 -- result:
+t1
 -- !result
 drop task t1;
 -- result:
