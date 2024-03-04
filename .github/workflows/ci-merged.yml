@@ -28,22 +28,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
-<<<<<<< HEAD
-=======
-      - name: backport branch-3.2
-        if: contains(github.event.pull_request.labels.*.name, '3.2')
-        uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            @Mergifyio backport branch-3.2
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, '3.2')
-        with:
-          labels: '3.2'
-
->>>>>>> 039cb16527 ([Tool] Add behavior check (#35552))
       - name: backport branch-3.1
         if: contains(github.event.pull_request.labels.*.name, '3.1')
         uses: thollander/actions-comment-pull-request@v1
@@ -181,7 +166,6 @@ jobs:
             yaml=ci-pipeline-branch.yml
           fi
           
-<<<<<<< HEAD
           gh run list --workflow ${yaml} -R ${REPO} -b ${GITHUB_HEAD_REF} --json databaseId -q '.[].databaseId' | xargs gh run cancel -R ${REPO} || true
 
   update_backport_merged_msg:
@@ -232,6 +216,3 @@ jobs:
         run: |
           gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
           
-=======
-          gh run list --workflow ${yaml} -R ${REPO} -b ${GITHUB_HEAD_REF} --json databaseId -q '.[].databaseId' | xargs gh run cancel -R ${REPO} || true
->>>>>>> 039cb16527 ([Tool] Add behavior check (#35552))
