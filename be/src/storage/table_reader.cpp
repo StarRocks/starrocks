@@ -259,6 +259,8 @@ Status TableReader::_tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t t
             closure = nullptr;
         }
     });
+    // ref count for next rpc call
+    closure->ref();
     if (_params->timeout_ms > 0) {
         closure->cntl.set_timeout_ms(_params->timeout_ms);
     }
