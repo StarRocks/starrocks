@@ -562,7 +562,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
             for (const auto& index_file : index_files) {
                 auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
                 auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
-                auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
+                auto* p3 = (char*)std::memchr(p2 + 1, '.', file.size() - (p2 - file.data() + 1));
 
                 std::string rowsetid = file.substr(0, p1 - file.data());
                 std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
