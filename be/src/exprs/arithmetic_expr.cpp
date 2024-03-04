@@ -366,7 +366,7 @@ public:
             jit_score.num += tmp.num;
         }
         jit_score.num++;
-        jit_score.score += 0;  // no benefit
+        jit_score.score += 0; // no benefit
         return jit_score;
     }
 
