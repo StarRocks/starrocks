@@ -198,10 +198,6 @@ void ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr&
         _write_string(orc_column, column);
         break;
     }
-    case TYPE_DECIMAL: {
-        _write_decimal(orc_column, column, type_desc.precision, type_desc.scale);
-        break;
-    }
     case TYPE_DECIMAL32: {
         _write_decimal32or64or128<TYPE_DECIMAL32, orc::Decimal64VectorBatch, int64_t>(
                 orc_column, column, type_desc.precision, type_desc.scale);
@@ -242,70 +238,67 @@ void ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     }
 }
 
+inline uint8_t* get_raw_null_column(const ColumnPtr& col) {
+    if (!col->has_null()) {
+        return nullptr;
+    }
+    auto& null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    auto* raw_column = null_column->get_data().data();
+    return raw_column;
+}
+
+template <LogicalType lt>
+inline RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
+    auto* data_column = ColumnHelper::get_data_column(col.get());
+    auto* raw_column = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
+    return raw_column;
+}
+
 template <LogicalType Type, typename VectorBatchType>
 void ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
     auto& number_orc_column = dynamic_cast<VectorBatchType&>(orc_column);
     auto column_size = column->size();
+    orc_column.resize(column_size);
+    orc_column.numElements = column_size;
 
-    number_orc_column.resize(column_size);
-    number_orc_column.notNull.resize(column_size);
+    auto* null_col = get_raw_null_column(column);
+    auto* data_col = get_raw_data_column<Type>(column);
 
-    if (column->is_nullable()) {
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(column);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<Type>(c->data_column())->get_data().data();
-
-        for (size_t i = 0; i < column_size; ++i) {
-            // redundant copy for auto-vectorization
-            number_orc_column.notNull[i] = !nulls[i];
-            number_orc_column.data[i] = values[i];
-        }
+    if (null_col != nullptr) {
         orc_column.hasNulls = true;
-    } else {
-        auto* values = ColumnHelper::cast_to_raw<Type>(column)->get_data().data();
-        for (size_t i = 0; i < column_size; ++i) {
-            number_orc_column.data[i] = values[i];
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_col[i];
         }
-        memset(number_orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
-    number_orc_column.numElements = column_size;
+
+    for (size_t i = 0; i < column_size; ++i) {
+        number_orc_column.data[i] = data_col[i];
+    }
 }
 
 void ORCFileWriter::_write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
     auto& string_orc_column = dynamic_cast<orc::StringVectorBatch&>(orc_column);
     auto column_size = column->size();
+    orc_column.resize(column_size);
+    orc_column.numElements = column_size;
 
-    string_orc_column.resize(column_size);
-    string_orc_column.notNull.resize(column_size);
+    auto* null_col = get_raw_null_column(column);
+    auto* data_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(ColumnHelper::get_data_column(column.get()));
 
-    if (column->is_nullable()) {
-        auto* c = ColumnHelper::as_raw_column<NullableColumn>(column);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c->data_column());
-
-        for (size_t i = 0; i < column_size; ++i) {
-            if (nulls[i]) {
-                string_orc_column.notNull[i] = 0;
-                continue;
-            }
-            string_orc_column.notNull[i] = 1;
-            auto slice = values->get_slice(i);
-            string_orc_column.data[i] = const_cast<char*>(slice.get_data());
-            string_orc_column.length[i] = slice.get_size();
-        }
+    if (null_col != nullptr) {
         orc_column.hasNulls = true;
-    } else {
-        auto* str_column = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(column);
-
-        for (size_t i = 0; i < column_size; ++i) {
-            auto slice = str_column->get_slice(i);
-
-            string_orc_column.data[i] = const_cast<char*>(slice.get_data());
-            string_orc_column.length[i] = string_orc_column.length[i] = slice.get_size();
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_col[i];
         }
-        memset(string_orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
-    string_orc_column.numElements = column_size;
+
+    for (size_t i = 0; i < column_size; ++i) {
+        auto slice = data_col->get_slice(i);
+        string_orc_column.data[i] = const_cast<char*>(slice.get_data());
+        string_orc_column.length[i] = slice.get_size();
+    }
 }
 
 template <LogicalType DecimalType, typename VectorBatchType, typename T>
@@ -316,148 +309,79 @@ void ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_column
     using Type = RunTimeCppType<DecimalType>;
 
     decimal_orc_column.resize(column_size);
-    decimal_orc_column.notNull.resize(column_size);
-
+    decimal_orc_column.numElements = column_size;
     decimal_orc_column.precision = precision;
     decimal_orc_column.scale = scale;
 
-    if (column->is_nullable()) {
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(column);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<DecimalType>(c->data_column())->get_data().data();
+    auto* null_col = get_raw_null_column(column);
+    auto* data_col = get_raw_data_column<DecimalType>(column);
 
-        for (size_t i = 0; i < column_size; ++i) {
-            if (nulls[i]) {
-                decimal_orc_column.notNull[i] = 0;
-                continue;
-            }
-            decimal_orc_column.notNull[i] = 1;
-            T value;
-            DecimalV3Cast::to_decimal_trivial<Type, T, false>(values[i], &value);
-            if constexpr (std::is_same_v<T, int128_t>) {
-                auto high64Bits = static_cast<int64_t>(value >> 64);
-                auto low64Bits = static_cast<uint64_t>(value);
-                decimal_orc_column.values[i] = orc::Int128{high64Bits, low64Bits};
-            } else {
-                decimal_orc_column.values[i] = value;
-            }
-        }
+    if (null_col != nullptr) {
         orc_column.hasNulls = true;
-    } else {
-        auto* values = ColumnHelper::cast_to_raw<DecimalType>(column)->get_data().data();
-        for (size_t i = 0; i < column_size; ++i) {
-            T value;
-            DecimalV3Cast::to_decimal_trivial<Type, T, false>(values[i], &value);
-            if constexpr (std::is_same_v<T, int128_t>) {
-                int64_t high64Bits = static_cast<int64_t>(value >> 64);
-                uint64_t low64Bits = static_cast<uint64_t>(value);
-                decimal_orc_column.values[i] = orc::Int128{high64Bits, low64Bits};
-            } else {
-                decimal_orc_column.values[i] = value;
-            }
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_col[i];
         }
-        memset(decimal_orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
-    decimal_orc_column.numElements = column_size;
-}
 
-void ORCFileWriter::_write_decimal(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision, int scale) {
-    auto& decimal_orc_column = dynamic_cast<orc::Decimal128VectorBatch&>(orc_column);
-    auto column_size = column->size();
-
-    decimal_orc_column.resize(column_size);
-    decimal_orc_column.notNull.resize(column_size);
-
-    decimal_orc_column.precision = precision;
-    decimal_orc_column.scale = scale;
-
-    if (column->is_nullable()) {
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(column);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values =
-                reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(c->data_column().get())->get_data().data());
-
-        for (size_t i = 0; i < column_size; ++i) {
-            if (nulls[i]) {
-                decimal_orc_column.notNull[i] = 0;
-                continue;
-            }
-            decimal_orc_column.notNull[i] = 1;
-            decimal_orc_column.values[i] = orc::Int128(values[i] >> 64, (values[i] << 64) >> 64);
+    for (size_t i = 0; i < column_size; ++i) {
+        T value;
+        DecimalV3Cast::to_decimal_trivial<Type, T, false>(data_col[i], &value);
+        if constexpr (std::is_same_v<T, int128_t>) {
+            auto high64Bits = static_cast<int64_t>(value >> 64);
+            auto low64Bits = static_cast<uint64_t>(value);
+            decimal_orc_column.values[i] = orc::Int128{high64Bits, low64Bits};
+        } else {
+            decimal_orc_column.values[i] = value;
         }
-        orc_column.hasNulls = true;
-    } else {
-        auto* values = reinterpret_cast<int128_t*>(down_cast<DecimalColumn*>(column.get())->get_data().data());
-        for (size_t i = 0; i < column_size; ++i) {
-            decimal_orc_column.values[i] = orc::Int128(values[i] >> 64, (values[i] << 64) >> 64);
-        }
-        memset(decimal_orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
-    decimal_orc_column.numElements = column_size;
 }
 
 void ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
     auto& date_orc_column = dynamic_cast<orc::LongVectorBatch&>(orc_column);
     auto column_size = column->size();
 
-    date_orc_column.resize(column_size);
-    date_orc_column.notNull.resize(column_size);
+    orc_column.resize(column_size);
+    orc_column.numElements = column_size;
 
-    if (column->is_nullable()) {
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(column);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_DATE>(c->data_column())->get_data().data();
+    auto* null_col = get_raw_null_column(column);
+    auto* data_col = get_raw_data_column<TYPE_DATE>(column);
 
-        for (size_t i = 0; i < column_size; ++i) {
-            if (nulls[i]) {
-                date_orc_column.notNull[i] = 0;
-                continue;
-            }
-            date_orc_column.notNull[i] = 1;
-            date_orc_column.data[i] = OrcDateHelper::native_date_to_orc_date(values[i]);
-        }
+    if (null_col != nullptr) {
         orc_column.hasNulls = true;
-    } else {
-        auto* values = ColumnHelper::cast_to_raw<TYPE_DATE>(column)->get_data().data();
-        for (size_t i = 0; i < column_size; ++i) {
-            date_orc_column.data[i] = OrcDateHelper::native_date_to_orc_date(values[i]);
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_col[i];
         }
-        memset(date_orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
-    date_orc_column.numElements = column_size;
+
+    for (size_t i = 0; i < column_size; ++i) {
+        date_orc_column.data[i] = OrcDateHelper::native_date_to_orc_date(data_col[i]);
+    }
 }
 
 void ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
     auto& timestamp_orc_column = dynamic_cast<orc::TimestampVectorBatch&>(orc_column);
     auto column_size = column->size();
 
-    timestamp_orc_column.resize(column_size);
-    timestamp_orc_column.notNull.resize(column_size);
+    orc_column.resize(column_size);
+    orc_column.numElements = column_size;
 
-    if (column->is_nullable()) {
-        auto c = ColumnHelper::as_raw_column<NullableColumn>(column);
-        auto* nulls = c->null_column()->get_data().data();
-        auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c->data_column())->get_data().data();
+    auto* null_col = get_raw_null_column(column);
+    auto* data_col = get_raw_data_column<TYPE_DATETIME>(column);
 
-        for (size_t i = 0; i < column_size; ++i) {
-            if (nulls[i]) {
-                timestamp_orc_column.notNull[i] = 0;
-                continue;
-            }
-            timestamp_orc_column.notNull[i] = 1;
-            OrcTimestampHelper::native_ts_to_orc_ts(values[i], timestamp_orc_column.data[i],
-                                                    timestamp_orc_column.nanoseconds[i]);
-        }
+    if (null_col != nullptr) {
         orc_column.hasNulls = true;
-    } else {
-        auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(column)->get_data().data();
-        for (size_t i = 0; i < column_size; ++i) {
-            OrcTimestampHelper::native_ts_to_orc_ts(values[i], timestamp_orc_column.data[i],
-                                                    timestamp_orc_column.nanoseconds[i]);
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_col[i];
         }
-        memset(timestamp_orc_column.notNull.data(), 1, column_size * sizeof(char));
     }
-    timestamp_orc_column.numElements = column_size;
+
+    for (size_t i = 0; i < column_size; ++i) {
+        OrcTimestampHelper::native_ts_to_orc_ts(data_col[i], timestamp_orc_column.data[i],
+                                                timestamp_orc_column.nanoseconds[i]);
+    }
 }
 
 void ORCFileWriter::_write_array_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
@@ -466,36 +390,26 @@ void ORCFileWriter::_write_array_column(orc::ColumnVectorBatch& orc_column, Colu
     auto column_size = column->size();
 
     array_orc_column.resize(column_size);
-    array_orc_column.notNull.resize(column_size);
+    array_orc_column.numElements = column_size;
     auto& value_orc_column = *array_orc_column.elements;
 
-    if (column->is_nullable()) {
-        auto* col_nullable = down_cast<NullableColumn*>(column.get());
-        auto* array_cols = down_cast<ArrayColumn*>(col_nullable->data_column().get());
-        uint32_t* offsets = array_cols->offsets_column().get()->get_data().data();
-        auto* nulls = col_nullable->null_column()->get_data().data();
+    auto* null_col = get_raw_null_column(column);
+    auto* array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column.get()));
 
-        array_orc_column.offsets[0] = offsets[0];
-        for (size_t i = 0; i < column_size; ++i) {
-            array_orc_column.offsets[i + 1] = offsets[i + 1];
-            array_orc_column.notNull[i] = !nulls[i];
+    if (null_col != nullptr) {
+        orc_column.hasNulls = true;
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_col[i];
         }
-
-        _write_column(value_orc_column, array_cols->elements_column(), type.children[0]);
-        array_orc_column.hasNulls = true;
-    } else {
-        auto* array_cols = down_cast<ArrayColumn*>(column.get());
-        uint32_t* offsets = array_cols->offsets_column().get()->get_data().data();
-
-        array_orc_column.offsets[0] = offsets[0];
-        for (size_t i = 0; i < column_size; ++i) {
-            array_orc_column.offsets[i + 1] = offsets[i + 1];
-        }
-        memset(array_orc_column.notNull.data(), 1, column_size * sizeof(char));
-
-        _write_column(value_orc_column, array_cols->elements_column(), type.children[0]);
     }
-    array_orc_column.numElements = column_size;
+
+    auto* offsets = array_col->offsets_column().get()->get_data().data();
+    for (size_t i = 0; i < column_size + 1; ++i) {
+        array_orc_column.offsets[i] = offsets[i];
+    }
+
+    _write_column(value_orc_column, array_col->elements_column(), type.children[0]);
 }
 
 void ORCFileWriter::_write_struct_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
@@ -504,32 +418,24 @@ void ORCFileWriter::_write_struct_column(orc::ColumnVectorBatch& orc_column, Col
     auto column_size = column->size();
 
     struct_orc_column.resize(column_size);
-    struct_orc_column.notNull.resize(column_size);
-
-    if (column->is_nullable()) {
-        auto* col_nullable = down_cast<NullableColumn*>(column.get());
-        auto* struct_cols = down_cast<StructColumn*>(col_nullable->data_column().get());
-        auto* nulls = col_nullable->null_column()->get_data().data();
-        Columns& field_columns = struct_cols->fields_column();
-
-        for (size_t i = 0; i < column_size; ++i) {
-            struct_orc_column.notNull[i] = !nulls[i];
-        }
-
-        for (size_t i = 0; i < type.children.size(); ++i) {
-            _write_column(*struct_orc_column.fields[i], field_columns[i], type.children[i]);
-        }
-        struct_orc_column.hasNulls = true;
-    } else {
-        auto* struct_cols = down_cast<StructColumn*>(column.get());
-        Columns& field_columns = struct_cols->fields_column();
-
-        for (size_t i = 0; i < type.children.size(); ++i) {
-            _write_column(*struct_orc_column.fields[i], field_columns[i], type.children[i]);
-        }
-        memset(struct_orc_column.notNull.data(), 1, column_size * sizeof(char));
-    }
     struct_orc_column.numElements = column_size;
+
+    auto* null_col = get_raw_null_column(column);
+    auto* data_col = ColumnHelper::get_data_column(column.get());
+    auto* struct_col = down_cast<StructColumn*>(data_col);
+    Columns& field_columns = struct_col->fields_column();
+
+    if (null_col != nullptr) {
+        orc_column.hasNulls = true;
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_col[i];
+        }
+    }
+
+    for (size_t i = 0; i < type.children.size(); ++i) {
+        _write_column(*struct_orc_column.fields[i], field_columns[i], type.children[i]);
+    }
 }
 
 void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
@@ -537,45 +443,32 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
     auto& map_orc_column = dynamic_cast<orc::MapVectorBatch&>(orc_column);
     size_t column_size = column->size();
 
+    map_orc_column.resize(column_size);
+    map_orc_column.numElements = column->size();
+
     orc::ColumnVectorBatch& keys_orc_column = *map_orc_column.keys;
     orc::ColumnVectorBatch& values_orc_column = *map_orc_column.elements;
 
-    if (column->is_nullable()) {
-        auto* col_nullable = down_cast<NullableColumn*>(column.get());
-        auto* col_map = down_cast<MapColumn*>(col_nullable->data_column().get());
-        uint32_t* offsets = col_map->offsets_column().get()->get_data().data();
-        auto* nulls = col_nullable->null_column()->get_data().data();
+    auto* null_col = get_raw_null_column(column);
+    auto* map_col = down_cast<MapColumn*>(ColumnHelper::get_data_column(column.get()));
+    auto& keys = map_col->keys_column();
+    auto& values = map_col->values_column();
+    auto& offsets = map_col->offsets_column()->get_data();
 
-        ColumnPtr& keys = col_map->keys_column();
-        ColumnPtr& values = col_map->values_column();
-
-        map_orc_column.resize(column_size);
-        map_orc_column.offsets[0] = 0;
-
-        for (size_t i = 0; i < column_size; ++i) {
-            map_orc_column.offsets[i + 1] = offsets[i + 1];
-            map_orc_column.notNull[i] = !nulls[i];
+    if (null_col != nullptr) {
+        orc_column.hasNulls = true;
+        orc_column.notNull.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            orc_column.notNull[i] = 1 - null_col[i];
         }
-
-        _write_column(keys_orc_column, keys, type.children[0]);
-        _write_column(values_orc_column, values, type.children[1]);
-        map_orc_column.hasNulls = true;
-    } else {
-        auto* col_map = down_cast<MapColumn*>(column.get());
-        uint32_t* offsets = col_map->offsets_column().get()->get_data().data();
-
-        ColumnPtr& keys = col_map->keys_column();
-        ColumnPtr& values = col_map->values_column();
-
-        for (size_t i = 0; i < column_size; ++i) {
-            map_orc_column.offsets[i + 1] = offsets[i + 1];
-        }
-        memset(map_orc_column.notNull.data(), 1, column_size * sizeof(char));
-
-        _write_column(keys_orc_column, keys, type.children[0]);
-        _write_column(values_orc_column, values, type.children[1]);
     }
-    map_orc_column.numElements = column->size();
+
+    for (size_t i = 0; i < column_size + 1; ++i) {
+        map_orc_column.offsets[i] = offsets[i];
+    }
+
+    _write_column(keys_orc_column, keys, type.children[0]);
+    _write_column(values_orc_column, values, type.children[1]);
 }
 
 StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema(const std::vector<std::string>& column_names,
