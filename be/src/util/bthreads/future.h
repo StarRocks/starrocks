@@ -224,6 +224,8 @@ public:
         return this->_state->value();
     }
 
+    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+
 private:
     friend class Promise<R>;
     friend class Future<R>;
