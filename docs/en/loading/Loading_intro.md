@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "English"
-toc_max_heading_level: 4
+toc_max_heading_level: 5
 ---
 
 # Loading options
