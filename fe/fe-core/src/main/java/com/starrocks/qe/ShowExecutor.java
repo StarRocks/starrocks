@@ -620,6 +620,7 @@ public class ShowExecutor {
             mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
             // task run status
             mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
+            mvStatus.setQueryRewriteStatus(mvTable.getQueryRewriteStatus());
             rowSets.add(mvStatus);
         }
 
@@ -1071,7 +1072,7 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.isSharedDataMode()) {
+        } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }

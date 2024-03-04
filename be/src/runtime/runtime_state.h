@@ -438,7 +438,7 @@ public:
         return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
     }
 
-    bool is_jit_enabled() const { return _query_options.__isset.jit_level && _query_options.jit_level; }
+    bool is_jit_enabled() const;
 
     bool is_adaptive_jit() const { return _query_options.__isset.jit_level && _query_options.jit_level == 1; }
 

@@ -472,7 +472,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
 
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
-    private static final String CBO_SPLIT_SCAN_PREDICATE_WITH_DATE = "enable_split_scan_predicate_with_date";
+    private static final String ENABLE_FINE_GRAINED_RANGE_PREDICATE = "enable_fine_grained_range_predicate";
 
     private static final String ENABLE_RESULT_SINK_ACCUMULATE = "enable_result_sink_accumulate";
 
@@ -1745,8 +1745,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
 
-    @VarAttr(name = CBO_SPLIT_SCAN_PREDICATE_WITH_DATE)
-    private boolean cboSplitScanPredicateWithDate = false;
+    @VarAttr(name = ENABLE_FINE_GRAINED_RANGE_PREDICATE)
+    private boolean enableFineGrainedRangePredicate = false;
 
     @VarAttr(name = CBO_DERIVE_JOIN_IS_NULL_PREDICATE)
     private boolean cboDeriveJoinIsNullPredicate = true;
@@ -3264,12 +3264,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
 
-    public boolean isCboSplitScanPredicateWithDate() {
-        return cboSplitScanPredicateWithDate;
+    public boolean isEnableFineGrainedRangePredicate() {
+        return enableFineGrainedRangePredicate;
     }
 
-    public void setCboSplitScanPredicateWithDate(boolean cboSplitScanPredicateWithDate) {
-        this.cboSplitScanPredicateWithDate = cboSplitScanPredicateWithDate;
+    public void setEnableFineGrainedRangePredicate(boolean enableFineGrainedRangePredicate) {
+        this.enableFineGrainedRangePredicate = enableFineGrainedRangePredicate;
     }
 
     public boolean isCboDeriveJoinIsNullPredicate() {

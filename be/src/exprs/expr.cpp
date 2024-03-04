@@ -255,12 +255,6 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
         return status;
     }
 
-    // Check if JIT compilation is feasible on this platform.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->support_jit()) {
-        return status;
-    }
-
     bool replaced = false;
     status = (*root_expr)->replace_compilable_exprs(root_expr, pool, state, replaced);
     if (!status.ok()) {
@@ -788,6 +782,7 @@ Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeStat
         _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR) {
         return Status::OK();
     }
+    DCHECK(JITEngine::get_instance()->support_jit());
     // TODO: if reject jit due to the score, we should skip this on expressions in such jit group?
     if ((*expr)->should_compile(state)) {
         // If the current expression is compilable, we will replace it with a JITExpr.
