@@ -200,7 +200,7 @@ public class Coordinator {
     private String trackingUrl;
     private final Set<String> rejectedRecordPaths = new HashSet<>();
     // for export
-    private List<String> exportFiles;
+    private List<String> exportFiles = Lists.newArrayList();
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
     private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
 
