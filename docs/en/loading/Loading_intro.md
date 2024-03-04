@@ -36,11 +36,8 @@ In the following sections, "batch" or "batch loading" refers the loading of a la
 **Business scenario:**
 
 - INSERT INTO VALUES: Append to an internal table with small amounts of data.
-
 - INSERT INTO SELECT:
-
   - INSERT INTO SELECT FROM `<table_name>`: Append to a table with the result of a query on an internal or external table.
-
   - INSERT INTO SELECT FROM FILES(): Append to a table with the result of a query on data files in remote storage.
 
     :::note
@@ -52,11 +49,8 @@ In the following sections, "batch" or "batch loading" refers the loading of a la
 **File format:**
 
 - INSERT INTO VALUES: SQL
-
 - INSERT INTO SELECT:
-
   - INSERT INTO SELECT FROM `<table_name>`: StarRocks tables
-
   - INSERT INTO SELECT FROM FILES(): Parquet and ORC
 
 **Data volume:** Not fixed (The data volume varies based on the memory size.)
@@ -120,21 +114,59 @@ Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters.
 
 ### Ecosystem tools
 
-| **Tool**                                                     | **Business scenario**                                        |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| [Kafka connector](../loading/Kafka-connector-starrocks.md)                                       | Stream data from Kafka.                                      |
-| [Spark connector](../loading/Spark-connector-starrocks.md)                                       | Batch load data from Spark.                                  |
-| [Flink connector](../loading/Flink-connector-starrocks.md)                                       | Stream data from Flink.                                      |
-| [SMT](../integrations/loading_tools/SMT.md)                                                   | Load data from data sources such as MySQL, PostgreSQL, SQL Server, Oracle, Hive, ClickHouse, and TiDB through Flink. |
-| [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)                                                 | Synchronize data between various heterogeneous data sources, including relational databases (MySQL, Oracle, etc.), HDFS, and Hive. |
-| [CloudCanal](../integrations/loading_tools/CloudCanal.md)                                            | Migrate or synchronize data from source databases (for example, MySQL, Oracle, and PostgreSQL) to StarRocks. |
-| [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle) | Integrate with Kettle. By combining Kettle's robust data processing and transformation capabilities with StarRocks's high-performance data storage and analytical abilities, more flexible and efficient data processing workflows can be achieved. |
+#### [Kafka connector](../loading/Kafka-connector-starrocks.md)
+
+**Business scenario:**
+
+Stream data from Kafka.
+
+#### [Spark connector](../loading/Spark-connector-starrocks.md)
+
+**Business scenario:**
+
+Batch load data from Spark.
+
+#### [Flink connector](../loading/Flink-connector-starrocks.md)
+
+**Business scenario:**
+
+Stream data from Flink.
+
+#### [SMT](../integrations/loading_tools/SMT.md)
+
+**Business scenario:**
+
+Load data from data sources such as MySQL, PostgreSQL, SQL Server, Oracle, Hive, ClickHouse, and TiDB through Flink.
+
+#### [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)
+
+**Business scenario:**
+
+Synchronize data between various heterogeneous data sources, including relational databases (MySQL, Oracle, etc.), HDFS, and Hive.
+
+#### [CloudCanal](../integrations/loading_tools/CloudCanal.md)
+
+**Business scenario:**
+
+Migrate or synchronize data from source databases (for example, MySQL, Oracle, and PostgreSQL) to StarRocks.
+
+#### [Kettle Connector](https://github.com/StarRocks/starrocks-connector-for-kettle)
+
+**Business scenario:**
+
+Integrate with Kettle. By combining Kettle's robust data processing and transformation capabilities with StarRocks's high-performance data storage and analytical abilities, more flexible and efficient data processing workflows can be achieved.
 
 ### API
 
-| **API**                                  | **Business scenario**                                        | **File format** | **Data volume** |
-| ---------------------------------------- | ------------------------------------------------------------ | --------------- | --------------- |
-| [Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md) | Implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Flink and Kafka, while improving the performance of highly concurrent stream loads. This feature is supported from v2.4 onwards. | <ul><li>CSV</li><li>JSON</li></ul>         | 10 GB or less   |
+#### Stream Load transaction interface
+
+**Business scenario:**
+
+Implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Flink and Kafka, while improving the performance of highly concurrent stream loads. This feature is supported from v2.4 onwards.
+
+**File format:** CSV and JSON
+
+**Data volume:** 10 GB or less
 
 ## Choice of loading options
 
@@ -166,7 +198,7 @@ This section lists the loading options available for common data sources, helpin
 | **Data source** | **Available loading options**                                |
 | --------------- | ------------------------------------------------------------ |
 | Apache Flink®   | <ul><li>[Flink connector](../loading/Flink-connector-starrocks.md)</li><li>[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md)</li></ul> |
-| Apache Kafka®   | <ul><li>(Streaming) [Kafka connector](../loading/Kafka-connector-starrocks.md)</li><li>(Streaming) [Routine Load](../loading/RoutineLoad.md)</li><li>[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md)</li></ul> **NOTE**<br/>If the source data requires multi-table joins and extract, transform and load (ETL) operations, you can use Flink to read and pre-process the data and then use [Flink connector](../loading/Flink-connector-starrocks.md) to load the data into StarRocks.::: |
+| Apache Kafka®   | <ul><li>(Streaming) [Kafka connector](../loading/Kafka-connector-starrocks.md)</li><li>(Streaming) [Routine Load](../loading/RoutineLoad.md)</li><li>[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md)</li></ul> **NOTE**<br/>If the source data requires multi-table joins and extract, transform and load (ETL) operations, you can use Flink to read and pre-process the data and then use [Flink connector](../loading/Flink-connector-starrocks.md) to load the data into StarRocks. |
 | Apache Spark™   | <ul><li>[Spark connector](../loading/Spark-connector-starrocks.md)</li><li>[Spark Load](../loading/SparkLoad.md)</li></ul> |
 
 ### Data lakes
