@@ -86,8 +86,8 @@
         {
           "type": "category",
           "label": "Loading overview",
-          "link": {"type": "doc", "id": "loading/loading_options_concepts_considerations/loading_overview"},
-          "items": ["loading/loading_options_concepts_considerations/loading_intro", "loading/loading_options_concepts_considerations/loading_concepts", "loading_options_concepts_considerations/loading_considerations"]
+          "link": {"type": "doc", "id": "loading/loading_introduction/loading_overview"},
+          "items": ["loading/Loading_intro", "loading/loading_introduction/loading_concepts", "loading/loading_introduction/loading_considerations"]
         },{
           "type": "category",
           "label": "Load from Object Storage",
@@ -1172,8 +1172,8 @@
         {
           "type": "category",
           "label": "导入概览",
-          "link": {"type": "doc", "id": "loading/loading_options_concepts_considerations/loading_overview"},
-          "items": ["loading/loading_options_concepts_considerations/loading_intro", "loading/loading_options_concepts_considerations/loading_concepts", "loading_options_concepts_considerations/loading_considerations"]
+          "link": {"type": "doc", "id": "loading/loading_introduction/loading_overview"},
+          "items": ["loading/Loading_intro", "loading/loading_introduction/loading_concepts", "loading/loading_introduction/loading_considerations"]
         },
         {
           "type": "category",
