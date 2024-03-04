@@ -43,7 +43,7 @@ std::string_view FPE::trim_trailing_zeros(const std::string_view& str) {
     return str.substr(0, end + 1);
 }
 
-Status FPE::encrypt(const std::string_view& num_str, const std::string_view& key, std::string& value, int radix = 10) {
+Status FPE::encrypt(const std::string_view& num_str, const std::string_view& key, char* buffer, size_t* len, int radix = 10) {
     int num_str_length = num_str.length();
     std::string fixed_num_str(num_str);
     if (num_str_length < MIN_LENGTH) {
@@ -61,10 +61,6 @@ Status FPE::encrypt(const std::string_view& num_str, const std::string_view& key
     struct ff1_ctx* ctx = nullptr;
     DeferOp op([&]{ if (ctx != nullptr) ff1_ctx_destroy(ctx);});
 
-    std::string tmp;
-    tmp.resize(num_str_length);
-    char* out = tmp.data();
-
     int res = ff1_ctx_create(&ctx, fpe_key.data(),
                              fpe_key_length, TWEAK, sizeof(TWEAK),
                              0, SIZE_MAX,
@@ -72,49 +68,65 @@ Status FPE::encrypt(const std::string_view& num_str, const std::string_view& key
     if (res != 0) {
         return Status::RuntimeError("ff1_ctx_create failed");
     }
-    res = ff1_encrypt(ctx, out, fixed_num_str.c_str(), NULL, 0);
+    res = ff1_encrypt(ctx, buffer, fixed_num_str.c_str(), NULL, 0);
     if (res != 0) {
         return Status::RuntimeError("ff1_encrypt failed");
     }
 
-    std::string result(out);
-    value = result;
+    if (len != nullptr) {
+        *len = strlen(buffer);
+    }
 
     return Status::OK();
 }
 
 Status FPE::encrypt_num(const std::string_view& num_str,const std::string_view& key, std::string& value) {
+    std::string result;
+    size_t result_len = 0;
+    result.resize(100);
+
     std::string num_flag;
     if (num_str[0] == '-') {
-        num_flag = "-";
+        result[0] = '-';
+        result_len = 1;
     }
+
+    result[result_len] = FIXED_NUM;
+    ++result_len;
 
     size_t dot_pos = num_str.find('.');
-    std::string_view int_part = num_str.substr(0, dot_pos);
-    Status status;
-    std::string encrypted_int_part;
-    status = encrypt(int_part, key, encrypted_int_part, DEFAULT_RADIX);
-    if (!status.ok()) {
-        return Status::RuntimeError("encrypt_num int_part failed");
+    std::string_view int_part;
+    std::string_view dec_part;
+
+    if (dot_pos != std::string_view::npos) {
+        int_part = num_str.substr(0, dot_pos);
+        dec_part = num_str.substr(dot_pos + 1);
+    } else {
+        int_part = num_str.substr(0);
     }
 
-    std::string encrypted_dec_part;
-    if (dot_pos != std::string::npos) {
-        std::string_view dec_part = num_str.substr(dot_pos + 1);
-        std::string dec_part_str(dec_part);
-        dec_part_str = "0." + dec_part_str;
+    size_t int_part_len = 0;
+    RETURN_IF_ERROR(encrypt(int_part, key, result.data() + result_len, &int_part_len, DEFAULT_RADIX));
+    result_len += int_part_len;
 
-        double dec_part_num = std::stod(dec_part_str);
+    if (!dec_part.empty()) {
+        double dec_part_num = std::stod(std::string(num_str.substr(dot_pos)), nullptr);
         dec_part_num = dec_part_num * EXPANDED;
         auto dec_int_part = static_cast<long long>(dec_part_num);
-        status = encrypt(std::to_string(dec_int_part), key, encrypted_dec_part, DEFAULT_RADIX);
-        if (!status.ok()) {
-            return Status::RuntimeError("encrypt_num dec_int_part failed");
-        }
-        encrypted_dec_part = "." + encrypted_dec_part + FIXED_NUM;
+
+        result[result_len] = '.';
+        ++result_len;
+
+        size_t dec_part_len = 0;
+        RETURN_IF_ERROR(encrypt(std::to_string(dec_int_part), key, result.data() + result_len, &dec_part_len, DEFAULT_RADIX));
+        result_len += dec_part_len;
+
+        result[result_len] = FIXED_NUM;
+        ++result_len;
     }
 
-    value = num_flag + FIXED_NUM + encrypted_int_part + encrypted_dec_part;
+    result.resize(result_len);
+    value = result;
 
     return Status::OK();
 }

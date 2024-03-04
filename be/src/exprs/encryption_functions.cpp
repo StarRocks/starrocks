@@ -430,7 +430,6 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
     Status status;
-    std::string value;
 
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
@@ -447,7 +446,11 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::encrypt(src_value.data, key, value, length));
+        size_t len = 0;
+        std::string value;
+        value.resize(100);
+        RETURN_IF_ERROR(FPE::encrypt(src_value.data, key, value.data(), &len, length));
+        value.resize(len);
 
         result.append(Slice(value));
     }
