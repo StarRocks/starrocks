@@ -26,7 +26,7 @@ public class DnsCache {
         if (InetAddressValidator.getInstance().isValidInet4Address(hostname)) {
             return hostname;
         }
-        return NetUtils.removeScope(InetAddress.getByName(hostname).getHostAddress());
+        return InetAddress.getByName(hostname).getHostAddress();
     }
 
     // This function will try to look up the given hostname. If there is an exception, this function will

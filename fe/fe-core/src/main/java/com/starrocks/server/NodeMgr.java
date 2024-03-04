@@ -287,6 +287,7 @@ public class NodeMgr {
                     LOG.info("forward compatibility. role: {}, node name: {}", role.name(), nodeName);
                 }
             }
+            nodeName = NetUtils.removeScope(nodeName);
             Preconditions.checkNotNull(role);
             Preconditions.checkNotNull(nodeName);
 

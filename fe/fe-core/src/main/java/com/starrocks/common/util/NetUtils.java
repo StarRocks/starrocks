@@ -92,7 +92,7 @@ public class NetUtils {
             ip = host;
         } else {
             // ipOrFqdn is fqdn
-            ip = removeScope(InetAddress.getByName(host).getHostAddress());
+            ip = InetAddress.getByName(host).getHostAddress();
             if (Strings.isNullOrEmpty(ip)) {
                 throw new UnknownHostException("got a wrong ip");
             }

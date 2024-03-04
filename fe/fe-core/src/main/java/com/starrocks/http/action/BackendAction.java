@@ -89,7 +89,7 @@ public class BackendAction extends WebBaseAction {
                 LOG.warn("unknown host: " + backend.getHost(), e);
                 continue;
             }
-            backendInfo.add(NetUtils.removeScope(address.getHostName()));
+            backendInfo.add(address.getHostName());
             backendInfo.add(backend.getId());
             backendInfo.add("host: " + backend.getHost()
                     + ", heart_port: " + backend.getHeartbeatPort()

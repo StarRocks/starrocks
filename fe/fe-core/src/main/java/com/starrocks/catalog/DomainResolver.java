@@ -144,7 +144,7 @@ public class DomainResolver extends FrontendDaemon {
         }
 
         for (InetAddress addr : address) {
-            resolvedIPs.add(NetUtils.removeScope(addr.getHostAddress()));
+            resolvedIPs.add(addr.getHostAddress());
         }
         return true;
     }

@@ -41,7 +41,7 @@ public class NMysqlChannel extends MysqlChannel {
         if (connection.getPeerAddress() instanceof InetSocketAddress) {
             InetSocketAddress address = (InetSocketAddress) connection.getPeerAddress();
             remoteHostPortString = NetUtils.getHostPortInAccessibleFormat(address.getHostString(), address.getPort());
-            remoteIp = NetUtils.removeScope(address.getAddress().getHostAddress());
+            remoteIp = address.getAddress().getHostAddress();
         } else {
             // Reach here, what's it?
             remoteHostPortString = connection.getPeerAddress().toString();

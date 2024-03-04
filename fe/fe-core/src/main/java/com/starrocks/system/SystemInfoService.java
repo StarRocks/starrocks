@@ -992,7 +992,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 // will throw
                 // UnknownHostException
                 InetAddress inetAddress = InetAddress.getByName(host);
-                host = NetUtils.removeScope(inetAddress.getHostAddress());
+                host = inetAddress.getHostAddress();
             }
 
             // validate port
