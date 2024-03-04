@@ -30,20 +30,6 @@ permissions:
   security-events: write
   statuses: write
 
-permissions:
-  checks: write
-  actions: write
-  contents: write
-  deployments: write
-  discussions: write
-  issues: write
-  packages: write
-  pages: write
-  pull-requests: write
-  repository-projects: write
-  security-events: write
-  statuses: write
-
 jobs:
 
   sync-checker:
@@ -135,15 +121,22 @@ jobs:
     if: >
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
        startsWith(github.event.pull_request.title, '[Enhancement]') ||
-<<<<<<< HEAD
        startsWith(github.event.pull_request.title, '[Doc]') ||
        startsWith(github.event.pull_request.title, '[UT]')) &&
-=======
-       startsWith(github.event.pull_request.title, '[Doc]')) &&
->>>>>>> 039cb16527 ([Tool] Add behavior check (#35552))
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
+      - name: add branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.2'
+
+      - name: add branch-3.1 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.1')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.1'
 
       - name: add branch-3.0 label
         if: contains(toJson(github.event.pull_request.body), '[x] 3.0')
@@ -157,17 +150,17 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: add branch-2.4 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 2.4')
-        uses: actions-ecosystem/action-add-labels@v1
+      - name: remove branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
+        uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: '2.4'
+          labels: '3.2'
 
-      - name: add branch-2.3 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 2.3')
-        uses: actions-ecosystem/action-add-labels@v1
+      - name: remove branch-3.1 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.1') && contains(github.event.pull_request.labels.*.name, '3.1')
+        uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: '2.3'
+          labels: '3.1'
 
       - name: remove branch-3.0 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 3.0') && contains(github.event.pull_request.labels.*.name, '3.0')
@@ -181,18 +174,6 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: remove branch-2.4 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 2.4') && contains(github.event.pull_request.labels.*.name, '2.4')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '2.4'
-
-      - name: remove branch-2.3 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 2.3') && contains(github.event.pull_request.labels.*.name, '2.3')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '2.3'
-
       - name: check-done
         if: >
           (startsWith(github.event.pull_request.title, '[BugFix]') ||
@@ -203,24 +184,14 @@ jobs:
           !contains(github.event.pull_request.title, 'backport') &&
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
         run: |
-<<<<<<< HEAD
-          echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
-=======
           echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
->>>>>>> 039cb16527 ([Tool] Add behavior check (#35552))
           exit 1
 
   behavior-check:
     runs-on: ubuntu-latest
     if: >
-<<<<<<< HEAD
       !startsWith(github.event.pull_request.title, '[Doc]') &&
       (github.base_ref == 'main' || !startsWith(github.head_ref, 'mergify/bp/') || github.event.action != 'opened')
-=======
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport') &&
-      !startsWith(github.event.pull_request.title, '[Doc]')
->>>>>>> 039cb16527 ([Tool] Add behavior check (#35552))
     steps:
       - name: Format Check
         id: check
@@ -230,13 +201,9 @@ jobs:
           (!contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior') &&
           !contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
           (contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior') &&
-<<<<<<< HEAD
           contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior')) ||
           (contains(toJson(github.event.pull_request.body), '[ ] Yes, this PR will result in a change in behavior') &&
           contains(toJson(github.event.pull_request.body), '[ ] No, this PR will not result in a change in behavior'))
-=======
-          contains(toJson(github.event.pull_request.body), '[x] No, this PR will not result in a change in behavior'))
->>>>>>> 039cb16527 ([Tool] Add behavior check (#35552))
         run: |
           echo "::error::Please check the format of your pr body about the behavior change checkbox!"
           exit 1
@@ -293,12 +260,9 @@ jobs:
       - name: automerge
         uses: peter-evans/enable-pull-request-automerge@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
-<<<<<<< HEAD
           merge-method: squash
-=======
-          merge-method: rebase
 
   changelist-check:
     runs-on: [self-hosted, normal]
@@ -314,4 +278,3 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
->>>>>>> 039cb16527 ([Tool] Add behavior check (#35552))
