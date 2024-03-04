@@ -14,6 +14,7 @@
 
 #include "block_cache/block_cache.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <cstring>
@@ -22,6 +23,7 @@
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
+#include "storage/options.h"
 
 namespace starrocks {
 
@@ -34,50 +36,6 @@ protected:
     void SetUp() override {}
     void TearDown() override {}
 };
-
-TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
-    std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
-
-    CacheOptions options;
-    options.mem_space_size = 20 * 1024 * 1024;
-    size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./final_entry_not_exist", .size = quota});
-    options.block_size = block_size;
-    options.max_concurrent_inserts = 100000;
-    options.enable_checksum = false;
-#ifdef WITH_STARCACHE
-    options.engine = "starcache";
-#else
-    options.engine = "cachelib";
-#endif
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
-
-    const size_t batch_size = block_size - 1234;
-    const size_t rounds = 3;
-    const std::string cache_key = "test_file";
-
-    // write cache
-    for (size_t i = 0; i < rounds; ++i) {
-        char ch = 'a' + i % 26;
-        std::string value(batch_size, ch);
-        Status st = cache->write_buffer(cache_key + std::to_string(i), 0, batch_size, value.c_str());
-        ASSERT_TRUE(st.ok());
-    }
-
-    // read cache
-    for (size_t i = 0; i < rounds; ++i) {
-        char ch = 'a' + i % 26;
-        std::string expect_value(batch_size, ch);
-        char value[batch_size] = {0};
-        auto res = cache->read_buffer(cache_key + std::to_string(i), 0, batch_size, value);
-        ASSERT_TRUE(res.status().ok());
-        ASSERT_EQ(memcmp(value, expect_value.c_str(), batch_size), 0);
-    }
-
-    cache->shutdown();
-}
 
 TEST_F(BlockCacheTest, copy_to_iobuf) {
     // Create an iobuffer which contains 3 blocks
@@ -107,7 +65,7 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
     ASSERT_EQ(memcmp(result, expect, size), 0);
 }
 
-TEST_F(BlockCacheTest, parse_cache_space_str) {
+TEST_F(BlockCacheTest, parse_cache_space_size_str) {
     uint64_t mem_size = 10;
     ASSERT_EQ(parse_mem_size("10"), mem_size);
     mem_size *= 1024;
@@ -136,6 +94,29 @@ TEST_F(BlockCacheTest, parse_cache_space_str) {
     std::error_code ec;
     auto space_info = std::filesystem::space(disk_path, ec);
     ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * space_info.capacity));
+}
+
+TEST_F(BlockCacheTest, parse_cache_space_paths) {
+    const std::string cwd = std::filesystem::current_path().string();
+    const std::string s_normal_path = fmt::format("{}/block_disk_cache/cache1;{}/block_disk_cache/cache2", cwd, cwd);
+    std::vector<std::string> paths;
+    ASSERT_TRUE(parse_conf_datacache_paths(s_normal_path, &paths).ok());
+    ASSERT_EQ(paths.size(), 2);
+
+    paths.clear();
+    const std::string s_space_path = fmt::format(" {}/block_disk_cache/cache3 ; {}/block_disk_cache/cache4 ", cwd, cwd);
+    ASSERT_TRUE(parse_conf_datacache_paths(s_space_path, &paths).ok());
+    ASSERT_EQ(paths.size(), 2);
+
+    paths.clear();
+    const std::string s_empty_path = fmt::format("//;{}/block_disk_cache/cache4 ", cwd, cwd);
+    ASSERT_FALSE(parse_conf_datacache_paths(s_empty_path, &paths).ok());
+    ASSERT_EQ(paths.size(), 1);
+
+    paths.clear();
+    const std::string s_invalid_path = fmt::format(" /block_disk_cache/cache5;{}/+/cache6", cwd, cwd);
+    ASSERT_FALSE(parse_conf_datacache_paths(s_invalid_path, &paths).ok());
+    ASSERT_EQ(paths.size(), 0);
 }
 
 #ifdef WITH_STARCACHE

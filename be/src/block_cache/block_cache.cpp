@@ -45,24 +45,6 @@ BlockCache* BlockCache::instance() {
 }
 
 Status BlockCache::init(const CacheOptions& options) {
-    for (auto& dir : options.disk_spaces) {
-        if (dir.size == 0) {
-            continue;
-        }
-        fs::path dir_path(dir.path);
-        if (fs::exists(dir_path)) {
-            if (!fs::is_directory(dir_path)) {
-                LOG(ERROR) << "the block cache disk path already exists but not a directory, path: " << dir.path;
-                return Status::InvalidArgument("invalid block cache disk path");
-            }
-        } else {
-            std::error_code ec;
-            if (!fs::create_directory(dir_path, ec)) {
-                LOG(ERROR) << "create block cache disk path failed, path: " << dir.path << ", reason: " << ec.message();
-                return Status::InvalidArgument("invalid block cache disk path");
-            }
-        }
-    }
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
 #ifdef WITH_CACHELIB
     if (options.engine == "cachelib") {
