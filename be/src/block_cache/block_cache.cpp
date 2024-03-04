@@ -25,6 +25,7 @@ BlockCache* BlockCache::instance() {
 }
 
 Status BlockCache::init(const CacheOptions& options) {
+<<<<<<< HEAD
     for (auto& dir : options.disk_spaces) {
         if (dir.size == 0) {
             continue;
@@ -46,6 +47,28 @@ Status BlockCache::init(const CacheOptions& options) {
     _block_size = options.block_size;
     _kv_cache = std::make_unique<FbCacheLib>();
     return _kv_cache->init(options);
+=======
+    _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
+#ifdef WITH_CACHELIB
+    if (options.engine == "cachelib") {
+        _kv_cache = std::make_unique<CacheLibWrapper>();
+        LOG(INFO) << "init cachelib engine, block_size: " << _block_size;
+    }
+#endif
+#ifdef WITH_STARCACHE
+    if (options.engine == "starcache") {
+        _kv_cache = std::make_unique<StarCacheWrapper>();
+        LOG(INFO) << "init starcache engine, block_size: " << _block_size;
+    }
+#endif
+    if (!_kv_cache) {
+        LOG(ERROR) << "unsupported block cache engine: " << options.engine;
+        return Status::NotSupported("unsupported block cache engine");
+    }
+    RETURN_IF_ERROR(_kv_cache->init(options));
+    _initialized.store(true, std::memory_order_relaxed);
+    return Status::OK();
+>>>>>>> d729b827c2 ([BugFix] Format the datacache path configurations before checking it instead of returning error directly. (#41921))
 }
 
 Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* buffer,
