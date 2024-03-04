@@ -31,14 +31,92 @@ In the following sections, "batch" or "batch loading" refers the loading of a la
 
 ### Loading methods
 
-| **Method**          | **Business scenario**                                        | **File format**                                              | **Data volume**                                              |
-| ------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| [Insert](../loading/InsertInto.md)       | <ul><li>INSERT INTO VALUES: Append to an internal table with small amounts of data.</li><li>INSERT INTO SELECT:</li></ul> <br/> - INSERT INTO SELECT FROM <table_name>: Append to a table with the result of a query on an internal or external table. <br/> - INSERT INTO SELECT FROM FILES(): Append to a table with the result of a query on data files in remote storage.  <br/>:::note  For AWS S3, this feature is supported from v3.1 onwards. For HDFS, Microsoft Azure Storage, Google GCS, and S3-compatible storage (such as MinIO), this feature is supported from v3.2 onwards.  ::: | <ul><li>INSERT INTO VALUES: SQL</li><li>INSERT INTO SELECT:</li></ul><br/> - INSERT INTO SELECT FROM <table_name>: StarRocks tables <br/> - INSERT INTO SELECT FROM FILES(): Parquet and ORC | Not fixed (The data volume varies based on the memory size.) |
-| [Stream Load](../loading/StreamLoad.md)  | Batch load data from a local file system.                    | <ul><li>CSV<li><li>JSON</li></ul>                                                      | 10 GB or less                                                |
-| [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)  | <ul><li>Batch load data from HDFS or cloud storage like AWS S3, Microsoft Azure Storage, Google GCS, and S3-compatible storage (such as MinIO).</li><li>Batch load data from a local file system or NAS.</li></ul> | <ul><li>CSV</li><li>Parquet</li><li>ORC</li><li>JSON (supported since v3.2.3)</li></ul>                   | Dozens of GB to hundreds of GB                               |
-| [Pipe](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)         | Batch load or stream data from HDFS or AWS S3. <br/> :::noteThis loading method is supported from v3.2 onwards.::: | <ul><li>Parquet</li><li>ORC</li></ul>                                                   | 100 GB to 1 TB or more                                       |
-| [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) | Stream data from Kafka.                                      | <ul><li>CSV</li><li>JSON</li><li>Avro (supported since v3.0.1)</li></ul>                         | MBs to GBs of data as mini-batches                           |
-| [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)   | Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters. | <ul><li>CSV</li><li>Parquet (supported since v2.0)</li><li>ORC (supported since v2.0)</li></ul>  | Dozens of GB to TBs                                          |
+#### [Insert](../loading/InsertInto.md)
+
+**Business scenario:**
+
+- INSERT INTO VALUES: Append to an internal table with small amounts of data.
+
+- INSERT INTO SELECT:
+
+  - INSERT INTO SELECT FROM <table_name>: Append to a table with the result of a query on an internal or external table.
+
+  - INSERT INTO SELECT FROM FILES(): Append to a table with the result of a query on data files in remote storage.
+
+    :::note
+
+    For AWS S3, this feature is supported from v3.1 onwards. For HDFS, Microsoft Azure Storage, Google GCS, and S3-compatible storage (such as MinIO), this feature is supported from v3.2 onwards.
+
+    :::
+
+**File format:**
+
+- INSERT INTO VALUES: SQL
+
+- INSERT INTO SELECT:
+
+  - INSERT INTO SELECT FROM <table_name>: StarRocks tables
+
+  - INSERT INTO SELECT FROM FILES(): Parquet and ORC
+
+**Data volume:** Not fixed (The data volume varies based on the memory size.)
+
+#### [Stream Load](../loading/StreamLoad.md)
+
+**Business scenario:**
+
+Batch load data from a local file system.
+
+**File format:** CSV and JSON
+
+**Data volume:** 10 GB or less
+
+#### [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+
+**Business scenario:**
+
+- Batch load data from HDFS or cloud storage like AWS S3, Microsoft Azure Storage, Google GCS, and S3-compatible storage (such as MinIO).
+- Batch load data from a local file system or NAS.
+
+**File format:** CSV, Parquet, ORC, and JSON (supported since v3.2.3)
+
+**Data volume:** Dozens of GB to hundreds of GB
+
+#### [Pipe](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
+
+**Business scenario:**
+
+Batch load or stream data from HDFS or AWS S3.
+
+:::note
+
+This loading method is supported from v3.2 onwards.
+
+:::
+
+**File format:** Parquet and ORC
+
+**Data volume:** 100 GB to 1 TB or more
+
+#### [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
+
+**Business scenario:**
+
+Stream data from Kafka.
+
+**File format:** CSV, JSON, and Avro (supported since v3.0.1)
+
+**Data volume:** MBs to GBs of data as mini-batches
+
+#### [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
+
+**Business scenario:**
+
+Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters.
+
+**File format:** CSV, Parquet (supported since v2.0), and ORC (supported since v2.0)
+
+**Data volume:** Dozens of GB to TBs
 
 ### Ecosystem tools
 
