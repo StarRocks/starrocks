@@ -398,7 +398,7 @@ public class LeaderImpl {
                         }
                     }
                 } else {
-                    LOG.warn("tablet_info is not set in finishTaskRequest", new Exception());
+                    LOG.warn("tablet_info is not set in finishTaskRequest");
                 }
 
                 // this should be called before 'countDownLatch()'
