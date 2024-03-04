@@ -20,6 +20,7 @@
 
 #include "column/bytes.h"
 #include "column/const_column.h"
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "gutil/bits.h"
@@ -63,12 +64,9 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
 
 template <typename T>
 void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    if (src.is_constant()) {
-        auto& const_column = down_cast<const ConstColumn&>(src);
-        auto& data_column = const_column.data_column();
-        auto concrete_data_column = down_cast<const BinaryColumnBase<T>*>(data_column.get());
-        auto length = concrete_data_column->get_offset()[1] - concrete_data_column->get_offset()[0];
-        auto bytes = concrete_data_column->get_bytes();
+    if (!src.only_null() && src.is_constant()) {
+        auto value = ColumnHelper::get_const_value<TYPE_VARCHAR>(&src);
+        auto length = value.size;
 
         _offsets.reserve(_offsets.size() + size);
         _bytes.resize(_bytes.size() + size * length);
@@ -76,7 +74,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
         for (size_t i = 0; i < size; i++) {
             int offset = _offsets.back();
             _offsets.push_back(offset + length);
-            strings::memcpy_inlined(_bytes.data() + offset, bytes.data(), length);
+            strings::memcpy_inlined(_bytes.data() + offset, value.data, length);
         }
         return;
     }
