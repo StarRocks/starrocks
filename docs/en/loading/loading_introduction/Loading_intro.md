@@ -124,7 +124,7 @@ This loading method is supported from v3.2 onwards.
 
 #### [DataX](../../integrations/loading_tools/DataX-starrocks-writer.md)
 
-**Business scenario:** Synchronize data between various heterogeneous data sources, including relational databases (MySQL, Oracle, etc.), HDFS, and Hive.
+**Business scenario:** Synchronize data between various heterogeneous data sources, including relational databases (for example, MySQL and Oracle), HDFS, and Hive.
 
 #### [CloudCanal](../../integrations/loading_tools/CloudCanal.md)
 

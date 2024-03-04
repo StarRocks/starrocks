@@ -35,9 +35,11 @@ You can configure the following parameters in the configuration file **fe.conf**
   
   This parameter specifies the maximum number of ongoing load transactions that are allowed in each database of your StarRocks cluster. A load job can contain one or more transactions. The default value is **100**. When the number of load transactions running in a database reaches the maximum number that you specify, the subsequent load jobs that you submit are not scheduled. In this situation, if you submit a synchronous load job, the job is rejected. If you submit an asynchronous load job, the job is held waiting in queue.
 
-  > **NOTE**
-  >
-  > StarRocks counts all load jobs together and does not distinguish between synchronous load jobs and asynchronous load jobs.
+  :::note
+  
+  StarRocks counts all load jobs together and does not distinguish between synchronous load jobs and asynchronous load jobs.
+
+  :::
 
 - `label_keep_max_second`
   

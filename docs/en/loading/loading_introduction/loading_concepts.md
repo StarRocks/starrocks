@@ -37,9 +37,11 @@ Strict mode is an optional property that you can configure for data loads. It af
 
 StarRocks supports two loading modes: synchronous loading mode and asynchronous loading mode.
 
-> **NOTE**
->
-> If you load data by using external programs, you must choose a loading mode that best suits your business requirements before you decide the loading method of your choice.
+:::note
+
+If you load data by using external programs, you must choose a loading mode that best suits your business requirements before you decide the loading method of your choice.
+
+:::
 
 ### Synchronous loading
 
