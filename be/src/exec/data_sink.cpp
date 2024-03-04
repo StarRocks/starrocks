@@ -318,8 +318,8 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
             // source op
             auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
                     context->next_operator_id(), upstream_plan_node_id, i, mcast_local_exchanger);
-            source_op->set_degree_of_parallelism(dop);
             context->inherit_upstream_source_properties(source_op.get(), upstream_source);
+            source_op->set_degree_of_parallelism(dop);
 
             // sink op
             auto sink_op = _create_exchange_sink_operator(context, t_stream_sink, sender.get(), dop);
