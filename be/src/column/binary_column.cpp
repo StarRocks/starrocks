@@ -76,6 +76,8 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
             _offsets.push_back(offset + length);
             strings::memcpy_inlined(_bytes.data() + offset, value.data, length);
         }
+
+        _slices_cache = false;
         return;
     }
 
