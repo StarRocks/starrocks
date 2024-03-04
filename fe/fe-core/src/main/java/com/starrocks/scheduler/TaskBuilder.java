@@ -18,7 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -32,11 +36,15 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.CreateExternalCooldownStmt;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections.MapUtils;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -276,7 +284,47 @@ public class TaskBuilder {
         }
     }
 
+    public static Task buildExternalCooldownTask(CreateExternalCooldownStmt externalCooldownStmt, ConnectContext context) {
+        Database db = MetaUtils.getDatabase(context, externalCooldownStmt.getTableName());
+        Table table = MetaUtils.getTable(context, externalCooldownStmt.getTableName());
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("only support cooldown for olap table, got " + table.getType());
+        }
+        OlapTable olapTable = (OlapTable) table;
+
+        Task task = new Task(getExternalCooldownTaskName(table.getId()));
+        task.setSource(Constants.TaskSource.EXTERNAL_COOLDOWN);
+        task.setDbName(db.getOriginName());
+        Map<String, String> taskProperties = getExternalCooldownTaskProperties(externalCooldownStmt, table);
+
+        task.setDefinition(String.format("INSERT INTO %s SELECT * FROM %s",
+                TableName.fromString(olapTable.getExternalCoolDownTarget()).toSql(),
+                externalCooldownStmt.getTableName().toSql()));
+        task.setProperties(taskProperties);
+        task.setExpireTime(0L);
+        handleSpecialTaskProperties(task);
+        return task;
+    }
+
+    @NotNull
+    private static Map<String, String> getExternalCooldownTaskProperties(CreateExternalCooldownStmt stmt, Table table) {
+        Map<String, String> taskProperties = Maps.newHashMap();
+        taskProperties.put(PartitionBasedCooldownProcessor.TABLE_ID, String.valueOf(table.getId()));
+        if (stmt.getPartitionRangeDesc() != null) {
+            taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_START,
+                    String.valueOf(stmt.getPartitionRangeDesc().getPartitionStart()));
+            taskProperties.put(PartitionBasedCooldownProcessor.PARTITION_END,
+                    String.valueOf(stmt.getPartitionRangeDesc().getPartitionEnd()));
+        }
+        taskProperties.put(PartitionBasedCooldownProcessor.FORCE, String.valueOf(table.getId()));
+        return taskProperties;
+    }
+
     public static String getMvTaskName(long mvId) {
         return "mv-" + mvId;
+    }
+
+    public static String getExternalCooldownTaskName(Long tableId) {
+        return "external-cooldown-" + tableId;
     }
 }
