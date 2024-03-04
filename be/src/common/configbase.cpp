@@ -23,11 +23,8 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
-<<<<<<< HEAD
-=======
 #include <set>
 #include <string>
->>>>>>> 5ebf987ab6 ([Enhancement] Support config alias names (#41989))
 
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
