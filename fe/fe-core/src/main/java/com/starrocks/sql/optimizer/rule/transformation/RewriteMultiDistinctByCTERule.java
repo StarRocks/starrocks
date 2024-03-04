@@ -155,7 +155,8 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             return false;
         }
 
-        if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
+        if (!hasMultiColumns && agg.getGroupingKeys().size() > 1
+                && !ConnectContext.get().getSessionVariable().isPreferCTERewrite()) {
             return false;
         }
 
