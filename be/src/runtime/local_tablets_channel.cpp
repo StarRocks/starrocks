@@ -361,8 +361,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     _flush_stale_memtables();
 
     if (close_channel) {
-        _load_channel->remove_tablets_channel(_index_id);
-
         // persist txn.
         std::vector<TabletSharedPtr> tablets;
         tablets.reserve(request.tablet_ids().size());
@@ -410,6 +408,11 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             wait_memtable_flush_time_us);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_us);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_us);
+
+    // remove tablets channel and load channel after all things done
+    if (close_channel) {
+        _load_channel->remove_tablets_channel(_index_id);
+    }
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {

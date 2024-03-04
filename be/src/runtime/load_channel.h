@@ -139,6 +139,7 @@ private:
     bthread::Mutex _lock;
     // index id -> tablets channel
     std::unordered_map<int64_t, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    std::atomic<bool> _closed{false};
 
     Span _span;
     size_t _num_chunk{0};

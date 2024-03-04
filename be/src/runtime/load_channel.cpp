@@ -237,6 +237,7 @@ void LoadChannel::remove_tablets_channel(int64_t index_id) {
     _tablets_channels.erase(index_id);
     if (_tablets_channels.empty()) {
         l.unlock();
+        _closed.store(true);
         _load_mgr->remove_load_channel(_load_id);
         // Do NOT touch |this| since here, it could have been deleted.
     }
