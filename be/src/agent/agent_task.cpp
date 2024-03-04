@@ -253,8 +253,18 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
         tablet_info.data_size = 0;
         tablet_info.__set_path_hash(tablet->data_dir()->path_hash());
     }
+    TStatus task_status;
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
 
-    unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature, true);
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+    finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
+    finish_task_request.__set_task_status(task_status);
+
+    finish_task(finish_task_request);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
