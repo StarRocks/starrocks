@@ -39,7 +39,7 @@ In the following sections, "batch" or "batch loading" refers the loading of a la
 
 - INSERT INTO SELECT:
 
-  - INSERT INTO SELECT FROM <table_name>: Append to a table with the result of a query on an internal or external table.
+  - INSERT INTO SELECT FROM `<table_name>`: Append to a table with the result of a query on an internal or external table.
 
   - INSERT INTO SELECT FROM FILES(): Append to a table with the result of a query on data files in remote storage.
 
@@ -55,7 +55,7 @@ In the following sections, "batch" or "batch loading" refers the loading of a la
 
 - INSERT INTO SELECT:
 
-  - INSERT INTO SELECT FROM <table_name>: StarRocks tables
+  - INSERT INTO SELECT FROM `<table_name>`: StarRocks tables
 
   - INSERT INTO SELECT FROM FILES(): Parquet and ORC
 
