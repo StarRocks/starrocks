@@ -104,3 +104,19 @@ select * from ngram_index_case_in_sensitive order by ngram_search_case_insensiti
 insert into ngram_index_case_in_sensitive values ('2023-01-01',"DDDDDDd",3);
 --  one row is filterd
 select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+
+
+-- name: test_ngram_bloom_filter_char
+create database ngram_bloom_filter_db_3;
+use ngram_bloom_filter_db_3;
+CREATE TABLE ngram_index_char(
+    timestamp DATETIME NOT NULL,
+    username char(20) NOT NULL,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+
+show index from ngram_index_char;
+
+insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaa",4),('2023-01-03',"我爱chin",4),('2023-01-04',"toniggrht",4);
+select * from ngram_index_char where username like '_hiaa%';

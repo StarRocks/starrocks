@@ -58,6 +58,7 @@ select * from ngram_index order by  ngram_search(username, 'chinese',4) desc;
 drop database ngram_bloom_filter_db_1;
 -- result:
 -- !result
+
 -- name: test_ngram_bloom_filter_default
 create database ngram_bloom_filter_db_2;
 -- result:
@@ -101,6 +102,7 @@ show index from ngram_index_default_3;
 -- result:
 ngram_bloom_filter_db_2.ngram_index_default_3		idx_name1		username						NGRAMBF	
 -- !result
+
 -- name: test_ngram_bloom_filter_like
 CREATE TABLE ngram_index_like(
     timestamp DATETIME NOT NULL,
@@ -127,6 +129,7 @@ select * from ngram_index_like where username like '_hin%';
 -- result:
 2023-01-01 00:00:00	chinese	3
 -- !result
+
 -- name: test_ngram_bloom_filter_case_insensitive
 CREATE TABLE ngram_index_case_in_sensitive(
     timestamp DATETIME NOT NULL,
@@ -197,4 +200,30 @@ select * from ngram_index_case_in_sensitive order by ngram_search_case_insensiti
 -- result:
 2023-01-01 00:00:00	AaBAa	3
 2023-01-01 00:00:00	aAbac	3
+-- !result
+
+-- name: test_ngram_bloom_filter_char
+create database ngram_bloom_filter_db_3;
+-- result:
+-- !result
+use ngram_bloom_filter_db_3;
+-- result:
+-- !result
+CREATE TABLE ngram_index_char(
+    timestamp DATETIME NOT NULL,
+    username char(20) NOT NULL,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+show index from ngram_index_char;
+-- result:
+ngram_bloom_filter_db_3.ngram_index_char		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "gram_num" = "4")	
+-- !result
+insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaa",4),('2023-01-03',"我爱chin",4),('2023-01-04',"toniggrht",4);
+-- result:
+-- !result
+select * from ngram_index_char where username like '_hiaa%';
+-- result:
 -- !result
