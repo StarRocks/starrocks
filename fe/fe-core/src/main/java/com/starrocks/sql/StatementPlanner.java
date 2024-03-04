@@ -74,7 +74,6 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -334,10 +333,7 @@ public class StatementPlanner {
             return;
         }
         List<Database> dbList = new ArrayList<>(dbs.values());
-        dbList.sort(Comparator.comparingLong(Database::getId));
-        for (Database db : dbList) {
-            locker.lockDatabase(db, LockType.READ);
-        }
+        locker.lockDatabases(dbList, LockType.READ);
     }
 
     // unLock all database after analyze
@@ -345,9 +341,8 @@ public class StatementPlanner {
         if (dbs == null) {
             return;
         }
-        for (Database db : dbs.values()) {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        List<Database> dbList = new ArrayList<>(dbs.values());
+        locker.unlockDatabases(dbList, LockType.READ);
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.
