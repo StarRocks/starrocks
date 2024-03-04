@@ -48,6 +48,7 @@ import com.google.common.collect.Table;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -724,6 +725,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Map<Long, DiskInfo> hashToDiskInfo = new HashMap<>();
+        for (DiskInfo diskInfo : GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getClusterInfo().getBackend(backendId).getDisks().values()) {
+            hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
+        }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
@@ -798,9 +804,29 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
 
                     long currentBackendReportVersion =
+<<<<<<< HEAD
                             GlobalStateMgr.getCurrentSystemInfo().getBackendReportVersion(backendId);
                     if (backendReportVersion < currentBackendReportVersion) {
                         continue;
+=======
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId);
+                    DiskInfo diskInfo = hashToDiskInfo.get(replica.getPathHash());
+
+                    // Only check reportVersion when the disk is online,
+                    // as there will be no tablet changes on an unavailable disk
+                    if (diskInfo != null
+                            && diskInfo.getState() == DiskInfo.DiskState.ONLINE
+                            && backendReportVersion < currentBackendReportVersion) {
+                        LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
+                                "latest report version: {}", backendId, backendReportVersion, currentBackendReportVersion);
+                        break DB_TRAVERSE;
+                    } else if (diskInfo == null) {
+                        LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
+                    } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
+                        LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
+>>>>>>> 805e22152a ([BugFix] Fixe bug where tablet was not deleted from meta when removing disk path from be.conf (#41755))
                     }
 
                     ReplicaState state = replica.getState();
