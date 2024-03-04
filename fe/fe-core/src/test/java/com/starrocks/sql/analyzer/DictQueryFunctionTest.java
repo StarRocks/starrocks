@@ -157,6 +157,7 @@ public class DictQueryFunctionTest {
                 "SELECT dict_mapping('dict.dict_table', 'key', null, 'value', true);",
                 "dict_mapping function do not support shared data mode");
         Config.run_mode = "shared_nothing";
+        RunMode.detectRunMode();
     }
 
     private void testDictMappingFunction(String sql, String expectException) {
