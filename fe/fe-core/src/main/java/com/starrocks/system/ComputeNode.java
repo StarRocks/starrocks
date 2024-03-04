@@ -175,6 +175,11 @@ public class ComputeNode implements IComputable, Writable {
         return isSetStoragePath;
     }
 
+    // for test only
+    public void setIsStoragePath(boolean isSetStoragePath) {
+        this.isSetStoragePath = isSetStoragePath;
+    }
+
     public long getId() {
         return id;
     }
