@@ -308,18 +308,7 @@ public class UtFrameUtils {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
 
-<<<<<<< HEAD
         // add be
-=======
-    public static ComputeNode addMockComputeNode(int backendId) throws Exception {
-        // start be
-        MockedBackend backend = new MockedBackend("127.0.108.1");
-        // add be
-        return addMockComputeNode(backend, backendId);
-    }
-
-    private static Backend addMockBackend(MockedBackend backend, int backendId) {
->>>>>>> 6c4f5cdae5 ([BugFix] create table with local persistent index by mistake when CN doesn't have local disk (#41933))
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
@@ -342,6 +331,13 @@ public class UtFrameUtils {
             GlobalStateMgr.getCurrentStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
         }
         return be;
+    }
+
+    public static ComputeNode addMockComputeNode(int backendId) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend("127.0.108.1");
+        // add be
+        return addMockComputeNode(backend, backendId);
     }
 
     private static ComputeNode addMockComputeNode(MockedBackend backend, int backendId) {
