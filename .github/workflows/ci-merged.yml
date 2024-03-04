@@ -7,11 +7,16 @@ on:
       - 'branch-[0-9].[0-9]'
     types:
       - closed
+permissions:
+  pull-requests: write
+  issues: write
+  actions: write
+
 jobs:
   backport:
     runs-on: ubuntu-latest
     if: >
-      ${{ github.event.pull_request.merged == true }} && 
+      github.event.pull_request.merged == true &&
       github.base_ref == 'main' && 
       github.repository == 'StarRocks/starrocks' &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
@@ -23,13 +28,14 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+
       - name: backport branch-3.1
         if: contains(github.event.pull_request.labels.*.name, '3.1')
         uses: thollander/actions-comment-pull-request@v1
         with:
           message: |
             @Mergifyio backport branch-3.1
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '3.1')
@@ -42,7 +48,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-3.0
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '3.0')
@@ -55,7 +61,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-2.5
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '2.5')

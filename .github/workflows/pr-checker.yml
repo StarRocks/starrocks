@@ -10,6 +10,11 @@ on:
       - opened
       - reopened
       - edited
+      - synchronize
+
+concurrency:
+  group: PR-CHECKER-${{ github.event.number }}
+  cancel-in-progress: false
 
 permissions:
   checks: write
@@ -121,6 +126,17 @@ jobs:
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
+      - name: add branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.2'
+
+      - name: add branch-3.1 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.1')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.1'
 
       - name: add branch-3.0 label
         if: contains(toJson(github.event.pull_request.body), '[x] 3.0')
@@ -134,17 +150,17 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: add branch-2.4 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 2.4')
-        uses: actions-ecosystem/action-add-labels@v1
+      - name: remove branch-3.2 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
+        uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: '2.4'
+          labels: '3.2'
 
-      - name: add branch-2.3 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 2.3')
-        uses: actions-ecosystem/action-add-labels@v1
+      - name: remove branch-3.1 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.1') && contains(github.event.pull_request.labels.*.name, '3.1')
+        uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: '2.3'
+          labels: '3.1'
 
       - name: remove branch-3.0 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 3.0') && contains(github.event.pull_request.labels.*.name, '3.0')
@@ -158,18 +174,6 @@ jobs:
         with:
           labels: '2.5'
 
-      - name: remove branch-2.4 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 2.4') && contains(github.event.pull_request.labels.*.name, '2.4')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '2.4'
-
-      - name: remove branch-2.3 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 2.3') && contains(github.event.pull_request.labels.*.name, '2.3')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '2.3'
-
       - name: check-done
         if: >
           (startsWith(github.event.pull_request.title, '[BugFix]') ||
@@ -180,7 +184,7 @@ jobs:
           !contains(github.event.pull_request.title, 'backport') &&
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
         run: |
-          echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
+          echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
 
   behavior-check:
@@ -259,3 +263,18 @@ jobs:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
+
+  changelist-check:
+    runs-on: [self-hosted, normal]
+    if: >
+      (github.event.action == 'opened' || github.event.action == 'synchronize') &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: CHECK CHANGELIST
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/check-pr-changelist.sh
