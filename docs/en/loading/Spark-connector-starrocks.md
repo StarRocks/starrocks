@@ -14,12 +14,8 @@ StarRocks provides a self-developed connector named StarRocks Connector for Apac
 
 | Spark connector | Spark            | StarRocks     | Java | Scala |
 | --------------- | ---------------- | ------------- | ---- | ----- |
-<<<<<<< HEAD
-| 1.1.1 | 3.2, 3.3, or 3.4 | 2.5 and later | 8 | 2.12 |
-=======
 | 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later   | 8    | 2.12  |
 | 1.1.1           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
->>>>>>> a2ef520533 ([Doc]update spark connector release note (#40610))
 | 1.1.0           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
 
 > **NOTICE**
