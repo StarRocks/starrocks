@@ -43,6 +43,13 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) return Status::OK();
+    auto defer = DeferOp([this]() {
+        COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
+        _aggregator->sink_complete();
+        _is_finished = true;
+    });
+
     // skip processing if cancelled
     if (state->is_cancelled()) {
         return Status::OK();
@@ -65,10 +72,7 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
             _aggregator->set_ht_eos();
         }
     }
-    COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
-    _aggregator->sink_complete();
-    _is_finished = true;
     return Status::OK();
 }
 

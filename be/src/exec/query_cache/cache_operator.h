@@ -64,6 +64,7 @@ public:
         _multilane_operators = std::move(multilane_operators);
     }
     void set_scan_operator(pipeline::OperatorRawPtr scan_operator) { _scan_operator = scan_operator; }
+    bool ignore_empty_eos() const override { return false; }
 
 private:
     void _update_probe_metrics(int64_t, const std::vector<ChunkPtr>& chunks);

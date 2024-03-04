@@ -40,7 +40,7 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     auto defer_set_finishing = DeferOp([this]() {
-        _aggregator->spill_channel()->set_finishing();
+        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
         _is_finished = true;
     });
 
@@ -107,6 +107,14 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
     if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
         return _spill_all_inputs(state, chunk);
     }
+    return Status::OK();
+}
+
+Status SpillableAggregateBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                           const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::reset_state(state, refill_chunks));
     return Status::OK();
 }
 

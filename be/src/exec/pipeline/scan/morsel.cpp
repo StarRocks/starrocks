@@ -14,6 +14,11 @@
 
 #include "exec/pipeline/scan/morsel.h"
 
+#include <fmt/compile.h>
+
+#include <memory>
+
+#include "common/statusor.h"
 #include "exec/olap_utils.h"
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
@@ -71,6 +76,34 @@ IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQ
     }
 }
 
+BucketSequenceMorselQueueFactory::BucketSequenceMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
+                                                                   bool could_local_shuffle)
+        : _could_local_shuffle(could_local_shuffle) {
+    if (queue_per_driver_seq.empty()) {
+        _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
+        return;
+    }
+
+    _queue_per_driver_seq.reserve(queue_per_driver_seq.size());
+    int max_dop = queue_per_driver_seq.rbegin()->first;
+    for (int i = 0; i <= max_dop; ++i) {
+        auto it = queue_per_driver_seq.find(i);
+        if (it == queue_per_driver_seq.end()) {
+            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
+        } else {
+            _queue_per_driver_seq.emplace_back(std::make_unique<BucketSequenceMorselQueue>(std::move(it->second)));
+        }
+    }
+}
+
+size_t BucketSequenceMorselQueueFactory::num_original_morsels() const {
+    size_t total = 0;
+    for (const auto& queue : _queue_per_driver_seq) {
+        total += queue->num_original_morsels();
+    }
+    return total;
+}
+
 /// MorselQueue.
 std::vector<TInternalScanRange*> _convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
     std::vector<TInternalScanRange*> scan_ranges;
@@ -109,6 +142,66 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     } else {
         return nullptr;
     }
+}
+
+BucketSequenceMorselQueue::BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue)
+        : _morsel_queue(std::move(morsel_queue)) {}
+
+std::vector<TInternalScanRange*> BucketSequenceMorselQueue::olap_scan_ranges() const {
+    return _morsel_queue->olap_scan_ranges();
+}
+
+bool BucketSequenceMorselQueue::empty() const {
+    return _unget_morsel == nullptr && _morsel_queue->empty();
+}
+
+StatusOr<MorselPtr> BucketSequenceMorselQueue::try_get() {
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
+    if (_morsel_queue->empty()) {
+        return nullptr;
+    }
+    ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
+    auto* m = down_cast<ScanMorsel*>(morsel.get());
+    auto owner_id = m->owner_id();
+    ASSIGN_OR_RETURN(int64_t next_owner_id, _peek_sequence_id());
+    _ticket_checker->enter(owner_id, next_owner_id != owner_id);
+    _current_sequence = owner_id;
+    return morsel;
+}
+
+std::string BucketSequenceMorselQueue::name() const {
+    return fmt::format("partition_morsel_queue({})", _morsel_queue->name());
+}
+
+StatusOr<bool> BucketSequenceMorselQueue::ready_for_next() const {
+    if (_current_sequence < 0) {
+        return true;
+    }
+
+    ASSIGN_OR_RETURN(int64_t next_sequence_id, _peek_sequence_id());
+    if (next_sequence_id == _current_sequence) {
+        return true;
+    }
+
+    if (_ticket_checker->are_all_left(_current_sequence)) {
+        return true;
+    }
+
+    return false;
+}
+
+StatusOr<int64_t> BucketSequenceMorselQueue::_peek_sequence_id() const {
+    int64_t next_owner_id = -1;
+    if (!_morsel_queue->empty()) {
+        ASSIGN_OR_RETURN(auto next_morsel, _morsel_queue->try_get());
+        if (auto* next_scan_morsel = down_cast<ScanMorsel*>(next_morsel.get())) {
+            next_owner_id = next_scan_morsel->owner_id();
+            _morsel_queue->unget(std::move(next_morsel));
+        }
+    }
+    return next_owner_id;
 }
 
 std::vector<TInternalScanRange*> PhysicalSplitMorselQueue::olap_scan_ranges() const {
