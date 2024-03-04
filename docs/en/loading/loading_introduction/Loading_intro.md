@@ -15,7 +15,7 @@ StarRocks provides a variety of options for data loading:
 
 These options each have its own advantages and support its own set of data source systems to pull from.
 
-This topic provides an overview of these options, along with comparisons to help you determine the loading option of your choice based on your data source, business scenario, data volume, data file format, and loading frequency.
+This topic provides an overview of these options, along with comparisons between them to help you determine the loading option of your choice based on your data source, business scenario, data volume, data file format, and loading frequency.
 
 ## Introduction to loading options
 
