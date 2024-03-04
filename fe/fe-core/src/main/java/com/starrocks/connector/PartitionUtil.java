@@ -442,48 +442,50 @@ public class PartitionUtil {
         LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-        int index = 0;
-        PartitionKey lastPartitionKey = null;
-        String lastPartitionName = null;
 
         boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
-        for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
-            if (index == 0) {
-                lastPartitionName = entry.getKey();
-                lastPartitionKey = entry.getValue();
-                if (lastPartitionKey.getKeys().get(0).isNullable()) {
-                    // If partition key is NULL literal, rewrite it to min value.
-                    lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
-                            ImmutableList.of(partitionColumn.getPrimitiveType()), false);
-                }
-                ++index;
-                continue;
-            }
-            Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            PartitionKey upperBound = entry.getValue();
-            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, upperBound));
-            lastPartitionName = entry.getKey();
-            lastPartitionKey = upperBound;
-        }
-        if (lastPartitionName != null) {
-            PartitionKey endKey = new PartitionKey();
-            if (!isConvertToDate) {
-                endKey.pushColumn(addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1,
-                                getDateTimeInterval(table, partitionColumn)), partitionColumn.getPrimitiveType());
-            } else {
-                PartitionKey lastDate = convertToDate(lastPartitionKey);
-                String lastDateFormat = lastPartitionKey.getKeys().get(0).getStringValue();
-                DateTimeFormatter formatter = DateUtils.probeFormat(lastDateFormat);
-                DateLiteral nextDate = (DateLiteral) addOffsetForLiteral(lastDate.getKeys().get(0), 1,
-                        getDateTimeInterval(table, partitionColumn));
-                LiteralExpr nextStringDate = new StringLiteral(nextDate.toLocalDateTime().format(formatter));
-                endKey.pushColumn(nextStringDate, partitionColumn.getPrimitiveType());
-            }
 
-            putRangeToMvPartitionRangeMap(mvPartitionRangeMap, lastPartitionName, lastPartitionKey, endKey);
+        PrimitiveType partitionColPrimType = partitionColumn.getPrimitiveType();
+        DateTimeInterval partitionDateTimeInterval = getDateTimeInterval(table, partitionColumn);
+
+        // NOTE: For external table, convert partition values to partition ranges just like list partition.
+        // Each partition's lower bound is the partition value itself, and the upper bound is the next partition value.
+        // This is more robust, and it's better to handle the case where the partition value is not continuous.
+        for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
+            String partitionKeyName = entry.getKey();
+            PartitionKey lowerBound = entry.getValue();
+            if (lowerBound.getKeys().get(0).isNullable()) {
+                // If partition key is NULL literal, rewrite it to min value.
+                lowerBound = PartitionKey.createInfinityPartitionKeyWithType(
+                        ImmutableList.of(partitionColumn.getPrimitiveType()), false);
+            }
+            Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionKeyName));
+            PartitionKey upperBound = nextPartitionKey(lowerBound, partitionDateTimeInterval, partitionColPrimType,
+                    isConvertToDate);
+            mvPartitionRangeMap.put(partitionKeyName, Range.closedOpen(lowerBound, upperBound));
         }
         return mvPartitionRangeMap;
+    }
+
+    public static PartitionKey nextPartitionKey(PartitionKey lastPartitionKey,
+                                                DateTimeInterval dateTimeInterval,
+                                                PrimitiveType partitionColPrimType,
+                                                boolean isStringConvertToDate) throws AnalysisException {
+        LiteralExpr literalExpr;
+        if (isStringConvertToDate) {
+            PartitionKey lastDate = convertToDate(lastPartitionKey);
+            String lastDateFormat = lastPartitionKey.getKeys().get(0).getStringValue();
+            DateTimeFormatter formatter = DateUtils.probeFormat(lastDateFormat);
+            DateLiteral nextDate = (DateLiteral) addOffsetForLiteral(lastDate.getKeys().get(0), 1,
+                    dateTimeInterval);
+            literalExpr = new StringLiteral(nextDate.toLocalDateTime().format(formatter));
+        } else {
+            literalExpr = addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1, dateTimeInterval);
+        }
+        PartitionKey partitionKey = new PartitionKey();
+        partitionKey.pushColumn(literalExpr, partitionColPrimType);
+        return partitionKey;
     }
 
     /**
@@ -617,9 +619,12 @@ public class PartitionUtil {
      * @param stringLiteral: input string literal to convert.
      * @return             : date literal if string literal can be converted, otherwise throw SemanticException.
      */
-    public static DateLiteral convertToDateLiteral(LiteralExpr stringLiteral) throws SemanticException {
+    public static LiteralExpr convertToDateLiteral(LiteralExpr stringLiteral) throws SemanticException {
         if (stringLiteral == null) {
             return null;
+        }
+        if (stringLiteral.isConstantNull()) {
+            return NullLiteral.create(Type.DATE);
         }
         try {
             String dateLiteral = stringLiteral.getStringValue();
@@ -638,7 +643,7 @@ public class PartitionUtil {
     private static PartitionKey convertToDate(PartitionKey partitionKey) throws SemanticException {
         PartitionKey newPartitionKey = new PartitionKey();
         try {
-            DateLiteral dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
+            LiteralExpr dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
             newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
             return newPartitionKey;
         } catch (SemanticException e) {

@@ -273,7 +273,7 @@ public class MvPartitionCompensator {
             partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
                     columnRefFactory);
         } else if (SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES.contains(scanOperator.getOpType())) {
-            partitionPredicate = compensatePartitionPredicateForExternalTables(scanOperator);
+            partitionPredicate = compensatePartitionPredicateForExternalTables(mvContext, scanOperator);
         } else {
             logMVRewrite(mvContext.getMv().getName(), "Compensate partition failed: unsupported scan " +
                             "operator type {} for {}", scanOperator.getOpType(), scanOperator.getTable().getName());
@@ -282,7 +282,8 @@ public class MvPartitionCompensator {
         return partitionPredicate;
     }
 
-    private static List<ScalarOperator> compensatePartitionPredicateForExternalTables(LogicalScanOperator scanOperator) {
+    private static List<ScalarOperator> compensatePartitionPredicateForExternalTables(MaterializationContext mvContext,
+                                                                                      LogicalScanOperator scanOperator) {
         ScanOperatorPredicates scanOperatorPredicates = null;
         try {
             scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
@@ -293,40 +294,53 @@ public class MvPartitionCompensator {
             return null;
         }
 
-        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
         Table baseTable = scanOperator.getTable();
         if (baseTable.isUnPartitioned()) {
-            return partitionPredicates;
+            return Lists.newArrayList();
         }
 
         OperatorType operatorType = scanOperator.getOpType();
         // only used for hive
         if (operatorType == OperatorType.LOGICAL_HIVE_SCAN && scanOperatorPredicates.getSelectedPartitionIds().size()
                 == scanOperatorPredicates.getIdToPartitionKey().size()) {
-            return partitionPredicates;
+            return Lists.newArrayList();
         }
 
         List<Range<PartitionKey>> ranges = Lists.newArrayList();
+        MaterializedView mv = mvContext.getMv();
+        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        if (partitionTableAndColumns == null) {
+            return null;
+        }
+        Column partitionColumn = partitionTableAndColumns.second;
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getFirstPartitionRefTableExpr(), partitionColumn);
         for (PartitionKey selectedPartitionKey : scanOperatorPredicates.getSelectedPartitionKeys()) {
             try {
-                LiteralExpr expr = PartitionUtil.addOffsetForLiteral(selectedPartitionKey.getKeys().get(0), 1,
-                        PartitionUtil.getDateTimeInterval(baseTable, baseTable.getPartitionColumns().get(0)));
+                LiteralExpr literalExpr = selectedPartitionKey.getKeys().get(0);
+                if (isConvertToDate) {
+                    literalExpr = PartitionUtil.convertToDateLiteral(literalExpr);
+                    if (literalExpr == null) {
+                        return null;
+                    }
+                }
+                PartitionUtil.DateTimeInterval interval = PartitionUtil.getDateTimeInterval(baseTable,
+                        baseTable.getPartitionColumns().get(0));
+                LiteralExpr expr = PartitionUtil.addOffsetForLiteral(literalExpr, 1, interval);
                 PartitionKey partitionKey = new PartitionKey(ImmutableList.of(expr), selectedPartitionKey.getTypes());
                 ranges.add(Range.closedOpen(selectedPartitionKey, partitionKey));
             } catch (AnalysisException e) {
-                LOG.warn("Compute partition key range failed. ", e);
-                return partitionPredicates;
+                logMVRewrite(mv.getName(), "Compute partition key range failed:{}", DebugUtil.getStackTrace(e));
+                return null;
             }
         }
 
         List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(ranges);
         ColumnRefOperator partitionColumnRef = scanOperator.getColumnReference(baseTable.getPartitionColumns().get(0));
         ScalarOperator partitionPredicate = convertPartitionKeysToPredicate(partitionColumnRef, mergedRanges);
-        if (partitionPredicate != null) {
-            partitionPredicates.add(partitionPredicate);
+        if (partitionPredicate == null) {
+            return null;
         }
-
-        return partitionPredicates;
+        return ImmutableList.of(partitionPredicate);
     }
 
     /**
@@ -426,27 +440,17 @@ public class MvPartitionCompensator {
             }
 
             // see `convertToDateRange`
-            if (range.hasLowerBound() && range.hasUpperBound()) {
+            if (range.hasLowerBound()) {
                 // partition range must have lower bound and upper bound
                 ConstantOperator lowerBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                Preconditions.checkState(lowerBound.getType().isStringType());
-                Preconditions.checkState(upperBound.getType().isStringType());
                 inArgs.add(lowerBound);
             } else if (range.hasUpperBound()) {
                 ConstantOperator upperBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
                 Preconditions.checkState(upperBound.getType().isStringType());
-                inArgs.add(upperBound);
-            } else if (range.hasLowerBound()) {
-                ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                Preconditions.checkState(lowerBound.getType().isStringType());
-                inArgs.add(lowerBound);
             } else {
-                // continue
+                return null;
             }
         }
         if (inArgs.size() == 1) {

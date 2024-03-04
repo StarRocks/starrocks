@@ -1183,8 +1183,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=6/6", "PARTITION PREDICATES: (16: l_shipdate < '1998-01-06') " +
-                "OR (16: l_shipdate IS NULL)");
+        assertPlanContains(execPlan, "partitions=6/6", "PARTITION PREDICATES: ((16: l_shipdate < '0000-01-02') " +
+                "OR ((16: l_shipdate >= '1998-01-01') AND (16: l_shipdate < '1998-01-06'))) OR (16: l_shipdate IS NULL)");
 
         MockedHiveMetadata mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
