@@ -180,8 +180,13 @@ public class CreateReplicaTask extends AgentTask {
         this.baseSchemaHash = baseSchemaHash;
     }
 
+<<<<<<< HEAD
     public void setStorageFormat(TStorageFormat storageFormat) {
         this.storageFormat = storageFormat;
+=======
+    public TTabletType getTabletType() {
+        return tabletType;
+>>>>>>> 805e22152a ([BugFix] Fixe bug where tablet was not deleted from meta when removing disk path from be.conf (#41755))
     }
 
     public TCreateTabletReq toThrift() {
