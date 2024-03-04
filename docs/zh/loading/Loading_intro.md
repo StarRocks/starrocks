@@ -144,10 +144,10 @@ StarRocks 提供以下各种导入方案供您选择：
 
 | **数据源**                             | **支持的导入方案**                                           |
 | -------------------------------------- | ------------------------------------------------------------ |
-| AWS S3                                 | (Batch) INSERT INTO SELECT FROM FILES()（自 3.1 版本起支持）(Batch) Broker Load(Batch or streaming) Pipe（自 3.2 版本起支持）参见[从 AWS S3 导入数据](../loading/s3.md)。 |
-| Microsoft Azure Storage                | (Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）(Batch) Broker Load参见[从 Microsoft Azure Storage 导入数据](../loading/azure.md)。 |
-| Google GCS                             | (Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）(Batch) Broker Load参见[从 GCS 导入数据](../loading/gcs.md)。 |
-| 其他兼容 S3 协议的对象存储（如 MinIO） | (Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）(Batch) Broker Load参见[从 MinIO 导入数据](../loading/minio.md)。 |
+| AWS S3                                 | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.1 版本起支持）</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe（自 3.2 版本起支持）</li></ul>参见[从 AWS S3 导入数据](../loading/s3.md)。 |
+| Microsoft Azure Storage                | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 Microsoft Azure Storage 导入数据](../loading/azure.md)。 |
+| Google GCS                             | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 GCS 导入数据](../loading/gcs.md)。 |
+| 其他兼容 S3 协议的对象存储（如 MinIO） | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li></ul>参见[从 MinIO 导入数据](../loading/minio.md)。 |
 | Alibaba Cloud OSS                      | (Batch) Broker Load                                          |
 | Tencent Cloud COS                      | (Batch) Broker Load                                          |
 | Huawei Cloud OBS                       | (Batch) Broker Load                                          |
@@ -156,39 +156,39 @@ StarRocks 提供以下各种导入方案供您选择：
 
 | **数据源**                        | **支持的导入方案**                                           |
 | --------------------------------- | ------------------------------------------------------------ |
-| Local file system (including NAS) | (Batch) Stream Load(Batch) Broker Load参见[从本地文件系统导入数据](../loading/StreamLoad.md)。 |
+| Local file system (including NAS) | <ul><li>(Batch) Stream Load</li><li>(Batch) Broker Load</li></ul>参见[从本地文件系统导入数据](../loading/StreamLoad.md)。 |
 
 ### HDFS
 
 | **数据源** | **支持的导入方案**                                           |
 | ---------- | ------------------------------------------------------------ |
-| HDFS       | (Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）(Batch) Broker Load(Batch or streaming) Pipe（自 3.2 版本起支持）参见[从 HDFS 导入数据](../loading/hdfs_load.md)。 |
+| HDFS       | <ul><li>(Batch) INSERT INTO SELECT FROM FILES()（自 3.2 版本起支持）</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe（自 3.2 版本起支持）</li></ul>参见[从 HDFS 导入数据](../loading/hdfs_load.md)。 |
 
 ### Flink、Kafka、及 Spark
 
 | **数据源**    | **支持的导入方案**                                           |
 | ------------- | ------------------------------------------------------------ |
-| Apache Flink® | [Flink connector](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/)[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md) |
-| Apache Kafka® | (Streaming) [Kafka connector](../loading/Kafka-connector-starrocks.md)(Streaming) [Routine Load](../loading/RoutineLoad.md)[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md):::note如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Flink 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [Flink connector](../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。::: |
-| Apache Spark™ | [Spark connector](../loading/Spark-connector-starrocks.md)[Spark Load](../loading/SparkLoad.md) |
+| Apache Flink® | <ul><li>[Flink connector](../loading/Flink-connector-starrocks.md)</li><li>[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md)</li></ul> |
+| Apache Kafka® | <ul><li>(Streaming) [Kafka connector](../loading/Kafka-connector-starrocks.md)</li><li>(Streaming) [Routine Load](../loading/RoutineLoad.md)</li><li>[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md)</li></ul> **NOTE**<br/>如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Flink 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [Flink connector](../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。 |
+| Apache Spark™ | <ul><li>[Spark connector](../loading/Spark-connector-starrocks.md)</li><li>[Spark Load](../loading/SparkLoad.md)</li></ul> |
 
 ### 数据湖
 
 | **数据源**     | **支持的导入方案**                                           |
 | -------------- | ------------------------------------------------------------ |
-| Apache Hive™   | (Batch) 创建 [Hive Catalog](../data_source/catalog/hive_catalog.md)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。(Batch) [Spark Load](https://docs.starrocks.io/docs/loading/SparkLoad/). |
+| Apache Hive™   | <ul><li>(Batch) 创建 [Hive Catalog](../data_source/catalog/hive_catalog.md)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。</li><li>(Batch) [Spark Load](../loading/SparkLoad.md).</li></ul> |
 | Apache Iceberg | (Batch) 创建 [Iceberg Catalog](../data_source/catalog/iceberg_catalog.md)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
 | Apache Hudi    | (Batch) 创建 [Hudi Catalog](../data_source/catalog/hudi_catalog.md)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
 | Delta Lake     | (Batch) 创建 [Delta Lake Catalog](../data_source/catalog/deltalake_catalog.md)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
 | Elasticsearch  | (Batch) 创建 [Elasticsearch Catalog](../data_source/catalog/elasticsearch_catalog.md)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
 | Apache Paimon  | (Batch) 创建 [Paimon Catalog](../data_source/catalog/paimon_catalog.md)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。 |
 
-StarRocks 从 3.2 版本起支持 [Unified Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/unified_catalog/)。通过 Unified Catalog，您无需执行数据导入即可统一管理存储在 Hive、Iceberg、Hudi、Delta Lake 数据源里的表数据。
+StarRocks 从 3.2 版本起支持 [Unified Catalog](../data_source/catalog/unified_catalog.md)。通过 Unified Catalog，您无需执行数据导入即可统一管理存储在 Hive、Iceberg、Hudi、Delta Lake 数据源里的表数据。
 
 ### 内外部数据库
 
 | **数据源**                                                   | **支持的导入方案**                                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| StarRocks                                                    | (Batch) 创建 [StarRocks External Table](../data_source/External_table.md#starrocks-外部表)，然后通过 [INSERT INTO VALUES](https://docs.starrocks.io/docs/loading/InsertInto/#insert-data-via-insert-into-values) 写入少量数据、或通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 写入整张表的数据。:::noteStarRocks 外部表只支持数据写入，不支持数据读取。::: |
-| MySQL                                                        | (Batch) 创建 [JDBC Catalog](../data_source/catalog/jdbc_catalog.md)（推荐）或 [MySQL 外部表](../data_source/External_table.md#deprecated-mysql-外部表)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。(Streaming) 通过 [SMT、Flink CDC Connector、Flink、Flink Connector](../loading/Flink_cdc_load.md) 实现数据导入。 |
-| Other databases such as Oracle, PostgreSQL, SQL Server, ClickHouse, and TiDB | (Batch) 创建 [JDBC Catalog](../data_source/catalog/iceberg_catalog.md)（推荐）或 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。(Streaming) 通过 [SMT、Flink CDC Connector、Flink、Flink Connector](../integrations/loading_tools/SMT.md) 实现数据导入。 |
+| StarRocks                                                    | (Batch) 创建 [StarRocks External Table](../data_source/External_table.md#starrocks-外部表)，然后通过 [INSERT INTO VALUES](../loading/InsertInto.md#通过-insert-into-values-语句导入数据) 写入少量数据、或通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 写入整张表的数据。<br/>**NOTE**<br/>StarRocks 外部表只支持数据写入，不支持数据读取。 |
+| MySQL                                                        | <ul><li>(Batch) 创建 [JDBC Catalog](../data_source/catalog/jdbc_catalog.md)（推荐）或 [MySQL 外部表](../data_source/External_table.md#deprecated-mysql-外部表)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。</li><li>(Streaming) 通过 [SMT、Flink CDC Connector、Flink、Flink Connector](../loading/Flink_cdc_load.md) 实现数据导入。</li></ul> |
+| Other databases such as Oracle, PostgreSQL, SQL Server, ClickHouse, and TiDB | <ul><li>(Batch) 创建 [JDBC Catalog](../data_source/catalog/iceberg_catalog.md)（推荐）或 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)，然后通过 [INSERT INTO SELECT FROM](../loading/InsertInto.md#通过-insert-into-select-将内外表数据导入内表) 实现数据导入。</li><li>(Streaming) 通过 [SMT、Flink CDC Connector、Flink、Flink Connector](../integrations/loading_tools/SMT.md) 实现数据导入。</li></ul> |
