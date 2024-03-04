@@ -93,6 +93,7 @@ public:
     void set_enable_pipeline_level_shuffle(bool flag) { _enable_pipeline_level_shuffle = flag; }
     bool enable_pipeline_level_shuffle() { return _enable_pipeline_level_shuffle; }
     void set_enable_profile() { _enable_profile = true; }
+    bool get_enable_profile_flag() { return _enable_profile; }
     bool enable_profile() {
         if (_enable_profile) {
             return true;
@@ -126,6 +127,7 @@ public:
         }
         _big_query_profile_threshold_ns = factor * big_query_profile_threshold;
     }
+    int64_t get_big_query_profile_threshold_ns() { return _big_query_profile_threshold_ns; }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
         _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
     }

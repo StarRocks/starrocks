@@ -45,7 +45,9 @@
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
 #include "util/lru_cache.h"
+#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
+#include "util/thrift_util.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -72,11 +74,35 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
           _last_updated_time(time(nullptr)) {
     _span = Tracer::Instance().start_trace_or_add_span("load_channel", txn_trace_parent);
     _span->SetAttribute("load_id", load_id.to_string());
+    _create_time_ns = MonotonicNanos();
+
+    _root_profile = std::make_shared<RuntimeProfile>("LoadChannel");
+    _root_profile->add_info_string("LoadId", print_id(load_id));
+    _root_profile->add_info_string("TxnId", std::to_string(txn_id));
+    _profile = _root_profile->create_child(fmt::format("Channel (host={})", BackendOptions::get_localhost()), true);
+    _profile->add_info_string("Address", BackendOptions::get_localhost());
+    _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
+    ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
+    _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
 }
 
 LoadChannel::~LoadChannel() {
     _span->SetAttribute("num_chunk", _num_chunk);
     _span->End();
+}
+
+void LoadChannel::set_profile_config(const PLoadChannelProfileConfig& config) {
+    if (config.has_enable_profile()) {
+        _enable_profile = config.enable_profile();
+    }
+
+    if (config.has_big_query_profile_threshold_ns()) {
+        _big_query_profile_threshold_ns = config.big_query_profile_threshold_ns();
+    }
+
+    if (config.has_runtime_profile_report_interval_ns()) {
+        _runtime_profile_report_interval_ns = config.runtime_profile_report_interval_ns();
+    }
 }
 
 void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
@@ -106,13 +132,15 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
         if (it == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
             if (is_lake_tablet) {
+                // TODO add profile for lake
                 channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get());
             } else {
-                channel = new_local_tablets_channel(this, key, _mem_tracker.get());
+                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
             }
             if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
+            COUNTER_UPDATE(_index_num, 1);
         } else if (request.is_incremental()) {
             st = it->second->incremental_open(request, response, _schema);
         }
@@ -150,6 +178,7 @@ void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTablet
     } else {
         _add_chunk(nullptr, request, response);
     }
+    _report_profile(response);
 }
 
 void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWriterAddBatchResult* response) {
@@ -186,6 +215,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     }
     StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
     StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
+    _report_profile(response);
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -301,5 +331,55 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
         }
     }
     return Status::OK();
+}
+
+void LoadChannel::_report_profile(PTabletWriterAddBatchResult* result) {
+    // report profile if enable profile or the query has run for a long time
+    if (!_enable_profile) {
+        if (_big_query_profile_threshold_ns <= 0) {
+            return;
+        }
+        int64_t query_run_duration = MonotonicNanos() - _create_time_ns;
+        if (query_run_duration <= _big_query_profile_threshold_ns) {
+            return;
+        }
+    }
+
+    int64_t last_report_tims_ns = _last_report_time_ns.load();
+    int64_t now = MonotonicNanos();
+    bool should_report;
+    if (_closed) {
+        // final profile report
+        bool old = false;
+        should_report = _final_report.compare_exchange_strong(old, true);
+    } else {
+        // runtime profile report
+        bool time_to_report = now - last_report_tims_ns > _runtime_profile_report_interval_ns;
+        should_report = time_to_report && _last_report_time_ns.compare_exchange_strong(last_report_tims_ns, now);
+    }
+    if (!should_report) {
+        return;
+    }
+
+    COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
+
+    if (config::pipeline_print_profile) {
+        std::stringstream ss;
+        _root_profile->pretty_print(&ss);
+        LOG(INFO) << ss.str();
+    }
+
+    TRuntimeProfileTree thrift_profile;
+    _root_profile->to_thrift(&thrift_profile);
+    uint8_t* buf = nullptr;
+    uint32_t len = 0;
+    ThriftSerializer ser(false, 4096);
+    Status st = ser.serialize(&thrift_profile, &len, &buf);
+    if (!st.ok()) {
+        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
+                   << ", status: " << st;
+        return;
+    }
+    result->set_load_channel_profile((char*)buf, len);
 }
 } // namespace starrocks

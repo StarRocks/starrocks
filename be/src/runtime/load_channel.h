@@ -64,6 +64,7 @@ class TabletsChannel;
 class LoadChannel;
 class LoadChannelMgr;
 class OlapTableSchemaParam;
+class RuntimeProfile;
 
 namespace lake {
 class TabletManager;
@@ -81,6 +82,8 @@ public:
     ~LoadChannel();
 
     DISALLOW_COPY_AND_MOVE(LoadChannel);
+
+    void set_profile_config(const PLoadChannelProfileConfig& config);
 
     // Open a new load channel if it does not exist.
     // NOTE: This method may be called multiple times, and each time with a different |request|.
@@ -121,6 +124,8 @@ private:
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
+    void _report_profile(PTabletWriterAddBatchResult* result);
+
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;
     UniqueId _load_id;
@@ -135,6 +140,12 @@ private:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::atomic<time_t> _last_updated_time;
 
+    // Put profile before _tablets_channels to avoid TabletsChannel use profile in destructor
+    // The root profile named "LoadChannel"
+    std::shared_ptr<RuntimeProfile> _root_profile;
+    // The profile named "Channel" for each BE
+    RuntimeProfile* _profile;
+
     // lock protect the tablets channel map
     bthread::Mutex _lock;
     // index id -> tablets channel
@@ -144,6 +155,16 @@ private:
     Span _span;
     size_t _num_chunk{0};
     size_t _num_segment = 0;
+
+    int64_t _create_time_ns;
+    bool _enable_profile{false};
+    int64_t _big_query_profile_threshold_ns{-1};
+    int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
+    std::atomic<int64_t> _last_report_time_ns{-1};
+    std::atomic<bool> _final_report{false};
+
+    RuntimeProfile::Counter* _index_num = nullptr;
+    RuntimeProfile::Counter* _peak_memory_usage = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {

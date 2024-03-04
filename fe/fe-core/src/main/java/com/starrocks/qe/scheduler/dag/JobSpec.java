@@ -481,7 +481,14 @@ public class JobSpec {
             return GlobalStateMgr.getCurrentState().getGlobalSlotProvider();
         }
     }
-
+    public boolean hasOlapTableSink() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment.hasOlapTableSink()) {
+                return true;
+            }
+        }
+        return false;
+    }
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 

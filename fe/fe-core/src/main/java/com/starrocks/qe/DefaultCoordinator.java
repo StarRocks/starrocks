@@ -890,6 +890,8 @@ public class DefaultCoordinator extends Coordinator {
             if (!execState.updateExecStatus(params)) {
                 return;
             }
+
+            queryProfile.updateLoadChannelProfile(params);
         } finally {
             unlock();
         }

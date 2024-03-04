@@ -49,6 +49,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -89,6 +90,10 @@ public class QueryRuntimeProfile {
 
     private RuntimeProfile queryProfile;
     private final List<RuntimeProfile> fragmentProfiles;
+
+    // The load channel profile is only present if loading to OlapTables.
+    // The hierarchy is LoadChannel -> Channel(BE) -> Index
+    private final Optional<RuntimeProfile> loadChannelProfile;
 
     /**
      * The number of instances of this query.
@@ -132,6 +137,13 @@ public class QueryRuntimeProfile {
             RuntimeProfile profile = new RuntimeProfile("Fragment " + i);
             fragmentProfiles.add(profile);
             queryProfile.addChild(profile);
+        }
+
+        if (jobSpec.hasOlapTableSink()) {
+            loadChannelProfile = Optional.of(new RuntimeProfile("LoadChannel"));
+            queryProfile.addChild(loadChannelProfile.get());
+        } else {
+            loadChannelProfile = Optional.empty();
         }
     }
 
@@ -244,6 +256,20 @@ public class QueryRuntimeProfile {
 
     public RuntimeProfile getQueryProfile() {
         return queryProfile;
+    }
+
+    public void updateLoadChannelProfile(TReportExecStatusParams params) {
+        if (params.isSetLoad_channel_profile() && loadChannelProfile.isPresent()) {
+            loadChannelProfile.get().update(params.load_channel_profile);
+            if (LOG.isDebugEnabled()) {
+                StringBuilder builder = new StringBuilder();
+                loadChannelProfile.get().prettyPrint(builder, "");
+                LOG.debug("Load channel profile for query_id={} after reported by instance_id={}\n{}",
+                        DebugUtil.printId(jobSpec.getQueryId()),
+                        DebugUtil.printId(params.getFragment_instance_id()),
+                        builder);
+            }
+        }
     }
 
     public void updateProfile(FragmentInstanceExecState execState, TReportExecStatusParams params) {
@@ -522,7 +548,52 @@ public class QueryRuntimeProfile {
                 newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
         processTimer.setValue(System.nanoTime() - start);
 
+        Optional<RuntimeProfile> mergedLoadChannelProfile =  mergeLoadChannelProfile();
+        mergedLoadChannelProfile.ifPresent(newQueryProfile::addChild);
+
         return newQueryProfile;
+    }
+
+    Optional<RuntimeProfile> mergeLoadChannelProfile() {
+        if (loadChannelProfile.isEmpty()) {
+            return Optional.empty();
+        }
+
+        RuntimeProfile originProfile = loadChannelProfile.get();
+        RuntimeProfile mergedProfile = new RuntimeProfile(originProfile.getName());
+
+        mergedProfile.copyAllInfoStringsFrom(originProfile, null);
+        mergedProfile.copyAllCountersFrom(originProfile);
+
+        List<RuntimeProfile> channelProfiles = originProfile.getChildList().stream()
+                .map(pair -> pair.first)
+                .collect(Collectors.toList());
+
+        Counter counter = mergedProfile.addCounter("ChannelNum", TUnit.UNIT, null);
+        counter.setValue(channelProfiles.size());
+
+        String backendAddresses = channelProfiles.stream().map(profile -> profile.getInfoString("Address"))
+                        .collect(Collectors.joining(","));
+        mergedProfile.addInfoString("BackendAddresses", backendAddresses);
+
+        RuntimeProfile mergedChannelProfile =
+                RuntimeProfile.mergeIsomorphicProfiles(channelProfiles, Sets.newHashSet("Address"));
+        if (mergedChannelProfile == null ) {
+            if (LOG.isDebugEnabled()) {
+                StringBuilder builder = new StringBuilder();
+                originProfile.prettyPrint(builder, "");
+                LOG.debug("Load channel profile is empty after merged, query_id={}, the original profile\n{}",
+                        DebugUtil.printId(jobSpec.getQueryId()), builder);
+            }
+            return Optional.empty();
+        }
+        mergedProfile.copyAllInfoStringsFrom(mergedChannelProfile, null);
+        mergedProfile.copyAllCountersFrom(mergedChannelProfile);
+        mergedChannelProfile.getChildList().forEach(pair -> mergedProfile.addChild(pair.first));
+
+        RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
+
+        return Optional.of(mergedProfile);
     }
 
     private List<String> getUnfinishedInstanceIds() {
