@@ -108,6 +108,8 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
+    public static final int OP_UNION_ALL_BIT = 1 << 0;
+
     public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
                                                       int maxLevel,
                                                       Set<Table> tablesToCheck) {
@@ -1171,4 +1173,85 @@ public class MvUtils {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
+        if (tree.getOp() instanceof LogicalViewScanOperator) {
+            viewScanOperators.add(tree.getOp());
+        } else {
+            for (OptExpression input : tree.getInputs()) {
+                collectViewScanOperator(input, viewScanOperators);
+            }
+        }
+    }
+
+    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression,
+                                                               QueryMaterializationContext queryMaterializationContext) {
+        List<LogicalViewScanOperator> viewScans = queryMaterializationContext.getViewScans();
+        if (viewScans == null) {
+            return queryExpression;
+        }
+        // add a LogicalTreeAnchorOperator to replace the tree easier
+        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
+        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
+        List<Operator> viewScanOperators = Lists.newArrayList();
+        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
+        if (!viewScanOperators.isEmpty()) {
+            return null;
+        }
+        OptExpression newQuery = anchorExpr.inputAt(0);
+        deriveLogicalProperty(newQuery);
+        return newQuery;
+    }
+
+    private static void doReplaceLogicalViewScanOperator(
+            OptExpression parent,
+            int index,
+            OptExpression queryExpression,
+            List<LogicalViewScanOperator> viewScans) {
+        LogicalOperator op = queryExpression.getOp().cast();
+        if (op instanceof LogicalViewScanOperator) {
+            LogicalViewScanOperator viewScanOperator = op.cast();
+            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
+            parent.setChild(index, viewPlan);
+            return;
+        }
+        for (int i = 0; i < queryExpression.getInputs().size(); i++) {
+            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
+        }
+    }
+
+    public static void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        ExpressionContext context = new ExpressionContext(root);
+        context.deriveLogicalProperty();
+        root.setLogicalProperty(context.getRootProperty());
+    }
+
+    public static OptExpression cloneExpression(OptExpression logicalTree) {
+        List<OptExpression> inputs = Lists.newArrayList();
+        for (OptExpression input : logicalTree.getInputs()) {
+            OptExpression clone = cloneExpression(input);
+            inputs.add(clone);
+        }
+        Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
+        builder.withOperator(logicalTree.getOp());
+        Operator newOp = builder.build();
+        return OptExpression.create(newOp, inputs);
+    }
+
+    public static void setAppliedUnionAllRewrite(Operator op) {
+        int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
+        op.setOpRuleMask(opRuleMask);
+    }
+
+    public static boolean isAppliedUnionAllRewrite(Operator op) {
+        int opRuleMask = op.getOpRuleMask();
+        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
+    }
+>>>>>>> 3be33b8632 ([BugFix] Fix mv partition range bug for external tables (#41957))
 }

@@ -502,7 +502,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                         "     TABLE: mv1\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     partitions=6/6\n" +
+                        "     partitions=5/6\n" +
                         "     rollup: mv1");
             }
 
@@ -518,7 +518,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                         "     TABLE: mv1\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 28: l_suppkey > 1\n" +
-                        "     partitions=6/6\n" +
+                        "     partitions=5/6\n" +
                         "     rollup: mv1");
             }
         });
@@ -598,7 +598,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                         "     TABLE: mv1\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     partitions=6/6\n" +
+                        "     partitions=5/6\n" +
                         "     rollup: mv1");
             }
 
@@ -614,7 +614,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                         "     TABLE: mv1\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 28: l_suppkey > 1\n" +
-                        "     partitions=6/6\n" +
+                        "     partitions=5/6\n" +
                         "     rollup: mv1");
             }
         });
