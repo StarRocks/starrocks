@@ -68,6 +68,11 @@ struct JITContext {
     int input_index = 0;
 };
 
+struct JitScore {
+    int64_t score = 0;
+    int64_t num = 0;
+};
+
 class IRHelper {
 public:
     /**

@@ -79,6 +79,27 @@ public:
         }
     }
 
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        int valid_children = 0;
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+            valid_children += tmp.score > 0;
+        }
+        LOG(INFO) << "JIT score case: " << valid_children << " / " << _children.size() << " = "
+                  << valid_children / _children.size() * 1.0 << " , score = " << jit_score.score << " / "
+                  << jit_score.num << " = " << jit_score.score * 1.0 / jit_score.num;
+        if (valid_children > _children.size() / 2.0 && jit_score.score * 1.0 / jit_score.num > 0.6) {
+            return {1, 1};
+        }
+        return {0, 1};
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         if constexpr (lt_is_decimal<WhenType> || lt_is_decimal<ResultType>) {
             // TODO(yueyang): Implement case...when in LLVM IR.

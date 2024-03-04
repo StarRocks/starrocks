@@ -200,6 +200,21 @@ public:
         return state->is_jit_div_op() && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += is_float_type(Type); // helpful on float type
+        return jit_score;
+    }
+
     std::string jit_func_name_impl(RuntimeState* state) const override {
         return "{" + _children[0]->jit_func_name(state) + "/" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
@@ -280,6 +295,21 @@ public:
         return state->is_jit_mod_op() && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += is_float_type(Type); // helpful on float type
+        return jit_score;
+    }
+
     std::string jit_func_name_impl(RuntimeState* state) const override {
         return "{" + _children[0]->jit_func_name(state) + "%" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
@@ -325,6 +355,21 @@ public:
         return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
     }
 
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0;  // no benefit
+        return jit_score;
+    }
+
     std::string jit_func_name_impl(RuntimeState* state) const override {
         return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
@@ -361,6 +406,21 @@ public:
 
     bool is_compilable(RuntimeState* state) const override {
         return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {

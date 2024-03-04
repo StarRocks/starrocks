@@ -788,6 +788,7 @@ Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeStat
         _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR) {
         return Status::OK();
     }
+    // TODO: if reject jit due to the score, we should skip this on expressions in such jit group?
     if ((*expr)->should_compile(state)) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
@@ -803,20 +804,34 @@ Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeStat
     return Status::OK();
 }
 
+JitScore Expr::compute_jit_score(RuntimeState* state) const {
+    JitScore jit_score = {0, 0};
+    if (!is_compilable(state)) {
+        return jit_score;
+    }
+    for (auto child : _children) {
+        auto tmp = child->compute_jit_score(state);
+        jit_score.score += tmp.score;
+        jit_score.num += tmp.num;
+    }
+    jit_score.num++;
+    jit_score.score++; // helpful by default.
+    return jit_score;
+}
+
 bool Expr::should_compile(RuntimeState* state) const {
     if (!is_compilable(state) || _children.empty() || is_constant()) {
         return false;
     }
 
-    for (auto child : _children) {
-        // If an expr is compilable, and it has compilable child nodes that are not leaf nodes,
-        // compiling these compilable nodes into one node via JIT will provide benefits.
-        // The 'literal' is special. It is compilable, but it doesn't have any child nodes
-        if (child->is_compilable(state) && !child->children().empty()) {
-            return true;
+    if (state->is_adaptive_jit()) {
+        auto score = compute_jit_score(state);
+        LOG(INFO) << "JIT score expr: score = " << score.score << " / " << score.num << " = "
+                  << score.score * 1.0 / score.num;
+        if (score.score * 1.0 / score.num < 0.8) {
+            return false;
         }
     }
-
     return true;
 }
 

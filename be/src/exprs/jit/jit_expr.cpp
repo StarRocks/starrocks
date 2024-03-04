@@ -85,8 +85,8 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
             LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
                       << " Reason: " << st;
         } else {
-            //LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0
-            //          << " ms :" << _expr->jit_func_name(state);
+            LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0
+                      << " ms :" << _jit_obj_cache->get_func_name();
             _jit_function = _jit_obj_cache->get_func();
             if (_jit_function == nullptr) {
                 return Status::RuntimeError("JIT func must be not null");

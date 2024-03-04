@@ -440,6 +440,8 @@ public:
 
     bool is_jit_enabled() const { return _query_options.__isset.jit_level && _query_options.jit_level; }
 
+    bool is_adaptive_jit() const { return _query_options.__isset.jit_level && _query_options.jit_level == 1; }
+
     void set_jit_level(const int level) { _query_options.__set_jit_level(level); }
 
     // except /, %

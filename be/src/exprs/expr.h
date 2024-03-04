@@ -64,6 +64,7 @@ class ColumnRef;
 class ColumnPredicateRewriter;
 class JITContext;
 class JITExpr;
+struct JitScore;
 struct LLVMDatum;
 
 // This is the superclass of all expr evaluation nodes.
@@ -240,6 +241,8 @@ public:
 
     // Establishes whether the current expression should undergo compilation.
     bool should_compile(RuntimeState* state) const;
+
+    virtual JitScore compute_jit_score(RuntimeState* state) const;
 
     // Return true if this expr or any of its children support ngram bloom filter, otherwise return flase
     virtual bool support_ngram_bloom_filter(ExprContext* context) const;
