@@ -21,7 +21,7 @@ This topic provides an overview of these options, along with comparisons to help
 
 This section mainly provides the characteristics and business scenarios of the loading options available in StarRocks.
 
-![Loading options overview](../assets/loading_intro_overview.png)
+![Loading options overview](../../assets/loading_intro_overview.png)
 
 :::note
 
@@ -31,7 +31,7 @@ In the following sections, "batch" or "batch loading" refers the loading of a la
 
 ### Loading methods
 
-#### [Insert](../loading/InsertInto.md)
+#### [Insert](../InsertInto.md)
 
 **Business scenario:**
 
@@ -55,7 +55,7 @@ In the following sections, "batch" or "batch loading" refers the loading of a la
 
 **Data volume:** Not fixed (The data volume varies based on the memory size.)
 
-#### [Stream Load](../loading/StreamLoad.md)
+#### [Stream Load](../StreamLoad.md)
 
 **Business scenario:**
 
@@ -65,7 +65,7 @@ Batch load data from a local file system.
 
 **Data volume:** 10 GB or less
 
-#### [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+#### [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
 
 **Business scenario:**
 
@@ -76,7 +76,7 @@ Batch load data from a local file system.
 
 **Data volume:** Dozens of GB to hundreds of GB
 
-#### [Pipe](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
+#### [Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
 
 **Business scenario:**
 
@@ -92,7 +92,7 @@ This loading method is supported from v3.2 onwards.
 
 **Data volume:** 100 GB to 1 TB or more
 
-#### [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
+#### [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)
 
 **Business scenario:**
 
@@ -102,7 +102,7 @@ Stream data from Kafka.
 
 **Data volume:** MBs to GBs of data as mini-batches
 
-#### [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
+#### [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)
 
 **Business scenario:**
 
@@ -114,37 +114,37 @@ Batch load data of Apache Hive™ tables stored in HDFS by using Spark clusters.
 
 ### Ecosystem tools
 
-#### [Kafka connector](../loading/Kafka-connector-starrocks.md)
+#### [Kafka connector](../Kafka-connector-starrocks.md)
 
 **Business scenario:**
 
 Stream data from Kafka.
 
-#### [Spark connector](../loading/Spark-connector-starrocks.md)
+#### [Spark connector](../Spark-connector-starrocks.md)
 
 **Business scenario:**
 
 Batch load data from Spark.
 
-#### [Flink connector](../loading/Flink-connector-starrocks.md)
+#### [Flink connector](../Flink-connector-starrocks.md)
 
 **Business scenario:**
 
 Stream data from Flink.
 
-#### [SMT](../integrations/loading_tools/SMT.md)
+#### [SMT](../../integrations/loading_tools/SMT.md)
 
 **Business scenario:**
 
 Load data from data sources such as MySQL, PostgreSQL, SQL Server, Oracle, Hive, ClickHouse, and TiDB through Flink.
 
-#### [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)
+#### [DataX](../../integrations/loading_tools/DataX-starrocks-writer.md)
 
 **Business scenario:**
 
 Synchronize data between various heterogeneous data sources, including relational databases (MySQL, Oracle, etc.), HDFS, and Hive.
 
-#### [CloudCanal](../integrations/loading_tools/CloudCanal.md)
+#### [CloudCanal](../../integrations/loading_tools/CloudCanal.md)
 
 **Business scenario:**
 
@@ -176,41 +176,41 @@ This section lists the loading options available for common data sources, helpin
 
 | **Data source**                       | **Available loading options**                                |
 | ------------------------------------- | ------------------------------------------------------------ |
-| AWS S3                                | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.1)</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe (supported since v3.2)</li></ul>See [Load data from AWS S3](../loading/s3.md). |
-| Microsoft Azure Storage               | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from Microsoft Azure Storage](../loading/azure.md). |
-| Google GCS                            | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from GCS](../loading/gcs.md). |
-| S3-compatible storage (such as MinIO) | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from MinIO](../loading/minio.md). |
+| AWS S3                                | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.1)</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe (supported since v3.2)</li></ul>See [Load data from AWS S3](../s3.md). |
+| Microsoft Azure Storage               | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from Microsoft Azure Storage](../azure.md). |
+| Google GCS                            | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from GCS](../gcs.md). |
+| S3-compatible storage (such as MinIO) | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li></ul>See [Load data from MinIO](../minio.md). |
 
 ### Local file system (including NAS)
 
 | **Data source**                   | **Available loading options**                                |
 | --------------------------------- | ------------------------------------------------------------ |
-| Local file system (including NAS) | <ul><li>(Batch) Stream Load</li><li>(Batch) Broker Load</li></ul>See [Load data from a local file system](../loading/StreamLoad.md). |
+| Local file system (including NAS) | <ul><li>(Batch) Stream Load</li><li>(Batch) Broker Load</li></ul>See [Load data from a local file system](../StreamLoad.md). |
 
 ### HDFS
 
 | **Data source** | **Available loading options**                                |
 | --------------- | ------------------------------------------------------------ |
-| HDFS            | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe (supported since v3.2)</li></ul>See [Load data from HDFS](../loading/hdfs_load.md). |
+| HDFS            | <ul><li>(Batch) INSERT INTO SELECT FROM FILES() (supported since v3.2)</li><li>(Batch) Broker Load</li><li>(Batch or streaming) Pipe (supported since v3.2)</li></ul>See [Load data from HDFS](../hdfs_load.md). |
 
 ### Flink, Kafka, and Spark
 
 | **Data source** | **Available loading options**                                |
 | --------------- | ------------------------------------------------------------ |
-| Apache Flink®   | <ul><li>[Flink connector](../loading/Flink-connector-starrocks.md)</li><li>[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md)</li></ul> |
-| Apache Kafka®   | <ul><li>(Streaming) [Kafka connector](../loading/Kafka-connector-starrocks.md)</li><li>(Streaming) [Routine Load](../loading/RoutineLoad.md)</li><li>[Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md)</li></ul> **NOTE**<br/>If the source data requires multi-table joins and extract, transform and load (ETL) operations, you can use Flink to read and pre-process the data and then use [Flink connector](../loading/Flink-connector-starrocks.md) to load the data into StarRocks. |
-| Apache Spark™   | <ul><li>[Spark connector](../loading/Spark-connector-starrocks.md)</li><li>[Spark Load](../loading/SparkLoad.md)</li></ul> |
+| Apache Flink®   | <ul><li>[Flink connector](../Flink-connector-starrocks.md)</li><li>[Stream Load transaction interface](../Stream_Load_transaction_interface.md)</li></ul> |
+| Apache Kafka®   | <ul><li>(Streaming) [Kafka connector](../Kafka-connector-starrocks.md)</li><li>(Streaming) [Routine Load](../RoutineLoad.md)</li><li>[Stream Load transaction interface](../Stream_Load_transaction_interface.md)</li></ul> **NOTE**<br/>If the source data requires multi-table joins and extract, transform and load (ETL) operations, you can use Flink to read and pre-process the data and then use [Flink connector](../Flink-connector-starrocks.md) to load the data into StarRocks. |
+| Apache Spark™   | <ul><li>[Spark connector](../Spark-connector-starrocks.md)</li><li>[Spark Load](../SparkLoad.md)</li></ul> |
 
 ### Data lakes
 
 | **Data source** | **Available loading options**                                |
 | --------------- | ------------------------------------------------------------ |
-| Apache Hive™    | <ul><li>(Batch) Create a [Hive catalog](../data_source/catalog/hive_catalog.md) and then use [INSERT INTO SELECT FROM ](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Batch) [Spark Load](https://docs.starrocks.io/docs/loading/SparkLoad/).</li></ul> |
-| Apache Iceberg  | (Batch) Create an [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) and then use [INSERT INTO SELECT FROM ](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-| Apache Hudi     | (Batch) Create a [Hudi catalog](../data_source/catalog/hudi_catalog.md) and then use [INSERT INTO SELECT FROM ](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-| Delta Lake      | (Batch) Create a [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md) and then use [INSERT INTO SELECT FROM ](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-| Elasticsearch   | (Batch) Create an [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) and then use [INSERT INTO SELECT FROM ](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
-| Apache Paimon   | (Batch) Create a [Paimon catalog](../data_source/catalog/paimon_catalog.md) and then use [INSERT INTO SELECT FROM ](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
+| Apache Hive™    | <ul><li>(Batch) Create a [Hive catalog](../../data_source/catalog/hive_catalog.md) and then use [INSERT INTO SELECT FROM ](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Batch) [Spark Load](https://docs.starrocks.io/docs/loading/SparkLoad/).</li></ul> |
+| Apache Iceberg  | (Batch) Create an [Iceberg catalog](../../data_source/catalog/iceberg_catalog.md) and then use [INSERT INTO SELECT FROM ](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
+| Apache Hudi     | (Batch) Create a [Hudi catalog](../../data_source/catalog/hudi_catalog.md) and then use [INSERT INTO SELECT FROM ](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
+| Delta Lake      | (Batch) Create a [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md) and then use [INSERT INTO SELECT FROM ](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
+| Elasticsearch   | (Batch) Create an [Elasticsearch catalog](../../data_source/catalog/elasticsearch_catalog.md) and then use [INSERT INTO SELECT FROM ](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
+| Apache Paimon   | (Batch) Create a [Paimon catalog](../../data_source/catalog/paimon_catalog.md) and then use [INSERT INTO SELECT FROM ](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table). |
 
 Note that StarRocks provides [unified catalogs](https://docs.starrocks.io/docs/data_source/catalog/unified_catalog/) from v3.2 onwards to help you handle tables from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source without ingestion.
 
@@ -218,6 +218,6 @@ Note that StarRocks provides [unified catalogs](https://docs.starrocks.io/docs/d
 
 | **Data source**                                              | **Available loading options**                                |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| StarRocks                                                    | (Batch) Create a [StarRocks external table](../data_source/External_table.md#starrocks-external-table) and then use [INSERT INTO VALUES](../loading/InsertInto.md#insert-data-via-insert-into-values) to insert a few data records or [INSERT INTO SELECT FROM](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) to insert the data of a table.<br/>**NOTE**<br/>StarRocks external tables only support data writes. They do not support data reads. |
-| MySQL                                                        | <ul><li>(Batch) Create a [JDBC catalog](../data_source/catalog/jdbc_catalog.md) (recommended) or a [MySQL external table](../data_source/External_table.md#deprecated-mysql-external-table) and then use [INSERT INTO SELECT FROM](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Streaming) Use [SMT, Flink CDC connector, Flink, and Flink connector](../loading/Flink_cdc_load.md).</li></ul> |
-| Other databases such as Oracle, PostgreSQL, SQL Server, ClickHouse, and TiDB | <ul><li>(Batch) Create a [JDBC catalog](../data_source//catalog/jdbc_catalog.md) (recommended) or a [JDBC external table](../data_source/External_table.md#external-table-for-a-jdbc-compatible-database) and then use [INSERT INTO SELECT FROM](../loading/InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Streaming) Use [SMT, Flink CDC connector, Flink, and Flink connector](../loading/loading_tools.md).</li></ul> |
+| StarRocks                                                    | (Batch) Create a [StarRocks external table](../../data_source/External_table.md#starrocks-external-table) and then use [INSERT INTO VALUES](../InsertInto.md#insert-data-via-insert-into-values) to insert a few data records or [INSERT INTO SELECT FROM](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table) to insert the data of a table.<br/>**NOTE**<br/>StarRocks external tables only support data writes. They do not support data reads. |
+| MySQL                                                        | <ul><li>(Batch) Create a [JDBC catalog](../../data_source/catalog/jdbc_catalog.md) (recommended) or a [MySQL external table](../../data_source/External_table.md#deprecated-mysql-external-table) and then use [INSERT INTO SELECT FROM](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Streaming) Use [SMT, Flink CDC connector, Flink, and Flink connector](../Flink_cdc_load.md).</li></ul> |
+| Other databases such as Oracle, PostgreSQL, SQL Server, ClickHouse, and TiDB | <ul><li>(Batch) Create a [JDBC catalog](../../data_source/catalog/jdbc_catalog.md) (recommended) or a [JDBC external table](../../data_source/External_table.md#external-table-for-a-jdbc-compatible-database) and then use [INSERT INTO SELECT FROM](../InsertInto.md#insert-data-from-an-internal-or-external-table-into-an-internal-table).</li><li>(Streaming) Use [SMT, Flink CDC connector, Flink, and Flink connector](../loading_tools.md).</li></ul> |
