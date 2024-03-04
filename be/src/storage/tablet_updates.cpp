@@ -2734,8 +2734,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     } while (stat.byte_size <= config::update_compaction_result_bytes * 2 &&
              info->inputs.size() < config::max_update_compaction_num_singleton_deltas &&
              compaction_level_candidate.find(compaction_level) == compaction_level_candidate.end() &&
-             candidates_by_level.find(compaction_level) != candidates_by_level.end() &&
-             stat.compaction_score > 0);
+             candidates_by_level.find(compaction_level) != candidates_by_level.end() && stat.compaction_score > 0);
 
     if (compaction_level_candidate.find(-1) == compaction_level_candidate.end()) {
         if (candidates_by_level[-1].size() > 0) {
