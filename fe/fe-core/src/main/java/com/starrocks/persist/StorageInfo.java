@@ -41,6 +41,10 @@ package com.starrocks.persist;
 public class StorageInfo {
     private long imageJournalId;
 
+    public StorageInfo() {
+        this(0);
+    }
+
     public StorageInfo(long imageJournalId) {
         this.imageJournalId = imageJournalId;
     }
