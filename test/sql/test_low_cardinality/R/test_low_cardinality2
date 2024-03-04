@@ -497,7 +497,7 @@ agged_supplier_1 as ( select l.S_NAME, l.mx_addr mx_addr from agged_supplier l j
 agged_supplier_2 as ( select S_NAME, if(mx_addr = 'key', 'key2', S_NAME) mx_addr from agged_supplier_1 l ), agged_supplier_4 
 as ( select S_NAME, mx_addr from agged_supplier_2 l group by S_NAME,mx_addr ), 
 agged_supplier_5 as ( select l.S_NAME, l.mx_addr from agged_supplier_4 l join supplier r where r.s_suppkey=10 ) 
-select l.S_NAME,l.mx_addr from agged_supplier_5 l right join [shuffle] supplier z on l.S_NAME = z.S_NAME and l.mx_addr = z.s_region order by 2 nulls last,1 limit 10
+select l.S_NAME,l.mx_addr from agged_supplier_5 l right join [shuffle] supplier z on l.S_NAME = z.S_NAME and l.mx_addr = z.s_region order by 2 nulls last,1 limit 10;
 -- result:
 1	1
 10	10
