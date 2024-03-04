@@ -905,9 +905,9 @@
               "link": {"type": "doc", "id": "cover_pages/functions_percentile"},
               "items": [
                 "sql-reference/sql-functions/percentile-functions/percentile_approx",
-                "sql-reference/sql-functions/percentile-functions/percentile_approx_raw",
                 "sql-reference/sql-functions/percentile-functions/percentile_cont",
                 "sql-reference/sql-functions/percentile-functions/percentile_disc",
+                "sql-reference/sql-functions/percentile-functions/percentile_approx_raw",
                 "sql-reference/sql-functions/percentile-functions/percentile_empty",
                 "sql-reference/sql-functions/percentile-functions/percentile_hash",
                 "sql-reference/sql-functions/percentile-functions/percentile_union"
@@ -1995,9 +1995,9 @@
               "link": {"type": "doc", "id": "cover_pages/functions_percentile"},
               "items": [ 
                 "sql-reference/sql-functions/percentile-functions/percentile_approx",
-                "sql-reference/sql-functions/percentile-functions/percentile_approx_raw",
                 "sql-reference/sql-functions/percentile-functions/percentile_cont",
                 "sql-reference/sql-functions/percentile-functions/percentile_disc",
+                "sql-reference/sql-functions/percentile-functions/percentile_approx_raw",
                 "sql-reference/sql-functions/percentile-functions/percentile_empty",
                 "sql-reference/sql-functions/percentile-functions/percentile_hash",
                 "sql-reference/sql-functions/percentile-functions/percentile_union"
