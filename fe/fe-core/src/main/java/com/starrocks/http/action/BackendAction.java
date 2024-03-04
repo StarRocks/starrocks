@@ -36,7 +36,6 @@ package com.starrocks.http.action;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
