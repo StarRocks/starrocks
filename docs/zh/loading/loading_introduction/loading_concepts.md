@@ -68,7 +68,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 :::
 
-支持异步模式的导入方式有 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md、[Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)。
+支持异步模式的导入方式有 [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Pipe](../../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)。
 
 用户操作过程如下：
 
