@@ -2879,10 +2879,10 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 
 StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
     std::string tablet_path_str = _tablet.schema_hash_path();
-    std::filesystem::path tablet_path(tablet_path_str.c_str());
     ExtraFileSize ef_size;
+
     try {
-        for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {
+        for (const auto& entry : std::filesystem::directory_iterator(tablet_path_str)) {
             if (entry.is_regular_file()) {
                 std::string filename = entry.path().filename().string();
 
@@ -2895,13 +2895,13 @@ StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
             }
         }
     } catch (const std::filesystem::filesystem_error& ex) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Filesystem error: " + ex.what();
+        std::string err_msg = "Iterate dir " + tablet_path_str + " Filesystem error: " + ex.what();
         return Status::InternalError(err_msg);
     } catch (const std::exception& ex) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Standard error: " + ex.what();
+        std::string err_msg = "Iterate dir " + tablet_path_str + " Standard error: " + ex.what();
         return Status::InternalError(err_msg);
     } catch (...) {
-        std::string err_msg = "Iterate dir " + tablet_path.string() + " Unknown exception occurred.";
+        std::string err_msg = "Iterate dir " + tablet_path_str + " Unknown exception occurred.";
         return Status::InternalError(err_msg);
     }
     return ef_size;
