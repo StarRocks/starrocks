@@ -1077,7 +1077,11 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
+<<<<<<< HEAD
         } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+=======
+        } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
+>>>>>>> 942703dae5 ([BugFix] Fix bug which cause storage volume is shown unexpectedly (#41731))
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
