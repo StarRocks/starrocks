@@ -154,10 +154,6 @@ inline bool parse_key_value_pairs(std::istream& input) {
         // compatible with doris_config
         kv.first = std::regex_replace(kv.first, doris_start, "");
 
-<<<<<<< HEAD
-        // Insert into 'file_conf_map'.
-        file_conf_map[key] = value;
-=======
         auto op_field = Field::get(kv.first);
         if (!op_field.has_value()) {
             std::cerr << fmt::format("Ignored unknown config: {}\n", kv.first);
@@ -173,7 +169,6 @@ inline bool parse_key_value_pairs(std::istream& input) {
             std::cerr << fmt::format("Invalid value of config '{}': '{}'\n", kv.first, kv.second);
             return false;
         }
->>>>>>> 5ebf987ab6 ([Enhancement] Support config alias names (#41989))
     }
     return true;
 }
