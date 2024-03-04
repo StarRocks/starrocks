@@ -184,6 +184,7 @@ import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
+import com.starrocks.sql.ast.CancelExternalCooldownStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -202,6 +203,7 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
+import com.starrocks.sql.ast.CreateExternalCooldownStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateImageClause;
@@ -1918,6 +1920,32 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TaskName taskName = qualifiedNameToTaskName(qualifiedName);
         boolean force = context.FORCE() != null;
         return new DropTaskStmt(taskName, force, createPos(context));
+    }
+
+    // ------------------------------------------- External Cooldown Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitCooldownStatement(StarRocksParser.CooldownStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+
+        PartitionRangeDesc partitionRangeDesc = null;
+        if (context.partitionRangeDesc() != null) {
+            partitionRangeDesc =
+                    (PartitionRangeDesc) visit(context.partitionRangeDesc());
+        }
+
+        NodePosition pos = createPos(context);
+        return new CreateExternalCooldownStmt(targetTableName, partitionRangeDesc,
+                context.FORCE() != null, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCancelCooldownStatement(StarRocksParser.CancelCooldownStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        boolean force = context.FORCE() != null;
+        return new CancelExternalCooldownStmt(targetTableName, createPos(context));
     }
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------

@@ -80,6 +80,10 @@ statement
     | submitTaskStatement
     | dropTaskStatement
 
+    // External Cooldown Statement
+    | cooldownStatement
+    | cancelCooldownStatement
+
     // Materialized View Statement
     | createMaterializedViewStatement
     | showMaterializedViewsStatement
@@ -631,6 +635,17 @@ dropTaskStatement
 
 taskScheduleDesc
     : SCHEDULE (START '(' string ')')? EVERY '(' taskInterval ')'
+    ;
+
+// ------------------------------------------- External Cool Down Statement ----------------------------------------------------------
+
+cooldownStatement
+    : COOLDOWN TABLE qualifiedName? properties?
+    (PARTITION partitionRangeDesc)? FORCE?
+    ;
+
+cancelCooldownStatement
+    : CANCEL COOLDOWN TABLE qualifiedName FORCE?
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------

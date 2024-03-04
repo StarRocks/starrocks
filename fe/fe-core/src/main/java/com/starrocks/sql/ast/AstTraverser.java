@@ -69,6 +69,16 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     }
 
     @Override
+    public R visitCreateExternalCooldownStatement(CreateExternalCooldownStmt statement, C context) {
+        return null;
+    }
+
+    @Override
+    public R visitCancelExternalCooldownStatement(CancelExternalCooldownStmt statement, C context) {
+        return null;
+    }
+
+    @Override
     public R visitCreatePipeStatement(CreatePipeStmt statement, C context) {
         if (statement.getInsertStmt() != null) {
             visit(statement.getInsertStmt(), context);

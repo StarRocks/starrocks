@@ -249,6 +249,16 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ---------------------------------------- Create External Cooldown Statement ---------------------------------------------------------
+
+    public R visitCreateExternalCooldownStatement(CreateExternalCooldownStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCancelExternalCooldownStatement(CancelExternalCooldownStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Partition Statement ----------------------------------------------------
 
     default R visitRecoverPartitionStatement(RecoverPartitionStmt statement, C context) {

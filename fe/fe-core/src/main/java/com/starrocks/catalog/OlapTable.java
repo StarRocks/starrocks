@@ -3539,6 +3539,15 @@ public class OlapTable extends Table {
         return null;
     }
 
+    public Table getExternalCoolDownTable() {
+        if (tableProperty == null) {
+            return null;
+        }
+        TableName tableName = TableName.fromString(tableProperty.getExternalCoolDownTarget());
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        return table.orElse(null);
+    }
+
     public String getExternalCoolDownSchedule() {
         if (tableProperty != null) {
             return tableProperty.getExternalCoolDownSchedule();

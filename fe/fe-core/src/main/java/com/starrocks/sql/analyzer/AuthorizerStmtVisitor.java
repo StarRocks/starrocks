@@ -86,6 +86,7 @@ import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
+import com.starrocks.sql.ast.CancelExternalCooldownStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CatalogRef;
@@ -93,6 +94,7 @@ import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateExternalCooldownStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -1780,6 +1782,16 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     public Void visitDataCacheSelectStatement(DataCacheSelectStatement statement, ConnectContext context) {
         // check we have permission access source data
         visitQueryStatement(statement.getInsertStmt().getQueryStatement(), context);
+        return null;
+    }
+
+    @Override
+    public Void visitCreateExternalCooldownStatement(CreateExternalCooldownStmt statement, ConnectContext context) {
+        return null;
+    }
+
+    @Override
+    public Void visitCancelExternalCooldownStatement(CancelExternalCooldownStmt statement, ConnectContext context) {
         return null;
     }
 
