@@ -138,27 +138,55 @@ void my_free(void* p) __THROW {
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     // If new_size is zero, the behavior is implementation defined
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
-        CHECK(false);
         return nullptr;
     }
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
 
-    void* ptr = STARROCKS_REALLOC(p, size);
-    if (ptr != nullptr) {
-        size_t new_size = STARROCKS_MALLOC_SIZE(ptr);
-        if (new_size >= old_size) {
-            MEMORY_CONSUME_SIZE(new_size - old_size);
+    if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
+        if (size >= old_size) {
+            TRY_MEM_CONSUME(size - old_size, nullptr);
+            void* ptr = STARROCKS_REALLOC(p, size);
+            if (UNLIKELY(ptr == nullptr)) {
+                SET_EXCEED_MEM_TRACKER();
+                MEMORY_RELEASE_SIZE(size - old_size);
+            } else {
+                MEMORY_RELEASE_SIZE(size - old_size);
+                int64_t new_size = STARROCKS_MALLOC_SIZE(ptr);
+                MEMORY_CONSUME_SIZE(new_size - old_size);
+            }
+            return ptr;
         } else {
-            MEMORY_RELEASE_SIZE(old_size - new_size);
+            void* ptr = STARROCKS_REALLOC(p, size);
+            if (UNLIKELY(ptr == nullptr)) {
+                SET_EXCEED_MEM_TRACKER();
+            } else {
+                int64_t new_size = STARROCKS_MALLOC_SIZE(ptr);
+                if (new_size >= old_size) {
+                    MEMORY_CONSUME_SIZE(new_size - old_size);
+                } else {
+                    MEMORY_RELEASE_SIZE(old_size - new_size);
+                }
+            }
+            return ptr;
         }
     } else {
-        CHECK(false);
+        void* ptr = STARROCKS_REALLOC(p, size);
+        if (ptr != nullptr) {
+            size_t new_size = STARROCKS_MALLOC_SIZE(ptr);
+            if (new_size >= old_size) {
+                MEMORY_CONSUME_SIZE(new_size - old_size);
+            } else {
+                MEMORY_RELEASE_SIZE(old_size - new_size);
+            }
+        }
+        return ptr;
     }
-    return ptr;
 }
 
 // calloc
