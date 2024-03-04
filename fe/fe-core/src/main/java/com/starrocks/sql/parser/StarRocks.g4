@@ -83,6 +83,10 @@ statement
     | submitTaskStatement
     | dropTaskStatement
 
+    // External Cooldown Statement
+    | cooldownStatement
+    | cancelCooldownStatement
+
     // Materialized View Statement
     | createMaterializedViewStatement
     | showMaterializedViewsStatement
@@ -623,6 +627,17 @@ submitTaskStatement
 
 dropTaskStatement
     : DROP TASK qualifiedName FORCE?
+    ;
+
+// ------------------------------------------- External Cool Down Statement ----------------------------------------------------------
+
+cooldownStatement
+    : COOLDOWN TABLE qualifiedName? properties?
+    (PARTITION partitionRangeDesc)? FORCE?
+    ;
+
+cancelCooldownStatement
+    : CANCEL COOLDOWN TABLE qualifiedName FORCE?
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------

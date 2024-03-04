@@ -121,6 +121,8 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.CancelExternalCooldownStmt;
+import com.starrocks.sql.ast.CreateExternalCooldownStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
@@ -487,6 +489,10 @@ public class StmtExecutor {
                                 throw e;
                             }
                         }
+                    } else if (parsedStmt instanceof CreateExternalCooldownStmt) {
+                        com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
+                    } else if (parsedStmt instanceof CancelExternalCooldownStmt) {
+                        com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {

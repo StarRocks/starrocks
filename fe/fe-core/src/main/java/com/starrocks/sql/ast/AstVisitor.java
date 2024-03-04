@@ -246,6 +246,16 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // ---------------------------------------- Create External Cooldown Statement ---------------------------------------------------------
+
+    public R visitCreateExternalCooldownStatement(CreateExternalCooldownStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCancelExternalCooldownStatement(CancelExternalCooldownStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Partition Statement ----------------------------------------------------
 
     public R visitRecoverPartitionStatement(RecoverPartitionStmt statement, C context) {

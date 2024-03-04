@@ -53,6 +53,7 @@ import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
@@ -3039,6 +3040,15 @@ public class OlapTable extends Table {
             return tableProperty.getExternalCoolDownTarget();
         }
         return null;
+    }
+
+    public Table getExternalCoolDownTable() {
+        if (tableProperty == null) {
+            return null;
+        }
+        TableName tableName = TableName.fromString(tableProperty.getExternalCoolDownTarget());
+        Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
+        return table.orElse(null);
     }
 
     public String getExternalCoolDownSchedule() {

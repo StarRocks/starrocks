@@ -19,6 +19,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -30,8 +32,11 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -62,6 +67,7 @@ import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
+import com.starrocks.sql.ast.CancelExternalCooldownStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -71,6 +77,7 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
+import com.starrocks.sql.ast.CreateExternalCooldownStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -106,6 +113,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -128,6 +136,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -141,8 +150,10 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class DDLStmtExecutor {
 
@@ -332,6 +343,60 @@ public class DDLStmtExecutor {
                         .cancelRefreshMaterializedView(
                                 stmt.getMvName().getDb(),
                                 stmt.getMvName().getTbl());
+            });
+            return null;
+        }
+
+        private static ExecuteOption getCooldownExecuteOption(CreateExternalCooldownStmt externalCooldownStmt) {
+            boolean force = externalCooldownStmt.isForceRefresh();
+            PartitionRangeDesc range = externalCooldownStmt.getPartitionRangeDesc();
+            HashMap<String, String> taskRunProperties = new HashMap<>();
+            taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
+            taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
+            taskRunProperties.put(TaskRun.FORCE, Boolean.toString(force));
+            ExecuteOption executeOption = new ExecuteOption(
+                    Constants.TaskRunPriority.HIGH.value(), false, taskRunProperties);
+            executeOption.setManual(true);
+            executeOption.setSync(force);
+            return executeOption;
+        }
+
+        @Override
+        public ShowResultSet visitCreateExternalCooldownStatement(CreateExternalCooldownStmt stmt,
+                                                            ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                Table table = MetaUtils.getTable(context, stmt.getTableName());
+                if (!(table instanceof OlapTable)) {
+                    throw new SemanticException("only support cooldown for olap table, got " + table.getType());
+                }
+                final String cooldownTaskName = TaskBuilder.getExternalCooldownTaskName(table.getId());
+                if (!taskManager.containTask(cooldownTaskName)) {
+                    Task task = TaskBuilder.buildExternalCooldownTask(stmt, context);
+                    taskManager.createTask(task, false);
+                }
+                ExecuteOption executeOption = getCooldownExecuteOption(stmt);
+                taskManager.executeTask(cooldownTaskName, executeOption);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCancelExternalCooldownStatement(CancelExternalCooldownStmt stmt,
+                                                                  ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(stmt.getTableName());
+                if (table.isEmpty()) {
+                    throw new MetaNotFoundException("table " + stmt.getTableName() + " not found");
+                }
+                if (!(table.get() instanceof OlapTable)) {
+                    throw new DdlException("only support cooldown for olap table, got " + table.get().getType());
+                }
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                Task cooldownTask = taskManager.getTask(TaskBuilder.getExternalCooldownTaskName(table.get().getId()));
+                if (cooldownTask != null) {
+                    taskManager.killTask(cooldownTask.getName(), false);
+                }
             });
             return null;
         }

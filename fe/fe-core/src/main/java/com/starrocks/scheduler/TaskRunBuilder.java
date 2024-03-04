@@ -50,6 +50,8 @@ public class TaskRunBuilder {
         taskRun.setType(getTaskType());
         if (task.getSource().equals(Constants.TaskSource.MV)) {
             taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
+        } else if (task.getSource().equals(Constants.TaskSource.EXTERNAL_COOLDOWN)) {
+            taskRun.setProcessor(new PartitionBasedCooldownProcessor());
         } else {
             taskRun.setProcessor(new SqlTaskRunProcessor());
         }

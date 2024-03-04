@@ -40,6 +40,7 @@ public class Constants {
         MV,
         INSERT,
         PIPE,
+        EXTERNAL_COOLDOWN,
     }
 
     // PENDING -> RUNNING -> FAILED
