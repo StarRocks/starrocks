@@ -546,6 +546,8 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     EtlJobType.INSERT,
                     System.currentTimeMillis(),
                     0L,
+                    0,
+                    0L,
                     TLoadJobType.INSERT_QUERY,
                     0L,
                     whId,

@@ -76,7 +76,7 @@ public class InsertLoadJob extends LoadJob {
 
     @SerializedName("tid")
     private long tableId;
-    private long estimateScanRow;
+    private long estimateScanRow = 0;
     private TLoadJobType loadType;
 
     @SerializedName("isj")
@@ -90,7 +90,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp,
-                         long estimateScanRow, TLoadJobType type, long timeout, long warehouseId,
+                         TLoadJobType type, long timeout, long warehouseId,
                          boolean isStatisticsJob) {
         super(dbId, label);
         this.tableId = tableId;
@@ -98,7 +98,6 @@ public class InsertLoadJob extends LoadJob {
         this.loadStartTimestamp = createTimestamp;
         this.state = JobState.LOADING;
         this.jobType = EtlJobType.INSERT;
-        this.estimateScanRow = estimateScanRow;
         this.loadType = type;
         this.timeoutSecond = timeout;
         this.warehouseId = warehouseId;
@@ -172,13 +171,20 @@ public class InsertLoadJob extends LoadJob {
             super.updateProgress(params);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
                 if (this.loadType == TLoadJobType.INSERT_QUERY) {
-                    progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadRows() 
-                        / (estimateScanRow + 1) * 100);
+                    if (loadingStatus.getLoadStatistic().totalFileSizeB != 0) {
+                        // progress of file scan
+                        progress = (int) ((double) loadingStatus.getLoadStatistic().sourceScanBytes() /
+                                loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                    } else {
+                        // progress of table scan. Slightly smaller than actual
+                        progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadRows()
+                                / (estimateScanRow + 1) * 100);
+                    }
                 } else {
                     progress = (int) ((double) loadingStatus.getLoadStatistic().totalSinkLoadRows() 
                         / (estimateScanRow + 1) * 100);
                 }
-                
+
                 if (progress >= 100) {
                     progress = 99;
                 }
@@ -261,5 +267,9 @@ public class InsertLoadJob extends LoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         tableId = in.readLong();
+    }
+
+    public void setEstimateScanRow(long rows) {
+        this.estimateScanRow = rows;
     }
 }
