@@ -102,7 +102,7 @@ std::function<void(const formats::FileWriter::CommitResult& result)> HiveChunkSi
     };
 }
 
-std::unique_ptr<ConnectorChunkSink> HiveChunkSinkProvider::create_chunk_sink(
+StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<HiveChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
@@ -121,8 +121,7 @@ std::unique_ptr<ConnectorChunkSink> HiveChunkSinkProvider::create_chunk_sink(
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
                 std::move(fs), ctx->options, ctx->data_column_names, std::move(data_column_evaluators), ctx->executor);
     } else {
-        CHECK(false) << "unreachable";
-        __builtin_unreachable();
+        return Status::NotSupported("got unsupported file format: " + ctx->format);
     }
 
     auto partition_column_evaluators = ColumnEvaluator::clone(ctx->partition_column_evaluators);

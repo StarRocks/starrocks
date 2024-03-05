@@ -93,7 +93,7 @@ std::function<void(const formats::FileWriter::CommitResult& result)> FileChunkSi
     };
 }
 
-std::unique_ptr<ConnectorChunkSink> FileChunkSinkProvider::create_chunk_sink(
+StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
@@ -112,8 +112,7 @@ std::unique_ptr<ConnectorChunkSink> FileChunkSinkProvider::create_chunk_sink(
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
                 std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor);
     } else {
-        CHECK(false) << "unreachable";
-        __builtin_unreachable();
+        return Status::NotSupported("got unsupported file format: " + ctx->format);
     }
 
     std::vector<std::string> partition_columns;

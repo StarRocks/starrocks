@@ -30,6 +30,8 @@ namespace starrocks::connector {
 
 class ConnectorChunkSink {
 public:
+    // If `add_chunk_future` is not ready, the chunk sink cannot accept more chunks.
+    // If `commit_file_future` is not ready, the chunk sink can still accept chunks.
     struct Futures {
         std::vector<std::future<Status>> add_chunk_future;
         std::vector<std::future<formats::FileWriter::CommitResult>> commit_file_future;
@@ -43,6 +45,7 @@ public:
 
     virtual Futures finish() = 0;
 
+    // callback function on commit file succeed.
     virtual std::function<void(const formats::FileWriter::CommitResult& result)> callback_on_success() = 0;
 };
 
@@ -55,9 +58,8 @@ class ConnectorChunkSinkProvider {
 public:
     virtual ~ConnectorChunkSinkProvider() = default;
 
-    // TODO: statusor
-    virtual std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                  int32_t driver_id) = 0;
+    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
+            std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) = 0;
 };
 
 } // namespace starrocks::connector

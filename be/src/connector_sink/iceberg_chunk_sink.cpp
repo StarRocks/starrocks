@@ -126,7 +126,7 @@ std::function<void(const formats::FileWriter::CommitResult& result)> IcebergChun
     };
 }
 
-std::unique_ptr<ConnectorChunkSink> IcebergChunkSinkProvider::create_chunk_sink(
+StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
@@ -136,12 +136,13 @@ std::unique_ptr<ConnectorChunkSink> IcebergChunkSinkProvider::create_chunk_sink(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
             boost::to_lower_copy(ctx->format));
 
-    std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
-    CHECK(boost::iequals(ctx->format, formats::PARQUET)) << "iceberg sink only supports parquet";
-    file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
+    if (boost::iequals(ctx->format, formats::PARQUET)) {
+        return Status::NotSupported("got unsupported file format: " + ctx->format);
+    }
+
+    auto file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
             std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), ctx->parquet_field_ids,
             ctx->executor);
-
     std::vector<std::string> partition_columns;
     std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators;
     for (auto idx : ctx->partition_column_indices) {
