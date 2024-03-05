@@ -110,8 +110,15 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
         tablet_rowsets.emplace_back();
         auto& rss = tablet_rowsets.back();
+        int64_t tablet_num_rows = 0;
         for (auto& rowset : _rowsets) {
+            tablet_num_rows += rowset->num_rows();
             rss.emplace_back(rowset);
+        }
+
+        // not split for data skew between tablet
+        if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
+            return init_collector(read_params);
         }
 
         std::vector<std::unique_ptr<pipeline::ScanMorsel>> morsels;
