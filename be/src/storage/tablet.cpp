@@ -195,9 +195,9 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         // delete versions from new local tablet_meta
         for (const Version& version : versions_to_delete) {
             new_tablet_meta->delete_rs_meta_by_version(version, nullptr);
-            // lock free version for version_for_delete_predicate
-            // caller of revise_tablet_meta has acquired the _meta_lock
-            if (new_tablet_meta->version_for_delete_predicate_unlocked(version)) {
+            // version_for_delete_predicate in tablet_meta is already
+            // lock free
+            if (new_tablet_meta->version_for_delete_predicate(version)) {
                 new_tablet_meta->remove_delete_predicate_by_version(version);
             }
             LOG(INFO) << "delete version from new local tablet_meta when clone. [table=" << full_name()
