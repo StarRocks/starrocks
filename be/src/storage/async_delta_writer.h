@@ -101,6 +101,8 @@ private:
     };
 
     struct Task {
+        Task() : create_time_ns(MonotonicNanos()) {}
+
         // If chunk == nullptr, this is a commit task
         Chunk* chunk = nullptr;
         const uint32_t* indexes = nullptr;
@@ -109,6 +111,7 @@ private:
         bool commit_after_write = false;
         bool abort = false;
         bool abort_with_log = false;
+        int64_t create_time_ns;
     };
 
     static int _execute(void* meta, bthread::TaskIterator<AsyncDeltaWriter::Task>& iter);

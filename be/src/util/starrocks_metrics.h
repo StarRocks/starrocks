@@ -189,7 +189,39 @@ public:
     METRIC_DEFINE_INT_COUNTER(load_rows_total, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(load_bytes_total, MetricUnit::BYTES);
 
+    // Metrics for LoadChannel
+    // The number that LoadChannel#add_chunks is accessed
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_total, MetricUnit::OPERATIONS);
+    // Accumulated time that LoadChannel#add_chunks costs. The time can be divided into
+    // waiting memtable, waiting async delta writer, waiting replicas, and others.
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that waiting memtable costs in LoadChannel#add_chunks
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_memtable_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that waiting async delta writer costs in LoadChannel#add_chunks
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_writer_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that waiting replicas costs in LoadChannel#add_chunks
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_replica_duration_us, MetricUnit::MICROSECONDS);
+
+    // Metrics for async delta writer
+    // The number of AsyncDeltaWriter::_execute is accessed. Each execution may run multiple tasks
+    METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);
+    // The number of task that executed
+    METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_total, MetricUnit::OPERATIONS);
+    // Accumulated time that task execution costs
+    METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_execute_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that task pends in the queue
+    METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_pending_duration_us, MetricUnit::MICROSECONDS);
+
+    // Metrics for delta writer
+    // Accumulated time that delta writer waits for memtable flush. It's part of
+    // async_delta_writer_task_execute_duration_us
+    METRIC_DEFINE_INT_COUNTER(delta_writer_wait_flush_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that delta writer waits for secondary replicas sync. It's part of
+    // async_delta_writer_task_execute_duration_us
+    METRIC_DEFINE_INT_COUNTER(delta_writer_wait_replica_duration_us, MetricUnit::MICROSECONDS);
+
     METRIC_DEFINE_INT_COUNTER(memtable_flush_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(memtable_finalize_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_io_time_us, MetricUnit::MICROSECONDS);
     // total memory size of memtables
