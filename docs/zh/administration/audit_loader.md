@@ -14,38 +14,37 @@ displayed_sidebar: "Chinese"
 
 > **注意**
 >
-> 1、请勿更改示例中的表属性，否则将导致日志导入失败。
-> 
-> 2、StarRocks 各个大版本的审计日志字段个数存在差异，为保证版本通用性，新版本的审计插件选取了各大版本中通用的日志字段进行入库。若业务中需要更完整的字段，可替换工程中的 `fe-plugins-auditloader\lib\starrocks-fe.jar` ，同时修改代码中与字段相关的内容后重新编译打包。
+> - 请勿更改示例中的表属性，否则将导致日志导入失败。
+> - StarRocks 各个大版本的审计日志字段个数存在差异，为保证版本通用性，新版本的审计插件选取了各大版本中通用的日志字段进行入库。若业务中需要更完整的字段，可替换工程中的 `fe-plugins-auditloader\lib\starrocks-fe.jar`，同时修改代码中与字段相关的内容后重新编译打包。
 
 ```SQL
 CREATE DATABASE starrocks_audit_db__;
 
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
-  `queryId` VARCHAR(64) COMMENT "查询的唯一ID",
-  `timestamp` DATETIME NOT NULL COMMENT "查询开始时间",
-  `queryType` VARCHAR(12) COMMENT "查询类型（query, slow_query, connection）",
-  `clientIp` VARCHAR(32) COMMENT "客户端IP",
-  `user` VARCHAR(64) COMMENT "查询用户名",
-  `authorizedUser` VARCHAR(64) COMMENT "用户唯一标识，既user_identity",
-  `resourceGroup` VARCHAR(64) COMMENT "资源组名",
-  `catalog` VARCHAR(32) COMMENT "数据目录名",
-  `db` VARCHAR(96) COMMENT "查询所在数据库",
-  `state` VARCHAR(8) COMMENT "查询状态（EOF，ERR，OK）",
-  `errorCode` VARCHAR(512) COMMENT "错误码",
-  `queryTime` BIGINT COMMENT "查询执行时间（毫秒）",
-  `scanBytes` BIGINT COMMENT "查询扫描的字节数",
-  `scanRows` BIGINT COMMENT "查询扫描的记录行数",
-  `returnRows` BIGINT COMMENT "查询返回的结果行数",
-  `cpuCostNs` BIGINT COMMENT "查询CPU耗时（纳秒）",
-  `memCostBytes` BIGINT COMMENT "查询消耗内存（字节）",
-  `stmtId` INT COMMENT "SQL语句增量ID",
-  `isQuery` TINYINT COMMENT "SQL是否为查询（1或0）",
-  `feIp` VARCHAR(128) COMMENT "执行该语句的FE IP",
-  `stmt` VARCHAR(1048576) COMMENT "SQL原始语句",
-  `digest` VARCHAR(32) COMMENT "慢SQL指纹",
-  `planCpuCosts` DOUBLE COMMENT "查询规划阶段CPU占用（纳秒）",
-  `planMemCosts` DOUBLE COMMENT "查询规划阶段内存占用（字节）"
+  `queryId`           VARCHAR(64)                COMMENT "查询的唯一ID",
+  `timestamp`         DATETIME         NOT NULL  COMMENT "查询开始时间",
+  `queryType`         VARCHAR(12)                COMMENT "查询类型（query, slow_query, connection）",
+  `clientIp`          VARCHAR(32)                COMMENT "客户端IP",
+  `user`              VARCHAR(64)                COMMENT "查询用户名",
+  `authorizedUser`    VARCHAR(64)                COMMENT "用户唯一标识，既user_identity",
+  `resourceGroup`     VARCHAR(64)                COMMENT "资源组名",
+  `catalog`           VARCHAR(32)                COMMENT "Catalog名",
+  `db`                VARCHAR(96)                COMMENT "查询所在数据库",
+  `state`             VARCHAR(8)                 COMMENT "查询状态（EOF，ERR，OK）",
+  `errorCode`         VARCHAR(512)               COMMENT "错误码",
+  `queryTime`         BIGINT                     COMMENT  "查询执行时间（毫秒）",
+  `scanBytes`         BIGINT                     COMMENT "查询扫描的字节数",
+  `scanRows`          BIGINT                     COMMENT "查询扫描的记录行数",
+  `returnRows`        BIGINT                     COMMENT "查询返回的结果行数",
+  `cpuCostNs`         BIGINT                     COMMENT "查询CPU耗时（纳秒）",
+  `memCostBytes`      BIGINT                     COMMENT "查询消耗内存（字节）",
+  `stmtId`            INT                        COMMENT "SQL语句增量ID",
+  `isQuery`           TINYINT                    COMMENT "SQL是否为查询（1或0）",
+  `feIp`              VARCHAR(128)               COMMENT "执行该语句的FE IP",
+  `stmt`              VARCHAR(1048576)           COMMENT "原始SQL语句",
+  `digest`            VARCHAR(32)                COMMENT "慢SQL指纹",
+  `planCpuCosts`      DOUBLE                     COMMENT "查询规划阶段CPU占用（纳秒）",
+  `planMemCosts`      DOUBLE                     COMMENT "查询规划阶段内存占用（字节）"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "审计日志表"
@@ -53,12 +52,12 @@ PARTITION BY RANGE (`timestamp`) ()
 DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
-  "dynamic_partition.start" = "-30",  --表示只保留最近30天的审计信息，可视需求调整
+  "dynamic_partition.start" = "-30",  --表示只保留最近30天的审计信息，可视需求调整。
   "dynamic_partition.end" = "3",
   "dynamic_partition.prefix" = "p",
   "dynamic_partition.buckets" = "3",
   "dynamic_partition.enable" = "true",
-  "replication_num" = "3"  --若集群中BE个数不大于3，可调整副本数为1，生产集群不推荐调整
+  "replication_num" = "3"  --若集群中BE个数不大于3，可调整副本数为1，生产集群不推荐调整。
 );
 ```
 
@@ -70,9 +69,9 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 
 待分区创建完成后，您可以继续下一步。
 
-## Download and configure Audit Loader
+## 下载并配置 AuditLoader
 
-1. [下载](https://releases.mirrorship.cn/resources/AuditLoader.zip) Audit Loader 安装包。该插件兼容目前在维护的所有 StarRocks 版本。
+1. [下载](https://releases.mirrorship.cn/resources/AuditLoader.zip) AuditLoader 安装包。该插件兼容目前在维护的所有 StarRocks 版本。
 
 2. 解压安装包。
 
@@ -86,7 +85,7 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
     - **plugin.properties**：插件属性文件，用于提供审计插件在 StarRocks 集群内的描述信息，无需修改。
     - **plugin.conf**：插件配置文件，用于提供插件底层进行 Stream Load 写入时的配置参数，需根据集群信息修改。通常只建议修改其中的 `user` 和 `password` 信息。
 
-3. 修改 **plugin.conf** 文件以配置 Audit Loader。您必须配置以下项目以确保 Audit Loader 可以正常工作：
+3. 修改 **plugin.conf** 文件以配置 AuditLoader。您必须配置以下项目以确保 AuditLoader 可以正常工作：
 
     - `frontend_host_port`：FE 节点 IP 地址和 HTTP 端口，格式为 `<fe_ip>:<fe_http_port>`。 默认值为 `127.0.0.1:8030`。
     - `database`：审计日志库名。
@@ -102,9 +101,9 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 
 5. 将压缩包分发至所有 FE 节点运行的机器。请确保所有压缩包都存储在相同的路径下，否则插件将安装失败。分发完成后，请复制压缩包的绝对路径。
 
-## 安装 Audit Loader
+## 安装 AuditLoader
 
-通过以下语句安装 Audit Loader 插件：
+通过以下语句安装 AuditLoader 插件：
 
 ```SQL
 INSTALL PLUGIN FROM "<absolute_path_to_package>";
@@ -145,7 +144,7 @@ INSTALL PLUGIN FROM "<absolute_path_to_package>";
     2 rows in set (0.01 sec)
     ```
 
-2. 随机执行 SQL 语句以生成审计日志，并等待60秒（或您在配置 Audit Loader 时在 `max_batch_interval_sec` 项中指定的时间）以允许 Audit Loader 将审计日志攒批导入至StarRocks 中。
+2. 随机执行 SQL 语句以生成审计日志，并等待60秒（或您在配置 AuditLoader 时在 `max_batch_interval_sec` 项中指定的时间）以允许 AuditLoader 将审计日志攒批导入至StarRocks 中。
 
 3. 查询审计日志表。
 
@@ -193,4 +192,4 @@ INSTALL PLUGIN FROM "<absolute_path_to_package>";
 UNINSTALL PLUGIN AuditLoader;
 ```
 
-所有配置设置正确后，您可以按照上述步骤重新安装 Audit Loader。
+所有配置设置正确后，您可以按照上述步骤重新安装 。
