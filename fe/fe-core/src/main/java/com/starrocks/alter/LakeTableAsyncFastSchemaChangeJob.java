@@ -108,7 +108,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     private void updateCatalogUnprotected(Database db, LakeTable table) {
-        Set<String> droppedColumns = Sets.newHashSet();
+        Set<String> droppedOrModifiedColumns = Sets.newHashSet();
         boolean hasMv = !table.getRelatedMaterializedViews().isEmpty();
         for (IndexSchemaInfo indexSchemaInfo : schemaInfos) {
             SchemaInfo schemaInfo = indexSchemaInfo.schemaInfo;
@@ -122,12 +122,8 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             Preconditions.checkState(schemaInfo.getVersion() > indexMeta.getSchemaVersion());
             Preconditions.checkState(Objects.equals(indexMeta.getShortKeyColumnCount(), schemaInfo.getShortKeyColumnCount()));
 
-            if (hasMv && schemaInfo.getColumns().size() < oldColumns.size()) {
-                List<Column> differences = oldColumns.stream().filter(element -> !schemaInfo.getColumns().contains(element))
-                        .collect(Collectors.toList());
-                // can just drop one column one time, so just one element in differences
-                int dropIdx = oldColumns.indexOf(differences.get(0));
-                droppedColumns.add(oldColumns.get(dropIdx).getName());
+            if (hasMv) {
+                droppedOrModifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(oldColumns, schemaInfo.getColumns()));
             }
 
             indexMeta.setSchema(schemaInfo.getColumns());
@@ -138,11 +134,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             // update the indexIdToMeta
             table.getIndexIdToMeta().put(indexId, indexMeta);
             table.setIndexes(schemaInfo.getIndexes());
+            table.renameColumnNamePrefix(indexId);
         }
         table.rebuildFullSchema();
 
         // If modified columns are already done, inactive related mv
-        inactiveRelatedMaterializedViews(db, table, droppedColumns);
+        inactiveRelatedMaterializedViews(db, table, droppedOrModifiedColumns);
     }
 
     @Override
