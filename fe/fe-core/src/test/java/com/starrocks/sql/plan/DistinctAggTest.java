@@ -35,13 +35,14 @@ public class DistinctAggTest extends PlanTestBase {
 
         sql = "select  distinct 111 as id, 111 as id from t0 order by id + 1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "5:Project\n" +
+        assertContains(plan, "4:Project\n" +
                 "  |  <slot 5> : 5: expr\n" +
-                "  |  <slot 6> : CAST(5: expr AS SMALLINT) + 1\n" +
                 "  |  \n" +
-                "  4:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 5: expr\n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 6> 6: expr ASC\n" +
+                "  |  offset: 0\n" +
                 "  |  \n" +
-                "  3:EXCHANGE");
+                "  2:EXCHANGE\n" +
+                "     limit: 1");
     }
 }
