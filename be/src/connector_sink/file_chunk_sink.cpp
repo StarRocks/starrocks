@@ -112,7 +112,7 @@ std::unique_ptr<ConnectorChunkSink> FileChunkSinkProvider::create_chunk_sink(
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
                 std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),
                 ctx->executor);
-    else {
+    } else {
         CHECK(false) << "unreachable";
         __builtin_unreachable();
     }
