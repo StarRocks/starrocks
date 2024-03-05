@@ -19,13 +19,13 @@ This topic provides an overview of these options, along with comparisons between
 
 ## Introduction to loading options
 
-This section mainly provides the characteristics and business scenarios of the loading options available in StarRocks.
+This section mainly describes the characteristics and business scenarios of the loading options available in StarRocks.
 
 ![Loading options overview](../../assets/loading_intro_overview.png)
 
 :::note
 
-In the following sections, "batch" or "batch loading" refers the loading of a large amount of data from a specified source all at a time into StarRocks, whereas "stream" or "streaming" refers to the continuous loading of data in real time.
+In the following sections, "batch" or "batch loading" refers to the loading of a large amount of data from a specified source all at a time into StarRocks, whereas "stream" or "streaming" refers to the continuous loading of data in real time.
 
 :::
 
@@ -136,7 +136,7 @@ This loading method is supported from v3.2 onwards.
 
 ### API
 
-#### Stream Load transaction interface
+#### [Stream Load transaction interface](../Stream_Load_transaction_interface.md)
 
 **Business scenario:** Implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Flink and Kafka, while improving the performance of highly concurrent stream loads. This feature is supported from v2.4 onwards.
 
