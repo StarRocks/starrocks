@@ -671,7 +671,7 @@ public class PseudoBackend {
                     String.format("alter (base:%d, new:%d version:%d) failed new tablet not found", task.base_tablet_id,
                             task.new_tablet_id, task.alter_version));
         }
-        if (newTablet.isRunning() == true) {
+        if (newTablet.isRunning()) {
             throw new Exception(
                     String.format("alter (base:%d, new:%d version:%d) failed new tablet is running", task.base_tablet_id,
                             task.new_tablet_id, task.alter_version));

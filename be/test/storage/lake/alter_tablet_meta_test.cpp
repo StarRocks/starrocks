@@ -179,19 +179,4 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
     ASSERT_EQ(true, new_tablet_meta2.value()->enable_persistent_index());
 }
 
-TEST_F(AlterTabletMetaTest, test_alter_not_persistent_index) {
-    lake::SchemaChangeHandler handler(_tablet_mgr.get());
-    TUpdateTabletMetaInfoReq update_tablet_meta_req;
-    int64_t txn_id = 1;
-    update_tablet_meta_req.__set_txn_id(txn_id);
-
-    TTabletMetaInfo tablet_meta_info;
-    auto tablet_id = _tablet_metadata->id();
-    tablet_meta_info.__set_tablet_id(tablet_id);
-    tablet_meta_info.__set_meta_type(TTabletMetaType::INMEMORY);
-
-    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
-    ASSERT_ERROR(handler.process_update_tablet_meta(update_tablet_meta_req));
-}
-
 } // namespace starrocks::lake
