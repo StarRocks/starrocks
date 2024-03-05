@@ -1,0 +1,39 @@
+--- avx2ki_type.h       2023-11-29 20:49:37.574577780 +0800
++++ avx2ki_type.h_1     2024-02-19 18:09:11.244710150 +0800
+@@ -141,7 +141,7 @@ __extension__
+ #define _CMP_GT_OQ 0x1e
+ #define _CMP_TRUE_US 0x1f
+
+-#define GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__ * 10 + __GNUC_PATCHLEVEL__)
++#define GCC_VERSION_2 (__GNUC__ * 100 + __GNUC_MINOR__ * 10 + __GNUC_PATCHLEVEL__)
+
+ #if (!__clang__) && __GNUC__ >= 4 && __GNUC__ < 5
+     typedef int16_t float16_t;
+@@ -237,7 +237,7 @@ typedef union {
+     __m64 vect_m64[2];
+ } __m128d __attribute__((aligned(16)));
+
+-#if defined(GCC_VERSION) && GCC_VERSION < 730
++#if defined(GCC_VERSION_2) && GCC_VERSION_2 < 730
+ #else
+ typedef union {
+     float16_t vect_bf16[8];
+@@ -308,7 +308,7 @@ typedef union {
+     __m128d vect_f128[2];
+ } __m256d __attribute__((aligned(32)));
+
+-#if defined(GCC_VERSION) && GCC_VERSION < 730
++#if defined(GCC_VERSION_2) && GCC_VERSION_2 < 730
+ #else
+ typedef struct {
+     float16x8_t vect_f16[2];
+@@ -360,7 +360,7 @@ typedef union {
+     __m256d vect_f256[2];
+ } __m512d __attribute__((aligned(64)));
+
+-#if defined(GCC_VERSION) && GCC_VERSION < 730
++#if defined(GCC_VERSION_2) && GCC_VERSION_2 < 730
+ #else
+ typedef struct {
+     float16x8_t vect_f16[4];
+

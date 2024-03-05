@@ -164,13 +164,21 @@ if [[ -z ${CCACHE} ]]; then
     CCACHE=ccache
 fi
 if [[ -z ${USE_AVX2KI} ]]; then
-    ## Disable it by default
-    USE_AVX2KI=OFF
+    if [[ "${MACHINE_TYPE}" == "aarch64"  && -f ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ]]; then
+        USE_AVX2KI=ON
+    else
+        USE_AVX2KI=OFF
+    fi
+elif [[ "${USE_AVX2KI}" == "ON" ]]; then
+    if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
+        USE_AVX2KI=OFF
+        echo "USE_AVX2KI=ON but it is not supported on non-aarch64 platform, will force it off"
+    elif [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ]]; then
+        USE_AVX2KI=OFF
+        echo "USE_AVX2KI=ON but missing depdency libraries(avx2ki), will force it off"
+    fi
 fi
 
-if [[ "${MACHINE_TYPE}" == "aarch64"  && -f ${STARROCKS_THIRDPARTY}/installed/ksl/lib/libavx2ki.so ]]; then
-    USE_AVX2KI=ON
-fi
 
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
@@ -540,6 +548,11 @@ if [ ${BUILD_BE} -eq 1 ]; then
     if [ "${WITH_CACHELIB}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
+    fi
+
+    if [ "${AVX2KI}" == "ON"  ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/avx2ki
+        cp ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ${STARROCKS_OUTPUT}/be/lib/avx2ki/libavx2neon.so.2.0.0
     fi
 
     MSG="${MSG} √ ${MSG_BE}"

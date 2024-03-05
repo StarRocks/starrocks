@@ -1241,12 +1241,14 @@ build_clucene() {
 build_avx2ki() {
     check_if_source_exist $AVX2KI_SOURCE
     cd $TP_SOURCE_DIR/$AVX2KI_SOURCE
-    rpm2cpio boostkit-ksl-2.1.0-1.aarch64.rpm | cpio -id
+    rpm2cpio boostkit-ksl-2.0.0-1.aarch64.rpm | cpio -id
     mv usr/local/ksl $TP_INSTALL_DIR
-    ln -s $TP_INSTALL_DIR/ksl/lib/libavx2neon.so.2.0.0 $TP_INSTALL_DIR/ksl/lib/libavx2ki.so
+    cp $TP_INSTALL_DIR/ksl/lib/libavx2neon.so.2.0.0 $TP_INSTALL_DIR/lib/libavx2neon.so
 
      # patch avx2ki/operatoroverload.h
-     patch $TP_INSTALL_DIR/ksl/include/operatoroverload.h -p1 < $TP_PATCH_DIR/avx2ki-2.1.0.patch
+     patch $TP_INSTALL_DIR/ksl/include/operatoroverload.h -p1 < $TP_PATCH_DIR/avx2ki-2.0.0-operation.patch
+     # patch avx2ki/avx2ki_type.h
+     patch $TP_INSTALL_DIR/ksl/include/avx2ki_type.h -p1 < $TP_PATCH_DIR/avx2ki-2.0.0-type.patch
 }
 
 # restore cxxflags/cppflags/cflags to default one

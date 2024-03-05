@@ -424,6 +424,10 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     endforeach()
 endif()
 
+if (${USE_AVX2KI} STREQUAL "ON")
+    LINK_LIBRARIES(${THIRDPARTY_DIR}/lib/libavx2neon.so)
+endif() 
+
 if (${WITH_STARCACHE} STREQUAL "ON")
     add_library(starcache STATIC IMPORTED GLOBAL)
     if ("${USE_STAROS}" STREQUAL "ON")
@@ -921,6 +925,13 @@ if (${WITH_STARCACHE} STREQUAL "ON")
         brpc
         starcache
         ${WL_END_GROUP}
+    )
+endif()
+
+if (${USE_AVX2KI} STREQUAL "ON")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        avx2neon
     )
 endif()
 
