@@ -21,7 +21,6 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -99,7 +98,8 @@ public class PreparedStmtTest{
     @Test
     public void testPrepareStatementParser() {
         String sql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";
-        Exception e = assertThrows(ValidateException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
-        assertEquals("This command is not supported in the prepared statement protocol yet", e.getMessage());
+        Exception e = assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        assertEquals("Getting analyzing error. Detail message: This command is not supported in the " +
+                "prepared statement protocol yet.", e.getMessage());
     }
 }
