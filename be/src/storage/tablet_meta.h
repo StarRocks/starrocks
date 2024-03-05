@@ -188,7 +188,6 @@ public:
     void remove_delete_predicate_by_version(const Version& version);
     const DelPredicateArray& delete_predicates() const;
     bool version_for_delete_predicate(const Version& version);
-    bool version_for_delete_predicate_unlocked(const Version& version);
     std::string full_name() const;
 
     void set_partition_id(int64_t partition_id);
