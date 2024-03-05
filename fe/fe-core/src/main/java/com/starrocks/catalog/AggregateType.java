@@ -112,7 +112,6 @@ public enum AggregateType {
 
         // all types except bitmap, hll, percentile and complex types.
         EnumSet<PrimitiveType> excObject = EnumSet.allOf(PrimitiveType.class);
-        excObject.remove(PrimitiveType.BITMAP);
         excObject.remove(PrimitiveType.HLL);
         excObject.remove(PrimitiveType.PERCENTILE);
         excObject.remove(PrimitiveType.INVALID_TYPE);
