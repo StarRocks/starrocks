@@ -27,6 +27,8 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.slot.SlotProvider;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TCompressionType;
@@ -222,7 +224,7 @@ public class JobSpec {
                                                              List<ScanNode> scanNodes) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
-                                                         context.getSessionVariable().getTimeZone());
+                    context.getSessionVariable().getTimeZone());
 
             return new JobSpec.Builder()
                     .queryId(queryId)
@@ -484,6 +486,14 @@ public class JobSpec {
 
     public void reset() {
         fragments.forEach(PlanFragment::reset);
+    }
+
+    public SlotProvider getSlotProvider() {
+        if (!isNeedQueued() || !isEnableQueue()) {
+            return GlobalStateMgr.getCurrentState().getLocalSlotProvider();
+        } else {
+            return GlobalStateMgr.getCurrentState().getGlobalSlotProvider();
+        }
     }
 
     public static class Builder {
