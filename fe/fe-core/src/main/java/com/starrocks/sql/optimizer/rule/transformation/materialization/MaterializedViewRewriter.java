@@ -805,6 +805,33 @@ public class MaterializedViewRewriter {
         return null;
     }
 
+    /**
+     * Collect ForeignKeyConstraint from child and mv's definition.
+     * @param mvTableScanDesc: child's table scan desc
+     * @param mv: mv's definition
+     * @return: ForeignKeyConstraint list associated with the child, empty list if no FK constraint.
+     */
+    private List<ForeignKeyConstraint> getForeignKeyConstraint(TableScanDesc mvTableScanDesc,
+                                                               MaterializedView mv) {
+        List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
+        Table mvChildTable = mvTableScanDesc.getTable();
+        if (mvChildTable.getForeignKeyConstraints() != null) {
+            foreignKeyConstraints.addAll(mvChildTable.getForeignKeyConstraints());
+        }
+
+        if (mv.getForeignKeyConstraints() != null) {
+            // add ForeignKeyConstraint from mv
+            mv.getForeignKeyConstraints().stream().filter(foreignKeyConstraint -> {
+                if (foreignKeyConstraint.getChildTableInfo() == null) {
+                    return false;
+                }
+                Table table = foreignKeyConstraint.getChildTableInfo().getTableChecked();
+                return table.equals(mvChildTable);
+            }).forEach(foreignKeyConstraints::add);
+        }
+        return foreignKeyConstraints;
+    }
+
     // check whether query can be rewritten by view even though the view has additional tables.
     // In order to do that, we should make sure that the additional joins(which exists in view
     // but not in query) are lossless join.
@@ -841,28 +868,7 @@ public class MaterializedViewRewriter {
 
         // add edges to directed graph by FK-UK
         for (TableScanDesc mvTableScanDesc : mvGraph.nodes()) {
-            Table mvChildTable = mvTableScanDesc.getTable();
-            List<ForeignKeyConstraint> foreignKeyConstraints = mvChildTable.getForeignKeyConstraints();
-            List<ForeignKeyConstraint> mvForeignKeyConstraints = Lists.newArrayList();
-            if (materializedView.getForeignKeyConstraints() != null) {
-                // add ForeignKeyConstraint from mv
-                materializedView.getForeignKeyConstraints().stream().filter(foreignKeyConstraint -> {
-                    if (foreignKeyConstraint.getChildTableInfo() == null) {
-                        return false;
-                    }
-                    Table table = foreignKeyConstraint.getChildTableInfo().getTableChecked();
-                    return table.equals(mvChildTable);
-                }).forEach(mvForeignKeyConstraints::add);
-            }
-
-            if (foreignKeyConstraints == null) {
-                foreignKeyConstraints = mvForeignKeyConstraints;
-            } else if (materializedView.getForeignKeyConstraints() != null) {
-                foreignKeyConstraints.addAll(mvForeignKeyConstraints);
-            }
-            if (foreignKeyConstraints.isEmpty()) {
-                continue;
-            }
+            List<ForeignKeyConstraint> foreignKeyConstraints = getForeignKeyConstraint(mvTableScanDesc, materializedView);
 
             for (ForeignKeyConstraint foreignKeyConstraint : foreignKeyConstraints) {
                 Collection<TableScanDesc> mvParentTableScanDescs =
@@ -1301,11 +1307,10 @@ public class MaterializedViewRewriter {
         return addJoinDerivePredicate(rewriteContext, rewriter, mvColumnRefToScalarOp, compensationPredicate);
     }
 
-    private ScalarOperator addJoinDerivePredicate(
-            RewriteContext rewriteContext,
-            ColumnRewriter rewriter,
-            Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
-            ScalarOperator compensationPredicate) {
+    private ScalarOperator addJoinDerivePredicate(RewriteContext rewriteContext,
+                                                  ColumnRewriter rewriter,
+                                                  Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
+                                                  ScalarOperator compensationPredicate) {
         // unnecessary to add the derived compensation predicates if compensationPredicate has related null rejecting predicate
         List<ScalarOperator> predicates = Utils.extractConjuncts(compensationPredicate);
         List<ScalarOperator> derivedPredicates = Lists.newArrayList();
