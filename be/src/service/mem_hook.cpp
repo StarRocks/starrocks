@@ -148,6 +148,7 @@ void* my_realloc(void* p, size_t size) __THROW {
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
 
     if (IS_BAD_ALLOC_CATCHED()) {
+        size_t check_size = STARROCKS_NALLOX(size, 0);
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         if (size >= old_size) {
             TRY_MEM_CONSUME(size - old_size, nullptr);
@@ -158,6 +159,7 @@ void* my_realloc(void* p, size_t size) __THROW {
             } else {
                 MEMORY_RELEASE_SIZE(size - old_size);
                 int64_t new_size = STARROCKS_MALLOC_SIZE(ptr);
+                CHECK(check_size == new_size);
                 MEMORY_CONSUME_SIZE(new_size - old_size);
             }
             return ptr;
@@ -167,6 +169,7 @@ void* my_realloc(void* p, size_t size) __THROW {
                 SET_EXCEED_MEM_TRACKER();
             } else {
                 int64_t new_size = STARROCKS_MALLOC_SIZE(ptr);
+                CHECK(check_size == new_size);
                 if (new_size >= old_size) {
                     MEMORY_CONSUME_SIZE(new_size - old_size);
                 } else {
