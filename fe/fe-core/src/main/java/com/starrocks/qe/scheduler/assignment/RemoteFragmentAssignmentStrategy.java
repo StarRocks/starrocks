@@ -213,6 +213,7 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
             for (Long id : candidates) {
                 if (!childUsedHosts.contains(id)) {
                     childHosts.add(id);
+                    workerProvider.selectWorkerUnchecked(id);
                     if (childHosts.size() == nodeNums) {
                         break;
                     }

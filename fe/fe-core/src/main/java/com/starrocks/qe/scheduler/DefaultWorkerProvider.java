@@ -233,6 +233,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
+    public void selectWorkerUnchecked(Long workerId) {
+        selectedWorkerIds.add(workerId);
+    }
+
+    @Override
     public String toString() {
         return toString(usedComputeNode);
     }
@@ -246,9 +251,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return chooseComputeNode ? computeNodesToString() : backendsToString();
     }
 
-    private void selectWorkerUnchecked(Long workerId) {
-        selectedWorkerIds.add(workerId);
-    }
+
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(

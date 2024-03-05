@@ -60,6 +60,8 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
 
         // join fragment use 3 nodes
         Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+
+        Assert.assertEquals(3, prepare.getWorkerProvider().getSelectedWorkerIds().size());
     }
 
     @Test
