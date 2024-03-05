@@ -49,8 +49,8 @@ public:
 
     StatusOr<hdfsFile> getOrCreateFile() {
         if (_file == nullptr) {
-            SCOPED_RAW_TIMER(&_total_open_file_time_ns);
             auto st = getOrCreateFS();
+            SCOPED_RAW_TIMER(&_total_open_file_time_ns);
             if (!st.ok()) return st.status();
             _file = hdfsOpenFile(st.value(), _path.c_str(), O_RDONLY, _buffer_size, 0, 0);
             if (_file == nullptr) {
