@@ -1074,8 +1074,8 @@ not serializing them.
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
+- 描述：是否为 Bitmap index 开启 Memory Cache。使用 Bitmap index 加速点查时，可以考虑开启。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -1518,8 +1518,8 @@ not serializing them.
 - 类型：Int
 - 单位：
 - 是否动态：是
-- 描述：
-- 引入版本：-
+- 描述：每个 tablet 上排队的 memtable 个数。用于控制导入内存使用量。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -2740,8 +2740,8 @@ not serializing them.
 - 类型：Int
 - 单位：
 - 是否动态：否
-- 描述：
-- 引入版本：-
+- 描述：pipeline 执行线程多级反馈队列的调度参数，最低优先级队列的时间片。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -2751,8 +2751,8 @@ not serializing them.
 - 类型：Double
 - 单位：
 - 是否动态：否
-- 描述：
-- 引入版本：-
+- 描述：pipeline 执行线程多级反馈队列的调度参数。相邻两级队列时间片的倍数关系。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -2762,8 +2762,10 @@ not serializing them.
 - 类型：Int
 - 单位：
 - 是否动态：否
-- 描述：
-- 引入版本：-
+- 描述：控制 Scan Task 的调度策略。`0` 表示 PriorityScanTaskQueue，`1` 表示 MultiLevelFeedScanTaskQueue。
+  - PriorityScanTaskQueue 以提交的任务次数为优先级。
+  - MultiLevelFeedScanTaskQueue 以最短执行时间为优先级。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -2773,8 +2775,9 @@ not serializing them.
 - 类型：Int
 - 单位：
 - 是否动态：否
-- 描述：
-- 引入版本：-
+- 描述：控制 MultiLevelFeedScanTaskQueue 的调度参数，在 `pipeline_scan_queue_mode` 为 1 时有效。
+最低优先级队列的时间片。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -2784,8 +2787,9 @@ not serializing them.
 - 类型：Double
 - 单位：
 - 是否动态：否
-- 描述：
-- 引入版本：-
+- 描述：控制 MultiLevelFeedScanTaskQueue 的调度参数，在 `pipeline_scan_queue_mode` 为 1 时有效。
+相邻两级队列时间片的倍数关系。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -3337,16 +3341,14 @@ not serializing them.
 - 引入版本：-
 -->
 
-<!--
 ##### aws_sdk_enable_compliant_rfc3986_encoding
 
 - 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
+- 描述：是否开启 RFC-3986 编码。从 Google GCS 查询数据时，如果 Object.key 包含特殊字符（例如 `=`，`$`），由于 result URL 未解析这些字符，会导致认证失败。开启 RFC-3986 编码能确保字符正确编码。该特性对于 Hive 分区表非常重要。如果使用 OBS 或 KS3 对象存储，需要在 `be.conf` 开启该参数，不然访问不通。
+- 引入版本：v3.1
 
 <!--
 ##### experimental_s3_max_single_part_size
@@ -4804,8 +4806,8 @@ not serializing them.
 - 类型：Double
 - 单位：
 - 是否动态：否
-- 描述：
-- 引入版本：-
+- 描述：物化视图刷新所占用的资源组 Memory 上限，默认 80%。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -4815,7 +4817,7 @@ not serializing them.
 - 类型：Int
 - 单位：
 - 是否动态：否
-- 描述：
+- 描述：物化视图刷新占用的资源组 CPU 比例，默认 1%。
 - 引入版本：-
 -->
 
@@ -4848,8 +4850,8 @@ not serializing them.
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
+- 描述：如果 sort key 是高基数，可以考虑开启该特性加速点查。
+- 引入版本：v3.1
 -->
 
 <!--

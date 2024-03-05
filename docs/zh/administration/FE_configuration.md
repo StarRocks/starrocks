@@ -378,8 +378,8 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
+- 描述：是否在查询异常结束时，打印 COSTS 计划到日志中。只有在 `enable_collect_query_detail_info` 为 `false` 时有效，因为 `enable_collect_query_detail_info` 为 `true` 时，plan 会被记录到 query detail 中。
+- 引入版本：v3.1
 -->
 
 <!--
@@ -2880,7 +2880,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：触发 Compaction 操作的 Compaction Score 阈值。当一个表分区的 Compaction Score 大于或等于该值时，系统会对该分区执行 Compaction 操作。
+- 描述：存算分离集群下，触发 Compaction 操作的 Compaction Score 阈值。当一个表分区的 Compaction Score 大于或等于该值时，系统会对该分区执行 Compaction 操作。
 - 引入版本：v3.1.0
 
 Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分，您可以通过 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 语句返回中的 `MaxCS` 一列的值来查看某个分区的 Compaction Score。Compaction Score 和分区中的文件数量有关系。文件数量过多将影响查询性能，因此系统后台会定期执行 Compaction 操作来合并小文件，减少文件数量。
@@ -2891,7 +2891,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：允许同时执行的 Compaction 任务数。系统依据分区中 Tablet 数量来计算 Compaction 任务数。如果一个分区有 10 个 Tablet，那么对该分区作一次 Compaction 就会创建 10 个 Compaction 任务。如果正在执行中的 Compaction 任务数超过该阈值，系统将不会创建新的 Compaction 任务。将该值设置为 `0` 表示禁止 Compaction，设置为 `-1` 表示系统依据自适应策略自动计算该值。
+- 描述：存算分离集群下允许同时执行的 Compaction 任务数。系统依据分区中 Tablet 数量来计算 Compaction 任务数。如果一个分区有 10 个 Tablet，那么对该分区作一次 Compaction 就会创建 10 个 Compaction 任务。如果正在执行中的 Compaction 任务数超过该阈值，系统将不会创建新的 Compaction 任务。将该值设置为 `0` 表示禁止 Compaction，设置为 `-1` 表示系统依据自适应策略自动计算该值。
 - 引入版本：v3.1.0
 
 ##### lake_compaction_history_size
@@ -2900,7 +2900,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：在 Leader FE 节点内存中保留多少条最近成功的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
+- 描述：存算分离集群下在 Leader FE 节点内存中保留多少条最近成功的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
 - 引入版本：v3.1.0
 
 ##### lake_compaction_fail_history_size
@@ -2909,7 +2909,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：在 Leader FE 节点内存中保留多少条最近失败的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近失败的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
+- 描述：存算分离集群下在 Leader FE 节点内存中保留多少条最近失败的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近失败的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
 - 引入版本：v3.1.0
 
 ##### lake_publish_version_max_threads
@@ -2918,7 +2918,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：发送生效版本（Publish Version）任务的最大线程数。
+- 描述：存算分离集群下发送生效版本（Publish Version）任务的最大线程数。
 - 引入版本：v3.2.0
 
 <!--
@@ -2960,7 +2960,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：最多可以同时对多少个表分区进行垃圾数据清理（AutoVacuum，即在 Compaction 后进行的垃圾文件回收）。
+- 描述：存算分离集群下最多可以同时对多少个表分区进行垃圾数据清理（AutoVacuum，即在 Compaction 后进行的垃圾文件回收）。
 - 引入版本：v3.1.0
 
 ##### lake_autovacuum_partition_naptime_seconds
@@ -2969,7 +2969,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：对同一个表分区进行垃圾数据清理的最小间隔时间。
+- 描述：存算分离集群下对同一个表分区进行垃圾数据清理的最小间隔时间。
 - 引入版本：v3.1.0
 
 ##### lake_autovacuum_grace_period_minutes
@@ -2978,7 +2978,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Long
 - 单位：Minutes
 - 是否动态：是
-- 描述：保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。
+- 描述：存算分离集群下保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。
 - 引入版本：v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold
@@ -2987,7 +2987,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Long
 - 单位：Hours
 - 是否动态：是
-- 描述：如果某个表分区在该阈值范围内没有任何更新操作(导入、删除或 Compaction)，将不再触发该分区的自动垃圾数据清理操作。
+- 描述：存算分离集群下，如果某个表分区在该阈值范围内没有任何更新操作(导入、删除或 Compaction)，将不再触发该分区的自动垃圾数据清理操作。
 - 引入版本：v3.1.0
 
 ##### lake_enable_ingest_slowdown
@@ -2996,7 +2996,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。
+- 描述：是否为存算分离集群开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。
 - 引入版本：v3.2.0
 
 ##### lake_ingest_slowdown_threshold
@@ -4077,8 +4077,8 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：是
-- 描述：
-- 引入版本：-
+- 描述：等待该参数指定的时间后，才能执行 Quorum publish。可以增加该参数值来避免不必要的 Clone。
+- 引入版本：v3.1
 -->
 
 <!--

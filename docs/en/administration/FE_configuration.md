@@ -381,8 +381,8 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
+- Description: Whether to log the COSTS plan if the query is cancelled due to a BE crash or RpcException. This parameter is effective only when `enable_collect_query_detail_info` is set to `false`. When `enable_collect_query_detail_info` is set to `true`, the plan will be recorded in the query detail.
+- Introduced in: v3.1
 -->
 
 <!--
@@ -2875,7 +2875,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: The Compaction Score threshold that triggers Compaction operations. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- Description: The Compaction Score threshold that triggers Compaction operations in a shared-data cluster. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
 - Introduced in: v3.1.0
 
 ##### lake_compaction_max_tasks
@@ -2884,7 +2884,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of concurrent Compaction tasks allowed. Setting this item to `-1` indicates to calculate the concurrent task number in an adaptive manner. Setting this value to `0` will disable compaction.
+- Description: The maximum number of concurrent Compaction tasks allowed in a shared-data cluster. Setting this item to `-1` indicates to calculate the concurrent task number in an adaptive manner. Setting this value to `0` will disable compaction.
 - Introduced in: v3.1.0
 
 ##### lake_compaction_history_size
@@ -2893,7 +2893,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
 
 ##### lake_compaction_fail_history_size
@@ -2902,7 +2902,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of recent failed Compaction task records to keep in the memory of the Leader FE node. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- Description: The number of recent failed Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
 
 ##### lake_publish_version_max_threads
@@ -2911,7 +2911,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads for Version Publish tasks.
+- Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
 <!--
@@ -2953,7 +2953,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum number of partitions that can undergo AutoVacuum simultaneously. AutoVacuum is the Garbage Collection after Compactions.
+- Description: The maximum number of partitions that can undergo AutoVacuum simultaneously in a shared-data cluster. AutoVacuum is the Garbage Collection after Compactions.
 - Introduced in: v3.1.0
 
 ##### lake_autovacuum_partition_naptime_seconds
@@ -2962,7 +2962,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The minimum interval between AutoVacuum operations on the same partition.
+- Description: The minimum interval between AutoVacuum operations on the same partition in a shared-data cluster.
 - Introduced in: v3.1.0
 
 ##### lake_autovacuum_grace_period_minutes
@@ -2971,7 +2971,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Long
 - Unit: Minutes
 - Is mutable: Yes
-- Description: The time range for retaining historical data versions. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- Description: The time range for retaining historical data versions in a shared-data cluster. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
 - Introduced in: v3.1.0
 
 ##### lake_autovacuum_stale_partition_threshold
@@ -2989,7 +2989,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Data Ingestion Slowdown. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`.
+- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`.
 - Introduced in: v3.2.0
 
 ##### lake_ingest_slowdown_threshold
@@ -2998,7 +2998,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The Compaction Score threshold that triggers Data Ingestion Slowdown. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
+- Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
 - Introduced in: v3.2.0
 
 ##### lake_ingest_slowdown_ratio
@@ -3025,7 +3025,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of the Compaction Score for a partition. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
 - Introduced in: v3.2.0
 
 ### Other
@@ -4066,8 +4066,8 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description:
-- Introduced in: -
+- Description: The wait time for quorum publish. You can increase the timeout to avoid unnecessary Clone.
+- Introduced in: v3.1
 -->
 
 <!--

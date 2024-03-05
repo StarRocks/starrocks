@@ -1073,8 +1073,8 @@ not serializing them.
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
+- Description: Whether to enable memory cache for Bitmap index. Memory cache is recommended if you want to use Bitmap indexes to accelerate point queries.
+- Introduced in: v3.1
 -->
 
 <!--
@@ -1517,8 +1517,8 @@ not serializing them.
 - Type: Int
 - Unit:
 - Is mutable: Yes
-- Description:
-- Introduced in: -
+- Description: The maximum number of queuing memtables on each tablet. This parameter is used to control the memory usage of loading tasks.
+- Introduced in: v3.1
 -->
 
 <!--
@@ -4803,8 +4803,8 @@ not serializing them.
 - Type: Double
 - Unit:
 - Is mutable: No
-- Description:
-- Introduced in: -
+- Description: The maximum memory percentage that can be used by the materialized view in a resource group.
+- Introduced in: v3.1
 -->
 
 <!--
