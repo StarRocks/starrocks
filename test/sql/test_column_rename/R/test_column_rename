@@ -206,7 +206,7 @@ alter table t2 rename column k1 to k2;
 -- !result
 insert into t2(k1,v1,v2) values(4, 5, 6);
 -- result:
-E: (1060, "Getting analyzing error. Detail message: Unknown column 'k1' in 't2'.")
+E: (1064, "Getting analyzing error. Detail message: Unknown column 'k1' in 't2'.")
 -- !result
 insert into t2(k2,v1,v2) values(4, 5, 6);
 -- result:
