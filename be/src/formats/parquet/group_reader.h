@@ -46,7 +46,7 @@ struct GroupReaderParam {
         tparquet::Type::type type_in_parquet;
 
         // column index in chunk
-        int32_t idx_in_chunk;
+        // int32_t idx_in_chunk;
 
         const SlotDescriptor* slot_desc = nullptr;
 

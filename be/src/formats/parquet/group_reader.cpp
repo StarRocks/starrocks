@@ -380,11 +380,9 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
 }
 
 void GroupReader::_init_read_chunk() {
-    const auto& slots = _param.tuple_desc->slots();
-    std::vector<SlotDescriptor*> read_slots;
+    std::vector<const SlotDescriptor*> read_slots;
     for (const auto& column : _param.read_cols) {
-        int chunk_index = column.idx_in_chunk;
-        read_slots.emplace_back(slots[chunk_index]);
+        read_slots.emplace_back(column.slot_desc);
     }
     size_t chunk_size = _param.chunk_size;
     _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
