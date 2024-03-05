@@ -201,6 +201,40 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     new_tablet_meta_pb.set_schema_hash(schema_hash);
     auto tablet_schema = std::make_shared<const TabletSchema>(new_tablet_meta_pb.schema());
 
+    // handle inverted index file
+    std::vector<std::string> all_files;
+    std::vector<std::string> new_inverted_index_files;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &all_files));
+    for (const auto& file : all_files) {
+        if (file.find(".fdt", 0) != std::string::npos || file.find(".fdx", 0) != std::string::npos ||
+            file.find(".fnm", 0) != std::string::npos || file.find(".frq", 0) != std::string::npos ||
+            file.find(".nrm", 0) != std::string::npos || file.find(".prx", 0) != std::string::npos ||
+            file.find(".tii", 0) != std::string::npos || file.find(".tis", 0) != std::string::npos ||
+            file.find("null_bitmap", 0) != std::string::npos || file.find("segments_2", 0) != std::string::npos ||
+            file.find("segments.gen", 0) != std::string::npos) {
+            auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
+            auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
+            auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
+            if (p1 == nullptr || p2 == nullptr || p3 == nullptr) {
+                return Status::InternalError("invalid index file name: " + file);
+            }
+
+            std::string rowsetid = file.substr(0, p1 - file.data());
+            std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
+            std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
+            std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
+                    clone_dir, rowsetid, std::stoi(segment_id), std::stoi(index_id));
+
+            if (!fs::path_exist(inverted_index_path)) {
+                RETURN_IF_ERROR(fs::create_directories(inverted_index_path));
+            }
+
+            std::string new_file_name = file.substr(p3 - file.data() + 1, file.data() + file.size() - p3);
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(clone_dir + "/" + file,
+                                                               inverted_index_path + "/" + new_file_name));
+        }
+    }
+
     std::unordered_map<string, string> old_to_new_rowsetid;
 
     std::unordered_map<Version, RowsetMetaPB*, HashOfVersion> rs_version_map;
@@ -516,6 +550,33 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     std::stringstream dcg_snapshot_path;
     dcg_snapshot_path << snapshot_dir << "/" << tablet->tablet_id() << ".dcgs_snapshot";
     RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcg_snapshot_path.str(), dcg_snapshot_pb));
+
+    // handle inverted index files
+    std::vector<std::string> all_files;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir, &all_files));
+    for (const auto& file : all_files) {
+        auto is_dir = fs::is_directory(snapshot_dir + "/" + file);
+        if (is_dir.ok() && is_dir.value() && file.find("ivt", 0) != std::string::npos) {
+            std::vector<std::string> index_files;
+            RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir + "/" + file, &index_files));
+            for (const auto& index_file : index_files) {
+                auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
+                auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
+                auto* p3 = (char*)std::memchr(p2 + 1, '.', file.size() - (p2 - file.data() + 1));
+
+                std::string rowsetid = file.substr(0, p1 - file.data());
+                std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
+                std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
+
+                std::string old_name = snapshot_dir + "/" + file + "/" + index_file;
+                std::string new_name =
+                        snapshot_dir + "/" + rowsetid + "_" + segment_id + "_" + index_id + "_" + index_file;
+
+                RETURN_IF_ERROR(FileSystem::Default()->rename_file(old_name, new_name));
+            }
+            RETURN_IF_ERROR(FileSystem::Default()->delete_dir_recursive(snapshot_dir + "/" + file));
+        }
+    }
 
     snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
     snapshot_tablet_meta->revise_rs_metas(std::move(snapshot_rowset_metas));

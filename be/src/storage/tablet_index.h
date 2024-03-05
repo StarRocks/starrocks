@@ -97,7 +97,7 @@ public:
     }
 
 private:
-    int32_t _index_id = -1;
+    int64_t _index_id = -1;
     std::string _index_name;
     IndexType _index_type = INDEX_UNKNOWN;
     std::vector<int32_t> _col_unique_ids;

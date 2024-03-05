@@ -414,7 +414,6 @@ Status SegmentIterator::_init() {
     _init_column_access_paths();
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
-    RETURN_IF_ERROR(_init_inverted_index_iterators());
 
     // filter by index stage
     // Use indexes and predicates to filter some data page
@@ -422,10 +421,10 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_del_vector());
     // Support prefilter for now
-    RETURN_IF_ERROR(_apply_inverted_index());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    RETURN_IF_ERROR(_apply_inverted_index());
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -1843,8 +1842,11 @@ Status SegmentIterator::_init_inverted_index_iterators() {
 
 Status SegmentIterator::_apply_inverted_index() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+
+    RETURN_IF_ERROR(_init_inverted_index_iterators());
     RETURN_IF(!_has_inverted_index, Status::OK());
-    SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_timer);
+    SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
 
     roaring::Roaring row_bitmap = range2roaring(_scan_range);
     size_t input_rows = row_bitmap.cardinality();
@@ -2007,6 +2009,12 @@ void SegmentIterator::close() {
 
     for (auto* iter : _bitmap_index_iterators) {
         delete iter;
+    }
+
+    for (auto* iter : _inverted_index_iterators) {
+        if (iter != nullptr) {
+            delete iter;
+        }
     }
 }
 
