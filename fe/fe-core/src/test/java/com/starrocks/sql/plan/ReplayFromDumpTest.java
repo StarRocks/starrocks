@@ -865,4 +865,19 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("9:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)"));
     }
+
+    public void testNestedViewWithCTE() throws Exception {
+
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("624:Project\n" +
+                "  |  <slot 7363> : 7363: count\n" +
+                "  |  limit: 100\n" +
+                "  |  \n" +
+                "  623:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7363: count)\n" +
+                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2133: case\n" +
+                "  |  limit: 100"));
+    }
 }

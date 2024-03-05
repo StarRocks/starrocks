@@ -157,12 +157,22 @@ public class QueryTransformer {
     }
 
     private OptExprBuilder planFrom(Relation node, CTETransformerContext cteContext) {
+<<<<<<< HEAD
         // This must be a copy of the context, because the new Relation may contain cte with the same name,
         // and the internal cte with the same name will overwrite the original mapping
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         return new RelationTransformer(columnRefFactory, session,
                 new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext)
                 .visit(node).getRootBuilder();
+=======
+        TransformerContext transformerContext = new TransformerContext(
+                columnRefFactory,
+                session,
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                cteContext,
+                inlineView);
+        return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
+>>>>>>> 504b4bf1da ([BugFix] record cte expressionMapping all the time (#42080))
     }
 
     private OptExprBuilder projectForOrder(OptExprBuilder subOpt,
