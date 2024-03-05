@@ -487,7 +487,9 @@ public class Optimizer {
             viewBasedMvRuleRewrite(tree, rootTaskContext);
         }
 
-        if (sessionVariable.isEnableMaterializedViewRewrite() && sessionVariable.isEnableForceRuleBasedMvRewrite()) {
+        if (sessionVariable.isEnableMaterializedViewRewrite()
+                && (sessionVariable.isEnableForceRuleBasedMvRewrite()
+                || (sessionVariable.isEnableForceRuleBasedMvRewriteForExternal() && context.isHasExternalTable()))) {
             // use rule based mv rewrite strategy to do mv rewrite for single table and multi tables query
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
         } else if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
@@ -717,6 +719,13 @@ public class Optimizer {
         }
 
         if (isEnableMultiTableRewrite(connectContext, tree)) {
+            if (context.isHasExternalTable() && sessionVariable.isEnableForceRuleBasedMvRewriteForExternal()) {
+                // keep the original rewrite mode to query materialization context
+                context.getQueryMaterializationContext().setOriginalMaterializedViewRewriteMode(
+                        connectContext.getSessionVariable().getMaterializedViewRewriteMode());
+                // for external table, set the rewrite mode to force
+                sessionVariable.setMaterializedViewRewriteMode("force");
+            }
             if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
                     rootTaskContext.getOptimizerContext().getCandidateMvs()
                             .stream().anyMatch(MaterializationContext::hasMultiTables)) {

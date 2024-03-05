@@ -498,7 +498,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testHivePartialPartition5() throws Exception {
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
                         "PARTITION BY date_trunc('month', o_orderdate)\n" +
                         "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
@@ -541,7 +540,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                 "partitions=1/36");
 
         dropMv("test", "hive_parttbl_mv_5");
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test

@@ -57,7 +57,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
         testSingleTableWithMVRewrite(mvName);
 
         starRocksAssert.dropMaterializedView(mvName);
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test
@@ -79,7 +78,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
 
         starRocksAssert.dropMaterializedView(mvName);
         starRocksAssert.dropView("view1");
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     private void testSingleTableWithMVRewrite(String mvName) throws Exception {
@@ -105,7 +103,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
             PlanTestBase.assertNotContains(plan, "test_mv1");
         }
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select a, b, d, count(distinct t1.c)\n" +
                     " from iceberg0.partitioned_db.part_tbl1 as t1 \n" +
@@ -838,7 +835,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/1");
         }
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+
         {
             String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
@@ -887,7 +884,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     rollup: test_mv1");
         }
         starRocksAssert.dropMaterializedView(mvName);
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test
@@ -1110,7 +1106,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         {
             String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
@@ -1125,7 +1120,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/1");
         }
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+
         {
             String query = "select  t1.d, t2.b, t3.c, count(t1.a) " +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
@@ -1173,7 +1168,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1\n" +
                     "     rollup: test_mv1");
         }
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         starRocksAssert.dropMaterializedView(mvName);
     }
 
@@ -1202,7 +1196,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
 
         {
             String query = "select t1.a, t2.b, t1.d, count(t1.c)\n" +
@@ -1514,7 +1507,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         {
             String query = "select t1.a, t2.b, t1.d, count(distinct t1.c)\n" +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 \n" +
@@ -1523,10 +1515,10 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " where t1.d in ('2023-08-01')\n" +
                     " group by t1.a, t2.b, t1.d;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            // rule based mv rewrite for external table
+            PlanTestBase.assertContains(plan, "test_mv1");
         }
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select t1.a, t2.b, t1.d, count(distinct t1.c)\n" +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 \n" +
@@ -1656,7 +1648,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1\n" +
                     "     rollup: test_mv1");
         }
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         starRocksAssert.dropMaterializedView(mvName);
     }
 
@@ -1686,7 +1677,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         {
             String query = "select  t1.d, t2.b, t3.c, bitmap_union(bitmap_hash(t1.a)) " +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
@@ -1717,7 +1707,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1");
         }
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select t1.d, t2.b, t3.c, count(distinct t1.a) " +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
@@ -1765,7 +1754,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1");
         }
         starRocksAssert.dropMaterializedView(mvName);
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test
@@ -1824,7 +1812,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1");
         }
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select t1.d, t2.b, t3.c, count(distinct t1.a) " +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
@@ -1871,7 +1858,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/1");
         }
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         starRocksAssert.dropMaterializedView(mvName);
     }
 
@@ -1903,7 +1889,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select a, b, date_trunc('day', str2date(d,'%Y-%m-%d')) as dt, " +
                     " count(distinct t1.c)\n" +
@@ -1930,7 +1915,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
 
         starRocksAssert.dropMaterializedView(mvName);
         starRocksAssert.dropView("view1");
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test
@@ -1960,7 +1944,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p202308_202309"), partitions);
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select " +
                     " a, b, date_trunc('month', str2date(d,'%Y-%m-%d')) as dt, " +
@@ -1990,7 +1973,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
 
         starRocksAssert.dropMaterializedView(mvName);
         starRocksAssert.dropView("view1");
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test

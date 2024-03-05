@@ -1,0 +1,21 @@
+-- name: test_mv_rewrite_for_hive
+
+set catalog default_catalog;
+create database mv_db_${uuid0};
+use mv_db_${uuid0};
+function: prepare_data("ssb", "mv_db_${uuid0}")
+
+create external catalog catalog_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+
+create database catalog_${uuid0}.mv_db_${uuid0};
+
+function: prepare_external_data("ssb", "catalog_${uuid0}", "mv_db_${uuid0}", "mv_db_${uuid0}")
+
+use default_catalog.mv_db_${uuid0};
+function: prepare_flat_mv("catalog_${uuid0}", "mv_db_${uuid0}")
+
+refresh materialized view lineorder_flat_mv with sync mode;
+
+function: test_ssb_rewrite("catalog_${uuid0}", "mv_db_${uuid0}")
+
+drop catalog catalog_${uuid0};

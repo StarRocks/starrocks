@@ -30,6 +30,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -53,6 +54,8 @@ public class QueryMaterializationContext {
             .maximumSize(Config.mv_query_context_cache_max_size)
             .recordStats()
             .build();
+
+    private Optional<String> originalMaterializedViewRewriteMode = Optional.empty();
 
     public QueryMaterializationContext() {
     }
@@ -122,7 +125,15 @@ public class QueryMaterializationContext {
                 LOG.info("MVQueryContextCache Stats:{}, estimatedSize:{}",
                         mvQueryContextCache.stats(), mvQueryContextCache.estimatedSize());
             }
+            if (originalMaterializedViewRewriteMode.isPresent()) {
+                ConnectContext.get().getSessionVariable()
+                        .setMaterializedViewRewriteMode(originalMaterializedViewRewriteMode.get());
+            }
         }
         this.mvQueryContextCache.invalidateAll();
+    }
+
+    public void setOriginalMaterializedViewRewriteMode(String originalMaterializedViewRewriteMode) {
+        this.originalMaterializedViewRewriteMode = Optional.of(originalMaterializedViewRewriteMode);
     }
 }
