@@ -2853,9 +2853,10 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 }
 
 StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
+    ExtraFileSize ef_size;
+#if !defined(ADDRESS_SANITIZER)
     std::string tablet_path_str = _tablet.schema_hash_path();
     std::filesystem::path tablet_path(tablet_path_str.c_str());
-    ExtraFileSize ef_size;
     try {
         for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {
             if (entry.is_regular_file()) {
@@ -2879,6 +2880,7 @@ StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
         std::string err_msg = "Iterate dir " + tablet_path.string() + " Unknown exception occurred.";
         return Status::InternalError(err_msg);
     }
+#endif
     return ef_size;
 }
 

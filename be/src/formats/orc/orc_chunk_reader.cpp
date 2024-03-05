@@ -812,6 +812,14 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
             }
         }
 
+        // We only support is null / is not null in function call
+        if (node_type == TExprNodeType::FUNCTION_CALL) {
+            std::string null_str;
+            if (!conjunct->is_null_scalar_function(null_str)) {
+                return false;
+            }
+        }
+
         for (int i = 1; i < conjunct->get_num_children(); i++) {
             c = conjunct->get_child(i);
             if (_supported_literal_types.find(c->node_type()) == _supported_literal_types.end()) {
