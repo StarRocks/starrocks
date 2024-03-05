@@ -28,6 +28,8 @@
 namespace starrocks {
 
 const std::string_view FPE::DEFAULT_KEY = "abcdefghijk12345abcdefghijk12345";
+std::vector<uint8_t> FPE::fpe_key;
+std::string FPE::current_key;
 
 std::string FPE::trim_zeros(const std::string& str, size_t num_flag_pos) {
     int start = num_flag_pos;
