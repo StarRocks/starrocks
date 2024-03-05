@@ -51,9 +51,6 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
 ## Integration procedure
 
-<<<<<<< HEAD
-### Installation ranger-starrocks-plugin
-=======
 ### (Optional) Install ranger-starrocks-plugin
 
 :::note
@@ -61,7 +58,6 @@ The main purpose of this step is to use Ranger's resource name autocomplete feat
 
 If you do not have the permissions to operate the Ranger cluster or do not need this feature, you can skip this step.
 :::
->>>>>>> f2ea72f8e4 ([Doc] add note of resource name autocomplete to ranger_plugin (#42116))
 
 1. Create the `starrocks` folder in the Ranger Admin directory `ews/webapp/WEB-INF/classes/ranger-plugins`.
 
