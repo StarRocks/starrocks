@@ -37,16 +37,6 @@ public class CTETransformerContext {
         this.cteMaxLimit = cteMaxLimit;
     }
 
-    public CTETransformerContext(CTETransformerContext other) {
-        // This must be a copy of the context, because the new Relation may contain cte with the same name,
-        // and the internal cte with the same name will overwrite the original mapping
-        this.cteExpressions = other.cteExpressions;
-        // must use one instance
-        this.cteRefIdMapping = other.cteRefIdMapping;
-        this.uniqueId = other.uniqueId;
-        this.cteMaxLimit = other.cteMaxLimit;
-    }
-
     public Map<Integer, ExpressionMapping> getCteExpressions() {
         return cteExpressions;
     }
