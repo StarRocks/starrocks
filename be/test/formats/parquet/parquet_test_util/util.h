@@ -88,7 +88,7 @@ public:
         ASSERT_EQ(expected->debug_columns(), actual->debug_columns());
         for (size_t i = 0; i < expected->num_columns(); i++) {
             const auto& expected_col = expected->get_column_by_index(i);
-            const auto& actual_col = expected->get_column_by_index(i);
+            const auto& actual_col = actual->get_column_by_index(i);
             if (expected_col->debug_string() != actual_col->debug_string()) {
                 std::cout << expected_col->debug_string() << std::endl;
                 std::cout << actual_col->debug_string() << std::endl;

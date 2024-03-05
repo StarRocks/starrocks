@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "formats/orc/orc_chunk_writer.h"
+#include "formats/orc/orc_file_writer.h"
 
 #include <gtest/gtest.h>
 
@@ -27,6 +27,7 @@
 #include "column/struct_column.h"
 #include "common/object_pool.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "fs/fs_memory.h"
 #include "fs/fs_posix.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
@@ -37,7 +38,7 @@
 #include "testutil/assert.h"
 #include "util/priority_thread_pool.hpp"
 
-namespace starrocks {
+namespace starrocks::formats {
 
 static void assert_equal_chunk(const Chunk* expected, const Chunk* actual) {
     if (expected->debug_columns() != actual->debug_columns()) {
@@ -56,7 +57,7 @@ static void assert_equal_chunk(const Chunk* expected, const Chunk* actual) {
     }
 }
 
-class OrcChunkWriterTest : public testing::Test {
+class OrcFileWriterTest : public testing::Test {
 public:
     void SetUp() override {
         TUniqueId fragment_id;
@@ -110,62 +111,13 @@ protected:
         return;
     }
 
-    Status _write_chunk(const ChunkPtr& chunk, std::vector<TypeDescriptor>& type_descs,
-                        std::unique_ptr<orc::Type> schema) {
-        _fs->delete_file(_file_path);
-        ASSIGN_OR_ABORT(auto file, _fs->new_writable_file(_file_path));
-        auto writer_options = std::make_shared<orc::WriterOptions>();
-
-        auto chunk_writer =
-                std::make_shared<OrcChunkWriter>(std::move(file), writer_options, type_descs, std::move(schema));
-        auto st = chunk_writer->write(chunk.get());
-        if (!st.ok()) {
-            std::cout << st.to_string() << std::endl;
-            return st;
-        }
-        chunk_writer->close();
-        return st;
-    }
-
-    Status _write_chunk_with_AsyncWriter(const ChunkPtr& chunk, std::vector<TypeDescriptor>& type_descs,
-                                         std::unique_ptr<orc::Type> schema) {
-        _fs->delete_file(_file_path);
-        ASSIGN_OR_ABORT(auto file, _fs->new_writable_file(_file_path));
-        RuntimeProfile* profile = _pool.add(new RuntimeProfile("orc_writer_prof", true));
-        auto thread_pool = std::make_unique<PriorityThreadPool>("async_chunk_writer_test", 2, 5);
-
-        auto writer_options = std::make_shared<orc::WriterOptions>();
-        auto chunk_writer = std::make_shared<AsyncOrcChunkWriter>(std::move(file), writer_options, type_descs,
-                                                                  std::move(schema), thread_pool.get(), profile);
-        auto st = chunk_writer->write(chunk.get());
-        if (!st.ok()) {
-            std::cout << st.to_string() << std::endl;
-            return st;
-        }
-        st = chunk_writer->close(_runtime_state.get(), nullptr);
-        if (!st.ok()) {
-            std::cout << st.to_string() << std::endl;
-            return st;
-        }
-        // IO timeout: 2s
-        std::this_thread::sleep_for(std::chrono::seconds(2));
-
-        if (!chunk_writer->closed()) {
-            return Status::InternalError("Async close file error");
-        }
-        return st;
-    }
-
     Status _read_chunk(ChunkPtr& chunk, const std::vector<std::string>& column_names,
                        const std::vector<TypeDescriptor>& type_descs, bool nullable) {
         std::vector<SlotDescriptor*> src_slot_descs;
         _create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, column_names, type_descs, nullable);
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descs);
         auto input_stream = orc::readLocalFile(_file_path);
-        auto res = reader.init(std::move(input_stream));
-        if (!res.ok()) {
-            std::cout << res.to_string();
-        }
+        EXPECT_OK(reader.init(std::move(input_stream)));
         auto st = reader.read_next();
         DCHECK(st.ok()) << st.message();
 
@@ -177,20 +129,30 @@ protected:
         return Status::OK();
     }
 
-private:
+protected:
     std::unique_ptr<FileSystem> _fs;
     std::string _file_path{"./be/test/exec/test_data/orc_scanner/tmp.orc"};
     ObjectPool _pool;
     std::shared_ptr<RuntimeState> _runtime_state;
 };
 
-TEST_F(OrcChunkWriterTest, TestWriteIntergersNullable) {
+TEST_F(OrcFileWriterTest, TestWriteIntergersNullable) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::from_logical_type(TYPE_TINYINT),
             TypeDescriptor::from_logical_type(TYPE_SMALLINT),
             TypeDescriptor::from_logical_type(TYPE_INT),
             TypeDescriptor::from_logical_type(TYPE_BIGINT),
     };
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -218,29 +180,38 @@ TEST_F(OrcChunkWriterTest, TestWriteIntergersNullable) {
         ASSERT_EQ(4, count);
         chunk->append_column(col3, chunk->num_columns());
     }
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
 
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteIntergersNotNull) {
+TEST_F(OrcFileWriterTest, TestWriteIntergersNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::from_logical_type(TYPE_TINYINT),
             TypeDescriptor::from_logical_type(TYPE_SMALLINT),
             TypeDescriptor::from_logical_type(TYPE_INT),
             TypeDescriptor::from_logical_type(TYPE_BIGINT),
     };
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -268,25 +239,33 @@ TEST_F(OrcChunkWriterTest, TestWriteIntergersNotNull) {
         ASSERT_EQ(4, count);
         chunk->append_column(col3, chunk->num_columns());
     }
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
 
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, false);
-    ASSERT_OK(st);
-
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteBooleanNullable) {
+TEST_F(OrcFileWriterTest, TestWriteBooleanNullable) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     std::vector<TypeDescriptor> type_descs{type_bool};
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -300,25 +279,33 @@ TEST_F(OrcChunkWriterTest, TestWriteBooleanNullable) {
         chunk->append_column(nullable_column, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteBooleanNotNull) {
+TEST_F(OrcFileWriterTest, TestWriteBooleanNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     std::vector<TypeDescriptor> type_descs{type_bool};
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -328,26 +315,35 @@ TEST_F(OrcChunkWriterTest, TestWriteBooleanNotNull) {
         chunk->append_column(data_column, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, false);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteStringsNullable) {
+TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     auto type_char = TypeDescriptor::from_logical_type(TYPE_CHAR);
     std::vector<TypeDescriptor> type_descs{type_varchar, type_char};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -376,27 +372,35 @@ TEST_F(OrcChunkWriterTest, TestWriteStringsNullable) {
         chunk->append_column(nullable_column2, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteStringsNotNull) {
+TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     auto type_char = TypeDescriptor::from_logical_type(TYPE_CHAR);
     std::vector<TypeDescriptor> type_descs{type_varchar, type_char};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -417,29 +421,37 @@ TEST_F(OrcChunkWriterTest, TestWriteStringsNotNull) {
         chunk->append_column(data_column2, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, false);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteDecimal) {
+TEST_F(OrcFileWriterTest, TestWriteDecimal) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 5),
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 9),
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 20, 10),
     };
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -462,28 +474,37 @@ TEST_F(OrcChunkWriterTest, TestWriteDecimal) {
         chunk->append_column(col2, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteDecimalNotNull) {
+TEST_F(OrcFileWriterTest, TestWriteDecimalNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     std::vector<TypeDescriptor> type_descs{
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 5),
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 9),
             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 20, 10),
     };
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -506,25 +527,34 @@ TEST_F(OrcChunkWriterTest, TestWriteDecimalNotNull) {
         chunk->append_column(col3, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, false);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteDate) {
+TEST_F(OrcFileWriterTest, TestWriteDate) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_date = TypeDescriptor::from_logical_type(TYPE_DATE);
     std::vector<TypeDescriptor> type_descs{type_date};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -547,25 +577,34 @@ TEST_F(OrcChunkWriterTest, TestWriteDate) {
         chunk->append_column(nullable_column, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteDateNotNull) {
+TEST_F(OrcFileWriterTest, TestWriteDateNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_date = TypeDescriptor::from_logical_type(TYPE_DATE);
     std::vector<TypeDescriptor> type_descs{type_date};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -584,25 +623,34 @@ TEST_F(OrcChunkWriterTest, TestWriteDateNotNull) {
         chunk->append_column(data_column, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, false);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteTimestamp) {
+TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
     std::vector<TypeDescriptor> type_descs{type_datetime};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -626,25 +674,34 @@ TEST_F(OrcChunkWriterTest, TestWriteTimestamp) {
         chunk->append_column(nullable_column, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
-    // check correctness
+    // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteTimestampNotNull) {
+TEST_F(OrcFileWriterTest, TestWriteTimestampNotNull) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
     std::vector<TypeDescriptor> type_descs{type_datetime};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -664,23 +721,22 @@ TEST_F(OrcChunkWriterTest, TestWriteTimestampNotNull) {
         chunk->append_column(data_column, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, false);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
 
-    // check correctness
+    // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteStruct) {
+TEST_F(OrcFileWriterTest, TestWriteStruct) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int_a = TypeDescriptor::from_logical_type(TYPE_SMALLINT);
@@ -690,6 +746,16 @@ TEST_F(OrcChunkWriterTest, TestWriteStruct) {
     type_int_struct.children = {type_int_a, type_int_b, type_int_c};
     type_int_struct.field_names = {"a", "b", "c"};
     type_descs.push_back(type_int_struct);
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
@@ -725,23 +791,22 @@ TEST_F(OrcChunkWriterTest, TestWriteStruct) {
         chunk->append_column(nullable_col, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteMap) {
+TEST_F(OrcFileWriterTest, TestWriteMap) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int_key = TypeDescriptor::from_logical_type(TYPE_INT);
@@ -750,6 +815,16 @@ TEST_F(OrcChunkWriterTest, TestWriteMap) {
     type_int_map.children.push_back(type_int_key);
     type_int_map.children.push_back(type_int_value);
     type_descs.push_back(type_int_map);
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     // [1 -> 1], NULL, [], [2 -> 2, 3 -> NULL]
     auto chunk = std::make_shared<Chunk>();
@@ -783,23 +858,22 @@ TEST_F(OrcChunkWriterTest, TestWriteMap) {
         chunk->append_column(nullable_col, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestWriteNestedArray) {
+TEST_F(OrcFileWriterTest, TestWriteNestedArray) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
@@ -808,6 +882,16 @@ TEST_F(OrcChunkWriterTest, TestWriteNestedArray) {
     type_int_array.children.push_back(type_int);
     type_int_array_array.children.push_back(type_int_array);
     type_descs.push_back(type_int_array_array);
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
+    ASSERT_OK(writer->init());
 
     // [[1], NULL, [], [2, NULL, 3]], [[4, 5], [6]], NULL
     auto chunk = std::make_shared<Chunk>();
@@ -844,49 +928,68 @@ TEST_F(OrcChunkWriterTest, TestWriteNestedArray) {
         chunk->append_column(array_array_col, chunk->num_columns());
     }
 
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
-
     // write chunk
-    auto st = _write_chunk(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    ASSERT_OK(writer->write(chunk).get());
+    auto result = writer->commit().get();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 3);
 
     // read chunk
     ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
 
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcChunkWriterTest, TestAsyncWriteChunk) {
-    std::vector<TypeDescriptor> type_descs{
-            TypeDescriptor::from_logical_type(TYPE_INT),
-    };
+TEST_F(OrcFileWriterTest, TestWriteWithExecutors) {
+    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    std::vector<TypeDescriptor> type_descs{type_bool};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto executors = PriorityThreadPool("test", 1, 1);
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, &executors);
+    ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
-        std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
-        auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
-        ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        auto data_column = BooleanColumn::create();
+        std::vector<uint8_t> values = {0, 1, 1, 0};
+        data_column->append_numbers(values.data(), values.size() * sizeof(uint8_t));
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
     }
-    auto column_names = _make_type_names(type_descs);
-    ASSIGN_OR_ABORT(auto schema, OrcChunkWriter::make_schema(column_names, type_descs));
 
-    // write chunk
-    auto st = _write_chunk_with_AsyncWriter(chunk, type_descs, std::move(schema));
-    ASSERT_OK(st);
+    // write chunk twice
+    ASSERT_TRUE(writer->write(chunk).get().ok());
+    ASSERT_TRUE(writer->write(chunk).get().ok());
+    auto result = writer->commit().get();
 
-    // read chunk
-    ChunkPtr read_chunk;
-    st = _read_chunk(read_chunk, column_names, type_descs, true);
-    ASSERT_OK(st);
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    ASSERT_TRUE(result.io_status.ok());
+    ASSERT_EQ(result.file_statistics.record_count, 8);
 }
 
-} // namespace starrocks
+TEST_F(OrcFileWriterTest, TestFactory) {
+    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    std::vector<TypeDescriptor> type_descs{type_bool};
+
+    auto column_names = _make_type_names(type_descs);
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto fs = std::make_shared<MemoryFileSystem>();
+    auto factory = formats::ORCFileWriterFactory(fs, {}, column_names, std::move(column_evaluators));
+    auto maybe_writer = factory.create("/test.orc");
+    ASSERT_OK(maybe_writer.status());
+    auto writer = maybe_writer.value();
+    ASSERT_OK(writer->init());
+}
+
+} // namespace starrocks::formats
