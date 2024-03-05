@@ -237,18 +237,17 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         auto mock_writer_factory = std::make_unique<MockFileWriterFactory>();
         auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
         auto sink = std::make_unique<IcebergChunkSink>(partition_column_names, std::move(partition_column_evaluators),
-                                                    std::move(location_provider), std::move(mock_writer_factory),
-                                                    100, _runtime_state);
-        sink->callback_on_success()(
-                CommitResult{
-                        .io_status = Status::OK(),
-                        .format = formats::PARQUET,
-                        .file_statistics = {
+                                                       std::move(location_provider), std::move(mock_writer_factory),
+                                                       100, _runtime_state);
+        sink->callback_on_success()(CommitResult{
+                .io_status = Status::OK(),
+                .format = formats::PARQUET,
+                .file_statistics =
+                        {
                                 .record_count = 100,
                         },
-                        .location = "path/to/directory/data.parquet",
-                }
-        );
+                .location = "path/to/directory/data.parquet",
+        });
 
         EXPECT_EQ(_runtime_state->num_rows_load_sink(), 100);
     }
@@ -267,7 +266,8 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->options = {};              // default for now
         sink_ctx->parquet_field_ids = {};
         sink_ctx->max_file_size = 1 << 30;
-        sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
+                {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         auto maybe_sink = provider.create_chunk_sink(sink_ctx, 0);
         EXPECT_TRUE(maybe_sink.ok());
@@ -285,7 +285,8 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->options = {};
         sink_ctx->parquet_field_ids = {};
         sink_ctx->max_file_size = 1 << 30;
-        sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
+                {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         auto maybe_sink = provider.create_chunk_sink(sink_ctx, 0);
         EXPECT_FALSE(maybe_sink.ok()); // format is not supported

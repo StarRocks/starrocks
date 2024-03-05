@@ -237,18 +237,17 @@ TEST_F(HiveChunkSinkTest, test_callback) {
         auto mock_writer_factory = std::make_unique<MockFileWriterFactory>();
         auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
         auto sink = std::make_unique<HiveChunkSink>(partition_column_names, std::move(partition_column_evaluators),
-                                                    std::move(location_provider), std::move(mock_writer_factory),
-                                                    100, _runtime_state);
-        sink->callback_on_success()(
-                CommitResult{
-                        .io_status = Status::OK(),
-                        .format = formats::PARQUET,
-                        .file_statistics = {
+                                                    std::move(location_provider), std::move(mock_writer_factory), 100,
+                                                    _runtime_state);
+        sink->callback_on_success()(CommitResult{
+                .io_status = Status::OK(),
+                .format = formats::PARQUET,
+                .file_statistics =
+                        {
                                 .record_count = 100,
                         },
-                        .location = "path/to/directory/data.parquet",
-                }
-        );
+                .location = "path/to/directory/data.parquet",
+        });
 
         EXPECT_EQ(_runtime_state->num_rows_load_sink(), 100);
     }
@@ -262,8 +261,10 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
         sink_ctx->partition_column_names = {"k2"};
-        sink_ctx->data_column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        sink_ctx->partition_column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->data_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
+        sink_ctx->partition_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET;
         sink_ctx->options = {}; // default for now
@@ -280,8 +281,10 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
         sink_ctx->partition_column_names = {"k2"};
-        sink_ctx->data_column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        sink_ctx->partition_column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->data_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
+        sink_ctx->partition_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::ORC;
         sink_ctx->options = {}; // default for now
@@ -298,8 +301,10 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
         sink_ctx->partition_column_names = {"k2"};
-        sink_ctx->data_column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        sink_ctx->partition_column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->data_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
+        sink_ctx->partition_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->executor = nullptr;
         sink_ctx->format = "unknown";
         sink_ctx->options = {}; // default for now
