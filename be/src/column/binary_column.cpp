@@ -49,6 +49,23 @@ void BinaryColumnBase<T>::check_or_die() const {
 
 template <typename T>
 void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
+    if (!src.only_null() && src.is_constant()) {
+        auto value = ColumnHelper::get_const_value<TYPE_VARCHAR>(&src);
+        auto length = value.size;
+
+        _offsets.reserve(_offsets.size() + count);
+        _bytes.resize(_bytes.size() + count * length);
+
+        for (size_t i = 0; i < count; i++) {
+            int off = _offsets.back();
+            _offsets.push_back(off + length);
+            strings::memcpy_inlined(_bytes.data() + off, value.data, length);
+        }
+
+        _slices_cache = false;
+        return;
+    }
+
     const auto& b = down_cast<const BinaryColumnBase<T>&>(src);
     const unsigned char* p = &b._bytes[b._offsets[offset]];
     const unsigned char* e = &b._bytes[b._offsets[offset + count]];
