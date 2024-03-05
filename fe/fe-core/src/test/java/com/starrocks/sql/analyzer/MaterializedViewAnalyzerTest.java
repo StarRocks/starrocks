@@ -136,6 +136,63 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCreateMvWithWindowFunction() throws Exception {
+        {
+            String mvSql = "create materialized view window_mv_1\n" +
+                    "partition by date_trunc('month', k1)\n" +
+                    "distributed by hash(k2)\n" +
+                    "refresh manual\n" +
+                    "as\n" +
+                    "select \n" +
+                    "\tk2, k1, row_number() over (partition by date_trunc('month', k1) order by  k2)\n" +
+                    "from tbl1 \n";
+            starRocksAssert.useDatabase("test").withMaterializedView(mvSql);
+        }
+
+        {
+            String mvSql = "create materialized view window_mv_2\n" +
+                    "partition by k1\n" +
+                    "distributed by hash(k2)\n" +
+                    "refresh manual\n" +
+                    "as\n" +
+                    "select \n" +
+                    "\tk2, k1, row_number() over (partition by k1 order by  k2)\n" +
+                    "from tbl1 \n";
+            starRocksAssert.useDatabase("test").withMaterializedView(mvSql);
+        }
+
+        {
+            String mvSql = "create materialized view window_mv_3\n" +
+                    "partition by k1\n" +
+                    "distributed by hash(k2)\n" +
+                    "refresh manual\n" +
+                    "as\n" +
+                    "select \n" +
+                    "\tk2, k1, row_number() over (order by  k2)\n" +
+                    "from tbl1 \n";
+            analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions" +
+                    " should contain the partition column k1 of materialized view");
+        }
+    }
+    @Test
+    public void testCreateMvBaseOnView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                        .withView("create view v1 as select date_trunc('month', k1) as kv1, k2 as kv2 from tbl1");
+
+        analyzeSuccess("create materialized view mv1 partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                "as select kv1 as k1, kv2 as k2 from v1");
+
+        starRocksAssert.useDatabase("test")
+                .withView("create view v2(kv1, kv2) as select date_trunc('month', k1), k2 as vv from tbl1");
+
+        analyzeSuccess("create materialized view mv2 partition by k1 distributed by hash(k2) buckets 3 refresh async " +
+                "as select kv1 as k1, kv2 as k2 from v2");
+    }
+
+    @Test
+>>>>>>> 3f5fbefc1e ([BugFix] fix resolve partition column failed where create mv (#41940))
     public void testGetQueryOutputIndices() {
         checkQueryOutputIndices(Arrays.asList(1, 2, 0, 3), "2,0,1,3", true);
         checkQueryOutputIndices(Arrays.asList(0, 1, 2, 3), "0,1,2,3", false);
