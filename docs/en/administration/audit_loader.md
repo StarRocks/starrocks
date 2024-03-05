@@ -17,7 +17,7 @@ Because the fields of audit logs vary among different StarRocks versions, you mu
 > **CAUTION**
 >
 > - DO NOT change the table schema in the examples, or the log loading will fail.
-> - Because the fields of audit logs vary among different StarRocks versions, the new version AuditLoader collects the common fields admong them from all available StarRocks versions currently.
+> - Because the fields of audit logs vary among different StarRocks versions, the new version AuditLoader collects the common fields among them from all available StarRocks versions.
 
 ```SQL
 CREATE DATABASE starrocks_audit_db__;
@@ -44,7 +44,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `isQuery`           TINYINT                    COMMENT "If the SQL is a query (0 and 1)",
   `feIp`              VARCHAR(128)               COMMENT "IP address of FE that executes the SQL",
   `stmt`              VARCHAR(1048576)           COMMENT "Original SQL statement",
-  `digest`            VARCHAR(32)                COMMENT "SLOW SQL fingerprint",
+  `digest`            VARCHAR(32)                COMMENT "Slow SQL fingerprint",
   `planCpuCosts`      DOUBLE                     COMMENT "CPU resources consumption time for planning in nanoseconds",
   `planMemCosts`      DOUBLE                     COMMENT "Memory cost for planning in bytes"
 ) ENGINE = OLAP
@@ -54,7 +54,7 @@ PARTITION BY RANGE (`timestamp`) ()
 DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
-  "dynamic_partition.start" = "-30",       -- Keep the audit logs from the latest 30 days. You can adjust this value based on you bussiness demand.
+  "dynamic_partition.start" = "-30",       -- Keep the audit logs from the latest 30 days. You can adjust this value based on you business demand.
   "dynamic_partition.end" = "3",
   "dynamic_partition.prefix" = "p",
   "dynamic_partition.buckets" = "3",
