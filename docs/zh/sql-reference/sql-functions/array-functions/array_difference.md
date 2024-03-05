@@ -20,7 +20,7 @@ output array_difference(input)
 
 ## 返回值说明
 
-类型为Array(与输入input保持一致)，内容为将输入input中相邻两元素的差，长度与input保持一致。
+类型为 ARRAY (与输入 `input` 保持一致)，内容为将输入 `input` 中相邻两元素的差，长度与 `input` 保持一致。
 
 ## 示例
 
@@ -46,7 +46,7 @@ mysql> SELECT array_difference([342, 32423, 213, null, 23432]);
 +----------------------------------------------+
 ```
 
-**示例 三**:
+**示例三**:
 
 ```plain text
 mysql> SELECT array_difference([1.2, 2.3, 3.2, 4324242.55]);
@@ -57,7 +57,7 @@ mysql> SELECT array_difference([1.2, 2.3, 3.2, 4324242.55]);
 +--------------------------------------------+
 ```
 
-**示例 四**:
+**示例四**:
 
 ```plain text
 mysql> SELECT array_difference([false, true, false]);
