@@ -87,6 +87,21 @@ Whether to use the [AWS SDK default credentials provider chain](https://docs.aws
 - `true`
 - `false` (Default).
 
+#### aws_s3_use_instance_profile
+
+Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values:
+
+- `true`
+- `false` (Default).
+
+If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`.
+
+If you use Instance Profile to access S3, you must specify this item as `true`.
+
+If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws_s3_iam_role_arn`.
+
+And if you use an external AWS account,  you must also specify `aws_s3_external_id`.
+
 #### aws_s3_access_key
 
 The Access Key ID used to access your S3 bucket.
@@ -94,6 +109,14 @@ The Access Key ID used to access your S3 bucket.
 #### aws_s3_secret_key
 
 The Secret Access Key used to access your S3 bucket.
+
+#### aws_s3_iam_role_arn
+
+The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored.
+
+#### aws_s3_external_id
+
+The external ID of the AWS account that is used for cross-account access to your S3 bucket.
 
 > **Note**
 >
