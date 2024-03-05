@@ -46,7 +46,7 @@ public class PrepareAnalyzer {
         if (prepareStmt != null) {
             StatementBase innerStmt = prepareStmt.getInnerStmt();
             if (!(innerStmt instanceof QueryStatement)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
+                ErrorReport.reportValidateException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
             }
             // Analyzing when preparing is only used to return the correct resultset meta, but not to generate an
             // execution plan
