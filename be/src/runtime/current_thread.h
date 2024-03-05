@@ -68,6 +68,9 @@ private:
             if (_cache_size >= BATCH_SIZE) {
                 commit(false);
             }
+            if (_cache_size >= BATCH_SIZE || _cache_size <= -BATCH_SIZE || _reserved_bytes != 0) {
+                CHECK(false);
+            }
         }
 
         bool try_mem_consume(int64_t size) {
@@ -87,8 +90,14 @@ private:
                     _allocated_cache_size -= size;
                     _try_consume_mem_size = size;
                     tls_exceed_mem_tracker = limit_tracker;
+                    if (_cache_size >= BATCH_SIZE || _cache_size <= -BATCH_SIZE || _reserved_bytes != 0) {
+                        CHECK(false);
+                    }
                     return false;
                 }
+            }
+            if (_cache_size >= BATCH_SIZE || _cache_size <= -BATCH_SIZE || _reserved_bytes != 0) {
+                CHECK(false);
             }
             return true;
         }
@@ -115,6 +124,9 @@ private:
         }
 
         void release_reserved() {
+            if (_reserved_bytes != 0) {
+                CHECK(false);
+            }
             if (_reserved_bytes) {
                 release(_reserved_bytes);
                 _reserved_bytes = 0;
@@ -126,6 +138,9 @@ private:
             _deallocated_cache_size += size;
             if (_cache_size <= -BATCH_SIZE) {
                 commit(false);
+            }
+            if (_cache_size >= BATCH_SIZE || _cache_size <= -BATCH_SIZE || _reserved_bytes != 0) {
+                CHECK(false);
             }
         }
 
