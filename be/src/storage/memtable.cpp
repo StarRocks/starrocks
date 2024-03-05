@@ -315,7 +315,7 @@ Status MemTable::finalize() {
         }
     }
 
-    StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
+    StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
 
