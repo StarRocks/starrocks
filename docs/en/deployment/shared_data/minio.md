@@ -87,21 +87,6 @@ Whether to use the [AWS SDK default credentials provider chain](https://docs.aws
 - `true`
 - `false` (Default).
 
-#### aws_s3_use_instance_profile
-
-Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values:
-
-- `true`
-- `false` (Default).
-
-If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`.
-
-If you use Instance Profile to access S3, you must specify this item as `true`.
-
-If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws_s3_iam_role_arn`.
-
-And if you use an external AWS account,  you must also specify `aws_s3_external_id`.
-
 #### aws_s3_access_key
 
 The Access Key ID used to access your S3 bucket.
@@ -109,30 +94,6 @@ The Access Key ID used to access your S3 bucket.
 #### aws_s3_secret_key
 
 The Secret Access Key used to access your S3 bucket.
-
-#### aws_s3_iam_role_arn
-
-The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored.
-
-#### aws_s3_external_id
-
-The external ID of the AWS account that is used for cross-account access to your S3 bucket.
-
-#### azure_blob_path
-
-The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`.
-
-#### azure_blob_endpoint
-
-The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`.
-
-#### azure_blob_shared_key
-
-The Shared Key used to authorize requests for your Azure Blob Storage.
-
-#### azure_blob_sas_token
-
-The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
 
 > **Note**
 >
