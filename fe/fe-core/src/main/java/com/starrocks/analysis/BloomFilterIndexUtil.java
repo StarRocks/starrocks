@@ -23,14 +23,16 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
 
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 public class BloomFilterIndexUtil {
-    public static String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
-    public static String GRAM_NUM_KEY = NgramBfIndexParamsKey.GRAM_NUM.toString().toLowerCase(Locale.ROOT);
+    public static final String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
+    public static final String GRAM_NUM_KEY = NgramBfIndexParamsKey.GRAM_NUM.toString().toLowerCase(Locale.ROOT);
+
+    public static final String CASE_SENSITIVE_KEY =
+            NgramBfIndexParamsKey.CASE_SENSITIVE.toString().toLowerCase(Locale.ROOT);
     private static final double MAX_FPP = 0.05;
     private static final double MIN_FPP = 0.0001;
 
@@ -62,6 +64,15 @@ public class BloomFilterIndexUtil {
         }
     }
 
+    private static void analyzeBloomFilterCaseSensitive(Map<String, String> properties) throws SemanticException {
+        if (properties != null && properties.containsKey(CASE_SENSITIVE_KEY)) {
+            String caseSensitive = properties.get(CASE_SENSITIVE_KEY);
+            if (!caseSensitive.equalsIgnoreCase("true") && !caseSensitive.equalsIgnoreCase("false")) {
+                throw new SemanticException("Ngram Bloom filter's case_sensitive should be true or false");
+            }
+        }
+    }
+
     public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)
             throws SemanticException {
         Type type = column.getType();
@@ -79,9 +90,9 @@ public class BloomFilterIndexUtil {
             throw new SemanticException("Ngram Bloom filter index only used in columns of DUP_KEYS/PRIMARY table or "
                     + "key columns of UNIQUE_KEYS/AGG_KEYS table. invalid column: " + column.getName());
         }
-
         analyzeBloomFilterFpp(properties);
         analyzeBloomFilterGramNum(properties);
+        analyzeBloomFilterCaseSensitive(properties);
     }
 
     public static void analyseBfWithNgramBf(Set<Index> newIndexs, Set<String> bfColumns) throws AnalysisException {

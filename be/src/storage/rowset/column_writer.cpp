@@ -416,6 +416,12 @@ Status ScalarColumnWriter::init() {
                 const std::string& fpp = it->second; // The value corresponding to the key "bloom_filter_fpp"
                 bf_options.fpp = std::stod(fpp);
             }
+            it = index_properties.find(CASE_SENSITIVE_KEY);
+            if (it != index_properties.end()) {
+                // Found the key "case_sensitive"
+                const std::string& case_sensitive = it->second; // The value corresponding to the key "case_sensitive"
+                bf_options.case_sensitive = (case_sensitive == "true");
+            }
         }
         RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_options, _type_info, &_bloom_filter_index_builder));
     }
