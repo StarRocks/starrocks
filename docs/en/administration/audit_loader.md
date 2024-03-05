@@ -120,6 +120,43 @@ See [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL_PLUG
     In the following example, the `Status` of the plugin `AuditLoader` is `INSTALLED`,  meaning installation is successful.
 
     ```Plain
+    mysql> SHOW PLUGINS\G
+    *************************** 1. row ***************************
+        Name: __builtin_AuditLogBuilder
+        Type: AUDIT
+    Description: builtin audit logger
+        Version: 0.12.0
+    JavaVersion: 1.8.31
+    ClassName: com.starrocks.qe.AuditLogBuilder
+        SoName: NULL
+        Sources: Builtin
+        Status: INSTALLED
+    Properties: {}
+    *************************** 2. row ***************************
+        Name: AuditLoader
+        Type: AUDIT
+    Description: Available for versions 2.3+. Load audit log to starrocks, and user can view the statistic of queries.
+        Version: 4.0.0
+    JavaVersion: 1.8.0
+    ClassName: com.starrocks.plugin.audit.AuditLoaderPlugin
+        SoName: NULL
+        Sources: /x/xx/xxx/xxxxx/auditloader.zip
+        Status: INSTALLED
+    Properties: {}
+    2 rows in set (0.01 sec)
+    ```
+
+2. Execute some random SQLs to generate audit logs, and wait for 60 seconds (or the time you have specified in the item `max_batch_interval_sec` when you configure AuditLoader) to allow AuditLoader to load audit logs into StarRocks.
+
+3. Check the audit logs by querying the table.
+
+    ```SQL
+    SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__;
+    ```
+
+    The following example shows when audit logs are loaded into the table successfully:
+
+    ```Plain
     mysql> SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__\G
     *************************** 1. row ***************************
          queryId: 84a69010-d47e-11ee-9647-024228044898
@@ -145,43 +182,6 @@ See [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL_PLUG
             stmt: SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__
           digest:
     planCpuCosts: 0
-    planMemCosts: 0
-    1 row in set (0.01 sec)
-    ```
-
-2. Execute some random SQLs to generate audit logs, and wait for 60 seconds (or the time you have specified in the item `max_batch_interval_sec` when you configure AuditLoader) to allow AuditLoader to load audit logs into StarRocks.
-
-3. Check the audit logs by querying the table.
-
-    ```SQL
-    SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__;
-    ```
-
-    The following example shows when audit logs are loaded into the table successfully:
-
-    ```Plain
-    mysql> SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__\G
-    *************************** 1. row ***************************
-        queryId: 082ddf02-6492-11ed-a071-6ae6b1db20eb
-        timestamp: 2022-11-15 11:03:08
-        clientIp: xxx.xx.xxx.xx:33544
-            user: root
-    resourceGroup: default_wg
-                db: 
-            state: EOF
-        errorCode: 
-        queryTime: 8
-        scanBytes: 0
-        scanRows: 0
-        returnRows: 0
-        cpuCostNs: 62380
-    memCostBytes: 14504
-            stmtId: 33
-        isQuery: 1
-            feIp: xxx.xx.xxx.xx
-            stmt: SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__
-            digest: 
-    planCpuCosts: 21
     planMemCosts: 0
     1 row in set (0.01 sec)
     ```
