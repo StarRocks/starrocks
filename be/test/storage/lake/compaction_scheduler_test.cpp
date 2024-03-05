@@ -21,7 +21,7 @@
 
 namespace starrocks::lake {
 
-inline void notify_and_wait_latch(CountDownLatch* l1, CountDownLatch* l2) {
+inline void notify_and_wait_latch(std::shared_ptr<CountDownLatch> l1, std::shared_ptr<CountDownLatch> l2) {
     l1->count_down();
     l2->wait();
 }
@@ -48,24 +48,24 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
 
     auto t0 = ::time(nullptr);
     auto txn_id = next_id();
-    CountDownLatch l1(1); // Used to notify that compaction task has finished
-    CountDownLatch l2(1); // Used to notify that CompactionScheduler::list_tasks() has finished
+    auto l1 = std::make_shared<CountDownLatch>(1); // Used to notify that compaction task has finished
+    auto l2 = std::make_shared<CountDownLatch>(1); // Used to notify that CompactionScheduler::list_tasks() has finished
     CompactRequest request;
     CompactResponse response;
     request.add_tablet_ids(_tablet_metadata->id());
     request.set_timeout_ms(/*1 minute=*/60 * 1000);
     request.set_txn_id(txn_id);
     request.set_version(1);
-    ASSIGN_OR_ABORT(auto tid, bthreads::start_bthread([&]() {
-                        auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch, &l1, &l2);
+    ASSIGN_OR_ABORT(auto tid, bthreads::start_bthread([&, l1, l2]() {
+                        auto cb = ::google::protobuf::NewCallback(notify_and_wait_latch, l1, l2);
                         _compaction_scheduler.compact(nullptr, &request, &response, cb);
                     }));
 
     // Wait until the compaction task finished
-    l1.wait();
+    l1->wait();
     _compaction_scheduler.list_tasks(&tasks);
     // Notify the compaction thread to exit
-    l2.count_down();
+    l2->count_down();
 
     auto t1 = ::time(nullptr);
     ASSERT_EQ(1, tasks.size());
