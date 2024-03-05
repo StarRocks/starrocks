@@ -801,9 +801,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
         ASSERT_EQ(results[j], v->get_data()[j]);
     }
-
 }
-
 
 class ShaTestFixture : public ::testing::TestWithParam<std::tuple<std::string, int, std::string>> {};
 
@@ -894,11 +892,8 @@ TEST_P(FpeTestFixture, fpe_ff1_encryptTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     EXPECT_EQ(expected, v->get_data()[0].to_string());
 }
-INSTANTIATE_TEST_SUITE_P(
-        FpeTest, FpeTestFixture,
-        ::testing::Values(
-            std::make_tuple("0504327939", "abcdefghijk12345abcdefghijk12345", 10, "8585819134")
-        )
-);
+INSTANTIATE_TEST_SUITE_P(FpeTest, FpeTestFixture,
+                         ::testing::Values(std::make_tuple("0504327939", "abcdefghijk12345abcdefghijk12345", 10,
+                                                           "8585819134")));
 
 } // namespace starrocks
