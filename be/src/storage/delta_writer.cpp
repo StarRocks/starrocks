@@ -554,7 +554,11 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
 
 Status DeltaWriter::_flush_memtable() {
     RETURN_IF_ERROR(flush_memtable_async());
-    return _flush_token->wait();
+    MonotonicStopWatch watch;
+    watch.start();
+    Status st = _flush_token->wait();
+    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(watch.elapsed_time() / 1000);
+    return st;
 }
 
 Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& ptable_schema_param,
@@ -634,11 +638,14 @@ Status DeltaWriter::commit() {
         break;
     }
 
+    MonotonicStopWatch watch;
+    watch.start();
     if (auto st = _flush_token->wait(); UNLIKELY(!st.ok())) {
         LOG(WARNING) << st;
         _set_state(kAborted, st);
         return st;
     }
+    auto flush_ts = watch.elapsed_time();
 
     if (auto res = _rowset_writer->build(); res.ok()) {
         _cur_rowset = std::move(res).value();
@@ -655,6 +662,7 @@ Status DeltaWriter::commit() {
             return st;
         }
     }
+    auto pk_finish_ts = watch.elapsed_time();
 
     if (_replicate_token != nullptr) {
         if (auto st = _replicate_token->wait(); UNLIKELY(!st.ok())) {
@@ -663,6 +671,7 @@ Status DeltaWriter::commit() {
             return st;
         }
     }
+    auto replica_ts = watch.elapsed_time();
 
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
@@ -685,6 +694,8 @@ Status DeltaWriter::commit() {
         }
     }
     VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
+    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
+    StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_finish_ts) / 1000);
     return Status::OK();
 }
 
