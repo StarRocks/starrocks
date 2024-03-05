@@ -282,6 +282,7 @@ int64_t HdfsScanner::estimated_mem_usage() const {
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     if (_file == nullptr) return;
+    static const char* const kHdfsIOProfileSectionPrefix = "HdfsIOMetrics";
 
     auto res = _file->get_numeric_statistics();
     if (!res.ok()) return;
@@ -290,7 +291,6 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     if (statistics == nullptr || statistics->size() == 0) return;
 
     RuntimeProfile* runtime_profile = profile->runtime_profile;
-    static constexpr std::string kHdfsIOProfileSectionPrefix = "HdfsIOMetrics";
     ADD_COUNTER(profile->runtime_profile, kHdfsIOProfileSectionPrefix, TUnit::NONE);
 
     for (int64_t i = 0, sz = statistics->size(); i < sz; i++) {
