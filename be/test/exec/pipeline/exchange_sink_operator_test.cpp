@@ -83,11 +83,16 @@ TEST_F(ExchangeSinkOperatorTest, test_push_chunk) {
     TPlanFragmentDestination destination;
     destination.__set_fragment_instance_id(_fragment_context->fragment_instance_id());
     destination.__set_pipeline_driver_sequence(0);
+    TNetworkAddress network_address;
+    network_address.__set_hostname("127.0.0.1");
+    network_address.__set_port(9050);
+    destination.__set_brpc_server(network_address);
     destinations.emplace_back(destination);
     std::vector<ExprContext*> partition_expr_ctxs;
     std::vector<int32_t> output_columns;
     // auto mock_sink_buffer = std::make_shared<MockSinkBuffer>(_fragment_context, destinations, false);
     auto mock_sink_buffer = std::make_shared<SinkBuffer>(_fragment_context, destinations, false);
+    ASSERT_EQ(mock_sink_buffer->connector_sink_need_scaling(0, 0), false);
     PlanNodeId id = 2;
     auto exchange_sink_operator_factory = std::make_shared<ExchangeSinkOperatorFactory>(
             0, 2, std::move(mock_sink_buffer), TPartitionType::RANDOM_SCALE, destinations, false, 0, 0, id,
