@@ -193,11 +193,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
       )
     ```
 
-<<<<<<< HEAD
-   - 也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
-=======
     - 也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
->>>>>>> 95c3fc9a3c ([Doc]Update ranger_plugin.md (#42078))
 
     ```SQL
       ALTER CATALOG hive_catalog_1
