@@ -619,7 +619,7 @@ DISTRIBUTED BY HASH(`id`);
 
 2. 在 Spark SQL 客户端中创建一个表。
 
-   Spark 表 schema 是从 StarRocks 表中推断出来的，而 Spark 不支持 HLL 类型。因此，您需要在 Spark 中自定义相应列的数据类型，例如配置选项 `"starrocks.column.types"="visit_users BIGINT"`，将其配置为 BIGINT 类型。在使用 Stream Load 来导入数据时，Spark connector 使用 [hll_hash](../sql-reference/sql-functions/aggregate-functions/hll_hash.md) 函数将 BIGINT 类型的数据转换为 HLL 类型。
+   Spark 表 schema 是从 StarRocks 表中推断出来的，而 Spark 不支持 HLL 类型。因此，您需要在 Spark 中自定义相应列的数据类型，例如配置选项 `"starrocks.column.types"="visit_users BIGINT"`，将其配置为 BIGINT 类型。在使用 Stream Load 来导入数据时，Spark connector 使用 [hll_hash](../sql-reference/sql-functions/scalar-functions/hll_hash.md) 函数将 BIGINT 类型的数据转换为 HLL 类型。
 
    在 `spark-sql` 中运行如下 DDL 语句：
 
