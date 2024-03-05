@@ -31,6 +31,7 @@ You can find a function based on the following categories:
 
 ## Aggregate functions
 
+<<<<<<< HEAD
 - [any_value](../sql-functions/aggregate-functions/any_value.md)
 - [approx_count_distinct](../sql-functions/aggregate-functions/approx_count_distinct.md)
 - [array_agg](../sql-functions/array-functions/array_agg.md)
@@ -98,6 +99,77 @@ You can find a function based on the following categories:
 - [element_at](../sql-functions/array-functions/element_at.md)
 - [reverse](../sql-functions/array-functions/reverse.md)
 - [unnest](../sql-functions/array-functions/unnest.md)
+=======
+- [any_value](./aggregate-functions/any_value.md)
+- [approx_count_distinct](./aggregate-functions/approx_count_distinct.md)
+- [array_agg](./array-functions/array_agg.md)
+- [avg](./aggregate-functions/avg.md)
+- [bitmap](./aggregate-functions/bitmap.md)
+- [bitmap_agg](./bitmap-functions/bitmap_agg.md)
+- [corr](./aggregate-functions/corr.md)
+- [covar_pop](./aggregate-functions/covar_pop.md)
+- [covar_samp](./aggregate-functions/covar_samp.md)
+- [count](./aggregate-functions/count.md)
+- [count_if](./aggregate-functions/count_if.md)
+- [group_concat](./string-functions/group_concat.md)
+- [grouping](./aggregate-functions/grouping.md)
+- [grouping_id](./aggregate-functions/grouping_id.md)
+- [hll_raw_agg](./aggregate-functions/hll_raw_agg.md)
+- [hll_union](./aggregate-functions/hll_union.md)
+- [hll_union_agg](./aggregate-functions/hll_union_agg.md)
+- [max](./aggregate-functions/max.md)
+- [max_by](./aggregate-functions/max_by.md)
+- [min](./aggregate-functions/min.md)
+- [min_by](./aggregate-functions/min_by.md)
+- [multi_distinct_sum](./aggregate-functions/multi_distinct_sum.md)
+- [multi_distinct_count](./aggregate-functions/multi_distinct_count.md)
+- [percentile_approx](./aggregate-functions/percentile_approx.md)
+- [percentile_cont](./aggregate-functions/percentile_cont.md)
+- [percentile_disc](./aggregate-functions/percentile_disc.md)
+- [retention](./aggregate-functions/retention.md)
+- [stddev，stddev_pop](./aggregate-functions/stddev.md)
+- [stddev_samp](./aggregate-functions/stddev_samp.md)
+- [sum](./aggregate-functions/sum.md)
+- [variance, variance_pop, var_pop](./aggregate-functions/variance.md)
+- [var_samp](./aggregate-functions/var_samp.md)
+- [window_funnel](./aggregate-functions/window_funnel.md)
+
+## Array functions
+
+- [all_match](./array-functions/all_match.md)
+- [any_match](./array-functions/any_match.md)
+- [array_agg](./array-functions/array_agg.md)
+- [array_append](./array-functions/array_append.md)
+- [array_avg](./array-functions/array_avg.md)
+- [array_concat](./array-functions/array_concat.md)
+- [array_contains](./array-functions/array_contains.md)
+- [array_contains_all](./array-functions/array_contains_all.md)
+- [array_contains_seq](./array-functions/array_contains_seq.md)
+- [array_cum_sum](./array-functions/array_cum_sum.md)
+- [array_difference](./array-functions/array_difference.md)
+- [array_distinct](./array-functions/array_distinct.md)
+- [array_filter](./array-functions/array_filter.md)
+- [array_generate](./array-functions/array_generate.md)
+- [array_intersect](./array-functions/array_intersect.md)
+- [array_join](./array-functions/array_join.md)
+- [array_length](./array-functions/array_length.md)
+- [array_map](./array-functions/array_map.md)
+- [array_max](./array-functions/array_max.md)
+- [array_min](./array-functions/array_min.md)
+- [array_position](./array-functions/array_position.md)
+- [array_remove](./array-functions/array_remove.md)
+- [array_slice](./array-functions/array_slice.md)
+- [array_sort](./array-functions/array_sort.md)
+- [array_sortby](./array-functions/array_sortby.md)
+- [array_sum](./array-functions/array_sum.md)
+- [arrays_overlap](./array-functions/arrays_overlap.md)
+- [array_to_bitmap](./array-functions/array_to_bitmap.md)
+- [array_unique_agg](./array-functions/array_unique_agg.md)
+- [cardinality](./array-functions/cardinality.md)
+- [element_at](./array-functions/element_at.md)
+- [reverse](./string-functions/reverse.md)
+- [unnest](./array-functions/unnest.md)
+>>>>>>> 6c17aad57e ([Doc] recategorize a few functions (#42056))
 
 ## Binary functions
 
@@ -397,6 +469,8 @@ You can find a function based on the following categories:
 ## Scalar functions
 
 - [hll_cardinality](./scalar-functions/hll_cardinality.md)
+- [hll_empty](./scalar-functions/hll_empty.md)
+- [hll_hash](./scalar-functions/hll_hash.md)
 
 ## Table functions
 
