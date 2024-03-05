@@ -81,14 +81,8 @@ CREATE TABLE test_tbl (id INT, city STRING);
     starrocks.username=user1
     # Enter the StarRocks password.
     starrocks.password=123456
-<<<<<<< HEAD
-    starrocks.database.name=inventory
-    key.converter=io.confluent.connect.json.JsonSchemaConverter
-    value.converter=io.confluent.connect.json.JsonSchemaConverter
-=======
     starrocks.database.name=example_db
     sink.properties.strip_outer_array=true
->>>>>>> a58bc9616d ([Doc]Update the demo in kafka connector (#41966))
     ```
    
     > **NOTICE**
@@ -189,29 +183,6 @@ The data is successfully loaded when the above result is returned.
 
 ## Parameters
 
-<<<<<<< HEAD
-| Parameter                           | Required | Default value                                                | Description                                                  |
-| ----------------------------------- | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| name                                | YES      |                                                              | Name for this Kafka connector. It must be globally unique among all Kafka connectors within this Kafka Connect cluster. For example, starrocks-kafka-connector. |
-| connector.class                     | YES      | com.starrocks.connector.kafka.SinkConnector                  | Class used by this Kafka connector's sink.                   |
-| topics                              | YES      |                                                              | One or more topics to subscribe to, where each topic corresponds to a StarRocks table. By default, StarRocks assumes that the topic name matches the name of the StarRocks table. So StarRocks determines the target StarRocks table by using the topic name. Please choose either to fill in `topics` or `topics.regex` (below), but not both.However, if the StarRocks table name is not the same as the topic name, then use the optional `starrocks.topic2table.map` parameter (below) to specify the mapping from topic name to table name. |
-| topics.regex                        |          | Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in  `topics.regex`or `topics` (above), but not both. |                                                              |
-| starrocks.topic2table.map           | NO       |                                                              | The mapping of the StarRocks table name and the topic name when the topic name is different from the StarRocks table name. The format is `<topic-1>:<table-1>,<topic-2>:<table-2>,...`. |
-| starrocks.http.url                  | YES      |                                                              | The HTTP URL of the FE in your StarRocks cluster. The format is `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>,...`. Multiple addresses are separated by commas (,). For example, `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`. |
-| starrocks.database.name             | YES      |                                                              | The name of StarRocks database.                              |
-| starrocks.username                  | YES      |                                                      | The username of your StarRocks cluster account. The user needs the [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) privilege on the StarRocks table. |
-| starrocks.password                  | YES      |                                                              | The password of your StarRocks cluster account.              |
-| key.converter                       | NO      |           Key converter used by Kafka Connect cluster                                                           | This parameter specifies the key converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the keys of Kafka data. The default key converter is the one used by Kafka Connect cluster.|
-| value.converter                     | NO      |    Value converter used by Kafka Connect cluster                             | This parameter specifies the value converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the values of Kafka data. The default value converter is the one used by Kafka Connect cluster. |
-| key.converter.schema.registry.url   | NO       |                                                              | Schema registry URL for the key converter.                   |
-| value.converter.schema.registry.url | NO       |                                                              | Schema registry URL for the value converter.                 |
-| tasks.max                           | NO       | 1                                                            | The upper limit for the number of task threads that the Kafka connector can create, which is usually the same as the number of CPU cores on the worker nodes in the Kafka Connect cluster. You can tune this parameter to control load performance. |
-| bufferflush.maxbytes                | NO       | 94371840(90M)                                                | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. The maximum value ranges from 64 MB to 10 GB. Keep in mind that the Stream Load SDK buffer may create multiple Stream Load jobs to buffer data. Therefore, the threshold mentioned here refers to the total data size. |
-| bufferflush.intervalms              | NO       | 300000                                                       | Interval for sending a batch of data which controls the load latency. Range: [1000, 3600000]. |
-| connect.timeoutms                   | NO       | 1000                                                         | Timeout for connecting to the HTTP URL. Range: [100, 60000]. |
-| sink.properties.*                   |          |                                                              | Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM LOAD.md). |
-| sink.properties.format              | NO       | json                                                         | The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters**](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters)和** [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters). |
-=======
 ### name                                
 
 **Required**: YES<br/>
@@ -325,7 +296,6 @@ The data is successfully loaded when the above result is returned.
 **Default value**: json<br/>
 **Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters**](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters)和** [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters).
 
->>>>>>> a58bc9616d ([Doc]Update the demo in kafka connector (#41966))
 
 ## Limits
 
@@ -348,5 +318,5 @@ transforms.unwrap.delete.handling.mode
 
 In the above configurations, we specify `transforms=addfield,unwrap`.
 
-- The addfield transform is used to add the __op field to each record of Debezium CDC-formatted data to support the StarRocks primary key model table. If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform. The addfield transform class is com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord. It is included in the Kafka connector JAR file, so you do not need to manually install it.
+- The addfield transform is used to add the __op field to each record of Debezium CDC-formatted data to support the StarRocks Primary Key table. If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform. The addfield transform class is com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord. It is included in the Kafka connector JAR file, so you do not need to manually install it.
 - The unwrap transform is provided by Debezium and is used to unwrap Debezium's complex data structure based on the operation type. For more information, see [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html).
