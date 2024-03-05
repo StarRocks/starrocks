@@ -380,7 +380,7 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
 }
 
 void GroupReader::_init_read_chunk() {
-    std::vector<const SlotDescriptor*> read_slots;
+    std::vector<SlotDescriptor*> read_slots;
     for (const auto& column : _param.read_cols) {
         read_slots.emplace_back(column.slot_desc);
     }

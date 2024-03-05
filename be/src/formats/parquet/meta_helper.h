@@ -61,7 +61,7 @@ public:
 
 protected:
     GroupReaderParam::Column _build_column(int32_t idx_in_parquet, const tparquet::Type::type& type_in_parquet,
-                                           const SlotDescriptor* slot_desc, bool decode_needed,
+                                           SlotDescriptor* slot_desc, bool decode_needed,
                                            const TIcebergSchemaField* t_iceberg_schema_field = nullptr) const {
         GroupReaderParam::Column column{};
         column.idx_in_parquet = idx_in_parquet;

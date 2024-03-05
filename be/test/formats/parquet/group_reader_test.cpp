@@ -321,7 +321,6 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tp
             new SlotDescriptor(idx, fmt::format("col{}", idx), TypeDescriptor::from_logical_type(prim_type));
     GroupReaderParam::Column c;
     c.idx_in_parquet = idx;
-    c.idx_in_chunk = idx;
     c.type_in_parquet = par_type;
     c.slot_desc = slot;
     return c;
