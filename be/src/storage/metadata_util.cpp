@@ -311,7 +311,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
 
                 index_pb->set_index_type(IndexType::NGRAMBF);
                 const auto& index_col_name = index.columns[0];
-                const auto& mit = column_map.find(index_col_name);
+                const auto& mit = column_map.find(boost::to_lower_copy(index_col_name));
 
                 if (mit != column_map.end()) {
                     mit->second->set_is_bf_column(true);

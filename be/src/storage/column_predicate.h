@@ -47,7 +47,7 @@ class ExprContext;
 class RuntimeState;
 class SlotDescriptor;
 class BitmapIndexIterator;
-class BloomFilter;
+struct NgramBloomFilterReaderOptions;
 } // namespace starrocks
 
 namespace starrocks {
@@ -167,7 +167,9 @@ public:
     virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
 
     // Return false to filter out a data page.
-    virtual bool ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) const { return true; }
+    virtual bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const {
+        return true;
+    }
 
     [[nodiscard]] virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");

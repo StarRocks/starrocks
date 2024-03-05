@@ -184,8 +184,9 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     return false;
 }
 
-bool ColumnExprPredicate::ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) const {
-    return _expr_ctxs[0]->ngram_bloom_filter(bf, gram_num);
+bool ColumnExprPredicate::ngram_bloom_filter(const BloomFilter* bf,
+                                             const NgramBloomFilterReaderOptions& reader_options) const {
+    return _expr_ctxs[0]->ngram_bloom_filter(bf, reader_options);
 }
 
 Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
