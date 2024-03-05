@@ -50,9 +50,11 @@ private:
                                      const TRemoteSnapshotInfo& src_snapshot_info,
                                      const TabletMetadataPtr& tablet_metadata);
 
-    Status convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
-                               TxnLogPB::OpWrite* op_write,
-                               std::unordered_map<std::string, std::string>* segment_filename_map);
+    static Status convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
+                                      TxnLogPB::OpWrite* op_write,
+                                      std::unordered_map<std::string, std::string>* segment_filename_map);
+
+    static Status convert_delete_predicate_pb(DeletePredicatePB* delete_predicate);
 
 private:
     lake::TabletManager* _tablet_manager;
