@@ -136,7 +136,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
             boost::to_lower_copy(ctx->format));
 
-    if (boost::iequals(ctx->format, formats::PARQUET)) {
+    if (!boost::iequals(ctx->format, formats::PARQUET)) {
         return Status::NotSupported("got unsupported file format: " + ctx->format);
     }
 
