@@ -527,7 +527,7 @@ public class PseudoBackend {
             tabletInfo.setTablet_id(createTabletReq.tablet_id);
             tabletInfo.setSchema_hash(createTabletReq.tablet_schema.schema_hash);
             tabletInfo.setVersion(createTabletReq.version);
-            finish.setFinish_tablet_infos(Lists.newArrayList(new TTabletInfo()));
+            finish.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
         }
     }
 
