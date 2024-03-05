@@ -482,6 +482,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                     OptExpression.Builder builder = OptExpression.builder()
                             .setOp(newOlapScan)
+                            .setInputs(Lists.newArrayList())
                             .setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
                             context.stringColumnIdToDictColumnIds))
                             .setStatistics(optExpression.getStatistics())

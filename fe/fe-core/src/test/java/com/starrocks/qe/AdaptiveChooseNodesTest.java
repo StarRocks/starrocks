@@ -21,21 +21,50 @@ import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.stream.Collectors;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
 
-    @BeforeClass
-    public static void beforeClass() throws Exception {
+    @BeforeAll
+    public static void beforeAll() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
     }
 
     @Test
-    public void testDecreaseNodesInPipeline() throws Exception {
+    @Order(1)
+    void testIncreaseNodes() throws Exception {
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
+        connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
+        connectContext.getSessionVariable().setPipelineDop(2);
+        connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
+        String sql = "select * from (select * from skew_table where id = 1) t " +
+                "join (select abs(id) abs from skew_table where id = 1) tt on t.id = tt.abs";
+        ExecPlan execPlan = getExecPlan(sql);
+        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(execPlan.getFragments(), execPlan.getScanNodes(),
+                connectContext);
+        prepare.computeFragmentInstances();
+
+        ExecutionDAG dag = prepare.getExecutionDAG();
+        // scan fragment only hit one tablet use 1 nodes
+        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
+        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(3).getInstances().size());
+
+        // join fragment use 3 nodes
+        Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+    }
+
+    @Test
+    @Order(2)
+    void testDecreaseNodesInPipeline() throws Exception {
         ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
         connectContext.getSessionVariable().setPipelineDop(2);
@@ -72,25 +101,12 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
         Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getNumSendersPerExchange().size());
     }
 
-    @Test
-    public void testIncreaseNodes() throws Exception {
-        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
-        connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
-        connectContext.getSessionVariable().setPipelineDop(2);
-        connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
-        String sql = "select * from (select * from skew_table where id = 1) t " +
-                "join (select abs(id) abs from skew_table where id = 1) tt on t.id = tt.abs";
-        ExecPlan execPlan = getExecPlan(sql);
-        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(execPlan.getFragments(), execPlan.getScanNodes(),
-                connectContext);
-        prepare.computeFragmentInstances();
-
-        ExecutionDAG dag = prepare.getExecutionDAG();
-        // scan fragment only hit one tablet use 1 nodes
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(3).getInstances().size());
-
-        // join fragment use 3 nodes
-        Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+    @AfterAll
+    public static void afterAll() throws Exception {
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setChooseExecuteInstancesMode("locality");
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "32");
     }
+
+
 }
