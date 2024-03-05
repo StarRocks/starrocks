@@ -195,7 +195,9 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         // delete versions from new local tablet_meta
         for (const Version& version : versions_to_delete) {
             new_tablet_meta->delete_rs_meta_by_version(version, nullptr);
-            if (new_tablet_meta->version_for_delete_predicate(version)) {
+            // lock free version for version_for_delete_predicate
+            // caller of revise_tablet_meta has acquired the _meta_lock
+            if (new_tablet_meta->version_for_delete_predicate_unlocked(version)) {
                 new_tablet_meta->remove_delete_predicate_by_version(version);
             }
             LOG(INFO) << "delete version from new local tablet_meta when clone. [table=" << full_name()
@@ -836,9 +838,12 @@ Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& 
     return Status::OK();
 }
 
-// TODO(lingbin): what is the difference between version_for_delete_predicate() and
-// version_for_load_deletion()? should at least leave a comment
 bool Tablet::version_for_delete_predicate(const Version& version) {
+    std::shared_lock rlock(get_header_lock());
+    return version_for_delete_predicate_unlocked(version);
+}
+
+bool Tablet::version_for_delete_predicate_unlocked(const Version& version) {
     return _tablet_meta->version_for_delete_predicate(version);
 }
 
@@ -1026,7 +1031,7 @@ void Tablet::calculate_cumulative_point() {
             break;
         }
 
-        bool is_delete = version_for_delete_predicate(rs->version());
+        bool is_delete = version_for_delete_predicate_unlocked(rs->version());
         // break the loop if segments in this rowset is overlapping, or is a singleton and not delete rowset.
         if (rs->is_segments_overlapping() || (rs->is_singleton_delta() && !is_delete)) {
             _cumulative_point = rs->version().first;
