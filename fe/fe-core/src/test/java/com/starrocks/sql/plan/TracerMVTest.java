@@ -165,6 +165,6 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Tracers.close();
         assertContains(pr, "[MV TRACE]");
         assertContains(pr, "has related materialized views");
-        assertContains(pr, "Rewrite aggregate group-by/agg expr failed");
+        assertContains(pr, "Rewrite projection with aggregate group-by/agg expr failed");
     }
 }

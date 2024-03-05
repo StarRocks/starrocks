@@ -51,6 +51,11 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         setTableStatistics(t4, 150000 * scale);
         OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
+
+        // When force rule based rewrite is enabled, query will be transformed into scan in Rule Rewrite Phase.
+        // And OneTabletExecutorVisitor#visitLogicalTableScan will deduce `supportOneTabletOpt` because this test
+        // case has no tablets left after mv rewrite.
+        connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(false);
     }
 
     @ParameterizedTest(name = "Tpch.{0}")
