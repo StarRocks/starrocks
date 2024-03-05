@@ -32,7 +32,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `db`                VARCHAR(96)                COMMENT "查询所在数据库",
   `state`             VARCHAR(8)                 COMMENT "查询状态（EOF，ERR，OK）",
   `errorCode`         VARCHAR(512)               COMMENT "错误码",
-  `queryTime`         BIGINT                     COMMENT  "查询执行时间（毫秒）",
+  `queryTime`         BIGINT                     COMMENT "查询执行时间（毫秒）",
   `scanBytes`         BIGINT                     COMMENT "查询扫描的字节数",
   `scanRows`          BIGINT                     COMMENT "查询扫描的记录行数",
   `returnRows`        BIGINT                     COMMENT "查询返回的结果行数",
@@ -155,15 +155,15 @@ INSTALL PLUGIN FROM "<absolute_path_to_package>";
     以下示例演示审计日志成功导入的情况：
 
     ```SQL
-        mysql> SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__\G
+    mysql> SELECT * FROM starrocks_audit_db__.starrocks_audit_tbl__\G
     *************************** 1. row ***************************
          queryId: 84a69010-d47e-11ee-9647-024228044898
        timestamp: 2024-02-26 16:10:35
        queryType: query
         clientIp: xxx.xx.xxx.xx:65283
             user: root
-   authorizedUser: 'root'@'%'
-   resourceGroup: default_wg
+    authorizedUser: 'root'@'%'
+    resourceGroup: default_wg
          catalog: default_catalog
               db: 
            state: EOF
@@ -192,4 +192,4 @@ INSTALL PLUGIN FROM "<absolute_path_to_package>";
 UNINSTALL PLUGIN AuditLoader;
 ```
 
-所有配置设置正确后，您可以按照上述步骤重新安装 。
+所有配置设置正确后，您可以按照上述步骤重新安装。
