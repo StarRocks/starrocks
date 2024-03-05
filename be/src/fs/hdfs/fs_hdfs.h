@@ -19,8 +19,8 @@
 namespace starrocks {
 
 struct HdfsReadMetricsKey {
-    static constexpr std::string_view kOpenFSTimeNs = "OpenFSTimeNs";
-    static constexpr std::string_view kOpenFileTimeNs = "OpenFileTimeNs";
+    static constexpr std::string_view kTotalOpenFSTimeNs = "TotalOpenFSTimeNs";
+    static constexpr std::string_view kTotalOpenFileTimeNs = "TotalOpenFileTimeNs";
 
     static constexpr std::string_view kTotalBytesRead = "TotalBytesRead";
     static constexpr std::string_view kTotalLocalBytesRead = "TotalLocalBytesRead";

@@ -39,7 +39,7 @@ public:
 
     StatusOr<hdfsFS> getOrCreateFS() {
         if (_hdfs_client == nullptr) {
-            SCOPED_RAW_TIMER(&_open_fs_time_ns);
+            SCOPED_RAW_TIMER(&_total_open_fs_time_ns);
             std::string namenode;
             RETURN_IF_ERROR(get_namenode_from_path(_path, &namenode));
             RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, _hdfs_client, _options));
@@ -49,7 +49,7 @@ public:
 
     StatusOr<hdfsFile> getOrCreateFile() {
         if (_file == nullptr) {
-            SCOPED_RAW_TIMER(&_open_file_time_ns);
+            SCOPED_RAW_TIMER(&_total_open_file_time_ns);
             auto st = getOrCreateFS();
             if (!st.ok()) return st.status();
             _file = hdfsOpenFile(st.value(), _path.c_str(), O_RDONLY, _buffer_size, 0, 0);
@@ -67,8 +67,8 @@ public:
 
     hdfsFS getFS() { return _hdfs_client->hdfs_fs; }
     hdfsFile getFile() { return _file; }
-    int64_t getOpenFSTimeNs() const { return _open_fs_time_ns; }
-    int64_t getOpenFileTimeNs() const { return _open_file_time_ns; }
+    int64_t getTotalOpenFSTimeNs() const { return _total_open_fs_time_ns; }
+    int64_t getTotalOpenFileTimeNs() const { return _total_open_file_time_ns; }
     const std::string& getPath() const { return _path; }
     void setOffset(int64_t offset) { _offset = offset; }
 
@@ -159,8 +159,8 @@ private:
     int _buffer_size;
     std::shared_ptr<HdfsFsClient> _hdfs_client = nullptr;
     hdfsFile _file = nullptr;
-    int64_t _open_fs_time_ns = 0;
-    int64_t _open_file_time_ns = 0;
+    int64_t _total_open_fs_time_ns = 0;
+    int64_t _total_open_file_time_ns = 0;
     int64_t _offset = 0;
 };
 
@@ -246,8 +246,8 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
         if (file == nullptr) {
             return Status::OK();
         }
-        stats->append(HdfsReadMetricsKey::kOpenFSTimeNs, _handle->getOpenFSTimeNs());
-        stats->append(HdfsReadMetricsKey::kOpenFileTimeNs, _handle->getOpenFileTimeNs());
+        stats->append(HdfsReadMetricsKey::kTotalOpenFSTimeNs, _handle->getTotalOpenFSTimeNs());
+        stats->append(HdfsReadMetricsKey::kTotalOpenFileTimeNs, _handle->getTotalOpenFileTimeNs());
 
         struct hdfsReadStatistics* hdfs_statistics = nullptr;
         auto r = hdfsFileGetReadStatistics(file, &hdfs_statistics);

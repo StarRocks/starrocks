@@ -295,7 +295,7 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
 
     for (int64_t i = 0, sz = statistics->size(); i < sz; i++) {
         auto&& name = statistics->name(i);
-        if (name == HdfsReadMetricsKey::kOpenFSTimeNs || name == HdfsReadMetricsKey::kOpenFileTimeNs) {
+        if (name == HdfsReadMetricsKey::kTotalOpenFSTimeNs || name == HdfsReadMetricsKey::kTotalOpenFileTimeNs) {
             auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::TIME_NS, kHdfsIOProfileSectionPrefix);
             COUNTER_UPDATE(counter, statistics->value(i));
         } else if (name == HdfsReadMetricsKey::kTotalBytesRead || name == HdfsReadMetricsKey::kTotalLocalBytesRead ||
