@@ -45,7 +45,7 @@ curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_ro
 - MinIO 终端节点（Endpoint）
 - 作为访问凭证的 Access Key 和 Secret Key
 
-<img src="../assets/quick-start/MinIO-create.png" width="200" />
+![MinIO access key](../assets/quick-start/MinIO-create.png)
 
 ## 通过 INSERT+FILES() 导入
 
