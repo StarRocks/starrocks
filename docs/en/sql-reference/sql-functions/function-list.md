@@ -68,7 +68,6 @@ You can find a function based on the following categories:
 
 ## Array functions
 
-<<<<<<< HEAD
 - [all_match](../sql-functions/array-functions/all_match.md)
 - [any_match](../sql-functions/array-functions/any_match.md)
 - [array_agg](../sql-functions/array-functions/array_agg.md)
@@ -101,41 +100,6 @@ You can find a function based on the following categories:
 - [element_at](../sql-functions/array-functions/element_at.md)
 - [reverse](../sql-functions/array-functions/reverse.md)
 - [unnest](../sql-functions/array-functions/unnest.md)
-=======
-- [all_match](./array-functions/all_match.md)
-- [any_match](./array-functions/any_match.md)
-- [array_agg](./array-functions/array_agg.md)
-- [array_append](./array-functions/array_append.md)
-- [array_avg](./array-functions/array_avg.md)
-- [array_concat](./array-functions/array_concat.md)
-- [array_contains](./array-functions/array_contains.md)
-- [array_contains_all](./array-functions/array_contains_all.md)
-- [array_contains_seq](./array-functions/array_contains_seq.md)
-- [array_cum_sum](./array-functions/array_cum_sum.md)
-- [array_difference](./array-functions/array_difference.md)
-- [array_distinct](./array-functions/array_distinct.md)
-- [array_filter](./array-functions/array_filter.md)
-- [array_generate](./array-functions/array_generate.md)
-- [array_intersect](./array-functions/array_intersect.md)
-- [array_join](./array-functions/array_join.md)
-- [array_length](./array-functions/array_length.md)
-- [array_map](./array-functions/array_map.md)
-- [array_max](./array-functions/array_max.md)
-- [array_min](./array-functions/array_min.md)
-- [array_position](./array-functions/array_position.md)
-- [array_remove](./array-functions/array_remove.md)
-- [array_slice](./array-functions/array_slice.md)
-- [array_sort](./array-functions/array_sort.md)
-- [array_sortby](./array-functions/array_sortby.md)
-- [array_sum](./array-functions/array_sum.md)
-- [arrays_overlap](./array-functions/arrays_overlap.md)
-- [array_to_bitmap](./array-functions/array_to_bitmap.md)
-- [array_unique_agg](./array-functions/array_unique_agg.md)
-- [cardinality](./array-functions/cardinality.md)
-- [element_at](./array-functions/element_at.md)
-- [reverse](./string-functions/reverse.md)
-- [unnest](./array-functions/unnest.md)
->>>>>>> 6c17aad57e ([Doc] recategorize a few functions (#42056))
 
 ## Binary functions
 
@@ -446,13 +410,9 @@ You can find a function based on the following categories:
 
 ## Scalar functions
 
-<<<<<<< HEAD
-- [hll_cardinality](../sql-functions/scalar-functions/hll_cardinality.md)
-=======
 - [hll_cardinality](./scalar-functions/hll_cardinality.md)
 - [hll_empty](./scalar-functions/hll_empty.md)
 - [hll_hash](./scalar-functions/hll_hash.md)
->>>>>>> 6c17aad57e ([Doc] recategorize a few functions (#42056))
 
 ## Struct functions
 
