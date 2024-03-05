@@ -215,10 +215,16 @@ public class UpdatePlanner {
         for (int columnIdx = 0; columnIdx < outputColumns.size(); ++columnIdx) {
             ColumnRefOperator outputColumn = outputColumns.get(columnIdx);
             String colName = colNames.get(columnIdx);
+            // It's safe to use getColumn directly, because the column name's case-insensitive is the same with table's schema.
             Column column = targetTable.getColumn(colName);
             Preconditions.checkState(column != null, "Column %s not found in table %s", colName,
                     targetTable.getName());
             if (!column.getType().matchesType(outputColumn.getType())) {
+                // This should be always true but add a check here to avoid updating the wrong column type.
+                if (!column.getType().isFullyCompatible(outputColumn.getType())) {
+                    throw new SemanticException(String.format("Output column type %s is not compatible table column type: %s",
+                            outputColumn.getType(), column.getType()));
+                }
                 ColumnRefOperator k = columnRefFactory.create(column.getName(), column.getType(), column.isAllowNull());
                 ScalarOperator castOperator = new CastOperator(column.getType(), outputColumn, true);
                 columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));

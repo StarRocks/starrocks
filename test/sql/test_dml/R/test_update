@@ -1,4 +1,7 @@
 -- name: test_update
+drop table if exists primary_key_with_null;
+-- result:
+-- !result
 CREATE TABLE `primary_key_with_null` ( 
     `k1`  date, 
     `k2`  datetime, 
@@ -8,11 +11,11 @@ CREATE TABLE `primary_key_with_null` (
     `k6`  tinyint, 
     `k7`  smallint, 
     `k8`  int, 
-    `k9`  bigint, 
-    `k10` largeint, 
-    `k11` float, 
-    `k12` double, 
-    `k13` decimal(27,9) 
+    `K9`  bigint, 
+    `K10` largeint, 
+    `K11` float, 
+    `K12` double, 
+    `K13` decimal(27,9) 
 ) PRIMARY KEY(`k1`, `k2`, `k3`) 
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
 PROPERTIES ( "replication_num" = "1");
@@ -45,6 +48,27 @@ select * from primary_key_with_null order by k1, k2, k3;
 2020-10-24	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
 2020-10-25	2020-10-23 12:12:12	k4	k4	0	1	2	3	4	None	None	None	2.889000000
 -- !result
+UPDATE primary_key_with_null SET `K4`  = 'update_k4', `K5`  = 2, `K6`  = 1, `k7`  = 7, `k8`  = 0 WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-22 00:00:00';
+-- result:
+-- !result
+select * from primary_key_with_null order by k1, k2, k3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k1	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-23 12:12:12	k2	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+2020-10-24	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-25	2020-10-23 12:12:12	k4	k4	0	1	2	3	4	None	None	None	2.889000000
+-- !result
+UPDATE primary_key_with_null SET `K4`  = 'update_k4', `K5`  = 'INVALID', `K6`  = 'xxx', `k7`  = 7, `k8`  = 0 WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-22 00:00:00';
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Invalid number format: xxx.')
+-- !result
+select * from primary_key_with_null order by k1, k2, k3;
+-- result:
+2020-10-22	2020-10-23 12:12:12	k1	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-23	2020-10-23 12:12:12	k2	k4	0	0	2	3	4	5	1.1	1.12	2.889000000
+2020-10-24	2020-10-23 12:12:12	k3	k4	0	1	2	3	4	5	1.1	1.12	2.889000000
+2020-10-25	2020-10-23 12:12:12	k4	k4	0	1	2	3	4	None	None	None	2.889000000
+-- !result
 UPDATE primary_key_with_null SET `k5`  = 5;
 -- result:
 -- !result
@@ -54,4 +78,7 @@ select * from primary_key_with_null order by k1, k2, k3;
 2020-10-23	2020-10-23 12:12:12	k2	k4	1	0	2	3	4	5	1.1	1.12	2.889000000
 2020-10-24	2020-10-23 12:12:12	k3	k4	1	1	2	3	4	5	1.1	1.12	2.889000000
 2020-10-25	2020-10-23 12:12:12	k4	k4	1	1	2	3	4	None	None	None	2.889000000
+-- !result
+drop table if exists primary_key_with_null;
+-- result:
 -- !result

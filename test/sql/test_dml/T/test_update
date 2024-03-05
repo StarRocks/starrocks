@@ -1,4 +1,5 @@
 -- name: test_update
+drop table if exists primary_key_with_null;
 CREATE TABLE `primary_key_with_null` ( 
     `k1`  date, 
     `k2`  datetime, 
@@ -8,11 +9,11 @@ CREATE TABLE `primary_key_with_null` (
     `k6`  tinyint, 
     `k7`  smallint, 
     `k8`  int, 
-    `k9`  bigint, 
-    `k10` largeint, 
-    `k11` float, 
-    `k12` double, 
-    `k13` decimal(27,9) 
+    `K9`  bigint, 
+    `K10` largeint, 
+    `K11` float, 
+    `K12` double, 
+    `K13` decimal(27,9) 
 ) PRIMARY KEY(`k1`, `k2`, `k3`) 
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
 PROPERTIES ( "replication_num" = "1");
@@ -29,5 +30,14 @@ select * from primary_key_with_null order by k1, k2, k3;
 UPDATE primary_key_with_null SET `k4`  = 'update_k4', `k5`  = 1, `k6`  = 1, `k7`  = 7, `k8`  = 0 WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-22 00:00:00';
 select * from primary_key_with_null order by k1, k2, k3;
 
+-- test column case-insensitive
+UPDATE primary_key_with_null SET `K4`  = 'update_k4', `K5`  = 2, `K6`  = 1, `k7`  = 7, `k8`  = 0 WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-22 00:00:00';
+select * from primary_key_with_null order by k1, k2, k3;
+
+-- invalid column type
+UPDATE primary_key_with_null SET `K4`  = 'update_k4', `K5`  = 'INVALID', `K6`  = 'xxx', `k7`  = 7, `k8`  = 0 WHERE `k3` ="k3" and `k1`='2020-10-22' and `k2`='2020-10-22 00:00:00';
+select * from primary_key_with_null order by k1, k2, k3;
+
 UPDATE primary_key_with_null SET `k5`  = 5;
 select * from primary_key_with_null order by k1, k2, k3;
+drop table if exists primary_key_with_null;
