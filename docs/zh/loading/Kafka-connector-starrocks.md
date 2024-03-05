@@ -41,19 +41,6 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 ### 数据集
 
-<<<<<<< HEAD
-    ```Properties
-    name=starrocks-kafka-connector
-    connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
-    topics=dbserver1.inventory.customers
-    starrocks.http.url=192.168.xxx.xxx:8030,192.168.xxx.xxx:8030
-    starrocks.username=root
-    starrocks.password=123456
-    starrocks.database.name=inventory
-    key.converter=io.confluent.connect.json.JsonSchemaConverter
-    value.converter=io.confluent.connect.json.JsonSchemaConverter
-    ```
-=======
 假设 Kafka 集群的 Topic `test` 中存在如下 JSON 格式的数据。
 
 ```JSON
@@ -97,11 +84,10 @@ CREATE TABLE test_tbl (id INT, city STRING);
       starrocks.database.name=example_db
       sink.properties.strip_outer_array=true
       ```
->>>>>>> a58bc9616d ([Doc]Update the demo in kafka connector (#41966))
 
     > **注意**
     >
-    > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键模型的表，为了将源端的数据变更同步至主键模型的表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
+    > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
 2. 配置并启动 Kafka Connect。
 
@@ -223,7 +209,7 @@ MySQL [example_db]> select * from test_tbl;
 
 ### 导入 Debezium CDC 格式数据
 
-如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键模型表，则在 Kafka connector 配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#使用示例)外，还需要配置 `transforms` 以及相关参数。
+如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键表，则在 Kafka connector 配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#使用示例)外，还需要配置 `transforms` 以及相关参数。
 
 ```Properties
 transforms=addfield,unwrap
@@ -235,5 +221,5 @@ transforms.unwrap.delete.handling.mode=rewrite
 
 在上述配置中，我们指定 `transforms=addfield,unwrap`。
 
-- addfield transform 用于向 Debezium CDC 格式数据的每个记录添加一个__op字段，以支持 [主键模型表](../table_design/table_types/primary_key_table.md)，。如果 StarRocks 表不是主键模型表，则无需指定 addfield 转换。addfield transform 的类是 com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
+- addfield transform 用于向 Debezium CDC 格式数据的每个记录添加一个__op字段，以支持 [主键表](../table_design/table_types/primary_key_table.md)，。如果 StarRocks 表不是主键表，则无需指定 addfield 转换。addfield transform 的类是 com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
 - unwrap transform 是指由 Debezium 提供的 unwrap，可以根据操作类型 unwrap Debezium 复杂的数据结构。更多信息，参见 [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html)。
