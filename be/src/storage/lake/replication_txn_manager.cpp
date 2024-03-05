@@ -434,11 +434,11 @@ Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* del
         if (condition.condition_op == "IS") {
             auto* is_null_predicate = delete_predicate->add_is_null_predicates();
             is_null_predicate->set_column_name(condition.column_name);
-            is_null_predicate->set_is_not_null(condition.condition_values[0].starts_with("NOT"));
+            is_null_predicate->set_is_not_null(std::string_view(condition.condition_values[0]).starts_with("NOT"));
         } else if (condition.condition_op == "*=" || condition.condition_op == "!*=") {
             auto* in_predicate = delete_predicate->add_in_predicates();
             in_predicate->set_column_name(condition.column_name);
-            in_predicate->set_is_not_in(condition.condition_op.starts_with('!'));
+            in_predicate->set_is_not_in(std::string_view(condition.condition_op).starts_with('!'));
             for (const auto& value : condition.condition_values) {
                 in_predicate->add_values()->assign(value);
             }
