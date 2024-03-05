@@ -429,7 +429,6 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
-    Status status;
 
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
@@ -446,11 +445,10 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        size_t len = 0;
         std::string value;
-        value.resize(100);
-        RETURN_IF_ERROR(FPE::encrypt(src_value.data, key, value.data(), &len, length));
-        value.resize(len);
+        auto src_size = src_value.size > FPE::MIN_LENGTH ? src_value.size : FPE::MIN_LENGTH;
+        value.resize(src_size);
+        RETURN_IF_ERROR(FPE::encrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
 
         result.append(Slice(value));
     }
@@ -467,13 +465,13 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, c
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
     Status status;
-    std::string value;
 
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
             result.append_null();
             continue;
         }
+
         auto src_value = src_viewer.value(row);
         auto key_value = key_viewer.value(row);
         auto key_size = key_value.size;
@@ -481,8 +479,9 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, c
             return Status::InvalidArgument("key size must 16 or 24 or 32");
         }
 
+        std::string value;
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::encrypt_num(src_value.data, key, value));
+        RETURN_IF_ERROR(FPE::encrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value));
 
         result.append(Slice(value));
     }
@@ -499,14 +498,13 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
-    Status status;
-    std::string value;
 
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
             result.append_null();
             continue;
         }
+
         auto src_value = src_viewer.value(row);
         auto key_value = key_viewer.value(row);
         auto length = length_viewer.value(row);
@@ -516,8 +514,11 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::decrypt(src_value.data, key, value, length));
 
+        std::string value;
+        auto src_size = src_value.size > FPE::MIN_LENGTH ? src_value.size : FPE::MIN_LENGTH;
+        value.resize(src_size);
+        RETURN_IF_ERROR(FPE::decrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
         result.append(Slice(value));
     }
 
@@ -548,7 +549,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt_num(FunctionContext* ctx, c
         }
 
         const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::decrypt_num(src_value.data, key, value));
+        RETURN_IF_ERROR(FPE::decrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value));
 
         result.append(Slice(value));
     }

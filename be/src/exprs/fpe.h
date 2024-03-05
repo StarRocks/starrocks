@@ -25,21 +25,21 @@ class FPE {
 public:
     FPE() = delete;
 
-    static std::string_view trim_leading_zeros(const std::string_view& str);
-    static std::string_view trim_trailing_zeros(const std::string_view& str);
-    static Status encrypt(const std::string_view& num_str, const std::string_view& key, char* buffer, size_t* len, int radix);
-    static Status encrypt_num(const std::string_view& num_str, const std::string_view& key, std::string& value);
-    static Status decrypt(const std::string_view& num_str, const std::string_view& key, std::string& value, int radix);
-    static Status decrypt_num(const std::string_view& num_str,const std::string_view& key, std::string& value);
+    static std::string trim_zeros(const std::string& str, size_t num_flag_pos);
+    static Status encrypt(std::string_view num_str, std::string_view key, char* buffer, int radix);
+    static Status encrypt_num(std::string_view num_str, std::string_view key, std::string& value);
+    static Status decrypt(std::string_view num_str, std::string_view key, char* buffer, int radix);
+    static Status decrypt_num(std::string_view num_str, std::string_view key, std::string& value);
 
 public:
     static const std::string_view DEFAULT_KEY;
     static const int DEFAULT_RADIX = 10;
+    static const int MIN_LENGTH = 6;
 
 private:
-    static const int MIN_LENGTH = 6;
     static const char FIXED_NUM = '1';
     constexpr static const double EXPANDED = 100000.0 * 1000000000.0;
+    constexpr static const int EXPANDED_LENGTH = 14;
     constexpr static const uint8_t TWEAK[] = {};
 };
 
