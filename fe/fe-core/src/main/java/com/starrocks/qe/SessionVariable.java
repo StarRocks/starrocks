@@ -1504,7 +1504,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMaterializedViewRewritePartitionCompensate = true;
 
     @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
-    private boolean enableForceRuleBasedMvRewrite = false;
+    private boolean enableForceRuleBasedMvRewrite = true;
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
@@ -2974,6 +2974,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return materializedViewJoinSameTablePermutationLimit;
     }
 
+    @Deprecated
     public boolean isEnableMaterializedViewSingleTableViewDeltaRewrite() {
         return enableMaterializedViewSingleTableViewDeltaRewrite;
     }

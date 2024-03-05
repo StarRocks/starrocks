@@ -43,11 +43,9 @@ You can find a function based on the following categories:
 - [covar_samp](./aggregate-functions/covar_samp.md)
 - [count](./aggregate-functions/count.md)
 - [count_if](./aggregate-functions/count_if.md)
-- [group_concat](./aggregate-functions/group_concat.md)
+- [group_concat](./string-functions/group_concat.md)
 - [grouping](./aggregate-functions/grouping.md)
 - [grouping_id](./aggregate-functions/grouping_id.md)
-- [hll_empty](./aggregate-functions/hll_empty.md)
-- [hll_hash](./aggregate-functions/hll_hash.md)
 - [hll_raw_agg](./aggregate-functions/hll_raw_agg.md)
 - [hll_union](./aggregate-functions/hll_union.md)
 - [hll_union_agg](./aggregate-functions/hll_union_agg.md)
@@ -101,7 +99,7 @@ You can find a function based on the following categories:
 - [array_unique_agg](./array-functions/array_unique_agg.md)
 - [cardinality](./array-functions/cardinality.md)
 - [element_at](./array-functions/element_at.md)
-- [reverse](./array-functions/reverse.md)
+- [reverse](./string-functions/reverse.md)
 - [unnest](./array-functions/unnest.md)
 
 ## Binary functions
@@ -420,6 +418,8 @@ You can find a function based on the following categories:
 ## Scalar functions
 
 - [hll_cardinality](./scalar-functions/hll_cardinality.md)
+- [hll_empty](./scalar-functions/hll_empty.md)
+- [hll_hash](./scalar-functions/hll_hash.md)
 
 ## Struct functions
 

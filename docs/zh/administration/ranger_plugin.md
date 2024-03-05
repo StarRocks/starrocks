@@ -12,7 +12,11 @@ Apache Ranger 提供以下核心模块：
 - Agent Plugin：嵌入到 Hadoop 生态圈组件的 Plugin，定期从 Ranger Admin 拉取安全策略，存储在本地文件中。当用户访问组件时，Plugin 会根据安全策略对请求进行安全评估，将结果反馈给相应组件。
 - User Sync：用于拉取用户和用户组的信息，将用户和用户组的权限数据同步到 Ranger 的数据库中。
 
-除了原生的 RBAC 权限系统，StarRocks 3.1 及后续版本还支持通过 Apache Ranger 来进行访问控制，提供更高层次的数据安全保障。
+除了原生的 RBAC 权限系统，StarRocks 3.1 及后续版本还支持通过 Apache Ranger 来进行访问控制，提供更高层次的数据安全保障。目前 StarRocks 在能力上支持：
+
+- 通过 Ranger 创建 Access policy、Masking policy、Row-level filter policy。
+- 支持 Ranger 审计日志。
+- 暂不支持 Kerberos 认证的 Ranger Server。
 
 本文介绍 StarRocks 与 Apache Ranger 集成后的权限控制方式以及集成过程。关于如何在 Ranger 上创建权限策略来管理数据安全，参见 [Apache Ranger 官网](https://ranger.apache.org/)。
 
@@ -29,16 +33,10 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 - 全部使用 Ranger 进行权限管理。对于内表及内部对象，在 StarRocks Service 内管理；对于 External Catalog，无需额外创建，直接复用对应外部数据源对应的 Ranger Service。
 - External Catalog 使用 Ranger 进行权限管理，复用外部数据源对应的 Ranger Service；内部对象及内部表在 StarRocks 内部进行授权。
 
-目前 StarRocks 在能力上支持：
-
-- 通过 Ranger 创建 Access policy、Masking policy、Row-level filter policy。
-- 支持 Ranger 审计日志。
-- 暂不支持 Kerberos 认证的 Ranger Server。
-
 **权限管理流程：**
 
-- 对于用户认证，您也可以选择通过 LDAP 来完成。Ranger 可以同步 LDAP 用户，并对其进行权限规则配置。StarRocks 也可以通过 LDAP 完成用户登录认证。
-- 在用户发起查询时，StarRocks 会对查询语句进行解析，向 Ranger 传递用户信息及所需权限；Ranger 则会在对应 Service 中根据创建的访问策略来判断用户是否有访问权限，并向 StarRocks 返回鉴权结果。如果用户有访问权限，StarRocks 会返回查询数据；如果用户无访问权限，StarRocks 会返回报错。
+1. 对于用户认证，您也可以选择通过 LDAP 来完成。Ranger 可以同步 LDAP 用户，并对其进行权限规则配置。StarRocks 也可以通过 LDAP 完成用户登录认证。
+2. 在用户发起查询时，StarRocks 会对查询语句进行解析，向 Ranger 传递用户信息及所需权限；Ranger 则会在对应 Service 中根据创建的访问策略来判断用户是否有访问权限，并向 StarRocks 返回鉴权结果。如果用户有访问权限，StarRocks 会返回查询数据；如果用户无访问权限，StarRocks 会返回报错。
 
 ## 前提条件
 
@@ -53,7 +51,11 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 ## 集成过程
 
-### 安装 ranger-starrocks-plugin
+### 安装 ranger-starrocks-plugin（可选）
+
+:::note
+本步骤的主要目的是使用 Ranger 的对象名称自动补全功能，非必要步骤。在 Ranger 中授权时，通常对象的数量都较多、名称较长，Ranger 提供了自动补全功能，即输入对象名称的一部分时，Ranger 可以自动补全对象的完整名称，从而方便授权。如果您没有 Ranger 集群的操作权限或不需要此功能，可以跳过本步骤。
+:::
 
 1. 在 Ranger Admin 的 `ews/webapp/WEB-INF/classes/ranger-plugins` 目录下创建 `starrocks` 文件夹。
 
@@ -76,6 +78,15 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ```SQL
    wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
    ```
+
+  :::note 
+  如果您不需要开启 Ranger 的自动补全功能，即在上一步骤中没有安装 ranger-starrocks-plugin，您需要修改 .json 文件中的 `implClass` 为空，即：
+
+  ```JSON
+  "implClass": "",
+  ```
+
+  :::
 
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
 
@@ -166,7 +177,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 2. 重启所有 FE。
 3. 配置 Catalog。
 
-   创建 External Catalog 时，添加 PROPERTIES `"ranger.plugin.hive.service.name"`.
+   - 创建 External Catalog 时，添加 PROPERTIES `"ranger.plugin.hive.service.name"`.
 
     ```SQL
       CREATE EXTERNAL CATALOG hive_catalog_1
@@ -178,7 +189,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
       )
     ```
 
-   也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
+    - 也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
 
     ```SQL
       ALTER CATALOG hive_catalog_1
