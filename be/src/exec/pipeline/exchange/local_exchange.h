@@ -115,7 +115,7 @@ public:
 
     virtual ~LocalExchanger() = default;
 
-    enum class PassThroughType { CHUNK = 0, RANDOM = 1, ADPATIVE = 2 };
+    enum class PassThroughType { CHUNK = 0, RANDOM = 1, ADPATIVE = 2, SCALE = 3 };
 
     virtual Status prepare(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}

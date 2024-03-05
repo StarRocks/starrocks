@@ -72,6 +72,13 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange
                                                          LocalExchanger::PassThroughType::CHUNK);
 }
 
+OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(
+        RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators, int num_receivers,
+        LocalExchanger::PassThroughType pass_through_type) {
+    return _maybe_interpolate_local_passthrough_exchange(state, plan_node_id, pred_operators, num_receivers, false,
+                                                         pass_through_type);
+}
+
 OpFactories PipelineBuilderContext::maybe_interpolate_local_random_passthrough_exchange(RuntimeState* state,
                                                                                         int32_t plan_node_id,
                                                                                         OpFactories& pred_operators,
@@ -113,6 +120,8 @@ OpFactories PipelineBuilderContext::_maybe_interpolate_local_passthrough_exchang
         local_exchange = std::make_shared<AdaptivePassthroughExchanger>(mem_mgr, local_exchange_source.get());
     } else if (pass_through_type == LocalExchanger::PassThroughType::RANDOM) {
         local_exchange = std::make_shared<RandomPassthroughExchanger>(mem_mgr, local_exchange_source.get());
+    } else if (!state->is_writer_scale_closed() && pass_through_type == LocalExchanger::PassThroughType::SCALE) {
+        local_exchange = std::make_shared<ConnectorSinkPassthroughExchanger>(mem_mgr, local_exchange_source.get());
     } else {
         local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
     }
