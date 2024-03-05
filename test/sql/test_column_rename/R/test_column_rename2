@@ -98,7 +98,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Table 'site_access' already exists.")
+E: (1050, "Getting analyzing error. Detail message: Table 'site_access' already exists.")
 -- !result
 alter table site_access rename column site_id to id;
 -- result:

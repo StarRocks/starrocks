@@ -10,5 +10,5 @@ DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- !result
 PREPARE stmt1 FROM insert overwrite prepare_stmt values (?, ?);
 -- result:
-E: (1064, 'Invalid statement type for prepared statement')
+E: (1295, 'Invalid statement type for prepared statement')
 -- !result
