@@ -576,8 +576,6 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
     Chunk chunk0({c0, c1}, _schema);
     Chunk chunk1({c2, c3}, _schema);
 
-    //const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
-
     VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
 
     {
@@ -604,6 +602,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
+        rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
@@ -633,6 +632,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
         rowset->set_id(2);
+        rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
