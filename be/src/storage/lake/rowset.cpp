@@ -280,7 +280,12 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
             auto packaged_func = [task]() { (*task)(); };
             if (auto st = ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
-                return st;
+                // try load segment serially
+                auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
+                                                            fill_metadata_cache, _tablet_schema);
+                if (auto status = check_status(segment_or, seg_name); !status.ok()) {
+                    return status;
+                }
             }
             segment_futures.push_back(task->get_future());
         } else {
