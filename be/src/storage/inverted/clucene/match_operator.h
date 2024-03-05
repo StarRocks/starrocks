@@ -32,10 +32,11 @@ public:
     Status match(roaring::Roaring* result);
 
 protected:
+    virtual Status _match_internal(lucene::search::HitCollector* hit_collector) = 0;
+
     lucene::search::IndexSearcher* _searcher;
     lucene::store::Directory* _dir;
     std::wstring _field_name;
-    virtual Status _match_internal(lucene::search::HitCollector* hit_collector) = 0;
 };
 
 class MatchTermOperator : public MatchOperator {

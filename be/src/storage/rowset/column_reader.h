@@ -190,6 +190,8 @@ private:
     // return zero means an invalid gram num
     size_t _get_gram_num_for_ngram() const;
 
+    bool _inverted_index_loaded() const { return invoked(_inverted_index_load_once); }
+
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
@@ -223,7 +225,6 @@ private:
     // is never released before the end of the parent's life cycle,
     // so here we just use a normal pointer
     Segment* _segment = nullptr;
-    mutable std::mutex _load_index_lock;
 
     uint8_t _flags = 0;
     // counter to record the reader's mem usage, sub readers excluded.
@@ -231,6 +232,9 @@ private:
 
     // only for json flat column
     std::string _name;
+
+    // only used for inverted index load
+    OnceFlag _inverted_index_load_once;
 };
 
 } // namespace starrocks

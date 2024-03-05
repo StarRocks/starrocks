@@ -119,7 +119,6 @@ DROP TABLE t_test_basic_create_index_pk;
 DROP TABLE t_test_basic_create_index_dup;
 -- result:
 -- !result
-
 -- name: test_query_gin_index
 CREATE TABLE `t_test_gin_index_query` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -181,14 +180,683 @@ select count(*) from t_test_gin_index_query where query_english like '%teria%';
 -- result:
 1
 -- !result
-select count(*) from t_test_gin_index_query where query_chinese = '你好';
--- result:
-1
--- !result
-select count(*) from t_test_gin_index_query where query_none_analyzer = '中文测试';
--- result:
-1
--- !result
 drop table t_test_gin_index_query;
 -- result:
+-- !result
+-- name: test_gin_index_single_predicate_none
+CREATE TABLE `t_gin_index_single_predicate_none` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_single_predicate_none VALUES
+(1, "ABC"),
+(2, "abc"),
+(3, "ABD"),
+(4, "This is Gin Index"),
+(5, NULL);
+-- result:
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column = "ABC";
+-- result:
+1	ABC
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column != "ABC";
+-- result:
+2	abc
+3	ABD
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column IS NULL;
+-- result:
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column IS NOT NULL;
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column <= "AB";
+-- result:
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column >= "AB";
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column IN ("ABC");
+-- result:
+1	ABC
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column IN ("ABC", "ABD");
+-- result:
+1	ABC
+3	ABD
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column NOT IN ("ABC");
+-- result:
+2	abc
+3	ABD
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column NOT IN ("ABC", "ABD");
+-- result:
+2	abc
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "ABC";
+-- result:
+1	ABC
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "%ABC%";
+-- result:
+1	ABC
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "%BC";
+-- result:
+1	ABC
+-- !result
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "AB%";
+-- result:
+1	ABC
+3	ABD
+-- !result
+DROP TABLE t_gin_index_single_predicate_none;
+-- result:
+-- !result
+-- name: test_gin_index_single_predicate_english
+CREATE TABLE `t_gin_index_single_predicate_english` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_english (`text_column`) USING GIN ("parser" = "english") COMMENT 'english index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_single_predicate_english VALUES
+(1, "ABC"),
+(2, "abc"),
+(3, "ABD"),
+(4, "This is Gin Index"),
+(5, NULL);
+-- result:
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "This is Gin Index";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "This";
+-- result:
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column = "this";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column != "this";
+-- result:
+1	ABC
+2	abc
+3	ABD
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IS NULL;
+-- result:
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IS NOT NULL;
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column <= "this";
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column >= "this";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IN ("this");
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column IN ("this", "is");
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column NOT IN ("this");
+-- result:
+1	ABC
+2	abc
+3	ABD
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column NOT IN ("this", "is");
+-- result:
+1	ABC
+2	abc
+3	ABD
+5	None
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "this";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "%this%";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "%his";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "thi%";
+-- result:
+4	This is Gin Index
+-- !result
+DROP TABLE t_gin_index_single_predicate_english;
+-- result:
+-- !result
+-- name: test_gin_index_multiple_predicate_none
+CREATE TABLE `t_gin_index_multiple_predicate_none` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_multiple_predicate_none VALUES
+(1, "ABC"),
+(2, "abc"),
+(3, "ABD"),
+(4, "This is Gin Index"),
+(5, NULL);
+-- result:
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column = "ABC" OR text_column = "ABD";
+-- result:
+1	ABC
+3	ABD
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column != "ABC" AND text_column != "ABD";
+-- result:
+2	abc
+4	This is Gin Index
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column IS NOT NULL AND text_column != "ABC";
+-- result:
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column <= "ABD" OR text_column >= "This is Gin Index";
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column >= "AB" AND text_column <= "This is Gin Index";
+-- result:
+1	ABC
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column IN ("ABC") OR text_column IN ("ABD");
+-- result:
+1	ABC
+3	ABD
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column IN ("ABC", "ABD") OR text_column IN ("abc");
+-- result:
+1	ABC
+2	abc
+3	ABD
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT IN ("ABC") OR text_column NOT IN ("ABD");
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "ABC" OR text_column LIKE "ABD";
+-- result:
+1	ABC
+3	ABD
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" AND text_column LIKE "%C";
+-- result:
+1	ABC
+-- !result
+DROP TABLE t_gin_index_multiple_predicate_none;
+-- result:
+-- !result
+-- name: test_gin_index_multiple_predicate_english
+CREATE TABLE `t_gin_index_multiple_predicate_english` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_english (`text_column`) USING GIN ("parser" = "english") COMMENT 'english index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_multiple_predicate_english VALUES
+(1, "ABC"),
+(2, "abc"),
+(3, "ABD"),
+(4, "This is Gin Index"),
+(5, NULL);
+-- result:
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column = "this" OR text_column = "abc";
+-- result:
+1	ABC
+2	abc
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column != "this" AND text_column != "abc";
+-- result:
+3	ABD
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IS NOT NULL AND text_column = "this";
+-- result:
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column <= "this" AND text_column >= "abc";
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column IN ("this") OR text_column IN ("abc");
+-- result:
+1	ABC
+2	abc
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column NOT IN ("this") AND text_column NOT IN ("abc");
+-- result:
+3	ABD
+5	None
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" OR text_column LIKE "abc";
+-- result:
+1	ABC
+2	abc
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
+-- result:
+4	This is Gin Index
+-- !result
+DROP TABLE t_gin_index_multiple_predicate_english;
+-- result:
+-- !result
+-- name: test_gin_index_compaction
+CREATE TABLE `t_gin_index_compaction_none_base` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_none_base VALUES (1, "abc");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_none_base VALUES (2, "ABC");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_none_base VALUES (3, "bcd");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_none_base VALUES (4, "BCD");
+-- result:
+-- !result
+ALTER TABLE t_gin_index_compaction_none_base BASE COMPACT;
+-- result:
+-- !result
+CREATE TABLE `t_gin_index_compaction_none_cumu` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_none_cumu VALUES (1, "abc");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_none_cumu VALUES (2, "ABC");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_none_cumu VALUES (3, "bcd");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_none_cumu VALUES (4, "BCD");
+-- result:
+-- !result
+ALTER TABLE t_gin_index_compaction_none_cumu CUMULATIVE COMPACT;
+-- result:
+-- !result
+SELECT sleep(10);
+-- result:
+1
+-- !result
+SELECT * FROM t_gin_index_compaction_none_base;
+-- result:
+1	abc
+2	ABC
+3	bcd
+4	BCD
+-- !result
+SELECT * FROM t_gin_index_compaction_none_cumu;
+-- result:
+1	abc
+2	ABC
+3	bcd
+4	BCD
+-- !result
+DROP TABLE t_gin_index_compaction_none_base;
+-- result:
+-- !result
+DROP TABLE t_gin_index_compaction_none_cumu;
+-- result:
+-- !result
+CREATE TABLE `t_gin_index_compaction_english_base` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_english (`text_column`) USING GIN ("parser" = "english") COMMENT 'english index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_english_base VALUES (1, "This is Gin Index");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_english_base VALUES (2, "This is Not Gin Index");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_english_base VALUES (3, "Gin Index");
+-- result:
+-- !result
+ALTER TABLE t_gin_index_compaction_english_base BASE COMPACT;
+-- result:
+-- !result
+CREATE TABLE `t_gin_index_compaction_english_cumu` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_english (`text_column`) USING GIN ("parser" = "english") COMMENT 'english index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_english_cumu VALUES (1, "This is Gin Index");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_english_cumu VALUES (2, "This is Not Gin Index");
+-- result:
+-- !result
+INSERT INTO t_gin_index_compaction_english_cumu VALUES (3, "Gin Index");
+-- result:
+-- !result
+ALTER TABLE t_gin_index_compaction_english_cumu CUMULATIVE COMPACT;
+-- result:
+-- !result
+SELECT sleep(10);
+-- result:
+1
+-- !result
+SELECT * FROM t_gin_index_compaction_english_base;
+-- result:
+1	This is Gin Index
+2	This is Not Gin Index
+3	Gin Index
+-- !result
+SELECT * FROM t_gin_index_compaction_english_cumu;
+-- result:
+1	This is Gin Index
+2	This is Not Gin Index
+3	Gin Index
+-- !result
+DROP TABLE t_gin_index_compaction_english_base;
+-- result:
+-- !result
+DROP TABLE t_gin_index_compaction_english_cumu;
+-- result:
+-- !result
+-- name: test_gin_index_type
+CREATE TABLE `t_gin_index_type_1` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `test_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`test_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t_gin_index_type_2` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `test_column` String NULL COMMENT "",
+  INDEX gin_none (`test_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t_gin_index_type_3` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `test_column` CHAR NULL COMMENT "",
+  INDEX gin_none (`test_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t_gin_index_type_4` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `test_column` BIGINT NULL COMMENT "",
+  INDEX gin_none (`test_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+-- !result
+CREATE TABLE `t_gin_index_type_5` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `test_column` DOUBLE NULL COMMENT "",
+  INDEX gin_none (`test_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+-- !result
+CREATE TABLE `t_gin_index_type_6` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `test_column` DATETIME NULL COMMENT "",
+  INDEX gin_none (`test_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+-- !result
+CREATE TABLE `t_gin_index_type_7` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `test_column` DATE NULL COMMENT "",
+  INDEX gin_none (`test_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+-- !result
+-- name: test_clone_for_gin
+CREATE TABLE `t_clone_for_gin` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "2",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_clone_for_gin VALUES (1, "abc"),(2, "ABC");
+-- result:
+-- !result
+SELECT * FROM t_clone_for_gin ORDER BY id1;
+-- result:
+1	abc
+2	ABC
+-- !result
+function: set_first_tablet_bad_and_recover("t_clone_for_gin")
+-- result:
+None
+-- !result
+SELECT * FROM t_clone_for_gin ORDER BY id1;
+-- result:
+1	abc
+2	ABC
 -- !result

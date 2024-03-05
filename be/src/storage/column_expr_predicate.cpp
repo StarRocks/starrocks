@@ -309,8 +309,8 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         }
     }
     auto* like_target = dynamic_cast<VectorizedLiteral*>(vectorized_function_call->get_child(1));
-    RETURN_IF(!like_target, Status::InvertedIndexNotSupport("Not supported like predicate parameters"));
-    ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr))
+    RETURN_IF(!like_target, Status::NotSupported("Not supported like predicate parameters"));
+    ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
     Slice padded_value(literal_col->get(0).get_slice());
     InvertedIndexQueryType query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
     roaring::Roaring roaring;
