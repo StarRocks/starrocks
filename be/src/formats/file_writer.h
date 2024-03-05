@@ -17,6 +17,7 @@
 #include <future>
 
 #include "column/chunk.h"
+#include "column_evaluator.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
@@ -30,7 +31,7 @@ struct FileWriterOptions {
 
 class FileWriter {
 public:
-    struct FileMetrics {
+    struct FileStatistics {
         int64_t record_count;
         int64_t file_size;
         std::optional<std::vector<int64_t>> split_offsets;
@@ -44,7 +45,7 @@ public:
     struct CommitResult {
         Status io_status;
         std::string format;
-        FileMetrics file_metrics;
+        FileStatistics file_statistics;
         std::string location;
         std::function<void()> rollback_action;
     };

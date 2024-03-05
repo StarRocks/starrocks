@@ -26,7 +26,8 @@ public class RewriteEquivalent {
             TimeSliceRewriteEquivalent.INSTANCE,
             DateTruncEquivalent.INSTANCE,
             CountRewriteEquivalent.INSTANCE,
-            BitmapRewriteEquivalent.INSTANCE);
+            BitmapRewriteEquivalent.INSTANCE,
+            ArrayRewriteEquivalent.INSTANCE);
     private final IRewriteEquivalent.RewriteEquivalentContext rewriteEquivalentContext;
     private final IRewriteEquivalent iRewriteEquivalent;
 

@@ -26,10 +26,12 @@ import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
@@ -82,7 +84,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAWSDefaultCredential() throws AnalysisException {
+    public void testAWSDefaultCredential() throws AnalysisException, DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -104,7 +106,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAWSSimpleCredential() throws AnalysisException {
+    public void testAWSSimpleCredential() throws AnalysisException, DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -131,7 +133,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAWSInstanceProfile() throws AnalysisException {
+    public void testAWSInstanceProfile() throws AnalysisException, DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -154,7 +156,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAWSAssumeIamRole() throws AnalysisException {
+    public void testAWSAssumeIamRole() throws AnalysisException, DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -196,7 +198,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testHDFSSimpleCredential() {
+    public void testHDFSSimpleCredential() throws DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.SIMPLE_AUTH);
         storageParams.put(HDFS_USERNAME, "username");
@@ -249,7 +251,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testHDFSKerberosCredential() throws AnalysisException {
+    public void testHDFSKerberosCredential() throws AnalysisException, DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.KERBEROS_AUTH);
         storageParams.put(HDFS_KERBEROS_PRINCIPAL_DEPRECATED, "nn/abc@ABC.COM");
@@ -305,7 +307,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testHDFSEmptyCredential() {
+    public void testHDFSEmptyCredential() throws DdlException {
         Map<String, String> storageParams = new HashMap<>();
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
                 storageParams, true, "");
@@ -318,7 +320,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testHDFSViewFS() {
+    public void testHDFSViewFS() throws DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put("fs.viewfs.mounttable.ClusterX.link./data", "hdfs://nn1-clusterx.example.com:8020/data");
         storageParams.put("fs.viewfs.mounttable.ClusterX.link./project", "hdfs://nn2-clusterx.example.com:8020/project");
@@ -337,7 +339,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testHDFSAddConfigResources() {
+    public void testHDFSAddConfigResources() throws DdlException {
         String runningDir = MockedFrontend.getInstance().getRunningDir();
         String confFile = runningDir + "/conf/hdfs-site.xml";
         String content = "<configuration>\n" +
@@ -370,7 +372,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAzureSharedKeyCredential() {
+    public void testAzureSharedKeyCredential() throws DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
         storageParams.put(AZURE_BLOB_SHARED_KEY, "shared_key");
@@ -396,7 +398,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testAzureSasTokenCredential() {
+    public void testAzureSasTokenCredential() throws DdlException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
         storageParams.put(AZURE_BLOB_SAS_TOKEN, "sas_token");
@@ -429,7 +431,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testFromFileStoreInfo() {
+    public void testFromFileStoreInfo() throws DdlException {
         AwsSimpleCredentialInfo simpleCredentialInfo = AwsSimpleCredentialInfo.newBuilder()
                 .setAccessKey("ak").setAccessKeySecret("sk").build();
         AwsCredentialInfo credentialInfo = AwsCredentialInfo.newBuilder().setSimpleCredential(simpleCredentialInfo).build();
@@ -482,6 +484,59 @@ public class StorageVolumeTest {
         fs = FileStoreInfo.newBuilder().setHdfsFsInfo(hdfs).setFsKey("0").setFsType(FileStoreType.HDFS).build();
         sv = StorageVolume.fromFileStoreInfo(fs);
         Assert.assertEquals(CloudType.HDFS, sv.getCloudConfiguration().getCloudType());
+    }
+
+    @Test
+    public void testGetParamsFromFileStoreInfo() {
+        AwsCredentialInfo.Builder awsCredBuilder = AwsCredentialInfo.newBuilder();
+        awsCredBuilder.getSimpleCredentialBuilder()
+                .setAccessKey("ak")
+                .setAccessKeySecret("sk")
+                .build();
+
+        FileStoreInfo.Builder fsInfoBuilder = FileStoreInfo.newBuilder();
+        fsInfoBuilder.getS3FsInfoBuilder()
+                .setBucket("bucket")
+                .setEndpoint("endpoint")
+                .setRegion("region")
+                .setCredential(awsCredBuilder);
+
+        fsInfoBuilder.setFsKey("0")
+                .setFsType(FileStoreType.S3)
+                .addLocations("s3://bucket");
+
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
+            Assert.assertFalse(params.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX));
+            Assert.assertFalse(params.containsKey(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+        }
+
+        fsInfoBuilder.getS3FsInfoBuilder()
+                .setPartitionedPrefixEnabled(true)
+                .setNumPartitionedPrefix(32);
+
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
+            Assert.assertTrue(params.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX));
+            Assert.assertTrue(params.containsKey(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+            Assert.assertEquals("32", params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+        }
+
+        // It's OK to have trailing '/' after bucket name
+        fsInfoBuilder.addLocations("s3://bucket/");
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            ExceptionChecker.expectThrowsNoException(() -> StorageVolume.fromFileStoreInfo(fs));
+        }
+
+        // can't have more after bucket name
+        fsInfoBuilder.addLocations("s3://bucket/abc");
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Assert.assertThrows(DdlException.class, () -> StorageVolume.fromFileStoreInfo(fs));
+        }
     }
 
     @Test

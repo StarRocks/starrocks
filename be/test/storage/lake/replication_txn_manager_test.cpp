@@ -208,11 +208,11 @@ protected:
     std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _replication_txn_manager;
 
-    int64_t _transaction_id = 100;
-    int64_t _table_id = 10001;
-    int64_t _partition_id = 10002;
-    int64_t _tablet_id = 10003;
-    int64_t _src_tablet_id = 10004;
+    int64_t _transaction_id = 300;
+    int64_t _table_id = 30001;
+    int64_t _partition_id = 30002;
+    int64_t _tablet_id = 30003;
+    int64_t _src_tablet_id = 30004;
     int32_t _schema_hash = 368169781;
     int64_t _version = 1;
     int64_t _src_version = 10;

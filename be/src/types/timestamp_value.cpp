@@ -99,17 +99,27 @@ int64_t TimestampValue::diff_microsecond(TimestampValue other) const {
 }
 
 bool TimestampValue::from_string(const char* date_str, size_t len) {
-    int year, month, day, hour, minute, second, microsecond;
-    if (!date::from_string_to_datetime(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond)) {
+    date::ToDatetimeResult res;
+    const auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, len, &res);
+    if (!is_valid) {
         return false;
     }
 
-    if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
-        return false;
-    }
+    auto process = [&](int year, int month, int day, int hour, int minute, int second, int microsecond) {
+        if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
+            return false;
+        }
+        from_timestamp(year, month, day, hour, minute, second, microsecond);
+        return true;
+    };
 
-    from_timestamp(year, month, day, hour, minute, second, microsecond);
-    return true;
+    // If `date_str` only contains date part, then pass constant zero for hour/minute/second/usec
+    // to make compiler eliminate some compution logic.
+    if (is_only_date) {
+        return process(res.year, res.month, res.day, 0, 0, 0, 0);
+    } else {
+        return process(res.year, res.month, res.day, res.hour, res.minute, res.second, res.microsecond);
+    }
 }
 
 // process string content based on format like "%Y-%m-%d". '-' means any char.

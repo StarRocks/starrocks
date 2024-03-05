@@ -468,7 +468,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                     "from (select a1[1] x1, array_max(a2) x2 from s1) y " +
                     "group by x1;";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "is_nullable:true, is_monotonic:true)])]), " +
+            assertContains(plan, "is_nullable:true, is_monotonic:true, is_index_only_filter:false)])]), " +
                     "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B]");
             assertContains(plan, "(type:RANDOM, partition_exprs:[]), " +
                     "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B]");

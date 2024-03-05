@@ -203,7 +203,7 @@ public class PlanTestNoneDBBase {
 
     public static void assertContains(String text, List<String> patterns) {
         for (String s : patterns) {
-            Assert.assertTrue(text, text.contains(s));
+            Assert.assertTrue(s + "\n" + text, text.contains(s));
         }
     }
 
@@ -283,6 +283,10 @@ public class PlanTestNoneDBBase {
 
     public String getThriftPlan(String sql) throws Exception {
         return UtFrameUtils.getPlanThriftString(connectContext, sql);
+    }
+
+    public String getDescTbl(String sql) throws Exception {
+        return UtFrameUtils.getThriftDescTbl(connectContext, sql);
     }
 
     public static int getPlanCount(String sql) throws Exception {

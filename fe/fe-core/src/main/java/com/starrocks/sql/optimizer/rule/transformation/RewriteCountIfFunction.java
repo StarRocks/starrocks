@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -66,8 +67,7 @@ public class RewriteCountIfFunction extends TransformationRule {
         Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap();
         boolean changed = false;
 
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry :
-                aggregationOperator.getAggregations().entrySet()) {
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
             CallOperator aggFunction = entry.getValue();
 
             if (aggFunction.isAggregate() && aggFunction.getFnName().equals(FunctionSet.COUNT_IF)) {
@@ -79,21 +79,20 @@ public class RewriteCountIfFunction extends TransformationRule {
                 args.add(ConstantOperator.createBigint(1));
                 args.add(ConstantOperator.createNull(Type.BIGINT));
 
+                Preconditions.checkState(aggExpr.getType().isBoolean());
                 Function ifFn = Expr.getBuiltinFunction(FunctionSet.IF,
                         new Type[] {aggExpr.getType(), Type.BIGINT, Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
-                if (ifFn == null) {
-                    newAggMap.put(entry.getKey(), entry.getValue());
-                } else {
-                    CallOperator ifCall = new CallOperator(FunctionSet.IF, aggExpr.getType(), args, ifFn);
+                Preconditions.checkNotNull(ifFn);
 
-                    Function countFn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
-                            Function.CompareMode.IS_IDENTICAL);
-                    CallOperator countCall = new CallOperator(FunctionSet.COUNT, Type.BIGINT,
-                            Lists.newArrayList(ifCall), countFn);
+                CallOperator ifCall = new CallOperator(FunctionSet.IF, Type.BIGINT, args, ifFn);
+                Function countFn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
+                        Function.CompareMode.IS_IDENTICAL);
 
-                    newAggMap.put(entry.getKey(), countCall);
-                    changed = true;
-                }
+                CallOperator countCall = new CallOperator(FunctionSet.COUNT, Type.BIGINT,
+                        Lists.newArrayList(ifCall), countFn);
+
+                newAggMap.put(entry.getKey(), countCall);
+                changed = true;
             } else {
                 newAggMap.put(entry.getKey(), entry.getValue());
             }
@@ -102,8 +101,9 @@ public class RewriteCountIfFunction extends TransformationRule {
         if (!changed) {
             return Lists.newArrayList();
         }
-        LogicalAggregationOperator newAggregation =
-                new LogicalAggregationOperator(aggregationOperator.getType(), aggregationOperator.getGroupingKeys(), newAggMap);
+        LogicalAggregationOperator newAggregation = LogicalAggregationOperator.builder()
+                .withOperator(aggregationOperator).setAggregations(newAggMap)
+                .build();
 
         return Lists.newArrayList(OptExpression.create(newAggregation, input.getInputs()));
     }

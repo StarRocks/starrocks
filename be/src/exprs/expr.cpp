@@ -191,6 +191,9 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
     if (node.__isset.is_monotonic) {
         _is_monotonic = node.is_monotonic;
     }
+    if (node.__isset.is_index_only_filter) {
+        _is_index_only_filter = node.is_index_only_filter;
+    }
 }
 
 Expr::~Expr() = default;
@@ -223,29 +226,12 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
-Status Expr::rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, RuntimeState* state) {
-    std::vector<ExprContext*> tmp;
-    for (auto ctx : expr_ctxs) {
-        auto* prev_expr = ctx->root();
-        auto* root_expr = &prev_expr;
-        bool replaced = false;
-        auto st = (*root_expr)->replace_compilable_exprs(root_expr, pool, replaced);
-        if (!st.ok()) {
-            LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (*root_expr)->debug_string();
-            // Fall back to the non-JIT path.
-            return Status::OK();
-        }
-        auto new_ctx = ctx;
-        if (replaced) {
-            // The node was replaced, so we need to update the context.
-            new_ctx = pool->add(new ExprContext(*root_expr));
-        }
-        tmp.emplace_back(new_ctx);
+Status Expr::prepare_jit_expr(RuntimeState* state, ExprContext* context) {
+    if (this->node_type() == TExprNodeType::JIT_EXPR) {
+        RETURN_IF_ERROR(((JITExpr*)this)->prepare_impl(state, context));
     }
-    expr_ctxs.swap(tmp);
-    if (state != nullptr) {
-        RETURN_IF_ERROR(Expr::prepare(expr_ctxs, state));
-        RETURN_IF_ERROR(Expr::open(expr_ctxs, state));
+    for (auto child : _children) {
+        RETURN_IF_ERROR(child->prepare_jit_expr(state, context));
     }
     return Status::OK();
 }
@@ -266,12 +252,6 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
     Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
     // Enable JIT based on the "enable_jit" parameters.
     if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
-        return status;
-    }
-
-    // Check if JIT compilation is feasible on this platform.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->support_jit()) {
         return status;
     }
 
@@ -802,6 +782,7 @@ Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, bool& repla
         _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR) {
         return Status::OK();
     }
+    DCHECK(JITEngine::get_instance()->support_jit());
     if ((*expr)->should_compile()) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
@@ -830,6 +811,36 @@ bool Expr::should_compile() const {
     }
 
     return true;
+}
+
+bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
+    bool support = false;
+    for (auto& child : _children) {
+        if (child->support_ngram_bloom_filter(context)) {
+            return true;
+        }
+    }
+    return support;
+}
+
+bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) const {
+    bool no_need_to_filt = true;
+    for (auto& child : _children) {
+        if (!child->ngram_bloom_filter(context, bf, gram_num)) {
+            return false;
+        }
+    }
+    return no_need_to_filt;
+}
+
+bool Expr::is_index_only_filter() const {
+    bool is_index_only_filter = _is_index_only_filter;
+    for (auto& child : _children) {
+        if (child->is_index_only_filter()) {
+            return true;
+        }
+    }
+    return is_index_only_filter;
 }
 
 } // namespace starrocks

@@ -351,6 +351,11 @@ public class RestoreJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
+
+        // test get restore info
+        try {
+            job.getInfo();
+        } catch (Exception ignore) { }
     }
 
     @Test

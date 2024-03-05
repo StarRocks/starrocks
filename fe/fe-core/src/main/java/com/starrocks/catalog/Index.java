@@ -40,6 +40,7 @@ import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
+import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
@@ -86,12 +87,12 @@ public class Index implements Writable {
     }
 
     public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
-            Map<String, String> properties) {
+                 Map<String, String> properties) {
         this(-1, indexName, columns, indexType, comment, properties);
     }
 
     public Index(long indexId, String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
-            Map<String, String> properties) {
+                 Map<String, String> properties) {
         this.indexId = indexId;
         this.indexName = indexName;
         this.columns = columns;
@@ -99,7 +100,6 @@ public class Index implements Writable {
         this.comment = comment;
         this.properties = properties;
     }
-
 
     public Index() {
         this.indexId = -1;
@@ -268,6 +268,12 @@ public class Index implements Writable {
                 searchIndexParamKeySet = Arrays.stream(SearchParamsKey.values())
                         .map(e -> e.name().toUpperCase(Locale.ROOT))
                         .collect(Collectors.toSet());
+            } else if (indexType == IndexType.NGRAMBF) {
+                commonIndexParamKeySet = Collections.emptySet();
+                indexIndexParamKeySet = Arrays.stream(NgramBfIndexParamsKey.values())
+                        .map(e -> e.name().toUpperCase(Locale.ROOT))
+                        .collect(Collectors.toSet());
+                searchIndexParamKeySet = Collections.emptySet();
             } else {
                 commonIndexParamKeySet = Collections.emptySet();
                 indexIndexParamKeySet = Collections.emptySet();
