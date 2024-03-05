@@ -452,7 +452,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
         size_t len = 0;
         std::string value;
         value.resize(100);
-        RETURN_IF_ERROR(FPE::encrypt(src_value.data, key, value.data(), &len, length));
+        std::string_view src_str(src_value.data, src_value.size);
+        RETURN_IF_ERROR(FPE::encrypt(src_str, key, value.data(), &len, length));
         value.resize(len);
 
         result.append(Slice(value));
@@ -487,7 +488,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, c
         const std::string_view key = (key_value.data != nullptr)
                                              ? std::string_view((char*)key_value.data, key_value.size)
                                              : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::encrypt_num(src_value.data, key, value));
+        std::string_view src_str(src_value.data, src_value.size);
+        RETURN_IF_ERROR(FPE::encrypt_num(src_str, key, value));
 
         result.append(Slice(value));
     }
@@ -523,7 +525,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
         const std::string_view key = (key_value.data != nullptr)
                                              ? std::string_view((char*)key_value.data, key_value.size)
                                              : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::decrypt(src_value.data, key, value, length));
+        std::string_view src_str(src_value.data, src_value.size);
+        RETURN_IF_ERROR(FPE::decrypt(src_str, key, value, length));
 
         result.append(Slice(value));
     }
@@ -557,7 +560,8 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt_num(FunctionContext* ctx, c
         const std::string_view key = (key_value.data != nullptr)
                                              ? std::string_view((char*)key_value.data, key_value.size)
                                              : std::string_view(FPE::DEFAULT_KEY);
-        RETURN_IF_ERROR(FPE::decrypt_num(src_value.data, key, value));
+        std::string_view src_str(src_value.data, src_value.size);
+        RETURN_IF_ERROR(FPE::decrypt_num(src_str, key, value));
 
         result.append(Slice(value));
     }

@@ -5,7 +5,6 @@ index 6479d03..2b44341 100644
 @@ -1,5 +1,4 @@
  add_subdirectory(lib)
 -add_subdirectory(test)
- 
+
  function(strip_target TARGET)
    set(CMAKE_STRIP_COMMAND /usr/bin/strip)
-   
