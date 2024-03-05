@@ -14,6 +14,8 @@
 
 #include "exec/hdfs_scanner.h"
 
+#include <fs/hdfs/fs_hdfs.h>
+
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "io/compressed_input_stream.h"
@@ -279,7 +281,6 @@ int64_t HdfsScanner::estimated_mem_usage() const {
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
-    static const char* const kHdfsIOProfileSectionPrefix = "HdfsIO";
     if (_file == nullptr) return;
 
     auto res = _file->get_numeric_statistics();
@@ -289,11 +290,25 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     if (statistics == nullptr || statistics->size() == 0) return;
 
     RuntimeProfile* runtime_profile = profile->runtime_profile;
-    ADD_TIMER(runtime_profile, kHdfsIOProfileSectionPrefix);
+    static constexpr std::string kHdfsIOProfileSectionPrefix = "HdfsIOMetrics";
+    ADD_COUNTER(profile->runtime_profile, kHdfsIOProfileSectionPrefix, TUnit::NONE);
+
     for (int64_t i = 0, sz = statistics->size(); i < sz; i++) {
         auto&& name = statistics->name(i);
-        auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::UNIT, kHdfsIOProfileSectionPrefix);
-        COUNTER_UPDATE(counter, statistics->value(i));
+        if (name == HdfsReadMetricsKey::kOpenFSTimeNs || name == HdfsReadMetricsKey::kOpenFileTimeNs) {
+            auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::TIME_NS, kHdfsIOProfileSectionPrefix);
+            COUNTER_UPDATE(counter, statistics->value(i));
+        } else if (name == HdfsReadMetricsKey::kTotalBytesRead || name == HdfsReadMetricsKey::kTotalLocalBytesRead ||
+                   name == HdfsReadMetricsKey::kTotalShortCircuitBytesRead ||
+                   name == HdfsReadMetricsKey::kTotalZeroCopyBytesRead) {
+            auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+            COUNTER_UPDATE(counter, statistics->value(i));
+        } else if (name == HdfsReadMetricsKey::kTotalHedgedReadOps ||
+                   name == HdfsReadMetricsKey::kTotalHedgedReadOpsInCurThread ||
+                   name == HdfsReadMetricsKey::kTotalHedgedReadOpsWin) {
+            auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::UNIT, kHdfsIOProfileSectionPrefix);
+            COUNTER_UPDATE(counter, statistics->value(i));
+        }
     }
 }
 
