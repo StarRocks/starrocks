@@ -647,6 +647,11 @@ public class QueryAnalyzer {
                     if (join.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
                         throw new SemanticException("skew join values must be constant");
                     }
+                    List<Expr> newSkewValues = new ArrayList<>();
+                    for (Expr expr : join.getSkewValues()) {
+                        newSkewValues.add(TypeManager.addCastExpr(expr, join.getSkewColumn().getType()));
+                    }
+                    join.setSkewValues(newSkewValues);
                 }
             } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
