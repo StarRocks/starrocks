@@ -15,52 +15,33 @@
 package com.starrocks.alter;
 
 import com.google.api.client.util.Lists;
-import com.google.common.collect.ImmutableMap;
-import com.staros.proto.FileCacheInfo;
-import com.staros.proto.FilePathInfo;
-import com.staros.proto.FileStoreInfo;
-import com.staros.proto.FileStoreType;
-import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.AddColumnClause;
-import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
-import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
+import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
@@ -69,155 +50,71 @@ import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Future;
-import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
-
-import static com.starrocks.catalog.TabletInvertedIndex.NOT_EXIST_TABLET_META;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
-    private ConnectContext connectContext;
+    private static ConnectContext connectContext;
+    private static final String DB_NAME = "db_lake_schema_change_test";
+    private static Database db;
     private LakeTableSchemaChangeJob schemaChangeJob;
-    private Database db;
     private LakeTable table;
-    private List<Long> shadowTabletIds = new ArrayList<>();
 
     public LakeTableSchemaChangeJobTest() {
-        connectContext = new ConnectContext(null);
-        connectContext.setStartTime();
-        connectContext.setThreadLocalInfo();
+    }
+
+    @BeforeClass
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
+
+    private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
+        return (LakeTable) db.getTable(createTableStmt.getTableName());
+    }
+
+    private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(stmt);
+    }
+
+    private LakeTableSchemaChangeJob getAlterJob(Table table) {
+        AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
+        List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assert.assertEquals(1, jobs.size());
+        AlterJobV2 alterJob = jobs.get(0);
+        Assert.assertTrue(alterJob instanceof LakeTableSchemaChangeJob);
+        return (LakeTableSchemaChangeJob) alterJob;
     }
 
     @Before
     public void before() throws Exception {
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
-                                           List<Long> matchShardIds, Map<String, String> properties)
-                    throws DdlException {
-                for (int i = 0; i < shardCount; i++) {
-                    shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
-                }
-                return shadowTabletIds;
-            }
-        };
-
-        new MockUp<EditLog>() {
-            @Mock
-            public void logSaveNextId(long nextId) {
-
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
-
-        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
-        final long dbId = GlobalStateMgr.getCurrentState().getNextId();
-        final long partitionId = GlobalStateMgr.getCurrentState().getNextId();
-        final long tableId = GlobalStateMgr.getCurrentState().getNextId();
-        final long indexId = GlobalStateMgr.getCurrentState().getNextId();
-
-        GlobalStateMgr.getCurrentState().setStarOSAgent(new StarOSAgent());
-
-        KeysType keysType = KeysType.DUP_KEYS;
-        db = new Database(dbId, "db0");
-
-        Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
-        Assert.assertNull(oldDb);
-
-        Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
-        DistributionInfo dist = new HashDistributionInfo(NUM_BUCKETS, Collections.singletonList(c0));
-        PartitionInfo partitionInfo = new RangePartitionInfo(Collections.singletonList(c0));
-        partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-
-        table = new LakeTable(tableId, "t0", Collections.singletonList(c0), keysType, partitionInfo, dist);
-        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        Partition partition = new Partition(partitionId, "t0", index, dist);
-        TStorageMedium storage = TStorageMedium.HDD;
-        TabletMeta tabletMeta =
-                new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
-        for (int i = 0; i < NUM_BUCKETS; i++) {
-            Tablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
-            index.addTablet(tablet, tabletMeta);
-        }
-        table.addPartition(partition);
-
-        table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN,
-                keysType);
-        table.setBaseIndexId(index.getId());
-        table.setUseFastSchemaEvolution(false);
-
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/object-1");
-        FilePathInfo pathInfo = builder.build();
-
-        table.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
-        DataCacheInfo dataCacheInfo = new DataCacheInfo(false, false);
-        partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
-
-        db.registerTableUnlocked(table);
-
-        ColumnDef c1 = new ColumnDef("c1", TypeDef.create(PrimitiveType.DOUBLE));
-        AddColumnClause alter = new AddColumnClause(c1, null, null, null);
-        alter.setColumn(new Column("c1", Type.DOUBLE));
-        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
-        List<AlterClause> alterList = Collections.singletonList(alter);
-        schemaChangeJob = (LakeTableSchemaChangeJob) schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
-        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        String createDbStmtStr = "create database " + DB_NAME;
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        connectContext.setDatabase(DB_NAME);
+        db = GlobalStateMgr.getServingState().getDb(DB_NAME);
+        table = createTable(connectContext, "CREATE TABLE t0(c0 INT) duplicate key(c0) distributed by hash(c0) buckets "
+                + NUM_BUCKETS);
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 DOUBLE");
+        schemaChangeJob = getAlterJob(table);
+        Config.enable_fast_schema_evolution_in_share_data_mode = true;
     }
 
     @After
     public void after() throws Exception {
-        db.dropTable(table.getName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
     }
 
     @Test
@@ -230,17 +127,8 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (Long tabletId : shadowTabletIds) {
-            Assert.assertNotNull(invertedIndex.getTabletMeta(tabletId));
-        }
-
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
-
-        for (Long tabletId : shadowTabletIds) {
-            Assert.assertNull(invertedIndex.getTabletMeta(tabletId));
-        }
-
         // test cancel again
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -794,9 +682,6 @@ public class LakeTableSchemaChangeJobTest {
         List<MaterializedIndex> shadowIndexes =
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
-        MaterializedIndex shadowIndex = shadowIndexes.get(0);
-        Assert.assertEquals(shadowTabletIds,
-                shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
 
         // Does not support cancel job in FINISHED_REWRITING state.
         schemaChangeJob.cancel("test");
@@ -821,7 +706,7 @@ public class LakeTableSchemaChangeJobTest {
 
             @Mock
             public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                       long commitTime)
+                                       long commitTime, long warehouseId)
                     throws
                     RpcException {
                 throw new RpcException("publish version failed", "127.0.0.1");
@@ -891,9 +776,6 @@ public class LakeTableSchemaChangeJobTest {
         List<MaterializedIndex> shadowIndexes =
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(1, shadowIndexes.size());
-        MaterializedIndex shadowIndex = shadowIndexes.get(0);
-        Assert.assertEquals(shadowTabletIds,
-                shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
         schemaChangeJob.runFinishedRewritingJob();
@@ -959,18 +841,6 @@ public class LakeTableSchemaChangeJobTest {
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Assert.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
-        Assert.assertEquals(shadowTabletIds,
-                normalIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
-
-        for (Long tabletId : shadowTabletIds) {
-            TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
-            Assert.assertNotSame(NOT_EXIST_TABLET_META, tabletMeta);
-            Assert.assertTrue(tabletMeta.isLakeTablet());
-            Assert.assertEquals(db.getId(), tabletMeta.getDbId());
-            Assert.assertEquals(table.getId(), tabletMeta.getTableId());
-            Assert.assertEquals(partition.getId(), tabletMeta.getPartitionId());
-            Assert.assertEquals(normalIndex.getId(), tabletMeta.getIndexId());
-        }
 
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");

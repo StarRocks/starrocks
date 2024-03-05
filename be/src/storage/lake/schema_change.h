@@ -36,8 +36,8 @@ public:
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
 
-    // for update tablet meta
     Status process_update_tablet_meta(const TUpdateTabletMetaInfoReq& request);
+
     DISALLOW_COPY_AND_MOVE(SchemaChangeHandler);
 
 private:
