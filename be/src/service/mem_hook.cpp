@@ -120,15 +120,14 @@ void* my_malloc(size_t size) __THROW {
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
-        int64_t tmp_size = STARROCKS_NALLOX(size, 0);
-        TRY_MEM_CONSUME(tmp_size, nullptr);
+        TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_MALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
-            MEMORY_RELEASE_SIZE(tmp_size);
+            MEMORY_RELEASE_SIZE(size);
         } else {
             int64_t check_size = STARROCKS_MALLOC_SIZE(ptr);
-            CHECK(check_size == tmp_size);
+            MEMORY_CONSUME_SIZE(check_size - size);
         }
         return ptr;
     } else {
