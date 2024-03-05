@@ -8,20 +8,17 @@ displayed_sidebar: "English"
 
 Apache Ranger provides the following core modules:
 
-- Ranger Admin: the core module of Ranger with a built-in web page. Users can create and update security policies on this page or through a REST interface. Plugins of various components of the Hadoop ecosystem poll and pull these policies at a regular basis.
-- Agent Plugin: plugins of components embedded in the Hadoop ecosystem. These plugins pull security policies from Ranger Admin on a regular basis and store the policies in local files. When users access a component, the corresponding plugin assesses the request based on the configured security policy and sends the authentication results to the corresponding component.
-- User Sync: used to pull user and user group information, and synchronize the permission data of users and user groups to Ranger's database.
+- **Ranger Admin**: the core module of Ranger with a built-in web page. Users can create and update security policies on this page or through a REST interface. Plugins of various components of the Hadoop ecosystem poll and pull these policies at a regular basis.
+- **Agent Plugin**: plugins of components embedded in the Hadoop ecosystem. These plugins pull security policies from Ranger Admin on a regular basis and store the policies in local files. When users access a component, the corresponding plugin assesses the request based on the configured security policy and sends the authentication results to the corresponding component.
+- **User Sync**: used to pull user and user group information, and synchronize the permission data of users and user groups to Ranger's database.
 
-In addition to the native RBAC privilege system, StarRocks v3.1 also supports access control through Apache Ranger, providing a higher level of data security.
-
-This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
-
-Currently, StarRocks supports:
+In addition to the native RBAC privilege system, StarRocks v3.1 also supports access control through Apache Ranger, providing a higher level of data security. Currently, StarRocks supports:
 
 - Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
 - Ranger audit logs.
+- **Ranger Servers that use Kerberos for authentication are not supported.**
 
-**Ranger Servers that use Kerberos for authentication are not supported.**
+This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 
 ## Permission control method
 
@@ -38,8 +35,8 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
 **Authentication process**
 
-- You can also use LDAP for user authentication, then use Ranger to synchronize LDAP users and configure access rules for them. StarRocks can also complete user login authentication through LDAP.
-- When users initiate a query, StarRocks parses the query statement, passes user information and required privileges to Apache Ranger. Ranger determines whether the user has the required privilege based on the access policy configured in the corresponding Service, and returns the authentication result to StarRocks. If the user has access, StarRocks returns the query data; if not, StarRocks returns an error.
+1. You can also use LDAP for user authentication, then use Ranger to synchronize LDAP users and configure access rules for them. StarRocks can also complete user login authentication through LDAP.
+2. When users initiate a query, StarRocks parses the query statement, passes user information and required privileges to Apache Ranger. Ranger determines whether the user has the required privilege based on the access policy configured in the corresponding Service, and returns the authentication result to StarRocks. If the user has access, StarRocks returns the query data; if not, StarRocks returns an error.
 
 ## Prerequisites
 
@@ -54,7 +51,13 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
 ## Integration procedure
 
-### Install ranger-starrocks-plugin
+### (Optional) Install ranger-starrocks-plugin
+
+:::note
+The main purpose of this step is to use Ranger's resource name autocomplete feature. When authoring policies in Ranger Admin, users need to enter the name of the resources whose access need to be protected. To make it easier for users to enter the resource names, Ranger Admin provides the autocomplete feature, which looks up the available resources in the service that match the input entered so far and automatically completes the resource name.
+
+If you do not have the permissions to operate the Ranger cluster or do not need this feature, you can skip this step.
+:::
 
 1. Create the `starrocks` folder in the Ranger Admin directory `ews/webapp/WEB-INF/classes/ranger-plugins`.
 
@@ -77,6 +80,15 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
    ```SQL
    wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
    ```
+
+   :::note
+   If you do not need Ranger's autocomplete feature (which means you did not install the ranger-starrocks-plugin), you must set `implClass` in the .json file to empty:
+
+   ```JSON
+   "implClass": "",
+   ```
+
+   :::
 
 2. Add StarRocks Service by running the following command as a Ranger administrator.
 
