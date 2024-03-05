@@ -121,11 +121,6 @@ private:
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
-    Status _decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
-                                            const UnifiedExecPlanFragmentParams& request,
-                                            std::unique_ptr<starrocks::DataSink>& datasink,
-                                            const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs);
-
     int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;
     FragmentContextPtr _fragment_ctx = nullptr;

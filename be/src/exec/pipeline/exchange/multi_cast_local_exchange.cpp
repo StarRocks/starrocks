@@ -112,7 +112,7 @@ StatusOr<ChunkPtr> MultiCastLocalExchanger::pull_chunk(RuntimeState* state, int3
     Cell* cell = _progress[mcast_consumer_index];
     if (cell->next == nullptr) {
         if (_opened_sink_number == 0) return Status::EndOfFile("mcast_local_exchanger eof");
-        return Status::OK();
+        return Status::InternalError("unreachable in multicast local exchanger");
     }
     cell = cell->next;
     VLOG_FILE << "MultiCastLocalExchanger: return chunk to " << mcast_consumer_index
