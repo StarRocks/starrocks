@@ -32,7 +32,7 @@ array_to_bitmap(array)
 
 ## 示例
 
-示例1：输入array，转化为bitmap。此处因为bitmap类型无法显示，故嵌套`bitmap_to_array`以方便说明。
+示例一：输入 array，转化为 bitmap。此处因为 bitmap 类型无法显示，故嵌套 `bitmap_to_array` 以方便说明。
 
 ```Plain Text
 MySQL > select bitmap_to_array(array_to_bitmap([1,2,3]));
@@ -43,7 +43,7 @@ MySQL > select bitmap_to_array(array_to_bitmap([1,2,3]));
 +-------------------------------------------+
 ```
 
-示例2：输入空array。
+示例二：输入空 array。
 
 ```Plain Text
 MySQL > select bitmap_to_array(array_to_bitmap([]));
@@ -54,7 +54,7 @@ MySQL > select bitmap_to_array(array_to_bitmap([]));
 +--------------------------------------+
 ```
 
-示例3：输入NULL。
+示例三：输入值为 NULL。
 
 ```Plain Text
 MySQL > select array_to_bitmap(NULL);

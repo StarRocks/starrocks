@@ -388,7 +388,7 @@ curl --location-trusted -u <username>:<password> \
 >
 > - 使用 `hll_empty` 函数给导入的数据行在 `table7` 中的第二列补充默认值。
 
-有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) 和 [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md)。
+有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [hll_hash](../../sql-functions/scalar-functions/hll_hash.md) 和 [hll_empty](../../sql-functions/scalar-functions/hll_empty.md)。
 
 #### **导入数据到含有 BITMAP 类型列的表**
 

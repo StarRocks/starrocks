@@ -107,4 +107,3 @@ mysql> select hex(bitmap_to_binary(bitmap_empty()));
        +---------+------------------------------------------------------------+
        3 rows in set (0.01 sec)
     ```
-    
