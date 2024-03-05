@@ -35,6 +35,8 @@ public:
     static const std::string_view DEFAULT_KEY;
     static const int DEFAULT_RADIX = 10;
     static const int MIN_LENGTH = 6;
+    static std::string current_key;
+    static std::vector<uint8_t> fpe_key;
 
 private:
     static const char FIXED_NUM = '1';

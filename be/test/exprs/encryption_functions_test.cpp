@@ -925,7 +925,7 @@ TEST_P(FpeTestFixture, fpe_ff1_decryptTest) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        FpeDncryptTest, FpeTestFixture,
+        FpeDecryptTest, FpeTestFixture,
         ::testing::Values(
             std::make_tuple("1123123", "abcdefghijk12345abcdefghijk12345", 10, "0459571"),
             std::make_tuple("23423274521", "abcdefghijk12345abcdefghijk12345", 10, "17651024676"),

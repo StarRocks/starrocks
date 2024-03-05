@@ -47,6 +47,15 @@ std::string FPE::trim_zeros(const std::string& str, size_t num_flag_pos) {
 }
 
 Status FPE::encrypt(std::string_view num_str, std::string_view key, char* buffer, int radix = 10) {
+    int fpe_key_length = key.length();
+    if (key != current_key) {
+        current_key = std::string(key);
+        fpe_key.resize(fpe_key_length);
+        for (size_t i = 0; i < key.length(); ++i) {
+            fpe_key[i] = static_cast<uint8_t>(key[i]);
+        }
+    }
+
     int num_str_length = num_str.length();
     std::string fixed_num_str;
     if (num_str_length < MIN_LENGTH) {
@@ -54,13 +63,6 @@ Status FPE::encrypt(std::string_view num_str, std::string_view key, char* buffer
         int padding_pos = MIN_LENGTH - num_str_length;
         std::fill(fixed_num_str.begin(), fixed_num_str.begin() + padding_pos, '0');
         strings::memcpy_inlined(fixed_num_str.data()+padding_pos,  num_str.data(), num_str.size());
-    }
-
-    int fpe_key_length = key.length();
-
-    std::vector<uint8_t> fpe_key(fpe_key_length);
-    for (size_t i = 0; i < fpe_key_length; ++i) {
-        fpe_key[i] = static_cast<uint8_t>(key[i]);
     }
 
     struct ff1_ctx* ctx = nullptr;
@@ -85,10 +87,12 @@ Status FPE::encrypt(std::string_view num_str, std::string_view key, char* buffer
 
 Status FPE::decrypt(std::string_view num_str, std::string_view key, char* buffer, int radix= 10) {
     int fpe_key_length = key.length();
-
-    std::vector<uint8_t> fpe_key(fpe_key_length);
-    for (size_t i = 0; i < fpe_key_length; ++i) {
-        fpe_key[i] = static_cast<uint8_t>(key[i]);
+    if (key != current_key) {
+        current_key = std::string(key);
+        fpe_key.resize(fpe_key_length);
+        for (size_t i = 0; i < key.length(); ++i) {
+            fpe_key[i] = static_cast<uint8_t>(key[i]);
+        }
     }
 
     struct ff1_ctx* ctx = nullptr;
