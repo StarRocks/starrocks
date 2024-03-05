@@ -89,13 +89,13 @@ ConnectorChunkSink::Futures HiveChunkSink::finish() {
 std::function<void(const formats::FileWriter::CommitResult& result)> HiveChunkSink::callback_on_success() {
     return [state = _state](const formats::FileWriter::CommitResult& result) {
         DCHECK(result.io_status.ok());
-        state->update_num_rows_load_sink(result.file_metrics.record_count);
+        state->update_num_rows_load_sink(result.file_statistics.record_count);
 
         THiveFileInfo hive_file_info;
         hive_file_info.__set_file_name(PathUtils::get_filename(result.location));
         hive_file_info.__set_partition_path(PathUtils::get_parent_path(result.location));
-        hive_file_info.__set_record_count(result.file_metrics.record_count);
-        hive_file_info.__set_file_size_in_bytes(result.file_metrics.file_size);
+        hive_file_info.__set_record_count(result.file_statistics.record_count);
+        hive_file_info.__set_file_size_in_bytes(result.file_statistics.file_size);
         TSinkCommitInfo commit_info;
         commit_info.__set_hive_file_info(hive_file_info);
         state->add_sink_commit_info(commit_info);
@@ -115,12 +115,11 @@ std::unique_ptr<ConnectorChunkSink> HiveChunkSinkProvider::create_chunk_sink(
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
-                std::move(fs), ctx->format, ctx->options, ctx->data_column_names, std::move(data_column_evaluators),
-                std::nullopt, ctx->executor);
+                std::move(fs), ctx->options, ctx->data_column_names, std::move(data_column_evaluators), std::nullopt,
+                ctx->executor);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
-                std::move(fs), ctx->format, ctx->options, ctx->data_column_names, std::move(data_column_evaluators),
-                ctx->executor);
+                std::move(fs), ctx->options, ctx->data_column_names, std::move(data_column_evaluators), ctx->executor);
     } else {
         CHECK(false) << "unreachable";
         __builtin_unreachable();

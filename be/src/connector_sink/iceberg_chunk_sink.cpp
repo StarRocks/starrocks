@@ -89,23 +89,23 @@ ConnectorChunkSink::Futures IcebergChunkSink::finish() {
 std::function<void(const formats::FileWriter::CommitResult& result)> IcebergChunkSink::callback_on_success() {
     return [state = _state](const formats::FileWriter::CommitResult& result) {
         DCHECK(result.io_status.ok());
-        state->update_num_rows_load_sink(result.file_metrics.record_count);
+        state->update_num_rows_load_sink(result.file_statistics.record_count);
 
         TIcebergColumnStats iceberg_column_stats;
-        if (result.file_metrics.column_sizes.has_value()) {
-            iceberg_column_stats.__set_column_sizes(result.file_metrics.column_sizes.value());
+        if (result.file_statistics.column_sizes.has_value()) {
+            iceberg_column_stats.__set_column_sizes(result.file_statistics.column_sizes.value());
         }
-        if (result.file_metrics.value_counts.has_value()) {
-            iceberg_column_stats.__set_value_counts(result.file_metrics.value_counts.value());
+        if (result.file_statistics.value_counts.has_value()) {
+            iceberg_column_stats.__set_value_counts(result.file_statistics.value_counts.value());
         }
-        if (result.file_metrics.null_value_counts.has_value()) {
-            iceberg_column_stats.__set_null_value_counts(result.file_metrics.null_value_counts.value());
+        if (result.file_statistics.null_value_counts.has_value()) {
+            iceberg_column_stats.__set_null_value_counts(result.file_statistics.null_value_counts.value());
         }
-        if (result.file_metrics.lower_bounds.has_value()) {
-            iceberg_column_stats.__set_lower_bounds(result.file_metrics.lower_bounds.value());
+        if (result.file_statistics.lower_bounds.has_value()) {
+            iceberg_column_stats.__set_lower_bounds(result.file_statistics.lower_bounds.value());
         }
-        if (result.file_metrics.upper_bounds.has_value()) {
-            iceberg_column_stats.__set_upper_bounds(result.file_metrics.upper_bounds.value());
+        if (result.file_statistics.upper_bounds.has_value()) {
+            iceberg_column_stats.__set_upper_bounds(result.file_statistics.upper_bounds.value());
         }
 
         TIcebergDataFile iceberg_data_file;
@@ -113,11 +113,11 @@ std::function<void(const formats::FileWriter::CommitResult& result)> IcebergChun
         iceberg_data_file.__set_partition_path(PathUtils::get_parent_path(result.location));
         iceberg_data_file.__set_path(result.location);
         iceberg_data_file.__set_format(result.format);
-        iceberg_data_file.__set_record_count(result.file_metrics.record_count);
-        iceberg_data_file.__set_file_size_in_bytes(result.file_metrics.file_size);
+        iceberg_data_file.__set_record_count(result.file_statistics.record_count);
+        iceberg_data_file.__set_file_size_in_bytes(result.file_statistics.file_size);
 
-        if (result.file_metrics.split_offsets.has_value()) {
-            iceberg_data_file.__set_split_offsets(result.file_metrics.split_offsets.value());
+        if (result.file_statistics.split_offsets.has_value()) {
+            iceberg_data_file.__set_split_offsets(result.file_statistics.split_offsets.value());
         }
 
         TSinkCommitInfo commit_info;
@@ -139,8 +139,8 @@ std::unique_ptr<ConnectorChunkSink> IcebergChunkSinkProvider::create_chunk_sink(
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
     CHECK(boost::iequals(ctx->format, formats::PARQUET)) << "iceberg sink only supports parquet";
     file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
-            std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),
-            ctx->parquet_field_ids, ctx->executor);
+            std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), ctx->parquet_field_ids,
+            ctx->executor);
 
     std::vector<std::string> partition_columns;
     std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators;

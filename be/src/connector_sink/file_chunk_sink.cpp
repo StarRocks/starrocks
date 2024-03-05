@@ -89,7 +89,7 @@ ConnectorChunkSink::Futures FileChunkSink::finish() {
 std::function<void(const formats::FileWriter::CommitResult& result)> FileChunkSink::callback_on_success() {
     return [state = _state](const formats::FileWriter::CommitResult& result) {
         DCHECK(result.io_status.ok());
-        state->update_num_rows_load_sink(result.file_metrics.record_count);
+        state->update_num_rows_load_sink(result.file_statistics.record_count);
     };
 }
 
@@ -106,12 +106,11 @@ std::unique_ptr<ConnectorChunkSink> FileChunkSinkProvider::create_chunk_sink(
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
-                std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators), std::nullopt,
+                std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), std::nullopt,
                 ctx->executor);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
-                std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor);
+                std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor);
     } else {
         CHECK(false) << "unreachable";
         __builtin_unreachable();
