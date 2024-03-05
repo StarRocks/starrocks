@@ -15,8 +15,8 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 
 #include "column/vectorized_fwd.h"
-#include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "exec/hdfs_scanner.h"
+#include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
@@ -185,8 +185,7 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
                                            const std::shared_ptr<DefaultMORProcessor> mor_processor,
                                            std::vector<SlotDescriptor*> slot_descs,
                                            TupleDescriptor* delete_column_tuple_desc,
-                                           const TIcebergSchema* iceberg_equal_delete_schema,
-                                           RuntimeState* state) {
+                                           const TIcebergSchema* iceberg_equal_delete_schema, RuntimeState* state) {
     std::unique_ptr<RandomAccessFile> file;
     ASSIGN_OR_RETURN(file, _fs->new_random_access_file(delete_file_path));
 
@@ -194,8 +193,8 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
     try {
         reader = std::make_unique<parquet::FileReader>(state->chunk_size(), file.get(), file->get_size().value(), 0);
     } catch (std::exception& e) {
-        const auto s =
-                strings::Substitute("ParquetEqualityDeleteBuilder::build create parquet::FileReader failed. reason = $0", e.what());
+        const auto s = strings::Substitute(
+                "ParquetEqualityDeleteBuilder::build create parquet::FileReader failed. reason = $0", e.what());
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }

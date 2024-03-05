@@ -250,8 +250,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
 
         int32_t delete_column_index = slots.size();
-        _delete_column_tuple_desc =
-                state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
+        _delete_column_tuple_desc = state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
 
         for (SlotDescriptor* d_slot_desc : _delete_column_tuple_desc->slots()) {
             _equality_delete_slots.emplace_back(d_slot_desc);

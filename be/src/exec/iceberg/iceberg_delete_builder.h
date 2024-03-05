@@ -136,8 +136,8 @@ public:
 
     Status build_parquet(const std::string& timezone, const TIcebergDeleteFile& delete_file,
                          const std::vector<SlotDescriptor*>& slots, TupleDescriptor* delete_column_tuple_desc,
-                         const TIcebergSchema* iceberg_equal_delete_schema,
-                         RuntimeState* state, std::shared_ptr<DefaultMORProcessor> mor_processor) const {
+                         const TIcebergSchema* iceberg_equal_delete_schema, RuntimeState* state,
+                         std::shared_ptr<DefaultMORProcessor> mor_processor) const {
         if (delete_file.file_content == TIcebergFileContent::POSITION_DELETES) {
             return ParquetPositionDeleteBuilder(_fs, _datafile_path)
                     .build(timezone, delete_file.full_path, delete_file.length, _need_skip_rowids);
@@ -151,7 +151,6 @@ public:
             return Status::InternalError(s);
         }
     }
-
 
 private:
     FileSystem* _fs;
