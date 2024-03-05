@@ -115,16 +115,34 @@ DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
-    void* ptr = STARROCKS_MALLOC(size);
-    // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
-    // call the `my_malloc`, and result in a deadloop.
-    if (LIKELY(ptr != nullptr)) {
-        size_t old_size = STARROCKS_NALLOX(size, 0);
-        size_t new_size = STARROCKS_MALLOC_SIZE(ptr);
-        CHECK(old_size == new_size);
-        MEMORY_CONSUME_SIZE(old_size);
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
+    if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
+        // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
+        // call the `my_malloc`, and result in a deadloop.
+        int64_t tmp_size = STARROCKS_NALLOX(size, 0);
+        TRY_MEM_CONSUME(tmp_size, nullptr);
+        void* ptr = STARROCKS_MALLOC(size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(tmp_size);
+        } else {
+            int64_t check_size = STARROCKS_MALLOC_SIZE(ptr);
+            CHECK(check_size == tmp_size);
+        }
+        return ptr;
+    } else {
+        void* ptr = STARROCKS_MALLOC(size);
+        // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
+        // call the `my_malloc`, and result in a deadloop.
+        if (LIKELY(ptr != nullptr)) {
+            int64_t tmp_size = STARROCKS_NALLOX(size, 0);
+            MEMORY_CONSUME_SIZE(tmp_size);
+            int64_t check_size = STARROCKS_MALLOC_SIZE(ptr);
+            CHECK(check_size == tmp_size);
+        }
+        return ptr;
     }
-    return ptr;
 }
 
 // free
