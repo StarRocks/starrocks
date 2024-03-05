@@ -131,3 +131,25 @@ from (select c1 from (values([])) as t(c1)) t;
 
 select array_concat(c1, [named_struct('a', 1, 'b', 2, 'c', 3)])
 from (select c1 from (values([])) as t(c1)) t;
+
+--name: testArrayNE
+CREATE TABLE `t2` (
+  `pk` bigint(20) NOT NULL COMMENT "",
+  `aas_1` array<array<array<varchar(65533)>>> NULL COMMENT "",
+  `aad_1` array<array<array<DECIMAL128(26,2)>>> NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 3 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+insert into t2 values
+(1, [[["10"],["20"],["30"]],[["60"],["5"],["4"]],[["-100","-2"],["-20","10"],["100","23"]]], [[[1.00],[2.00],[3.00]],[[6.00],[5.00],[4.00]],[[-1.00,-2.00],[-2.00,10.00],[100.00,23.00]]]);
+
+select aad_1 != aas_1  from t2;
