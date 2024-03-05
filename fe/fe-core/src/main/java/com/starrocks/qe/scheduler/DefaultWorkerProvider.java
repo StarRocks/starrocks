@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SimpleScheduler;
@@ -213,6 +214,17 @@ public class DefaultWorkerProvider implements WorkerProvider {
     @Override
     public List<Long> getSelectedWorkerIds() {
         return new ArrayList<>(selectedWorkerIds);
+    }
+
+    @Override
+    public List<Long> getAllAvailableNodes() {
+        List<Long> nodeIds = Lists.newArrayList();
+        nodeIds.addAll(availableID2ComputeNode.keySet());
+        if (preferComputeNode) {
+            return nodeIds;
+        }
+        nodeIds.addAll(availableID2Backend.keySet());
+        return nodeIds;
     }
 
     @Override

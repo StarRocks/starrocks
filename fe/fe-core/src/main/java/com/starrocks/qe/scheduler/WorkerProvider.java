@@ -78,6 +78,8 @@ public interface WorkerProvider {
 
     List<Long> getSelectedWorkerIds();
 
+    List<Long> getAllAvailableNodes();
+
     default boolean isPreferComputeNode() {
         return false;
     }

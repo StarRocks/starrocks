@@ -34,6 +34,21 @@ public class SessionVariableConstants {
 
     public static final String VARCHAR = "varchar";
 
+    public enum ChooseInstancesMode {
+        LOCALITY,
+        AUTO,
+        ADAPTIVE_INCREASE,
+        ADAPTIVE_DECREASE;
+
+        public boolean enableIncreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_INCREASE;
+        }
+
+        public boolean enableDecreaseInstance() {
+            return this == AUTO || this == ADAPTIVE_DECREASE;
+        }
+    }
+
     public enum AggregationStage {
         AUTO,
         ONE_STAGE,
