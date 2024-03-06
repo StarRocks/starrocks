@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -90,8 +91,13 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             scan.setNeedOutputChunkByBucket(true);
 
             if (!hasColocateRequirement && enablePartitionBucketOptimize) {
-                Set<Column> partitionColumns =
-                        Sets.newHashSet(((OlapTable) scan.getTable()).getPartitionInfo().getPartitionColumns());
+                Set<Column> partitionColumns = null;
+                try {
+                    partitionColumns =
+                            Sets.newHashSet(((OlapTable) scan.getTable()).getPartitionInfo().getPartitionColumns());
+                } catch (NotImplementedException e) {
+                    return null;
+                }
                 List<ColumnRefOperator> groupBys = agg.getGroupBys();
                 for (ColumnRefOperator groupBy : groupBys) {
                     Column column = scan.getColRefToColumnMetaMap().get(groupBy);
