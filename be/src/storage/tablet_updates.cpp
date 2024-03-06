@@ -2018,6 +2018,12 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     } else {
         st = index.load(&_tablet);
     }
+    if (!st.ok()) {
+        std::string msg = strings::Substitute("load primary index failed: $0 $1", st.to_string(),
+                                                _debug_string(false, true));
+        failure_handler(msg);
+        return;
+    }
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
     bool enable_persistent_index = index.enable_persistent_index();
