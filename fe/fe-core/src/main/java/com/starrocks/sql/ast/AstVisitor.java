@@ -1126,6 +1126,10 @@ public abstract class AstVisitor<R, C> {
         return visitRelation(node, context);
     }
 
+    public R visitPivotRelation(PivotRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
     // ------------------------------------------- Expression --------------------------------==------------------------
 
     public R visitExpression(Expr node, C context) {
