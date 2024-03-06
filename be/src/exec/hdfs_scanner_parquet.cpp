@@ -35,7 +35,6 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                     runtime_state->timezone(), *tdelete_file, scanner_params.mor_params.equality_slots,
                     scanner_params.mor_params.delete_column_tuple_desc, scanner_params.iceberg_equal_delete_schema,
                     runtime_state, _mor_processor));
-
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     }
