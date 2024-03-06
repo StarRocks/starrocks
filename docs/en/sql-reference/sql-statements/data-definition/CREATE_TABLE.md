@@ -429,7 +429,7 @@ PROPERTIES (
 
   **Parameter**
 
-  - `storage_cooldown_ttl`：the **time interval** of automatic storage cooldown for the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The automatic storage cooldown time for each partition is calculated using the value of this parameter plus the upper time bound of the partition.
+  - `storage_cooldown_ttl`: the **time interval** of automatic storage cooldown for the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The automatic storage cooldown time for each partition is calculated using the value of this parameter plus the upper time bound of the partition.
 
   The supported values are `<num> YEAR`, `<num> MONTH`, `<num> DAY`, and `<num> HOUR`. `<num>` is a non-negative integer. The default value is null, indicating that storage cooldown is not automatically performed.
 
