@@ -331,6 +331,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int task_runs_max_history_number = 10000;
 
+    @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
+    public static int task_min_schedule_interval_s = 10;
+
     /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.

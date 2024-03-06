@@ -24,13 +24,16 @@ public class TaskSchedule {
 
     // Measured in milliseconds, between the start time and midnight, January 1, 1970 UTC.
     @SerializedName("startTime")
-    private long startTime;
+    private long startTime = 0;
 
     @SerializedName("period")
     private long period;
 
     @SerializedName("timeUnit")
     private TimeUnit timeUnit;
+
+    public TaskSchedule() {
+    }
 
     public TaskSchedule(long startTime, long period, TimeUnit timeUnit) {
         this.startTime = startTime;
@@ -63,7 +66,10 @@ public class TaskSchedule {
     }
 
     public String toString() {
-        return " (START " + Utils.getDatetimeFromLong(startTime)
-                + " EVERY(" + period + " " + timeUnit + "))";
+        if (startTime > 0) {
+            return " START(" + Utils.getDatetimeFromLong(startTime)
+                    + ") EVERY(" + period + " " + timeUnit + ")";
+        }
+        return "EVERY(" + period + " " + timeUnit + ")";
     }
 }
