@@ -25,7 +25,8 @@ struct CSVWriterOptions : FileWriterOptions {
     std::string line_terminated_by = "\n";
 };
 
-// Note(letian-jiang): for hive only
+// The primary purpose of this class is to support hive + csv. Use with caution in other cases.
+// TODO(letian-jiang): support escaping
 class CSVFileWriter final : public FileWriter {
 public:
     CSVFileWriter(std::string location, std::unique_ptr<csv::OutputStream> output_stream,
@@ -61,8 +62,7 @@ private:
 
 class CSVFileWriterFactory : public FileWriterFactory {
 public:
-    CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::string& format,
-                         const std::map<std::string, std::string>& options,
+    CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::map<std::string, std::string>& options,
                          const std::vector<std::string>& column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                          PriorityThreadPool* executors = nullptr);
@@ -73,7 +73,6 @@ private:
     Status _init();
 
     std::shared_ptr<FileSystem> _fs;
-    std::string _format;
     std::map<std::string, std::string> _options;
     std::shared_ptr<CSVWriterOptions> _parsed_options;
 

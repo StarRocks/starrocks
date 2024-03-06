@@ -33,9 +33,7 @@ CSVFileWriter::CSVFileWriter(std::string location, std::unique_ptr<csv::OutputSt
           _rollback_action(rollback_action),
           _executors(executors) {}
 
-CSVFileWriter::~CSVFileWriter() {
-    WARN_IF_ERROR(_output_stream->finalize(), "close csv file writer error:");
-}
+CSVFileWriter::~CSVFileWriter() = default;
 
 Status CSVFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
@@ -100,7 +98,6 @@ std::future<FileWriter::CommitResult> CSVFileWriter::commit() {
 
     auto task = [output_stream = _output_stream, p = promise, rollback = _rollback_action, row_counter = _num_rows,
                  location = _location] {
-        // TODO(letian-jiang): check if there are any outstanding io task
         FileWriter::CommitResult result{
                 .io_status = Status::OK(), .format = ORC, .location = location, .rollback_action = rollback};
 
@@ -109,8 +106,8 @@ std::future<FileWriter::CommitResult> CSVFileWriter::commit() {
         }
 
         if (result.io_status.ok()) {
-            result.file_metrics.record_count = row_counter;
-            result.file_metrics.file_size = output_stream->size();
+            result.file_statistics.record_count = row_counter;
+            result.file_statistics.file_size = output_stream->size();
         }
 
         p->set_value(result);
@@ -130,13 +127,12 @@ std::future<FileWriter::CommitResult> CSVFileWriter::commit() {
     return future;
 }
 
-CSVFileWriterFactory::CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::string& format,
+CSVFileWriterFactory::CSVFileWriterFactory(std::shared_ptr<FileSystem> fs,
                                            const std::map<std::string, std::string>& options,
                                            const std::vector<std::string>& column_names,
                                            std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                            PriorityThreadPool* executors)
         : _fs(std::move(fs)),
-          _format(format),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),
