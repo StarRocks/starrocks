@@ -185,7 +185,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 if (sv == null) {
                     if (Config.enable_load_volume_from_conf) {
                         LOG.error("Failed to get builtin storage volume, svName: {}, dbId: {}, current stack trace: {}",
-                                svName, dbId, LogUtil.getCurrentStackTrace());
+                                svName, dbId, LogUtil.getCurrentStackTraceToList());
                         throw new DdlException(String.format("Failed to get builtin storage volume, svName: %s, dbId: %d",
                                 svName, dbId));
                     } else {

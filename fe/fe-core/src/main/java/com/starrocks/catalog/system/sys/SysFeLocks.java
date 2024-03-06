@@ -23,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
@@ -143,17 +144,7 @@ public class SysFeLocks {
         }
 
         // waiters
-        Collection<Thread> waiters = lock.getQueuedThreads();
-        JsonArray waiterIds = new JsonArray();
-        for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
-            if (th != null) {
-                JsonObject waiter = new JsonObject();
-                waiter.addProperty("threadId", th.getId());
-                waiter.addProperty("threadName", th.getName());
-                waiterIds.add(waiter);
-            }
-        }
-        lockItem.setWaiter_list(waiterIds.toString());
+        lockItem.setWaiter_list(LockChecker.getLockWaiterInfoJsonArray(lock).toString());
 
         return lockItem;
     }

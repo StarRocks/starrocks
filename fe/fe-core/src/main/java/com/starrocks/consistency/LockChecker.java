@@ -67,7 +67,7 @@ public class LockChecker extends FrontendDaemon {
                     ownerInfo.addProperty("lockHoldTime", (System.currentTimeMillis() - lockStartTime) + " ms");
                     ownerInfo.addProperty("dumpThread", Util.dumpThread(exclusiveLockThread, 50));
                 }
-            } else if (sharedLockThreadIds.size() > 0) {
+            } else if (!sharedLockThreadIds.isEmpty()) {
                 StringBuilder infos = new StringBuilder();
                 int slowReadLockCnt = 0;
                 for (long threadId : sharedLockThreadIds) {
@@ -90,17 +90,7 @@ public class LockChecker extends FrontendDaemon {
             if (hasSlowLock) {
                 ownerInfo.addProperty("lockDbName", db.getFullName());
                 // waiters
-                Collection<Thread> waiters = lock.getQueuedThreads();
-                JsonArray waiterIds = new JsonArray();
-                for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
-                    if (th != null) {
-                        JsonObject waiter = new JsonObject();
-                        waiter.addProperty("threadId", th.getId());
-                        waiter.addProperty("threadName", th.getName());
-                        waiterIds.add(waiter);
-                    }
-                }
-                ownerInfo.add("lockWaiters", waiterIds);
+                ownerInfo.add("lockWaiters", getLockWaiterInfoJsonArray(lock));
                 dbLocks.add(ownerInfo);
             }
         }
@@ -110,6 +100,21 @@ public class LockChecker extends FrontendDaemon {
         } else {
             LOG.debug("no slow db locks");
         }
+    }
+
+    public static JsonArray getLockWaiterInfoJsonArray(QueryableReentrantReadWriteLock lock) {
+        Collection<Thread> waiters = lock.getQueuedThreads();
+        JsonArray waiterInfos = new JsonArray();
+        for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
+            if (th != null) {
+                JsonObject waiter = new JsonObject();
+                waiter.addProperty("threadId", th.getId());
+                waiter.addProperty("threadName", th.getName());
+                waiterInfos.add(waiter);
+            }
+        }
+
+        return waiterInfos;
     }
 
     private void checkDeadlocks() {
