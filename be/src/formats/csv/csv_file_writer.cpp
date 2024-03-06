@@ -41,7 +41,7 @@ Status CSVFileWriter::init() {
     for (auto& type : _types) {
         auto nullable_conv = csv::get_converter(type, true);
         if (nullable_conv == nullptr) {
-            return Status::InternalError("No CSV converter for type " + type.debug_string());
+            return Status::InternalError(fmt::format("No CSV converter for type: {}", type.debug_string()));
         }
         _column_converters.emplace_back(std::move(nullable_conv), csv::get_converter(type, false));
     }
