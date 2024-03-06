@@ -46,6 +46,7 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
         connectContext.getSessionVariable().setPipelineDop(2);
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
+        connectContext.getSessionVariable().setPreferComputeNode(true);
         String sql = "select * from (select * from skew_table where id = 1) t " +
                 "join (select abs(id) abs from skew_table where id = 1) tt on t.id = tt.abs";
         ExecPlan execPlan = getExecPlan(sql);
@@ -58,10 +59,23 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
         Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
         Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(3).getInstances().size());
 
-        // join fragment use 3 nodes
-        Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+        // join fragment only use compute nodes
+        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+        Assert.assertEquals(10004L, (long) dag.getFragmentsInCreatedOrder().get(1).getInstances().get(0).getWorkerId());
 
-        Assert.assertEquals(3, prepare.getWorkerProvider().getSelectedWorkerIds().size());
+        connectContext.getSessionVariable().setPreferComputeNode(false);
+        execPlan = getExecPlan(sql);
+        prepare = new CoordinatorPreprocessor(execPlan.getFragments(), execPlan.getScanNodes(),
+                connectContext);
+        prepare.computeFragmentInstances();
+
+        dag = prepare.getExecutionDAG();
+        // scan fragment only hit one tablet use 1 nodes
+        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
+        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(3).getInstances().size());
+
+        // join fragment use all be nodes
+        Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
     }
 
     @Test

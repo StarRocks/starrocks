@@ -216,10 +216,19 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return new ArrayList<>(selectedWorkerIds);
     }
 
+    /**
+     * if usedComputeNode turns on or no backend, we add all compute nodes to the result.
+     * if perferComputeNode turns on, we just return computeNode set
+     * else add backend set and return
+     * @return
+     */
     @Override
     public List<Long> getAllAvailableNodes() {
         List<Long> nodeIds = Lists.newArrayList();
-        nodeIds.addAll(availableID2ComputeNode.keySet());
+        if (usedComputeNode || availableID2Backend.isEmpty()) {
+            nodeIds.addAll(availableID2ComputeNode.keySet());
+        }
+
         if (preferComputeNode) {
             return nodeIds;
         }

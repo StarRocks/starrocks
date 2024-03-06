@@ -28,6 +28,7 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         PlanTestBase.beforeClass();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockComputeNode(10004);
 
         starRocksAssert.withTable("CREATE TABLE `lineorder_new_l` (\n" +
                 "  `LO_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
