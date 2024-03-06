@@ -129,7 +129,7 @@ private:
     bool _no_data = false;
 
     int _min_max_tuple_id = 0;
-    TupleDescriptor* _min_max_tuple_desc = nullptr;
+    const TupleDescriptor* _min_max_tuple_desc = nullptr;
 
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
