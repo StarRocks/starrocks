@@ -40,21 +40,6 @@ public:
     //     the last 900.
     Status parse(tparquet::Encoding::type encoding, level_t max_level, uint32_t num_levels, Slice* slice);
 
-    // Try to decode n levels into levels;
-    size_t decode_batch(size_t n, level_t* levels) {
-        if (_encoding == tparquet::Encoding::RLE) {
-            // NOTE(zc): Because RLE can only record elements that are multiples of 8,
-            // it must be ensured that the incoming parameters cannot exceed the boundary.
-            n = std::min((size_t)_num_levels, n);
-            auto num_decoded = _rle_decoder.GetBatch(levels, n);
-            _num_levels -= num_decoded;
-            return num_decoded;
-        } else if (_encoding == tparquet::Encoding::BIT_PACKED) {
-            DCHECK(false);
-        }
-        return 0;
-    }
-
     size_t next_repeated_count() {
         DCHECK_EQ(_encoding, tparquet::Encoding::RLE);
         return _rle_decoder.repeated_count();
@@ -87,21 +72,19 @@ public:
     void consume_levels(size_t num_levels) { _levels_parsed += num_levels; }
 
     size_t get_avail_levels(size_t row, level_t** levels) {
-        size_t batch_size = get_level_to_decode_batch_size(row);
+        size_t batch_size = _get_level_to_decode_batch_size(row);
         if (batch_size > 0) {
             size_t new_capacity = batch_size + _levels_decoded;
             if (new_capacity > _levels_capacity) {
                 _levels.resize(new_capacity);
                 _levels_capacity = new_capacity;
             }
-            size_t res_def = decode_batch(batch_size, &_levels[_levels_decoded]);
+            size_t res_def = _decode_batch(batch_size, &_levels[_levels_decoded]);
             _levels_decoded += res_def;
         }
         *levels = &_levels[_levels_parsed];
         return _levels_decoded - _levels_parsed;
     }
-
-    size_t get_level_to_decode_batch_size(size_t row);
 
     void append_default_levels(size_t level_nums) {
         size_t new_capacity = _levels_parsed + level_nums;
@@ -115,6 +98,23 @@ public:
     }
 
 private:
+    size_t _get_level_to_decode_batch_size(size_t row);
+
+    // Try to decode n levels into levels;
+    size_t _decode_batch(size_t n, level_t* levels) {
+        if (_encoding == tparquet::Encoding::RLE) {
+            // NOTE(zc): Because RLE can only record elements that are multiples of 8,
+            // it must be ensured that the incoming parameters cannot exceed the boundary.
+            n = std::min((size_t)_num_levels, n);
+            auto num_decoded = _rle_decoder.GetBatch(levels, n);
+            _num_levels -= num_decoded;
+            return num_decoded;
+        } else if (_encoding == tparquet::Encoding::BIT_PACKED) {
+            DCHECK(false);
+        }
+        return 0;
+    }
+
     tparquet::Encoding::type _encoding;
     level_t _bit_width = 0;
     [[maybe_unused]] level_t _max_level = 0;

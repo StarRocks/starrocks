@@ -97,9 +97,6 @@ public:
 
     void set_page_num(size_t page_num) override { _reader->set_page_num(page_num); }
 
-    static size_t get_level_to_decode_batch_size(size_t row, size_t num_values_left_in_cur_page, size_t decoded,
-                                                 size_t parsed);
-
     static size_t count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level);
 
 protected:

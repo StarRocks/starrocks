@@ -60,7 +60,7 @@ Status LevelDecoder::parse(tparquet::Encoding::type encoding, level_t max_level,
     return Status::OK();
 }
 
-size_t LevelDecoder::get_level_to_decode_batch_size(size_t row_num) {
+size_t LevelDecoder::_get_level_to_decode_batch_size(size_t row_num) {
     constexpr size_t min_level_batch_size = 4096;
     constexpr size_t max_level_batch_size = 1024 * 1024;
     size_t levels_remaining = _levels_decoded - _levels_parsed;
