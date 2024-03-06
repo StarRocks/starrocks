@@ -470,6 +470,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     newOlapScan.setOutputColumns(newOutputColumns);
                     newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
                     newOlapScan.setNeedOutputChunkByBucket(scanOperator.needOutputChunkByBucket());
+                    newOlapScan.setWithoutColocateRequirement(scanOperator.isWithoutColocateRequirement());
 
                     OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(newOlapScan, Lists.newArrayList());
                     builder.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -753,6 +754,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
             newHashAggregator.setUsePerBucketOptmize(aggOperator.isUsePerBucketOptmize());
+            newHashAggregator.setWithoutColocateRequirement(aggOperator.isWithoutColocateRequirement());
             return newHashAggregator;
         }
 
