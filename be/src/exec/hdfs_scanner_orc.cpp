@@ -140,7 +140,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             int part_idx = 0;
             const int part_size = _scanner_ctx.partition_columns.size();
             for (part_idx = 0; part_idx < part_size; part_idx++) {
-                if (_scanner_ctx.partition_columns[part_idx].col_name == slot->col_name()) {
+                if (_scanner_ctx.partition_columns[part_idx].name() == slot->col_name()) {
                     break;
                 }
             }
@@ -202,7 +202,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 continue;
             }
             int32_t column_index = -1;
-            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.col_name);
+            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.name());
             if (orc_type != nullptr) {
                 column_index = orc_type->getColumnId();
             }
@@ -353,9 +353,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // we evaluate conjunct ctxs in `do_get_next`.
     _scanner_params.eval_conjunct_ctxs = false;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_ctx.case_sensitive);
+        auto col_name = OrcChunkReader::format_column_name(column.name(), _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id);
+        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(column.slot_desc);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
@@ -367,6 +367,19 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
+<<<<<<< HEAD
+=======
+
+        // put materialized columns' conjunctions into _eval_conjunct_ctxs_by_materialized_slot
+        // for example, partition column's conjunctions will not put into _eval_conjunct_ctxs_by_materialized_slot
+        {
+            auto it = _scanner_params.conjunct_ctxs_by_slot.find(column.slot_id());
+            if (it != _scanner_params.conjunct_ctxs_by_slot.end()) {
+                _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
+            }
+        }
+
+>>>>>>> 712adb44dc ([Refactor] reduce column info fields and group reader params (#42085))
         _src_slot_descriptors.emplace_back(column.slot_desc);
         src_slot_index++;
     }
