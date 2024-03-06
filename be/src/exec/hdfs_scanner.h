@@ -205,16 +205,16 @@ struct HdfsScannerParams {
 
 struct HdfsScannerContext {
     struct ColumnInfo {
-        int col_idx;
-        TypeDescriptor col_type;
-        SlotId slot_id;
-        std::string col_name;
+        int idx_in_chunk;
         SlotDescriptor* slot_desc;
         bool decode_needed = true;
 
-        std::string formated_col_name(bool case_sensitive) {
-            return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+        std::string formatted_name(bool case_sensitive) const {
+            return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
+        const std::string& name() const { return slot_desc->col_name(); }
+        const SlotId slot_id() const { return slot_desc->id(); }
+        const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
     const TupleDescriptor* tuple_desc = nullptr;
