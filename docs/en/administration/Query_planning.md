@@ -199,7 +199,7 @@ By removing the specific expressions (only keep the operators), the query plan c
 
 ## Query hint
 
-Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports three types of hints: system variable hint (`SET_VAR`), user-defined variable hint (`SET_USER_VARIABLE`), and join hint. Hints only take effect within a single query.
+Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports three types of hints: system variable hint (`SET_VAR`), user-defined variable hint (`SET_USER_VARIABLE`), and Join hint. Hints only take effect within a single query.
 
 ### System variable hint
 
@@ -265,7 +265,7 @@ SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select mi
 
 ### Join hint
 
-For multi-table join queries, the optimizer usually selects the optimal join execution method. In special cases, you can use a join hint to explicitly suggest the join execution method to the optimizer or disable Join Reorder. Currently, a join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, or Colocate Join as a join execution method. When a join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting [Colocate Join](../using_starrocks/Colocate_join.md) or Bucket Shuffle Join as the join execution method, make sure that the data distribution of the joined table meets the requirements of these join execution methods. Otherwise, the suggested join execution method cannot take effect.
+For multi-table Join queries, the optimizer usually selects the optimal Join execution method. In special cases, you can use a Join hint to explicitly suggest the Join execution method to the optimizer or disable Join Reorder. Currently, a Join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, or Colocate Join as a Join execution method. When a Join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting [Colocate Join](../using_starrocks/Colocate_join.md) or Bucket Shuffle Join as the Join execution method, make sure that the data distribution of the joined table meets the requirements of these Join execution methods. Otherwise, the suggested Join execution method cannot take effect.
 
 #### Syntax
 
@@ -281,7 +281,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 - Shuffle Join
 
-  If you need to shuffle the data rows with the same bucketing key values from tables A and B onto the same machine before a Join operation is performed, you can hint the join execution method as Shuffle Join.
+  If you need to shuffle the data rows with the same bucketing key values from tables A and B onto the same machine before a Join operation is performed, you can hint the Join execution method as Shuffle Join.
 
   ~~~SQL
   select k1 from t1 join [SHUFFLE] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -289,7 +289,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 - Broadcast Join
   
-  If table A is a large table and table B is a small table, you can hint the join execution method as Broadcast Join. The data of the table B is fully broadcasted to the machines on which the data of table A resides, and then the Join operation is performed. Compared to Shuffle Join, Broadcast Join saves the cost of shuffling the data of table A.
+  If table A is a large table and table B is a small table, you can hint the Join execution method as Broadcast Join. The data of the table B is fully broadcasted to the machines on which the data of table A resides, and then the Join operation is performed. Compared to Shuffle Join, Broadcast Join saves the cost of shuffling the data of table A.
 
   ~~~SQL
   select k1 from t1 join [BROADCAST] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -297,7 +297,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 - Bucket Shuffle Join
   
-  If the Join equijoin expression in the join query contains the bucketing key of table A, especially when both tables A and B are large tables, you can hint the join execution method as Bucket Shuffle Join. The data of table B is shuffled to the machines on which the data of table A resides, according to the data distribution of table A, and then the Join operation is performed. Compared to Broadcast Join, Bucket Shuffle Join significantly reduces data transferring because the data of table B is shuffled only once globally.
+  If the Join equijoin expression in the Join query contains the bucketing key of table A, especially when both tables A and B are large tables, you can hint the Join execution method as Bucket Shuffle Join. The data of table B is shuffled to the machines on which the data of table A resides, according to the data distribution of table A, and then the Join operation is performed. Compared to Broadcast Join, Bucket Shuffle Join significantly reduces data transferring because the data of table B is shuffled only once globally.
 
   ~~~SQL
   select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -305,15 +305,15 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
 
 - Colocate Join
   
-  If tables A and B belong to the same Colocation Group which is specified during table creation, the data rows with the same bucketing key values from tables A and B are distributed on the same BE node. When the Join equijoin expression contains the bucketing key of tables A and B in the join query, you can hint the join execution method as Colocate Join. Data with the same key values are directly joined locally, reducing the time spent on data transmission between nodes and improving query performance.
+  If tables A and B belong to the same Colocation Group which is specified during table creation, the data rows with the same bucketing key values from tables A and B are distributed on the same BE node. When the Join equijoin expression contains the bucketing key of tables A and B in the Join query, you can hint the Join execution method as Colocate Join. Data with the same key values are directly joined locally, reducing the time spent on data transmission between nodes and improving query performance.
 
   ~~~SQL
   select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
   ~~~
 
-#### View join execution method
+#### View Join execution method
 
-Use the `EXPLAIN` command to view the actual join execution method. If the returned result shows that the join execution method matches the join hint, it means that the join hint is effective.
+Use the `EXPLAIN` command to view the actual Join execution method. If the returned result shows that the Join execution method matches the Join hint, it means that the Join hint is effective.
 
 ~~~SQL
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
