@@ -65,6 +65,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean usePerBucketOptmize = false;
 
+    private boolean withoutColocateRequirement = false;
+
     private DataSkewInfo distinctColumnDataSkew = null;
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
@@ -156,6 +158,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public boolean isUsePerBucketOptmize() {
         return usePerBucketOptmize;
+    }
+
+    public boolean isWithoutColocateRequirement() {
+        return withoutColocateRequirement;
+    }
+
+    public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
+        this.withoutColocateRequirement = withoutColocateRequirement;
     }
 
     public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {

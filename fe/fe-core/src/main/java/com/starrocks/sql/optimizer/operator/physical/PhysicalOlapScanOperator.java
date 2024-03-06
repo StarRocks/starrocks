@@ -48,6 +48,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private String turnOffReason;
     protected boolean needSortedByKeyPerTablet = false;
     protected boolean needOutputChunkByBucket = false;
+    private boolean withoutColocateRequirement = false;
 
     private boolean usePkIndex = false;
 
@@ -159,6 +160,14 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public void setNeedOutputChunkByBucket(boolean needOutputChunkByBucket) {
         this.needOutputChunkByBucket = needOutputChunkByBucket;
+    }
+
+    public boolean isWithoutColocateRequirement() {
+        return withoutColocateRequirement;
+    }
+
+    public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
+        this.withoutColocateRequirement = withoutColocateRequirement;
     }
 
     public boolean isUsePkIndex() {
