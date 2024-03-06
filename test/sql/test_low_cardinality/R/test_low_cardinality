@@ -1,4 +1,4 @@
--- name: test_split_or
+-- name: test_low_cardinality
 CREATE TABLE `common_duplicate` (
   `c0` int(11) NOT NULL COMMENT "",
   `c1` int(11) NOT NULL COMMENT "",
@@ -612,11 +612,11 @@ INSERT INTO low_card_duplicate (c0,c1,c2,c3,c4,c5,c6) VALUES
 -- !result
 [UC] analyze full table common_duplicate;
 -- result:
-test_db_d992a13ebf6811eeb62000163e04d4c2.common_duplicate	analyze	status	OK
+test_db_90045066dbac11eebf782207f0c28980.common_duplicate	analyze	status	OK
 -- !result
 [UC] analyze full table low_card_duplicate;
 -- result:
-test_db_d992a13ebf6811eeb62000163e04d4c2.low_card_duplicate	analyze	status	OK
+test_db_90045066dbac11eebf782207f0c28980.low_card_duplicate	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('c3', 'low_card_duplicate')
 -- result:
@@ -676,16 +676,16 @@ order by
 limit
     10;
 -- result:
-None	beijing - a	beijing-a	68616E677A686F75	hangz	1	hangzhou	000beijing	beijing		zhengzhou	hangzhouhangzhouhangzhou	hangsu	gnijieb	hou	hangzhou  	beijing	None	angz	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	7368616E67686169	shang	0	shanghai	000beijing	beijing		szhenghai	shanghaishanghaishanghai	shanghai	gnijieb	hai	shanghai  	beijing	None	hang	ijing	beijing - a	BEIJING	a
 None	beijing - a	beijing-a	6265696A696E67	beiji	0	beijing	000beijing	beijing		beijing	beijingbeijingbeijing	beijing	gnijieb	ing	beijing   	beijing	None	eiji	ijing	beijing - a	BEIJING	a
 None	beijing - a	beijing-a	7368656E7A68656E	shenz	0	shenzhen	000beijing	beijing		shenzhen	shenzhenshenzhenshenzhen	shenzhen	gnijieb	hen	shenzhen  	beijing	None	henz	ijing	beijing - a	BEIJING	a
-None	beijing - a	beijing-a	7368616E67686169	shang	0	shanghai	000beijing	beijing		szhenghai	shanghaishanghaishanghai	shanghai	gnijieb	hai	shanghai  	beijing	None	hang	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	68616E677A686F75	hangz	1	hangzhou	000beijing	beijing		zhengzhou	hangzhouhangzhouhangzhou	hangsu	gnijieb	hou	hangzhou  	beijing	None	angz	ijing	beijing - a	BEIJING	a
 None	beijing - a	beijing-a	6775616E677A686F75	guang	0	guangzhou	000beijing	beijing		guangzhou	guangzhouguangzhouguangzhou	guangsu	gnijieb	hou	guangzhou 	beijing	None	uang	ijing	beijing - a	BEIJING	a
-None	guangzhou - a	guangzhou-a	6265696A696E67	beiji	0	beijing	0guangzhou	guangzhou		beijing	beijingbeijingbeijing	beijing	uohzgnaug	ing	beijing   	guangzhou	None	eiji	angzhou	guangzhou - a	GUANGZHOU	a
-None	guangzhou - a	guangzhou-a	6775616E677A686F75	guang	0	guangzhou	0guangzhou	guangzhou		guangzhou	guangzhouguangzhouguangzhou	guangsu	uohzgnaug	hou	guangzhou 	guangzhou	None	uang	angzhou	guangzhou - a	GUANGZHOU	a
-None	guangzhou - a	guangzhou-a	7368616E67686169	shang	0	shanghai	0guangzhou	guangzhou		szhenghai	shanghaishanghaishanghai	shanghai	uohzgnaug	hai	shanghai  	guangzhou	None	hang	angzhou	guangzhou - a	GUANGZHOU	a
 None	guangzhou - a	guangzhou-a	68616E677A686F75	hangz	1	hangzhou	0guangzhou	guangzhou		zhengzhou	hangzhouhangzhouhangzhou	hangsu	uohzgnaug	hou	hangzhou  	guangzhou	None	angz	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	7368616E67686169	shang	0	shanghai	0guangzhou	guangzhou		szhenghai	shanghaishanghaishanghai	shanghai	uohzgnaug	hai	shanghai  	guangzhou	None	hang	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	6265696A696E67	beiji	0	beijing	0guangzhou	guangzhou		beijing	beijingbeijingbeijing	beijing	uohzgnaug	ing	beijing   	guangzhou	None	eiji	angzhou	guangzhou - a	GUANGZHOU	a
 None	guangzhou - a	guangzhou-a	7368656E7A68656E	shenz	0	shenzhen	0guangzhou	guangzhou		shenzhen	shenzhenshenzhenshenzhen	shenzhen	uohzgnaug	hen	shenzhen  	guangzhou	None	henz	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	6775616E677A686F75	guang	0	guangzhou	0guangzhou	guangzhou		guangzhou	guangzhouguangzhouguangzhou	guangsu	uohzgnaug	hou	guangzhou 	guangzhou	None	uang	angzhou	guangzhou - a	GUANGZHOU	a
 -- !result
 select
     CONCAT(concatenated_values, '-', lower_c3),
@@ -710,11 +710,11 @@ group by
     lower_c3
 order by max(lower_c3) limit 5;
 -- result:
-shenzhen - a-beijing	beijing	1	["nehznehs"]
-beijing - a-beijing	beijing	1	["gnijieb"]
-guangzhou - a-beijing	beijing	1	["uohzgnaug"]
-hangzhou - a-beijing	beijing	1	["uohzgnah"]
 shanghai - a-beijing	beijing	1	["iahgnahs"]
+beijing - a-beijing	beijing	1	["gnijieb"]
+shenzhen - a-beijing	beijing	1	["nehznehs"]
+hangzhou - a-beijing	beijing	1	["uohzgnah"]
+guangzhou - a-beijing	beijing	1	["uohzgnaug"]
 -- !result
 SELECT
     CONCAT(lcd.c4, ' - ', 'a') AS concatenated_values,
@@ -785,11 +785,11 @@ select
 from
     low_card_duplicate lcd;
 -- result:
-shanghai
+hangzhou
 beijing
+shanghai
 guangzhou
 shenzhen
-hangzhou
 -- !result
 SELECT
     c4,
@@ -999,11 +999,11 @@ FROM
 GROUP BY
     grouped_results.upper_c1;
 -- result:
+SHANGHAI	990	c
 SHENZHEN	770	c
 BEIJING	1034	c
 GUANGZHOU	968	c
 HANGZHOU	1056	c
-SHANGHAI	990	c
 -- !result
 SELECT
     lcd.c0,
@@ -1257,8 +1257,8 @@ FROM
 ORDER BY c1, c2, rank limit 10;
 -- result:
 		1	0.00175303445490039722
-		6	0.00738631979156705382
 		6	0.00142515312812037520
+		6	0.00738631979156705382
 		7	0.00952553311745999506
 		11	2.0835238245287E-7
 		17	0.00573706498198447023
@@ -1290,16 +1290,16 @@ FROM
     low_card_duplicate
 ORDER BY c1, c2, rank limit 10;
 -- result:
-		1	0.00175303445490039722
 		1	9896154.00000000000000000000
-		6	0.00738631979156705382
+		1	0.00175303445490039722
+		6	8983395.00000000000000000000
 		6	7954463.00000000000000000000
 		6	0.00142515312812037520
-		6	8983395.00000000000000000000
+		6	0.00738631979156705382
 		7	7953378.00000000000000000000
 		7	0.00952553311745999506
-		11	2.0835238245287E-7
 		11	7077253.00000000000000000000
+		11	2.0835238245287E-7
 -- !result
 select
     unnest
@@ -1332,4 +1332,33 @@ a
 a
 a
 a
+-- !result
+SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
+-- result:
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+-- !result
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
+-- result:
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
 -- !result
