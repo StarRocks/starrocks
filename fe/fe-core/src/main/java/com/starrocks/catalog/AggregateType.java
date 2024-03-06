@@ -165,9 +165,11 @@ public enum AggregateType {
     }
 
     public static Type extendedPrecision(Type type) {
+        /*
         if (type.isDecimalV3()) {
             return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, ((ScalarType) type).getScalarScale());
         }
+        */
         return type;
     }
 
