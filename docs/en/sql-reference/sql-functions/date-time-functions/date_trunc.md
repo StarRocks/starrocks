@@ -24,7 +24,11 @@ DATETIME date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 
   `fmt` must be set to a value listed in the following table. If the value is incorrect, an error will be returned.
 
+<<<<<<< HEAD
   If `datetime` is a DATE value, `fmt` can only be `year`，`quarter`，`month`，`week`，or `day`. If you set `fmt` to other date units, for example `hour`, an error is reported. See Example 5.
+=======
+  If `datetime` is a DATE value, `fmt` can only be `year`, `quarter`, `month`, `week`, or `day`. If you set `fmt` to other date units, for example `hour`, an error is reported. See Example 8.
+>>>>>>> 60f645d81f ([Doc] fix chinese characters in Branch 3.1 (backport #42140) (#42226))
 
 | Value   | Description                                                  |
 | ------- | ------------------------------------------------------------ |

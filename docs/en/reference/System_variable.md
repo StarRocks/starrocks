@@ -125,7 +125,7 @@ SELECT /*+ SET_VAR
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
 
-### activate_all_roles_on_login (global）
+### activate_all_roles_on_login (global)
 
   Whether to enable all roles (including default roles and granted roles) for a StarRocks user when the user connects to the StarRocks cluster. This variable is supported since v3.0.
   
@@ -152,7 +152,7 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
   Whether to enable low cardinality optimization. After this feature is enabled, the performance of querying STRING columns improves by about three times. Default value: true.
 
-### character_set_database (global）
+### character_set_database (global)
 
   The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
 
@@ -248,7 +248,21 @@ This variable is supported from v2.5.18 and v3.1.7.
 
 ### enable_query_queue_statistic (global)
 
+<<<<<<< HEAD
   Boolean value to enable query queues for statistics queries.
+=======
+Boolean value to enable query queues for statistics queries.
+
+### enable_query_tablet_affinity (2.5 and later)
+
+Boolean value to control whether to direct multiple queries against the same tablet to a fixed replica.
+
+In scenarios where the table to query has a large number of tablets, this feature significantly improves query performance because the meta information and data of the tablet can be cached in memory more quickly.
+
+However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
+
+Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, and 3.1.4.
+>>>>>>> 60f645d81f ([Doc] fix chinese characters in Branch 3.1 (backport #42140) (#42226))
 
 ### enable_scan_block_cache (2.5 and later)
   
