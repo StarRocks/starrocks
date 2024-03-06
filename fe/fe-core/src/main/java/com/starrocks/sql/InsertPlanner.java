@@ -45,7 +45,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
@@ -60,6 +59,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.QueryLocker;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
@@ -356,8 +356,8 @@ public class InsertPlanner {
                                             LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                             QueryRelation queryRelation, Table targetTable) {
         boolean isSchemaValid = true;
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(insertStmt, dbs);
-        Locker locker = new Locker();
+        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
+        QueryLocker locker = new QueryLocker(session, insertStmt);
         Stopwatch watch = Stopwatch.createStarted();
 
         for (int i = 0; i < Config.max_query_retry_time; i++) {
@@ -367,13 +367,13 @@ public class InsertPlanner {
             }
 
             // Release the lock during planning, and reacquire the lock before validating
-            StatementPlanner.unLock(locker, dbs);
+            StatementPlanner.unLock(locker);
             ExecPlan plan;
             try {
                 plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
                         targetTable);
             } finally {
-                StatementPlanner.lock(locker, dbs);
+                StatementPlanner.lock(locker);
             }
             isSchemaValid =
                     olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
