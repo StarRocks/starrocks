@@ -14,10 +14,9 @@
 
 #include "exec/hdfs_scanner.h"
 
-#include "fs/hdfs/fs_hdfs.h"
-
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
+#include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
