@@ -90,6 +90,8 @@ TEST_F(ExchangeSinkOperatorTest, test_push_random_scale) {
     network_address.__set_port(9050);
     destination.__set_brpc_server(network_address);
     destinations.emplace_back(destination);
+    TPlanFragmentDestination mock_destination = destination;
+    destinations.emplace_back(mock_destination);
     std::vector<ExprContext*> partition_expr_ctxs;
     std::vector<int32_t> output_columns;
     // auto mock_sink_buffer = std::make_shared<MockSinkBuffer>(_fragment_context, destinations, false);
