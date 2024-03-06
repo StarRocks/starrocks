@@ -525,13 +525,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Set<String> realPartitionNames =
                         e.getValue().stream()
                                 .flatMap(name -> convertMVPartitionNameToRealPartitionName(e.getKey(), name).stream())
-<<<<<<< HEAD
                                 .collect(Collectors.toSet());
-                ;
-
-=======
-                                .collect(Collectors.toSet());;
->>>>>>> 9c8beefb19 ([BugFix] Fix mv refresh possible deadlock between checkBaseTablePartitionChange and prepareRefreshPlan (backport #42052) (#42180))
                 baseTableAndPartitionNames.put(e.getKey(), realPartitionNames);
             }
             Map<Table, Set<String>> nonRefTableAndPartitionNames = getNonRefTableRefreshPartitions();
@@ -1267,39 +1261,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 return true;
             }
 
-<<<<<<< HEAD
-                if (snapshotTable.isOlapOrCloudNativeTable()) {
-                    OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
-                    PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
-                    if (snapshotPartitionInfo instanceof SinglePartitionInfo) {
-                        Set<String> partitionNames = ((OlapTable) table).getPartitionNames();
-                        if (!snapShotOlapTable.getVisiblePartitionNames().equals(partitionNames)) {
-                            // there is partition rename
-                            return true;
-                        }
-                    } else {
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap =
-                                snapShotOlapTable.getRangePartitionMap();
-                        Map<String, Range<PartitionKey>> currentPartitionMap =
-                                ((OlapTable) table).getRangePartitionMap();
-                        boolean changed =
-                                SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
-                        if (changed) {
-                            return true;
-                        }
-                    }
-                } else if (ConnectorPartitionTraits.isSupported(snapshotTable.getType())) {
-                    if (snapshotTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
-                    } else {
-                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                        // do not need to check base partition table changed when mv is not partitioned
-                        if (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
-                            return false;
-                        }
-=======
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
                 PartitionInfo snapshotPartitionInfo = snapShotOlapTable.getPartitionInfo();
@@ -1309,35 +1270,28 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         // there is partition rename
                         return true;
                     }
-                } else if (snapshotPartitionInfo instanceof ListPartitionInfo) {
-                    Map<String, List<List<String>>> snapshotPartitionMap =
-                            snapShotOlapTable.getListPartitionMap();
-                    Map<String, List<List<String>>> currentPartitionMap =
-                            ((OlapTable) table).getListPartitionMap();
-                    if (SyncPartitionUtils.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
-                        return true;
-                    }
                 } else {
                     Map<String, Range<PartitionKey>> snapshotPartitionMap =
                             snapShotOlapTable.getRangePartitionMap();
                     Map<String, Range<PartitionKey>> currentPartitionMap =
                             ((OlapTable) table).getRangePartitionMap();
-                    if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
+                    boolean changed =
+                            SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
+                    if (changed) {
                         return true;
                     }
                 }
             } else if (ConnectorPartitionTraits.isSupported(snapshotTable.getType())) {
                 if (snapshotTable.isUnPartitioned()) {
-                    return false;
+                    if (!table.isUnPartitioned()) {
+                        return true;
+                    }
                 } else {
                     PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                    // TODO: Support list partition later.
                     // do not need to check base partition table changed when mv is not partitioned
                     if (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
                         return false;
                     }
->>>>>>> 9c8beefb19 ([BugFix] Fix mv refresh possible deadlock between checkBaseTablePartitionChange and prepareRefreshPlan (backport #42052) (#42180))
-
                     Pair<Table, Column> partitionTableAndColumn =
                             getRefBaseTableAndPartitionColumn(snapshotBaseTables);
                     Column partitionColumn = partitionTableAndColumn.second;
@@ -1347,24 +1301,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         return false;
                     }
 
-<<<<<<< HEAD
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        boolean changed =
-                                SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
-                        if (changed) {
-                            return true;
-                        }
-=======
                     Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
                             snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
                     Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
                             table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                    if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
+                    boolean changed =
+                            SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
+                    if (changed) {
                         return true;
->>>>>>> 9c8beefb19 ([BugFix] Fix mv refresh possible deadlock between checkBaseTablePartitionChange and prepareRefreshPlan (backport #42052) (#42180))
                     }
                 }
             }
