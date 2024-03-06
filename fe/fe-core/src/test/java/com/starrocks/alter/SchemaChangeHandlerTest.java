@@ -47,7 +47,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class SchemaChangeHandlerTest {
-
     @Test
     public void testAddValueColumnOnAggMV(@Injectable OlapTable olapTable, @Injectable Column newColumn,
                                           @Injectable ColumnPosition columnPosition) {
@@ -73,6 +72,5 @@ public class SchemaChangeHandlerTest {
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
-
     }
 }
