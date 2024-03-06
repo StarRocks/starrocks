@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-This SQL statement can：
+This SQL statement can:
 
 - Alter the name of an asynchronous materialized view.
 - Alter the refresh strategy of an asynchronous materialized view.

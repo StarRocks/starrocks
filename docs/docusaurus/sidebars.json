@@ -238,7 +238,8 @@
               "description": "Pipe: Ideal for continuous loading at scale",
               "link": {"type": "doc", "id": "integrations/streaming/pipe"},
               "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
-            }
+            },
+            "integrations/streaming/rising_wave"
           ]
         },
         {
@@ -1326,7 +1327,11 @@
               "label": "Apache Kafka",
               "description": "从 Kafka 导入实时数据流",
               "link": {"type": "doc", "id": "integrations/streaming/apache_kafka"},
-              "items": ["integrations/streaming/kafka/Kafka-connector-starrocks", "integrations/streaming/kafka/RoutineLoad", "loading/automq-routine-load"]
+              "items": [
+                "integrations/streaming/kafka/Kafka-connector-starrocks",
+                "integrations/streaming/kafka/RoutineLoad",
+                "loading/automq-routine-load"
+              ]
             },
             {
               "type":"category",
@@ -1334,7 +1339,8 @@
               "description": "实现大规模、持续数据导入的理想工具",
               "link": {"type": "doc", "id": "integrations/streaming/pipe"},
               "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
-            }
+            },
+            "integrations/streaming/rising_wave"
           ]
         },
         {

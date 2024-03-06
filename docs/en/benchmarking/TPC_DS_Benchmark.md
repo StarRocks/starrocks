@@ -954,7 +954,7 @@ properties(
 );
 ```
 
-### 5.3 Create Hive external tables（Parquet)
+### 5.3 Create Hive external tables (Parquet)
 
 ```SQL
 use tpcds_100g_parquet_lz4;
@@ -1553,7 +1553,7 @@ LOCATION '/user/tmp/parquet/store_sales/'
 tblproperties("parquet.compression"="Lz4");
 ```
 
-### 5.4 Create Hive external tables（CSV）
+### 5.4 Create Hive external tables (CSV)
 
 ```SQL
 use tpcds_100g_csv;

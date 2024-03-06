@@ -111,7 +111,7 @@ GRANT
 
 * You must first run SET CATALOG before you run this command.
 * You can also use `<db_name>.<table_name>` to represent a table.
-* You can grant the SELECT privilege on all tables in Internal and External Catalogs to read data from these tables. For tables in Hive and Iceberg Catalogs，you can grant the INSERT privilege to write data into such tables (supported since v3.1 for Iceberg and v3.2 for Hive)
+* You can grant the SELECT privilege on all tables in Internal and External Catalogs to read data from these tables. For tables in Hive and Iceberg Catalogs, you can grant the INSERT privilege to write data into such tables (supported since v3.1 for Iceberg and v3.2 for Hive)
 
   ```SQL
   GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
