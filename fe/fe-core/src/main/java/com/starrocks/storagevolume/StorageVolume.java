@@ -82,6 +82,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public static String CREDENTIAL_MASK = "******";
 
+    private String dumpMaskedParams(Map<String, String> params) {
+        Gson gson = new Gson();
+        Map<String, String> maskedParams = new HashMap<>(params);
+        addMaskForCredential(maskedParams);
+        return gson.toJson(maskedParams);
+    }
+
     public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) {
         this.id = id;
@@ -95,8 +102,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         preprocessAuthenticationIfNeeded(configurationParams);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams);
         if (!isValidCloudConfiguration()) {
-            Gson gson = new Gson();
-            throw new SemanticException("Storage params is not valid " + gson.toJson(params));
+            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
         }
     }
 
@@ -116,8 +122,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
         if (!isValidCloudConfiguration()) {
-            Gson gson = new Gson();
-            throw new SemanticException("Storage params is not valid " + gson.toJson(newParams));
+            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(newParams));
         }
         this.params = newParams;
     }
@@ -184,15 +189,17 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public void getProcNodeData(BaseProcResult result) {
-        Gson gson = new Gson();
-        Map<String, String> p = new HashMap<>(params);
-        addMaskForCredential(p);
         result.addRow(Lists.newArrayList(name,
                 String.valueOf(svt.name()),
                 String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                         .getDefaultStorageVolumeId().equals(id)),
+<<<<<<< HEAD
                 String.valueOf(Strings.join(locations, ", ")),
                 String.valueOf(gson.toJson(p)),
+=======
+                Joiner.on(", ").join(locations),
+                dumpMaskedParams(params),
+>>>>>>> 0fb6375de0 ([BugFix] mask secret parameters when create storage volume failed(#41975) (#41975))
                 String.valueOf(enabled),
                 String.valueOf(comment)));
     }

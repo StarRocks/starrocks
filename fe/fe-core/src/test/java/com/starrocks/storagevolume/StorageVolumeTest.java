@@ -49,6 +49,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -430,5 +431,19 @@ public class StorageVolumeTest {
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_SECRET_KEY));
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SAS_TOKEN));
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SHARED_KEY));
+    }
+
+    @Test
+    public void testAddMaskInvalidForInvalidCredential() {
+        String awsSecretKey = "SomeAWSSecretKey";
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_ACCESS_KEY, "accessKey");
+        storageParams.put(AWS_S3_SECRET_KEY, awsSecretKey);
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        Exception exception = Assert.assertThrows(SemanticException.class, () -> new StorageVolume(
+                "1", "test", "obs", Collections.singletonList("s3://foobar"), storageParams, true, ""
+        ));
+        Assert.assertFalse(exception.getMessage().contains(awsSecretKey));
+        Assert.assertTrue(exception.getMessage().contains(StorageVolume.CREDENTIAL_MASK));
     }
 }
