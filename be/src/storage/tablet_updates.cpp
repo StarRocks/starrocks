@@ -2019,8 +2019,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         st = index.load(&_tablet);
     }
     if (!st.ok()) {
-        std::string msg = strings::Substitute("load primary index failed: $0 $1", st.to_string(),
-                                                _debug_string(false, true));
+        std::string msg =
+                strings::Substitute("load primary index failed: $0 $1", st.to_string(), _debug_string(false, true));
         failure_handler(msg);
         return;
     }
