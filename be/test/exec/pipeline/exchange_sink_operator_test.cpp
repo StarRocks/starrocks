@@ -102,7 +102,8 @@ TEST_F(ExchangeSinkOperatorTest, test_push_random_scale) {
             0, 2, std::move(mock_sink_buffer), TPartitionType::RANDOM_SCALE, destinations, false, 0, 0, id,
             std::move(partition_expr_ctxs), false, false, _fragment_context, output_columns);
     exchange_sink_operator_factory->set_runtime_state(_runtime_state);
-    auto exchange_sink_operator = exchange_sink_operator_factory->create(1, 0);
+    auto exchange_sink_operator =
+            std::static_pointer_cast<ExchangeSinkOperator>(exchange_sink_operator_factory->create(1, 0));
     auto chunk = std::make_shared<Chunk>();
     EXPECT_OK(exchange_sink_operator->push_chunk(_runtime_state, chunk));
 }
