@@ -222,14 +222,14 @@ To specify the aggregation mode for an aggregate query, use the `SET_VAR` hint t
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ~~~
 
-To specify the query execution timeout for a SUBMIT TASK statement, use the `SET_VAR` Hint to set the system variable `query_timeout` in the SUBMIT TASK statement.
+To specify the execution timeout for a SUBMIT TASK statement, use the `SET_VAR` Hint to set the system variable `query_timeout` in the SUBMIT TASK statement.
 
 
 ~~~SQL
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ~~~
 
-To specify the query execution timeout for creating a materialized view, use the `SET_VAR` hint to set the system variable `query_timeout` in the SELECT clause.
+To specify the subquery execution timeout for creating a materialized view, use the `SET_VAR` hint to set the system variable `query_timeout` in the SELECT clause.
 
 ~~~SQL
 CREATE MATERIALIZED VIEW mv 
@@ -242,9 +242,9 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 ### User-defined variable hint
 
-You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../reference/user_defined_variables.md) in SELECT statements, or in the INSERT statements.
+You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../reference/user_defined_variables.md) in the SELECT statements or INSERT statements.
 
-If other statements contain a SELECT clause, you can also use the `SET_USER_VARIABLE` hint in that SELECT clause. The other statements can be SELECT statements and INSERT statements, but cannot be CREATE MATERIALIZED VIEW AS SELECT statements and CREATE VIEW AS SELECT statements. Note that if the `SET_USER_VARIABLE` hint is used in the SELECT clause of CTE, the `SET_USER_VARIABLE` hint does not take effect even if the statement is executed successfully.
+If other statements contain a SELECT clause, you can also use the `SET_USER_VARIABLE` hint in that SELECT clause. Other statements can be SELECT statements and INSERT statements, but cannot be CREATE MATERIALIZED VIEW AS SELECT statements and CREATE VIEW AS SELECT statements. Note that if the `SET_USER_VARIABLE` hint is used in the SELECT clause of CTE, the `SET_USER_VARIABLE` hint does not take effect even if the statement is executed successfully.
 
 Compared with [the general usage of user-defined variables](../reference/user_defined_variables.md) which takes effect at the session level, the `SET_USER_VARIABLE` hint takes effect at the statement level and does not impact the entire session.
 
