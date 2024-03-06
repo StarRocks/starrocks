@@ -168,8 +168,14 @@ public:
     Status capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
 
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
+<<<<<<< HEAD
     bool version_for_delete_predicate(const Version& version);
     bool has_delete_predicates(const Version& version);
+=======
+    [[nodiscard]] bool version_for_delete_predicate(const Version& version);
+    [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
+    [[nodiscard]] bool has_delete_predicates(const Version& version);
+>>>>>>> 84c884d46a ([BugFix] Fix race condition when access delete predicate list in tablet meta (#42099) (#42100))
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
