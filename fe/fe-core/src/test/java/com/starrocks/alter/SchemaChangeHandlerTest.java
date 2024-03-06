@@ -27,14 +27,33 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.common.jmockit.Deencapsulation;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.Assert;
 import org.junit.Test;
+=======
+import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.utframe.TestWithFeService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.junit.Assert;
+import org.junit.FixMethodOrder;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.runners.MethodSorters;
+>>>>>>> de1ae9786d ([BugFix] Fix mv refresh possible deadlock between checkBaseTablePartitionChange and prepareRefreshPlan (#42052))
 
 public class SchemaChangeHandlerTest {
 
+<<<<<<< HEAD
     @Test
     public void testAddValueColumnOnAggMV(@Injectable OlapTable olapTable, @Injectable Column newColumn,
                                           @Injectable ColumnPosition columnPosition) {
@@ -49,6 +68,77 @@ public class SchemaChangeHandlerTest {
                 result = KeysType.AGG_KEYS;
                 newColumn.isKey();
                 result = false;
+=======
+
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+public class SchemaChangeHandlerTest extends TestWithFeService {
+
+    private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerTest.class);
+    private int jobSize = 0;
+
+    @Override
+    protected void runBeforeAll() throws Exception {
+        // set some parameters to speedup test
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
+        //create database db1
+        createDatabase("test");
+
+        //create tables
+        String createAggTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_agg (\n" + "user_id LARGEINT NOT NULL,\n"
+                + "date DATE NOT NULL,\n" + "city VARCHAR(20),\n" + "age SMALLINT,\n" + "sex TINYINT,\n"
+                + "last_visit_date DATETIME REPLACE DEFAULT '1970-01-01 00:00:00',\n" + "cost BIGINT SUM DEFAULT '0',\n"
+                + "max_dwell_time INT MAX DEFAULT '0',\n" + "min_dwell_time INT MIN DEFAULT '99999')\n"
+                + "AGGREGATE KEY(user_id, date, city, age, sex)\n" + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+        createTable(createAggTblStmtStr);
+
+        String createUniqTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_uniq (\n" + "user_id LARGEINT NOT NULL,\n"
+                + "username VARCHAR(50) NOT NULL,\n" + "city VARCHAR(20),\n" + "age SMALLINT,\n" + "sex TINYINT,\n"
+                + "phone LARGEINT,\n" + "address VARCHAR(500),\n" + "register_time DATETIME)\n"
+                + "UNIQUE  KEY(user_id, username)\n" + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+        createTable(createUniqTblStmtStr);
+
+        String createDupTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup (\n" + "timestamp DATETIME,\n"
+                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+
+        createTable(createDupTblStmtStr);
+
+        String createDup2TblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup2 (\n" + "timestamp DATETIME,\n"
+                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+
+        createTable(createDup2TblStmtStr);
+
+        String createDupTbl2StmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup2 (\n" + "timestamp DATETIME,\n"
+                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+
+        createTable(createDupTbl2StmtStr);
+
+        String createPKTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_pk (\n" + "timestamp DATETIME,\n"
+                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                + "op_time DATETIME)\n" + "PRIMARY  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+
+        createTable(createPKTblStmtStr);
+
+    }
+
+    private void waitAlterJobDone(Map<Long, AlterJobV2> alterJobs) throws Exception {
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            while (!alterJobV2.getJobState().isFinalState()) {
+                LOG.info("alter job {} is running. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
+                Thread.sleep(1000);
+>>>>>>> de1ae9786d ([BugFix] Fix mv refresh possible deadlock between checkBaseTablePartitionChange and prepareRefreshPlan (#42052))
             }
         };
 
