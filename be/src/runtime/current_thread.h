@@ -62,7 +62,6 @@ private:
         MemCacheManager(MemCacheManager&&) = delete;
 
         void consume(int64_t size) {
-            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -74,7 +73,6 @@ private:
         bool try_mem_consume(int64_t size) {
             MemTracker* cur_tracker = _loader();
             int64_t prev_reserved = _reserved_bytes;
-            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -114,16 +112,6 @@ private:
                 }
             }
             return true;
-        }
-
-        bool try_mem_reserve(int64_t reserve_bytes, MemTracker* tracker, int64_t limit) {
-            DCHECK(_reserved_bytes == 0);
-            DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes, tracker, limit)) {
-                _reserved_bytes = reserve_bytes;
-                return true;
-            }
-            return false;
         }
 
         void release_reserved() {
@@ -167,17 +155,6 @@ private:
         int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
 
     private:
-        int64_t _consume_from_reserved(int64_t size) {
-            if (_reserved_bytes > size) {
-                _reserved_bytes -= size;
-                size = 0;
-            } else {
-                size -= _reserved_bytes;
-                _reserved_bytes = 0;
-            }
-            return size;
-        }
-
         const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
         std::function<MemTracker*()> _loader;
@@ -270,13 +247,6 @@ public:
         return false;
     }
 
-    bool try_mem_reserve(int64_t size, MemTracker* tracker, int64_t limit) {
-        if (_mem_cache_manager.try_mem_reserve(size, tracker, limit)) {
-            return true;
-        }
-        return false;
-    }
-
     void release_reserved() { _mem_cache_manager.release_reserved(); }
 
     void mem_release(int64_t size) {
@@ -337,19 +307,9 @@ inline thread_local CurrentThread tls_thread_status;
 
 class CurrentThreadMemTrackerSetter {
 public:
-    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
-        _old_mem_tracker = tls_thread_status.mem_tracker();
-        _is_same = (_old_mem_tracker == new_mem_tracker);
-        if (!_is_same) {
-            tls_thread_status.set_mem_tracker(new_mem_tracker);
-        }
-    }
+    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {}
 
-    ~CurrentThreadMemTrackerSetter() {
-        if (!_is_same) {
-            (void)tls_thread_status.set_mem_tracker(_old_mem_tracker);
-        }
-    }
+    ~CurrentThreadMemTrackerSetter() {}
 
     CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
     void operator=(const CurrentThreadMemTrackerSetter&) = delete;

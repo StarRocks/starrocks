@@ -26,33 +26,21 @@ class PassThroughSenderChannel {
 public:
     PassThroughSenderChannel(std::atomic_int64_t& total_bytes) : _total_bytes(total_bytes) {}
 
-    ~PassThroughSenderChannel() {
-        if (_physical_bytes > 0) {
-            CurrentThread::current().mem_consume(_physical_bytes);
-        }
-    }
+    ~PassThroughSenderChannel() {}
 
     void append_chunk(const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
         // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
-        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
         auto clone = chunk->clone_unique();
-        int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
-        DCHECK_GE(physical_bytes, 0);
-        CurrentThread::current().mem_release(physical_bytes);
 
         std::unique_lock lock(_mutex);
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
         _bytes.push_back(chunk_size);
-        _physical_bytes += physical_bytes;
-        _total_bytes += physical_bytes;
     }
     void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
         std::unique_lock lock(_mutex);
         chunks->swap(_buffer);
         bytes->swap(_bytes);
 
-        // Consume physical bytes in current MemTracker, since later it would be released
-        CurrentThread::current().mem_consume(_physical_bytes);
         _total_bytes -= _physical_bytes;
         _physical_bytes = 0;
     }

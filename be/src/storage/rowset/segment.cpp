@@ -177,14 +177,9 @@ Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segm
           _fname(std::move(path)),
           _tablet_schema(std::move(tablet_schema)),
           _segment_id(segment_id),
-          _tablet_manager(tablet_manager) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-}
+          _tablet_manager(tablet_manager) {}
 
-Segment::~Segment() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
-}
+Segment::~Segment() {}
 
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
                      bool skip_fill_local_cache) {
@@ -274,8 +269,6 @@ Status Segment::load_index(bool skip_fill_local_cache) {
 
         Status st = _load_index(skip_fill_local_cache);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->short_key_index_mem_tracker(),
-                                     _short_key_index_mem_usage());
             update_cache_size();
         } else {
             _reset();

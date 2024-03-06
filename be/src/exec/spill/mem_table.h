@@ -50,11 +50,7 @@ public:
             : _runtime_state(state), _max_buffer_size(max_buffer_size), _spiller(spiller) {
         _tracker = std::make_unique<MemTracker>(-1, "spill-mem-table", parent);
     }
-    virtual ~SpillableMemTable() {
-        if (auto parent = _tracker->parent()) {
-            parent->release(_tracker->consumption());
-        }
-    }
+    virtual ~SpillableMemTable() {}
     bool is_full() const { return _tracker->consumption() >= _max_buffer_size; };
     virtual bool is_empty() = 0;
     size_t mem_usage() { return _tracker->consumption(); }

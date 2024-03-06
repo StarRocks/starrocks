@@ -24,15 +24,14 @@ CurrentThread::~CurrentThread() {
         tls_is_thread_status_init = false;
         return;
     }
+    release_reserved();
     mem_tracker_ctx_shift();
     tls_is_thread_status_init = false;
 }
 
 starrocks::MemTracker* CurrentThread::mem_tracker() {
     if (LIKELY(GlobalEnv::is_init())) {
-        if (UNLIKELY(tls_mem_tracker == nullptr)) {
-            tls_mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
-        }
+        tls_mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
         return tls_mem_tracker;
     } else {
         return nullptr;

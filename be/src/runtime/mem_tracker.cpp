@@ -128,6 +128,7 @@ MemTracker::~MemTracker() {
     if (parent()) {
         unregister_from_parent();
     }
+    _consumption = nullptr;
 }
 
 Status MemTracker::check_mem_limit(const std::string& msg) const {

@@ -146,9 +146,7 @@ public:
     SetMemTrackerForColumnPool(std::shared_ptr<MemTracker> mem_tracker) : _mem_tracker(std::move(mem_tracker)) {}
 
     template <typename Pool>
-    void operator()() {
-        Pool::singleton()->set_mem_tracker(_mem_tracker);
-    }
+    void operator()() {}
 
 private:
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
