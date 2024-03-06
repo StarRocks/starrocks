@@ -203,30 +203,33 @@ Query hints are directives or comments that explicitly suggest the query optimiz
 
 ### System variable hint
 
-You can use a `SET_VAR` hint to set one or more [system variables](../reference/System_variable.md) in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+You can use a `SET_VAR` hint to set one or more [system variables](../reference/System_variable.md) in SELECT and SUBMIT TASK statements, and then execute the statements. You can also use a `SET_VAR` hint in the SELECT clause included in other statements, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT. Note that if the `SET_VAR` hint is used in the SELECT clause of CTE, the `SET_VAR` hint does not take effect even if the statement is executed successfully.
+
+Compared with [the general usage of system variables](../reference/System_variable.md) which takes effect at the session level, the `SET_VAR` hint takes effect at the statement level and does not impact the entire session.
 
 #### Syntax
 
 ~~~SQL
-[...] SELECT [/*+ SET_VAR(key=value [, key = value]*) */] ...
-SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
+[...] SELECT /*+ SET_VAR(key=value [, key = value]) */ ...
+SUBMIT [/*+ SET_VAR(key=value [, key = value]) */] TASK ...
 ~~~
 
 #### Examples
 
- Hint the aggregation method for an aggregate query by setting the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage`.
+To specify the aggregation mode for an aggregate query, use the `SET_VAR` hint to set the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage` in the aggregate query.
 
 ~~~SQL
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ~~~
 
-Hint the query's task execution timeout period by setting the system variable `query_timeout` in the SUBMIT TASK statement.
+To specify the query execution timeout for a SUBMIT TASK statement, use the `SET_VAR` Hint to set the system variable `query_timeout` in the SUBMIT TASK statement.
+
 
 ~~~SQL
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ~~~
 
-Hint the query's execution timeout period by setting the system variable `query_timeout` in the SELECT clause when creating a materialized view.
+To specify the query execution timeout for creating a materialized view, use the `SET_VAR` hint to set the system variable `query_timeout` in the SELECT clause.
 
 ~~~SQL
 CREATE MATERIALIZED VIEW mv 
@@ -239,22 +242,25 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 ### User-defined variable hint
 
-You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../reference/user_defined_variables.md) in SELECT statements, or in the SELECT clauses within the INSERT statements.
+You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../reference/user_defined_variables.md) in SELECT statements, or in the INSERT statements.
 
-If a query references the result of a scalar subquery or scalar expression, you can use the `SET_USER_VARIABLE` hint to set that subquery or expression as a user-defined variable and then run the query. This not only avoids duplicate computation, but also eliminates the influence on the entire session because the `SET_USER_VARIABLE` hint takes effect at the statement level, unlike [the normal usage of user-defined variables](../reference/user_defined_variables.md) that takes effect at the session level.
+If other statements contain a SELECT clause, you can also use the `SET_USER_VARIABLE` hint in that SELECT clause. The other statements can be SELECT statements and INSERT statements, but cannot be CREATE MATERIALIZED VIEW AS SELECT statements and CREATE VIEW AS SELECT statements. Note that if the `SET_USER_VARIABLE` hint is used in the SELECT clause of CTE, the `SET_USER_VARIABLE` hint does not take effect even if the statement is executed successfully.
+
+Compared with [the general usage of user-defined variables](../reference/user_defined_variables.md) which takes effect at the session level, the `SET_USER_VARIABLE` hint takes effect at the statement level and does not impact the entire session.
 
 #### Syntax
 
-~~~SQL
-[...] SELECT [/*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]*) */] ...
-~~~
+```SQL
+[...] SELECT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
+INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
+```
 
 #### Examples
 
-The following query references scalar subqueries `select max(age) from users` and `select min(name) from users`, so you can use a `SET_USER_VARIABLE` hint to set these two scalar subqueries as user-defined variables and then run the query.
+The following SELECT statement references scalar subqueries `select max(age) from users` and `select min(name) from users`, so you can use a `SET_USER_VARIABLE` hint to set these two scalar subqueries as user-defined variables and then run the query.
 
 ~~~SQL
-SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
+SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ * FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
 ~~~
 
 ### Join hint
