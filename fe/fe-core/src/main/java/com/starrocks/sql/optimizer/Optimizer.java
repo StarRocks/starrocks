@@ -477,7 +477,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
         // try view based mv rewrite first, then try normal mv rewrite rules
-        if (isEnableSingleViewMvRewrite()) {
+        if (isEnableRBOViewBasedRewrite()) {
             // view based mv rewrite for single view
             viewBasedMvRuleRewrite(tree, rootTaskContext);
         }
@@ -523,7 +523,7 @@ public class Optimizer {
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             deriveLogicalProperty(treeWithView);
-            ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
             List<Operator> viewScanOperators = Lists.newArrayList();
             MvUtils.collectViewScanOperator(treeWithView, viewScanOperators);
 
@@ -547,13 +547,10 @@ public class Optimizer {
         }
     }
 
-    private boolean isEnableSingleViewMvRewrite() {
+    private boolean isEnableRBOViewBasedRewrite() {
         return context.getQueryMaterializationContext() != null
                 && context.getQueryMaterializationContext().getLogicalTreeWithView() != null
-                && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
-                && !context.getCandidateMvs().isEmpty()
-                && context.getCandidateMvs().stream().anyMatch(MaterializationContext::isSingleTable)
-                && context.getSessionVariable().isEnableRuleBasedMaterializedViewRewrite();
+                && context.getSessionVariable().isEnableViewBasedMvRewrite();
     }
 
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
