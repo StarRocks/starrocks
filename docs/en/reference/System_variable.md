@@ -125,7 +125,7 @@ SELECT /*+ SET_VAR
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
 
-### activate_all_roles_on_login (global）
+### activate_all_roles_on_login (global)
 
 Whether to enable all roles (including default roles and granted roles) for a StarRocks user when the user connects to the StarRocks cluster. This variable is supported since v3.0.
 
@@ -162,7 +162,7 @@ Controls how the CBO converts data from the DECIMAL type to the STRING type. If 
 
 Whether to enable low cardinality optimization. After this feature is enabled, the performance of querying STRING columns improves by about three times. Default value: true.
 
-### character_set_database (global）
+### character_set_database (global)
 
 The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
 
@@ -266,7 +266,7 @@ Boolean value to enable query queues for SELECT queries. Default: `false`.
 
 Boolean value to enable query queues for statistics queries.
 
-### enable_query_tablet_affinity（2.5 and later）
+### enable_query_tablet_affinity (2.5 and later)
 
 Boolean value to control whether to direct multiple queries against the same tablet to a fixed replica.
 

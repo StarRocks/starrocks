@@ -191,7 +191,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: ms
 - Default: 5000
 - Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
-- Introduced in: 2.5.15，3.1.5
+- Introduced in: 2.5.15, 3.1.5
 
 ##### max_partitions_in_one_batch
 
@@ -1001,7 +1001,7 @@ This section provides an overview of the static parameters that you can configur
 
 - **Default:** 0
 - **Description:** Number of worker threads for http server to deal with http requests. For a negative or 0 value, the number of threads will be twice the number of cpu cores.
-- Introduced in: 2.5.18，3.0.10，3.1.7，3.2.2
+- Introduced in: 2.5.18, 3.0.10, 3.1.7, 3.2.2
 
 ##### http_backlog_num
 
@@ -1910,14 +1910,14 @@ BE dynamic parameters are as follows.
 
 #### starlet_use_star_cache
 
-- **Default**：true
-- **Description**：Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
+- **Default**: true
+- **Description**: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
 - **Introduced in:** v3.1
 
 #### starlet_cache_evict_high_water
 
-- **Default**：0.2
-- **Description**：In a shared-data cluster, if the percentage of the available disk capacity is below this value, file data cache eviction will be triggered. The default value indicates that file data cache will use at most 80% of the disk capacity.
+- **Default**: 0.2
+- **Description**: In a shared-data cluster, if the percentage of the available disk capacity is below this value, file data cache eviction will be triggered. The default value indicates that file data cache will use at most 80% of the disk capacity.
 - **Introduced in:** v3.0
 
 ### Configure BE static parameters
@@ -2425,8 +2425,8 @@ BE static parameters are as follows.
 
 #### starlet_star_cache_disk_size_percent
 
-- **Default**：80
-- **Description**：The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- **Default**: 80
+- **Description**: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
 - **Introduced in:** v3.1
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |

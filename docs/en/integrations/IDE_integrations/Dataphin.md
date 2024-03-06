@@ -32,7 +32,7 @@ You can create StarRocks data sources and use StarRocks data sources as source d
   >
   > Currently, only MySQL, Hologres, and MaxCompute data sources are supported.
 
-- **Support scenerios**：The scenerios that data source can be applied in.
+- **Support scenerios**: The scenerios that data source can be applied in.
 
 - **Description**: Optional. You can enter a brief description of the data source. A maximum of 128 characters are allowed.
 
@@ -239,7 +239,7 @@ Parameters are described as follows:
 
   - Part Two: format is `database? key1 = value1 & key2 = value2`, where `database` is the name of the StarRocks database used for metadata calculation, which is required. The parameter after '?' is optional.
 
-- **Load URL**：The format is `fe_ip:http_port;fe_ip:http_port`. `fe_ip` is host of FE (Front End), and `http_port` is th port of FE.
+- **Load URL**: The format is `fe_ip:http_port;fe_ip:http_port`. `fe_ip` is host of FE (Front End), and `http_port` is th port of FE.
 
 - **Username**: The username used to connect to the StarRocks.
 
@@ -307,7 +307,7 @@ The detailed configuration information is as follows:
 
    - **JDBC URL**: The format is `jdbc:mysql://<Host>:<Port>/`. `Host` is the IP address of the FE Host in the StarRocks cluster. `Port` is the query Port of FE. Default value: `9030`.
 
-   - **Load URL**：The format is `fe_ip:http_port;fe_ip:http_port`. `fe_ip` is host of FE (Front End), and `http_port` is th port of FE.
+   - **Load URL**: The format is `fe_ip:http_port;fe_ip:http_port`. `fe_ip` is host of FE (Front End), and `http_port` is th port of FE.
 
    - **Username**: The username used to connect to the StarRocks.
 
