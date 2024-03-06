@@ -14,7 +14,7 @@
 
 #include "exec/hdfs_scanner.h"
 
-#include <fs/hdfs/fs_hdfs.h>
+#include "fs/hdfs/fs_hdfs.h"
 
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
