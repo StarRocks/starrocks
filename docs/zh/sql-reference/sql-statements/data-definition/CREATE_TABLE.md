@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['CREATE TABLE']
 ---
 
 # CREATE TABLE
