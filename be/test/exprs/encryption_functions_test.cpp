@@ -874,13 +874,13 @@ INSTANTIATE_TEST_SUITE_P(
                                 "d94d86cd8a6f3bb6b1804c22097b337ecc24f6015e")));
 
 // --gtest_filter=FpeTestFixture.fpe_ff1_encryptTest
-class FpeTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int, std::string>> {};
+class FpeFf1EncryptTestFixture
+        : public ::testing::TestWithParam<std::tuple<std::string, std::string, int, std::string>> {};
 
-TEST_P(FpeTestFixture, fpe_ff1_encryptTest) {
+TEST_P(FpeFf1EncryptTestFixture, fpe_ff1_encryptTest) {
     //LOG(INFO) << " fpe_ff1_encryptTest ";
     auto [str, key, radix, expected] = GetParam();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
-    Columns columns;
 
     auto str_plain = BinaryColumn::create();
     str_plain->append(str);
@@ -888,6 +888,8 @@ TEST_P(FpeTestFixture, fpe_ff1_encryptTest) {
     key_plain->append(key);
 
     ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
+
+    Columns columns;
     columns.emplace_back(str_plain);
     columns.emplace_back(key_plain);
     columns.emplace_back(radix_column);
@@ -899,13 +901,14 @@ TEST_P(FpeTestFixture, fpe_ff1_encryptTest) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        FpeEncryptTest, FpeTestFixture,
+        FpeFf1EncryptTest, FpeFf1EncryptTestFixture,
         ::testing::Values(std::make_tuple("1123123", "abcdefghijk12345abcdefghijk12345", 10, "0459571"),
                           std::make_tuple("23423274521", "abcdefghijk12345abcdefghijk12345", 10, "17651024676"),
                           std::make_tuple("469823423432", "abcdefghijk12345", 10, "539696457650")));
 
-//--gtest_filter=FpeTestFixture.fpe_ff1_decryptTest
-TEST_P(FpeTestFixture, fpe_ff1_decryptTest) {
+class FpeFf1DecryptTestFixture
+        : public ::testing::TestWithParam<std::tuple<std::string, std::string, int, std::string>> {};
+TEST_P(FpeFf1DecryptTestFixture, fpe_ff1_decryptTest) {
     auto [str, key, radix, expected] = GetParam();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
@@ -926,14 +929,14 @@ TEST_P(FpeTestFixture, fpe_ff1_decryptTest) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        FpeDecryptTest, FpeTestFixture,
+        FpeFf1DecryptTest, FpeFf1DecryptTestFixture,
         ::testing::Values(std::make_tuple("0459571", "abcdefghijk12345abcdefghijk12345", 10, "1123123"),
                           std::make_tuple("17651024676", "abcdefghijk12345abcdefghijk12345", 10, "23423274521"),
                           std::make_tuple("539696457650", "abcdefghijk12345", 10, "469823423432")));
 
-// --gtest_filter=FpeTestFixture.fpe_ff1_encrypt_numTest
-class FpeNumTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {};
-TEST_P(FpeNumTestFixture, fpe_ff1_encrypt_numTest) {
+class FpeFf1NumEncryptTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {
+};
+TEST_P(FpeFf1NumEncryptTestFixture, fpe_ff1_encrypt_numTest) {
     auto [str, key, expected] = GetParam();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
@@ -949,7 +952,7 @@ TEST_P(FpeNumTestFixture, fpe_ff1_encrypt_numTest) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        FpeNumEncryptTest, FpeNumTestFixture,
+        FpeFf1NumEncryptTest, FpeFf1NumEncryptTestFixture,
         ::testing::Values(
                 std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
                 std::make_tuple("-82695393.42", "abcdefghijk12345abcdefghijk12345", "-115815106.800956527124541"),
@@ -958,8 +961,9 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple("38229200.77", "abcdefghijk12345abcdefghijk12345", "184295182.721481625269811"),
                 std::make_tuple("61386179.40", "abcdefghijk12345abcdefghijk12345", "171024887.068976512463771")));
 
-// --gtest_filter=FpeTestFixture.fpe_ff1_decrypt_numTest
-TEST_P(FpeNumTestFixture, fpe_ff1_decrypt_numTest) {
+class FpeFf1NumDecryptTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {
+};
+TEST_P(FpeFf1NumDecryptTestFixture, fpe_ff1_decrypt_numTest) {
     auto [str, key, expected] = GetParam();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
@@ -975,7 +979,7 @@ TEST_P(FpeNumTestFixture, fpe_ff1_decrypt_numTest) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        FpeNumDecryptTest, FpeNumTestFixture,
+        FpeFf1NumDecryptTest, FpeFf1NumDecryptTestFixture,
         ::testing::Values(
                 std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
                 std::make_tuple("-115815106.800956527124541", "abcdefghijk12345abcdefghijk12345", "-82695393.42"),

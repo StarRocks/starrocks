@@ -1263,6 +1263,7 @@ build_gmp() {
     make install
 }
 
+# libfpe
 build_libfpe() {
     check_if_source_exist $LIBFPE_SOURCE
     mkdir -p $TP_SOURCE_DIR/$LIBFPE_SOURCE/build
@@ -1277,6 +1278,8 @@ build_libfpe() {
         -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ..
 
     ${BUILD_SYSTEM} -j$PARALLEL
+    cp src/libubiqfpe.a $TP_INSTALL_DIR/lib
+    cp -r $TP_SOURCE_DIR/$LIBFPE_SOURCE/src/include  $TP_INSTALL_DIR/installed
 }
 
 # restore cxxflags/cppflags/cflags to default one
