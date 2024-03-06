@@ -328,7 +328,7 @@ public class Optimizer {
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
-        if (mvRewriteStrategy.enableRBOSingleViewRewrite) {
+        if (mvRewriteStrategy.enableRBOViewBasedRewrite) {
             // try view based mv rewrite first, then try normal mv rewrite rules
             viewBasedMvRuleRewrite(tree, rootTaskContext);
         }
@@ -537,7 +537,7 @@ public class Optimizer {
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             deriveLogicalProperty(treeWithView);
-            ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+            ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
             List<Operator> viewScanOperators = Lists.newArrayList();
             MvUtils.collectViewScanOperator(treeWithView, viewScanOperators);
 
