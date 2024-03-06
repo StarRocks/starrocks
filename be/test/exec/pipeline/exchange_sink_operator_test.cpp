@@ -104,6 +104,8 @@ TEST_F(ExchangeSinkOperatorTest, test_push_random_scale) {
     exchange_sink_operator_factory->set_runtime_state(_runtime_state);
     auto exchange_sink_operator =
             std::static_pointer_cast<ExchangeSinkOperator>(exchange_sink_operator_factory->create(1, 0));
+    ASSERT_EQ(exchange_sink_operator->get_part_type(), TPartitionType::RANDOM_SCALE);
+
     auto chunk = std::make_shared<Chunk>();
     EXPECT_OK(exchange_sink_operator->push_chunk(_runtime_state, chunk));
 }
