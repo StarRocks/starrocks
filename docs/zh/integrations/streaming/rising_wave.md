@@ -8,15 +8,16 @@ displayed_sidebar: "Chinese"
 
 RisingWave 提供了直连的 StarRocks Sink 功能，可用于将数据导入至 StarRocks 表，不依赖第三方组件。该功能支持 StarRocks 全部 4 种表类型：明细表、聚合表、更新表和主键表。
 
-**注意：**
-
-- 使用 RisingWave connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/account-management/GRANT/) 给用户赋权。
-- RisingWave 目前对 StarRocks Sink 仅支持 At-least-once 语义，这意味着在故障发生时，数据可能被重复写入。使用 [StarRocks 主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)可对数据进行去重，实现端到端的幂等写。
-
-## 版本支持
+## 前提条件
 
 - 请确保您的 RisingWave 集群升级至 v1.7 或以上。v1.7 版本对 StarRocks Sink 进行了优化。
 - 推荐使用 StarRocks v2.5 及以上版本。更早版本未经过充分测试，如遇到稳定性问题可以通过 [Github Issues](https://github.com/risingwavelabs/risingwave/issues) 进行反馈。
+- 使用 RisingWave connector 导入数据至 StarRocks 需要目标表的 SELECT 和 INSERT 权限。如果您的用户账号没有这些权限，请参考 [GRANT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/account-management/GRANT/) 给用户赋权。
+
+:::tip
+RisingWave 目前对 StarRocks Sink 仅支持 At-least-once 语义，这意味着在故障发生时，数据可能被重复写入。使用 [StarRocks 主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)可对数据进行去重，实现端到端的幂等写。
+
+:::
 
 ## 参数说明
 
