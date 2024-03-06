@@ -88,10 +88,12 @@ def _parse_version(result):
     if ' ' in result:
         first_part = result.split(' ')[0]
 
-    if first_part and len(first_part.split('.')) == 3:
-        return first_part[0], first_part[1], first_part[2]
-
-    return default_version
+    base_version = tuple(int(i) for i in first_part.split('.'))
+    if base_version and len(base_version) == 3:
+        return base_version
+    else:
+        logger.debug("Config version '{}' is invalid. Use default version '{}'".format(result, default_version))
+        return default_version
 
 class StarRocksConnectionManager(SQLConnectionManager):
     TYPE = 'starrocks'
@@ -141,11 +143,7 @@ class StarRocksConnectionManager(SQLConnectionManager):
             except Exception as e:
                 logger.debug("Got an error when obtain StarRocks version exception: '{}'".format(e))
         else:
-            version = credentials.version.strip().split('.')
-            if len(version) == 3:
-                connection.handle.server_version = (int(version[0]), int(version[1]), int(version[2]))
-            else:
-                logger.debug("Config version '{}' is invalid".format(version))
+            connection.handle.server_version = _parse_version(credentials.version)
 
         return connection
 

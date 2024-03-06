@@ -144,14 +144,8 @@ class StarRocksAdapter(SQLAdapter):
         conn = self.connections.get_if_exists()
         if conn:
             server_version = conn.handle.server_version
-            version_detail = version.split(".")
-            version_detail = (int(version_detail[0]), int(version_detail[1]), int(version_detail[2]))
-            if version_detail[0] > server_version[0]:
-                return True
-            elif version_detail[0] == server_version[0] and version_detail[1] > server_version[1]:
-                return True
-            elif version_detail[0] == server_version[0] and version_detail[1] == server_version[1] \
-                    and version_detail[2] > server_version[2]:
+            version_detail = tuple(int(i) for i in version.split("."))
+            if version_detail > server_version:
                 return True
         return False
 
@@ -159,10 +153,7 @@ class StarRocksAdapter(SQLAdapter):
     def current_version(self):
         conn = self.connections.get_if_exists()
         if conn:
-            server_version = conn.handle.server_version
-            if server_version != (999, 999, 999):
-                return "{}.{}.{}".format(server_version[0], server_version[1], server_version[2])
-        return 'UNKNOWN'
+            return '.'.join([str(i) for i in conn.handle.server_version])
 
     def _get_one_catalog(
         self,
