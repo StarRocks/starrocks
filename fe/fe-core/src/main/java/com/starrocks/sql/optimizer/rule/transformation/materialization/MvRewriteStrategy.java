@@ -32,7 +32,7 @@ public class MvRewriteStrategy {
     public boolean enableForceRBORewrite = false;
 
     // rbo config
-    public boolean enableRBOSingleViewRewrite = false;
+    public boolean enableRBOViewBasedRewrite = false;
     public boolean enableRBOSingleTableRewrite = false;
 
     // cbo config
@@ -72,11 +72,10 @@ public class MvRewriteStrategy {
             return true;
         }
 
-        private boolean isEnableRBOSingleViewRewrite() {
+        private boolean isEnableRBOViewBasedRewrite() {
             return optimizerContext.getQueryMaterializationContext() != null
                     && optimizerContext.getQueryMaterializationContext().getLogicalTreeWithView() != null
-                    && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
-                    && optimizerContext.getCandidateMvs().stream().anyMatch(MaterializationContext::isSingleTable);
+                    && sessionVariable.isEnableViewBasedMvRewrite();
         }
 
         private boolean isEnableRBOSingleTableRewrite(OptExpression queryPlan) {
@@ -137,7 +136,7 @@ public class MvRewriteStrategy {
         strategy.enableForceRBORewrite = sessionVariable.isEnableForceRuleBasedMvRewrite();
 
         // rbo strategies
-        strategy.enableRBOSingleViewRewrite = arbitrator.isEnableRBOSingleViewRewrite();
+        strategy.enableRBOViewBasedRewrite = arbitrator.isEnableRBOViewBasedRewrite();
         strategy.enableRBOSingleTableRewrite = arbitrator.isEnableRBOSingleTableRewrite(queryPlan);
 
         // cbo strategies
