@@ -70,6 +70,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -320,16 +321,31 @@ public class StatementPlanner {
         }
     }
 
+    public static void lockDatabases(List<Database> dbs) {
+        if (dbs == null) {
+            return;
+        }
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        for (Database db : dbs) {
+            db.readLock();
+        }
+    }
+    public static void unlockDatabases(Collection<Database> dbs) {
+        if (dbs == null) {
+            return;
+        }
+        for (Database db : dbs) {
+            db.readUnlock();
+        }
+    }
+
     // Lock all database before analyze
     public static void lock(Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
         List<Database> dbList = new ArrayList<>(dbs.values());
-        dbList.sort(Comparator.comparingLong(Database::getId));
-        for (Database db : dbList) {
-            db.readLock();
-        }
+        lockDatabases(dbList);
     }
 
     // unLock all database after analyze
@@ -337,9 +353,7 @@ public class StatementPlanner {
         if (dbs == null) {
             return;
         }
-        for (Database db : dbs.values()) {
-            db.readUnlock();
-        }
+        unlockDatabases(dbs.values());
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.
