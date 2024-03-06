@@ -362,7 +362,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
                                     shadowShortKeyColumnCount, shadowSchemaHash, shadowSchemaVersion,
                                     Partition.PARTITION_INIT_VERSION,
-                                    originKeysType, TStorageType.COLUMN, storageMedium,
+                                    originKeysType, tbl.getStorageType(), storageMedium,
                                     shadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
@@ -596,6 +596,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     new RelationFields(tbl.getBaseSchema().stream().map(col ->
                                                     new Field(col.getName(), col.getType(), tableName, null))
                                             .collect(Collectors.toList())));
+
+                            if (ConnectContext.get() == null) {
+                                LOG.warn("Connect Context is null when add/modify generated column");
+                            } else {
+                                ConnectContext.get().setDatabase(db.getFullName());
+                            }
 
                             RewriteAliasVisitor visitor =
                                     new RewriteAliasVisitor(sourceScope, outputScope,

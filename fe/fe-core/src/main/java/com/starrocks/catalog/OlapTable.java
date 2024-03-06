@@ -84,6 +84,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
@@ -170,10 +171,6 @@ public class OlapTable extends Table {
          */
         WAITING_STABLE
     }
-
-    @SerializedName(value = "clusterId")
-    @Deprecated
-    protected int clusterId;
 
     @SerializedName(value = "state")
     protected OlapTableState state;
@@ -264,8 +261,6 @@ public class OlapTable extends Table {
         // for persist
         super(type);
 
-        this.clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
-
         this.bfColumns = null;
         this.bfFpp = 0;
 
@@ -282,24 +277,16 @@ public class OlapTable extends Table {
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
-        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(), indexes, TableType.OLAP);
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                     TableIndexes indexes) {
+        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes, TableType.OLAP);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-                     int clusterId, TableIndexes indexes) {
-        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                clusterId, indexes, TableType.OLAP);
-    }
-
-    public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-                     int clusterId, TableIndexes indexes, TableType tableType) {
+                     TableIndexes indexes, TableType tableType) {
         super(id, tableName, tableType, baseSchema);
 
-        this.clusterId = clusterId;
         this.state = OlapTableState.NORMAL;
 
         this.keysType = keysType;
@@ -448,10 +435,6 @@ public class OlapTable extends Table {
 
     public long getBaseIndexId() {
         return baseIndexId;
-    }
-
-    public int getClusterId() {
-        return clusterId;
     }
 
     public void setState(OlapTableState state) {
@@ -1740,6 +1723,11 @@ public class OlapTable extends Table {
         return partitionInfo != null && partitionInfo.isPartitioned();
     }
 
+    @Override
+    public boolean isUnPartitioned() {
+        return !isPartitionedTable();
+    }
+
     // NOTE: It's different from `isPartitionedTable` which `isPartitioned` means table has many buckets rather than
     // partitions.
     @Override
@@ -1951,10 +1939,6 @@ public class OlapTable extends Table {
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
             }
         }
-
-        // The table may be restored from another cluster, it should be set to current
-        // cluster id.
-        clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
 
         lastSchemaUpdateTime = new AtomicLong(-1);
         // Record the start and end time for data load version update phase
@@ -2813,6 +2797,10 @@ public class OlapTable extends Table {
     }
 
     public boolean getUseFastSchemaEvolution() {
+        if (hasRowStorageType()) {
+            // row storage type does not support fast schema evolution currently
+            return false;
+        }
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }
@@ -3040,10 +3028,7 @@ public class OlapTable extends Table {
     public FilePathInfo getPartitionFilePathInfo(long partitionId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-            builder.mergeFrom(pathInfo);
-            builder.setFullPath(builder.getFullPath() + "/" + partitionId);
-            return builder.build();
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, partitionId);
         }
         return null;
     }
@@ -3113,7 +3098,7 @@ public class OlapTable extends Table {
                     return partitionRange.isConnected(dataCacheRange);
                 } catch (Exception e) {
                     LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
-                            " validaity of range partition. Error: {}.", super.name, partition.getName(),
+                                    " validaity of range partition. Error: {}.", super.name, partition.getName(),
                             cacheDuration.toString(), e.getMessage());
                     return false;
                 }
@@ -3152,7 +3137,7 @@ public class OlapTable extends Table {
                 return false;
             } catch (Exception e) {
                 LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
-                        "validaity of list partition. Error: {}.", super.name, partition.getName(),
+                                "validaity of list partition. Error: {}.", super.name, partition.getName(),
                         cacheDuration.toString(), e.getMessage());
                 return false;
             }

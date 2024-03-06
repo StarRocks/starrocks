@@ -123,13 +123,13 @@ private:
     private:
         Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine);
 
-        std::unique_ptr<llvm::LLVMContext> context_;
-        std::unique_ptr<llvm::orc::LLJIT> lljit_;
-        std::unique_ptr<llvm::IRBuilder<>> ir_builder_;
-        std::unique_ptr<llvm::Module> module_;
+        std::unique_ptr<llvm::LLVMContext> _context;
+        std::unique_ptr<llvm::orc::LLJIT> _lljit;
+        std::unique_ptr<llvm::IRBuilder<>> _ir_builder;
+        std::unique_ptr<llvm::Module> _module;
 
-        bool module_finalized_ = false;
-        std::unique_ptr<llvm::TargetMachine> target_machine_;
+        bool _module_finalized = false;
+        std::unique_ptr<llvm::TargetMachine> _target_machine;
     };
 
     bool _initialized = false;

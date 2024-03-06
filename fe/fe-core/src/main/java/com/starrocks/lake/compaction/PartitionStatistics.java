@@ -32,6 +32,25 @@ public class PartitionStatistics {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
+    // default priority is 0, manual compaction will have priority value 1
+    @SerializedName(value = "priority")
+    private volatile CompactionPriority priority = CompactionPriority.DEFAULT;
+
+    public enum CompactionPriority {
+        DEFAULT(0),
+        MANUAL_COMPACT(1);
+
+        private final int value;
+
+        CompactionPriority(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
+
     public PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
         this.compactionVersion = null;
@@ -83,8 +102,23 @@ public class PartitionStatistics {
         return compactionScore;
     }
 
+    public CompactionPriority getPriority() {
+        // For backward compatibility
+        // prevent null value when deserializing JSON that doesn't include the priority field
+        return priority == null ? CompactionPriority.DEFAULT : priority;
+    }
+
+    public void setPriority(CompactionPriority priority) {
+        this.priority = priority;
+    }
+
+    public void resetPriority() {
+        this.setPriority(CompactionPriority.DEFAULT);
+    }
+
     @Override
     public String toString() {
         return new Gson().toJson(this);
     }
 }
+

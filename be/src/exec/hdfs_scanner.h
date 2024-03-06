@@ -143,6 +143,9 @@ struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
     const THdfsScanRange* scan_range = nullptr;
 
+    bool enable_split_tasks = false;
+    const pipeline::ScanSplitContext* split_context = nullptr;
+
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
@@ -165,7 +168,7 @@ struct HdfsScannerParams {
     // The file last modification time
     int64_t modification_time = 0;
 
-    TupleDescriptor* tuple_desc = nullptr;
+    const TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
@@ -212,16 +215,16 @@ struct HdfsScannerParams {
 
 struct HdfsScannerContext {
     struct ColumnInfo {
-        int col_idx;
-        TypeDescriptor col_type;
-        SlotId slot_id;
-        std::string col_name;
+        int idx_in_chunk;
         SlotDescriptor* slot_desc;
         bool decode_needed = true;
 
-        std::string formated_col_name(bool case_sensitive) {
-            return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+        std::string formatted_name(bool case_sensitive) const {
+            return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
+        const std::string& name() const { return slot_desc->col_name(); }
+        const SlotId slot_id() const { return slot_desc->id(); }
+        const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -238,6 +241,7 @@ struct HdfsScannerContext {
 
     // scan range
     const THdfsScanRange* scan_range = nullptr;
+    const pipeline::ScanSplitContext* split_context = nullptr;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -317,6 +321,9 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+        split_tasks->swap(_split_tasks);
+    }
 
 protected:
     Status open_random_access_file();
@@ -344,6 +351,9 @@ protected:
     int64_t _total_running_time = 0;
 
     std::shared_ptr<DefaultMORProcessor> _mor_processor;
+
+    const pipeline::ScanSplitContext* _split_context = nullptr;
+    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
 };
 
 } // namespace starrocks

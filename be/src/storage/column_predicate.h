@@ -47,7 +47,7 @@ class ExprContext;
 class RuntimeState;
 class SlotDescriptor;
 class BitmapIndexIterator;
-class BloomFilter;
+struct NgramBloomFilterReaderOptions;
 } // namespace starrocks
 
 namespace starrocks {
@@ -157,8 +157,19 @@ public:
 
     virtual bool support_bloom_filter() const { return false; }
 
+    // return true means this predicate can support ngram bloom filter, don't consider gram number(N)
+    // in ngram_bloom_filter(), if gram number is not equal(only happended in ngram_search right now)
+    // it will return true directly. This design is becasue gram number is hard to get in ScalarColumnIterator
+    // and not all predicate need gram size to determin whether support ngram bloom filter
+    virtual bool support_ngram_bloom_filter() const { return false; }
+
     // Return false to filter out a data page.
     virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
+
+    // Return false to filter out a data page.
+    virtual bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const {
+        return true;
+    }
 
     [[nodiscard]] virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");

@@ -39,13 +39,12 @@ public:
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status prepare_batch(size_t* num_records, Column* column) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+        size_t num_rows = static_cast<size_t>(range.span_size());
         if (_step > 1) {
-            *num_records = 0;
             return Status::EndOfFile("");
         }
         size_t start = 0;
-        size_t num_rows = 0;
         if (_step == 0) {
             start = 0;
             num_rows = 8;
@@ -55,29 +54,21 @@ public:
         }
 
         if (_type == tparquet::Type::type::INT32) {
-            _append_int32_column(column, start, num_rows);
+            _append_int32_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::INT64) {
-            _append_int64_column(column, start, num_rows);
+            _append_int64_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::INT96) {
-            _append_int96_column(column, start, num_rows);
+            _append_int96_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::BYTE_ARRAY) {
-            _append_binary_column(column, start, num_rows);
+            _append_binary_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::FLOAT) {
-            _append_float_column(column, start, num_rows);
+            _append_float_column(dst, start, num_rows);
         } else if (_type == tparquet::Type::type::DOUBLE) {
-            _append_double_column(column, start, num_rows);
+            _append_double_column(dst, start, num_rows);
         }
 
         _step++;
-        *num_records = num_rows;
         return Status::OK();
-    }
-
-    Status finish_batch() override { return Status::OK(); }
-
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
-        size_t rows = static_cast<size_t>(range.span_size());
-        return prepare_batch(&rows, dst);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override{};
@@ -164,8 +155,8 @@ private:
 ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     for (auto& column : param->read_cols) {
-        auto c = ColumnHelper::create_column(column.col_type_in_chunk, true);
-        chunk->append_column(c, column.col_idx_in_chunk);
+        auto c = ColumnHelper::create_column(column.slot_type(), true);
+        chunk->append_column(c, column.slot_id());
     }
     return chunk;
 }
@@ -224,7 +215,7 @@ void GroupReaderTest::_check_chunk(GroupReaderParam* param, const ChunkPtr& chun
     ASSERT_EQ(param->read_cols.size(), chunk->num_columns());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto column = chunk->columns()[i].get();
-        auto _type = param->read_cols[i].col_type_in_parquet;
+        auto _type = param->read_cols[i].type_in_parquet;
         size_t num_rows = count;
 
         if (_type == tparquet::Type::type::INT32) {
@@ -305,7 +296,7 @@ tparquet::FileMetaData* GroupReaderTest::_create_t_filemeta(GroupReaderParam* pa
     schema_elements.emplace_back(*_create_root_schema_element(param));
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         std::string name = "c" + std::to_string(i);
-        auto type = param->read_cols[i].col_type_in_parquet;
+        auto type = param->read_cols[i].type_in_parquet;
         schema_elements.emplace_back(*_create_schema_element(name, type));
     }
 
@@ -326,12 +317,12 @@ Status GroupReaderTest::_create_filemeta(FileMetaData** file_meta, GroupReaderPa
 
 static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tparquet::Type::type par_type,
                                                                      LogicalType prim_type) {
+    SlotDescriptor* slot =
+            new SlotDescriptor(idx, fmt::format("col{}", idx), TypeDescriptor::from_logical_type(prim_type));
     GroupReaderParam::Column c;
-    c.field_idx_in_parquet = idx;
-    c.col_idx_in_chunk = idx;
-    c.col_type_in_parquet = par_type;
-    c.col_type_in_chunk = TypeDescriptor::from_logical_type(prim_type);
-    c.slot_id = idx;
+    c.idx_in_parquet = idx;
+    c.type_in_parquet = par_type;
+    c.slot_desc = slot;
     return c;
 }
 
@@ -389,7 +380,7 @@ static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* 
     group_reader->_column_readers.clear();
     group_reader->_active_column_indices.clear();
     for (size_t i = 0; i < param->read_cols.size(); i++) {
-        auto r = std::make_unique<MockColumnReader>(param->read_cols[i].col_type_in_parquet);
+        auto r = std::make_unique<MockColumnReader>(param->read_cols[i].type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
         group_reader->_active_column_indices.push_back(i);
     }

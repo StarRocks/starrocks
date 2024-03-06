@@ -122,6 +122,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: false
 - **Description**: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics. This parameter is supported from v3.1.5 onwards.
 
+### User, role, privilege
+
+#### privilege_max_total_roles_per_user
+
+- **Unit**: -
+- **Default**: 64
+- **Description**: The maximum number of roles a user can have.
+- **Introduced in**: v3.0.0
+
+#### privilege_max_role_depth
+
+- **Unit**: -
+- **Default**: 16
+- **Description**: The maximum role depth (level of inheritance) of a role.
+- **Introduced in**: v3.0.0
+
 ### Query engine
 
 #### max_allowed_in_element_num_of_delete
@@ -580,23 +596,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition. Starting from version 2.5.7, StarRocks supports setting this parameter.
 
+#### enable_experimental_rowstore
+
+- **Description**: Whether to enable the [hybrid row-column storage](../table_design/hybrid_table.md).
+- **Default**: FALSE
+- **Introduced in**: v3.2.3
+
 #### storage_usage_soft_limit_percent
 
 - **Unit**: %
 - **Default**: 90
-- **Description**: If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_soft_limit_reserve_bytes`, tablets cannot be cloned into this directory.
+- **Description**: Soft limit of the storage usage percentage in a BE directory. If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_soft_limit_reserve_bytes`, tablets cannot be cloned into this directory.
 
 #### storage_usage_soft_limit_reserve_bytes
 
 - **Unit**: Byte
 - **Default**: `200 * 1024 * 1024 * 1024`
-- **Description**: If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory.
+- **Description**: Soft limit of the remaining storage space in a BE directory. If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory.
+
+##### storage_usage_hard_limit_percent
+
+- **Unit**: %
+- **Default**: 95
+- **Description**: Hard limit of the storage usage percentage in a BE directory. If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_hard_limit_reserve_bytes`, Load and Restore jobs are rejected. You need to set this item together with the BE configuration item `storage_flood_stage_usage_percent` to allow the configurations to take effect.
+
+##### storage_usage_hard_limit_reserve_bytes
+
+- **Unit**: Byte
+- **Default**: `100 * 1024 * 1024 * 1024`
+- **Description**: Hard limit of the remaining storage space in a BE directory. If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_hard_limit_percent`, Load and Restore jobs are rejected. You need to set this item together with the BE configuration item `storage_flood_stage_left_capacity_bytes` to allow the configurations to take effect.
 
 #### catalog_trash_expire_second
 
 - **Unit**: s
 - **Default**: 86400
-- **Description**: The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds.
+- **Description**: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command.
 
 #### alter_table_timeout_second
 

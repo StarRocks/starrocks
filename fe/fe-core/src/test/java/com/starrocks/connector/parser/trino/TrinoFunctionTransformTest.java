@@ -78,6 +78,16 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select contains_sequence(array[1,2,3], array[1,2])";
         assertPlanContains(sql, "array_contains_seq([1,2,3], [1,2])");
+
+        sql = "select concat_ws('_', array['1','2','3'])";
+        assertPlanContains(sql, "concat_ws('_', ['1','2','3'])");
+
+        sql = "select concat_ws('|', array_agg(event_type)) from "
+            + "(select 1 as event_type union all select 1 as event_type union all select 2 as event_type)";
+        assertPlanContains(sql, "concat_ws('|', CAST(8: array_agg AS ARRAY<VARCHAR>))");
+
+        sql = "select concat_ws('.', 5,6,'s',8,9,10)";
+        assertPlanContains(sql, "'5.6.s.8.9.10'");
     }
 
     @Test
@@ -156,6 +166,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
         assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
+
+        sql = "select to_char(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss');";
+        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
 
         sql = "select parse_datetime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')";
         assertPlanContains(sql, "str_to_jodatime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')");
@@ -421,5 +434,14 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select isnotnull(1, 2)";
         analyzeFail(sql, "isnotnull function must have 1 argument");
+    }
+
+    @Test
+    public void testUtilityFunction() throws Exception {
+        String sql = "select current_catalog";
+        assertPlanContains(sql, "<slot 2> : CATALOG()");
+
+        sql = "select current_schema";
+        assertPlanContains(sql, "<slot 2> : 'test'");
     }
 }

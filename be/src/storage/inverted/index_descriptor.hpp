@@ -30,7 +30,7 @@ public:
                                                 int segment_id, int64_t index_id) {
         // inverted index is a directory, it's path likes below
         // {rowset_dir}/{schema_hash}/{rowset_id}_{seg_num}_{index_id}
-        return fmt::format("{}/{}_{}_{}_{}", rowset_dir, rowset_id, segment_id, index_id, INVERTED_INDEX_MARK_NAME);
+        return fmt::format("{}/{}_{}_{}.{}", rowset_dir, rowset_id, segment_id, index_id, INVERTED_INDEX_MARK_NAME);
     }
 
     static const std::string get_temporary_null_bitmap_file_name() { return "null_bitmap"; }

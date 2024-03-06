@@ -45,11 +45,35 @@
 #include "util/murmur_hash3.h"
 
 namespace starrocks {
+class Slice;
 
+static const std::string FPP_KEY = "bloom_filter_fpp";
+static const std::string GRAM_NUM_KEY = "gram_num";
+static const std::string CASE_SENSITIVE_KEY = "case_sensitive";
+// used in write
 struct BloomFilterOptions {
     // false positive probablity
     double fpp = 0.05;
     HashStrategyPB strategy = HASH_MURMUR3_X64_64;
+    bool use_ngram = false;
+    // only use when use_ngram is true
+    size_t gram_num = 0;
+    bool case_sensitive = true;
+};
+
+// used in read from ngram bloom filter
+struct NgramBloomFilterReaderOptions {
+    size_t index_gram_num = 0;
+    bool index_case_sensitive = true;
+};
+
+struct NgramBloomFilterState {
+    bool initialized = false;
+    // whether this index can be used for predicate or not
+    bool index_useful = false;
+    std::vector<Slice> ngram_set;
+    // when index is case_insensitive, buffer is used to store the lower case of ngram_set
+    std::string buffer;
 };
 
 // Base class for bloom filter

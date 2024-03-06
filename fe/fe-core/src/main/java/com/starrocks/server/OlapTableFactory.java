@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang3.StringUtils;
@@ -279,6 +281,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
 
                 table.setBloomFilterInfo(bfColumns, bfFpp);
+
+                BloomFilterIndexUtil.analyseBfWithNgramBf(new HashSet<>(stmt.getIndexes()), bfColumns);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -314,6 +318,12 @@ public class OlapTableFactory implements AbstractTableFactory {
             boolean enablePersistentIndex = analyzeRet.first;
             boolean enablePersistentIndexByUser = analyzeRet.second;
             if (enablePersistentIndex && table.isCloudNativeTable()) {
+                TPersistentIndexType persistentIndexType;
+                try {
+                    persistentIndexType = PropertyAnalyzer.analyzePersistentIndexType(properties);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
                 // Judge there are whether compute nodes without storagePath or not.
                 // Cannot create cloud native table with persistent_index = true when ComputeNode without storagePath
                 Set<Long> cnUnSetStoragePath =
@@ -321,22 +331,19 @@ public class OlapTableFactory implements AbstractTableFactory {
                                 stream()
                                 .filter(id -> !GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(id).
                                         isSetStoragePath()).collect(Collectors.toSet());
-                if (cnUnSetStoragePath.size() != 0) {
+                if (cnUnSetStoragePath.size() != 0 && persistentIndexType == TPersistentIndexType.LOCAL) {
+                    // Check CN storage path when using local persistent index
                     if (enablePersistentIndexByUser) {
-                        throw new DdlException("Cannot create cloud native table with persistent_index = true " +
+                        throw new DdlException("Cannot create cloud native table with local persistent index" +
                                 "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
                     } else {
                         // if user has not requested persistent index, switch it to false
-                        table.setEnablePersistentIndex(false);
-                    }
-                } else {
-                    try {
-                        table.setPersistentIndexType(PropertyAnalyzer.analyzePersistentIndexType(properties));
-                    } catch (AnalysisException e) {
-                        throw new DdlException(e.getMessage());
+                        enablePersistentIndex = false;
                     }
                 }
-
+                if (enablePersistentIndex) {
+                    table.setPersistentIndexType(persistentIndexType);
+                }
             }
             table.setEnablePersistentIndex(enablePersistentIndex);
 

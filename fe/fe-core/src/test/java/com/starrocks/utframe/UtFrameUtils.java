@@ -109,6 +109,7 @@ import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -125,6 +126,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
@@ -326,6 +328,13 @@ public class UtFrameUtils {
         return addMockBackend(backend, backendId);
     }
 
+    public static ComputeNode addMockComputeNode(int backendId) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend("127.0.108.1");
+        // add be
+        return addMockComputeNode(backend, backendId);
+    }
+
     private static Backend addMockBackend(MockedBackend backend, int backendId) {
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
@@ -349,6 +358,25 @@ public class UtFrameUtils {
             GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
         }
         return be;
+    }
+
+    private static ComputeNode addMockComputeNode(MockedBackend backend, int backendId) {
+        ComputeNode cn = new ComputeNode(backendId, backend.getHost(), backend.getHeartBeatPort());
+        cn.setAlive(true);
+        cn.setBePort(backend.getBeThriftPort());
+        cn.setBrpcPort(backend.getBrpcPort());
+        cn.setHttpPort(backend.getHttpPort());
+        cn.setStarletPort(backend.getStarletPort());
+        cn.setIsStoragePath(false);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = backend.getStarletPort();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            String workerAddress = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress, workerGroupId);
+        }
+        return cn;
     }
 
     public static void addBroker(String brokerName) throws Exception {
@@ -750,6 +778,45 @@ public class UtFrameUtils {
         }
     }
 
+    public static LogicalPlan getQueryLogicalPlan(ConnectContext connectContext,
+                                                  ColumnRefFactory columnRefFactory,
+                                                  QueryStatement statement) {
+        LogicalPlan logicalPlan;
+        try (Timer t = Tracers.watchScope("Transformer")) {
+            logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transform((statement).getQueryRelation());
+
+        }
+        return logicalPlan;
+    }
+
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      ColumnRefFactory columnRefFactory,
+                                                      LogicalPlan logicalPlan,
+                                                      OptimizerConfig optimizerConfig) {
+        OptExpression optimizedPlan;
+        try (Timer t = Tracers.watchScope("Optimizer")) {
+            Optimizer optimizer = null;
+            if (optimizerConfig != null) {
+                optimizer = new Optimizer(optimizerConfig);
+            } else {
+                optimizer = new Optimizer();
+            }
+            optimizedPlan = optimizer.optimize(
+                    connectContext,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        }
+        return optimizedPlan;
+    }
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      ColumnRefFactory columnRefFactory,
+                                                      LogicalPlan logicalPlan) {
+        return getQueryOptExpression(connectContext, columnRefFactory, logicalPlan, null);
+    }
+
     private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
             throws Exception {
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
@@ -759,24 +826,8 @@ public class UtFrameUtils {
             }
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-
-            LogicalPlan logicalPlan;
-            try (Timer t = Tracers.watchScope("Transformer")) {
-                logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                        .transform((statement).getQueryRelation());
-
-            }
-
-            OptExpression optimizedPlan;
-            try (Timer t = Tracers.watchScope("Optimizer")) {
-                Optimizer optimizer = new Optimizer();
-                optimizedPlan = optimizer.optimize(
-                        connectContext,
-                        logicalPlan.getRoot(),
-                        new PhysicalPropertySet(),
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
-            }
+            LogicalPlan logicalPlan = getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+            OptExpression optimizedPlan = getQueryOptExpression(connectContext, columnRefFactory, logicalPlan);
 
             ExecPlan execPlan;
             try (Timer t = Tracers.watchScope("Builder")) {
@@ -898,6 +949,11 @@ public class UtFrameUtils {
 
     public static String getPlanThriftString(ConnectContext ctx, String queryStr) throws Exception {
         return UtFrameUtils.getThriftString(UtFrameUtils.getPlanAndFragment(ctx, queryStr).second.getFragments());
+    }
+
+    public static String getThriftDescTbl(ConnectContext ctx, String queryStr) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(ctx, queryStr);
+        return pair.second.getDescTbl().toThrift().toString();
     }
 
     // Lock all database before analyze

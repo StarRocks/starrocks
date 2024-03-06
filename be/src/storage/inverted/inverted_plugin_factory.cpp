@@ -23,7 +23,7 @@ StatusOr<InvertedPlugin*> InvertedPluginFactory::get_plugin(InvertedImplementTyp
     case InvertedImplementType::CLUCENE:
         return &CLucenePlugin::get_instance();
     default:
-        return Status::InvertedIndexCluceneError("Invalid implement of inverted type");
+        return Status::InternalError("Invalid implement of inverted type");
     }
 }
 

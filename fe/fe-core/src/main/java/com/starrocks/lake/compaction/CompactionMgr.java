@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -161,6 +162,11 @@ public class CompactionMgr {
         partitionStatisticsHashMap.remove(partition);
     }
 
+    @VisibleForTesting
+    public void clearPartitions() {
+        partitionStatisticsHashMap.clear();
+    }
+
     public long saveCompactionManager(DataOutput out, long checksum) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
@@ -209,5 +215,17 @@ public class CompactionMgr {
 
     public long getPartitionStatsCount() {
         return partitionStatisticsHashMap.size();
+    }
+
+    public PartitionStatistics triggerManualCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            return v;
+        });
+        LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
     }
 }

@@ -348,7 +348,7 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         Body body = new Body();
-        if (StringUtils.isNotBlank(request.getContent())) {
+        if (txnOperation != TransactionOperation.TXN_LOAD && StringUtils.isNotBlank(request.getContent())) {
             try {
                 LOG.info("Parse request body, label: {}, {}", label, request.getContent());
                 body = mapper.readValue(request.getContent(), new TypeReference<>() {

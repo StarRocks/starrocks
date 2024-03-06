@@ -35,10 +35,6 @@ public:
         _inner_reader->set_need_parse_levels(need_parse_levels);
     }
 
-    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override {
-        return _inner_reader->read_records(num_rows, content_type, dst);
-    }
-
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                       Column* dst) override;
 

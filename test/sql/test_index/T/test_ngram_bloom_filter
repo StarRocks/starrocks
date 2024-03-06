@@ -1,0 +1,122 @@
+-- name: test_ngram_bloom_filter
+create database ngram_bloom_filter_db_1;
+use  ngram_bloom_filter_db_1;
+CREATE TABLE ngram_index(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+
+show index from ngram_index;
+
+insert into ngram_index values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaaaaaaaaaaab",4),('2023-01-03',"我爱吃烤全羊yangyangchin",4),('2023-01-04',"tonightisgreadnight",4);
+
+select * from ngram_index order by ngram_search(username, 'chinese',4) desc;
+drop index idx_name1 on ngram_index;
+function: wait_alter_table_finish()
+show index from ngram_index;
+
+ALTER TABLE ngram_index ADD INDEX idx_name1(username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.01");
+function: wait_alter_table_finish()
+show index from ngram_index;
+select * from ngram_index order by  ngram_search(username, 'chinese',4) desc;
+drop database ngram_bloom_filter_db_1;
+
+-- name: test_ngram_bloom_filter_default
+create database ngram_bloom_filter_db_2;
+use  ngram_bloom_filter_db_2;
+CREATE TABLE ngram_index_default_1(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4")
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_1;
+
+CREATE TABLE ngram_index_default_2(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_2;
+
+CREATE TABLE ngram_index_default_3(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_3;
+
+-- name: test_ngram_bloom_filter_like
+CREATE TABLE ngram_index_like(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+
+insert into ngram_index_like values ('2023-01-01',"hina",3);
+insert into ngram_index_like values ('2023-01-01',"chinese",3);
+-- 2 rows are filterd
+select * from ngram_index_like where username like 'chia%';
+-- one row output, one row is filterd
+select * from ngram_index_like where username like '_hine%';
+-- this can not use index
+select * from ngram_index_like where username like '_hin%';
+
+
+-- name: test_ngram_bloom_filter_case_insensitive
+CREATE TABLE ngram_index_case_in_sensitive(
+    timestamp DATETIME NOT NULL,
+    Username STRING,
+    price INT NULL
+)PROPERTIES ("replication_num" = "1");
+insert into ngram_index_case_in_sensitive values ('2023-01-01',"aAbac",3);
+insert into ngram_index_case_in_sensitive values ('2023-01-01',"AaBAa",3);
+
+select ngram_search(Username,"aabaa",4) as order_col from ngram_index_case_in_sensitive order by order_col desc;
+
+select ngram_search_case_insensitive(Username,"aabaa",4) as order_col from ngram_index_case_in_sensitive order by order_col desc;
+
+
+ALTER TABLE ngram_index_case_in_sensitive ADD INDEX idx_name1(Username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.01");
+function: wait_alter_table_finish()
+
+-- index and function is case sensitive, so tow rows is filterd
+select * from ngram_index_case_in_sensitive order by ngram_search(Username,"aabaa",4) desc;
+-- function is case insensitive, index is sensitive, so index doesn't filter any data
+select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+
+drop index idx_name1 on ngram_index_case_in_sensitive;
+function: wait_alter_table_finish()
+
+ALTER TABLE ngram_index_case_in_sensitive ADD INDEX idx_name1(Username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.05", "case_sensitive" = "false");
+function: wait_alter_table_finish()
+-- function is case sensitive, index is case insensitive, index doesn't filter any data 
+-- because tow rows all hit bloom filter if case insensitive, which is a bad case
+select * from ngram_index_case_in_sensitive order by ngram_search(Username,"aabaa",4) desc;
+
+-- both are case insensitive, can't filter data 
+select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+insert into ngram_index_case_in_sensitive values ('2023-01-01',"DDDDDDd",3);
+--  one row is filterd
+select * from ngram_index_case_in_sensitive order by ngram_search_case_insensitive(Username,"aabaa",4) desc;
+
+
+-- name: test_ngram_bloom_filter_char
+create database ngram_bloom_filter_db_3;
+use ngram_bloom_filter_db_3;
+CREATE TABLE ngram_index_char(
+    timestamp DATETIME NOT NULL,
+    username char(20) NOT NULL,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+
+show index from ngram_index_char;
+
+insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaa",4),('2023-01-03',"我爱chin",4),('2023-01-04',"toniggrht",4);
+select * from ngram_index_char where username like '_hiaa%';

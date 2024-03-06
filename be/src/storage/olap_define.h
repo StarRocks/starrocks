@@ -43,9 +43,6 @@
 
 namespace starrocks {
 
-// data and index page size, default is 64k
-static const size_t OLAP_PAGE_SIZE = 65536;
-
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
 uint32_t get_olap_string_max_length();

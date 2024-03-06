@@ -55,7 +55,7 @@ alter table t set('bucket_size'='0');
 -- !result
 alter table t set('bucket_size'='-1');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
+E: (5064, 'Getting analyzing error. Detail message: Illegal bucket size: -1.')
 -- !result
 alter table t set('bucket_size'='2048');
 -- result:
