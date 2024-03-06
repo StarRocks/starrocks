@@ -1277,7 +1277,6 @@ build_libfpe() {
         -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ..
 
     ${BUILD_SYSTEM} -j$PARALLEL
-    ${BUILD_SYSTEM} install
 }
 
 # restore cxxflags/cppflags/cflags to default one
