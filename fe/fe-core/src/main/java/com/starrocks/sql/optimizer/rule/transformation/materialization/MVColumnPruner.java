@@ -43,13 +43,22 @@ public class MVColumnPruner {
 
     public OptExpression pruneColumns(OptExpression queryExpression) {
         if (queryExpression.getOp() instanceof LogicalFilterOperator) {
-            queryExpression = queryExpression.inputAt(0);
+            OptExpression newQueryOptExpression = doPruneColumns(queryExpression.inputAt(0));
+            Operator filterOp = queryExpression.getOp();
+            Operator.Builder opBuilder = OperatorBuilderFactory.build(filterOp);
+            opBuilder.withOperator(filterOp);
+            return OptExpression.create(opBuilder.build(), newQueryOptExpression);
+        } else {
+            return doPruneColumns(queryExpression);
         }
-        Projection projection = queryExpression.getOp().getProjection();
+    }
+
+    public OptExpression doPruneColumns(OptExpression project) {
+        Projection projection = project.getOp().getProjection();
         // OptExpression after mv rewrite must have projection.
         Preconditions.checkState(projection != null);
         requiredOutputColumns = new ColumnRefSet(projection.getOutputColumns());
-        return queryExpression.getOp().accept(new ColumnPruneVisitor(), queryExpression, null);
+        return project.getOp().accept(new ColumnPruneVisitor(), project, null);
     }
 
     // Prune columns by top-down, only support SPJG/union operators.
