@@ -23,6 +23,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -38,6 +39,7 @@ import org.junit.Test;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 
 public class PseudoClusterTest {
@@ -120,8 +122,9 @@ public class PseudoClusterTest {
             try {
                 stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
                 Assert.fail("expected exception was not occured.");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
+            } catch (SQLException e) {
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
 
             // client prepared stmt
@@ -155,8 +158,9 @@ public class PseudoClusterTest {
             try {
                 stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
                 Assert.fail("expected exception was not occured.");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
+            } catch (SQLException e) {
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.toString(), e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
 
             // client prepared stmt
