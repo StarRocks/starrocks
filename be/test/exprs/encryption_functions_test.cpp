@@ -941,10 +941,13 @@ TEST_P(FpeFf1NumEncryptTestFixture, fpe_ff1_encrypt_numTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto plain = BinaryColumn::create();
-    plain->append(str);
-    plain->append(key);
-    columns.emplace_back(plain);
+    auto str_plain = BinaryColumn::create();
+    str_plain->append(str);
+    auto key_plain = BinaryColumn::create();
+    key_plain->append(key);
+
+    columns.emplace_back(str_plain);
+    columns.emplace_back(key_plain);
 
     ColumnPtr result = EncryptionFunctions::fpe_encrypt_num(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -968,10 +971,13 @@ TEST_P(FpeFf1NumDecryptTestFixture, fpe_ff1_decrypt_numTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto plain = BinaryColumn::create();
-    plain->append(str);
-    plain->append(key);
-    columns.emplace_back(plain);
+    auto str_plain = BinaryColumn::create();
+    str_plain->append(str);
+    auto key_plain = BinaryColumn::create();
+    key_plain->append(key);
+
+    columns.emplace_back(str_plain);
+    columns.emplace_back(key_plain);
 
     ColumnPtr result = EncryptionFunctions::fpe_decrypt_num(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
