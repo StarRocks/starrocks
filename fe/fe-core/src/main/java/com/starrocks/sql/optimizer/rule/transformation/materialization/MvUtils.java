@@ -108,6 +108,8 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
+    public static final int OP_UNION_ALL_BIT = 1 << 0;
+
     public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
                                                       int maxLevel,
                                                       Set<Table> tablesToCheck) {
@@ -1170,5 +1172,15 @@ public class MvUtils {
                 }
             }
         }
+    }
+
+    public static void setAppliedUnionAllRewrite(Operator op) {
+        int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
+        op.setOpRuleMask(opRuleMask);
+    }
+
+    public static boolean isAppliedUnionAllRewrite(Operator op) {
+        int opRuleMask = op.getOpRuleMask();
+        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
     }
 }
