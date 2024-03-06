@@ -355,20 +355,20 @@ SUBMIT [/*+ SET_VAR(key=value [, key = value]) */] TASK ...
 
 #### 示例
 
-在聚合查询语句中使用 `SET_VAR` hint 设置系统变量 `streaming_preaggregation_mode` 和 `new_planner_agg_stage` 来指定聚合方式。
+如果需要指定聚合查询的聚合方式，可以在聚合查询中使用 `SET_VAR` hint 设置系统变量 `streaming_preaggregation_mode` 和 `new_planner_agg_stage`。
 
 ```SQL
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ```
 
-在 SUBMIT TASK 语句中使用 `SET_VAR` hint 设置系统变量 `query_timeout` 来指定查询执行超时时间。
+如果需要指定 SUBMIT TASK 语句执行超时时间，可以在 SUBMIT TASK 语句中使用 `SET_VAR` hint 设置系统变量 `query_timeout`。
 
 ```SQL
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK 
     AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ```
 
-创建物化视图时在 SELECT 子句中使用 `SET_VAR` hint 通过系统变量 `query_timeout` 来设置查询执行超时时间。
+如果需要指定创建物化视图的子查询执行超时时间，可以在 SELECT 子句中使用 `SET_VAR` hint 设置系统变量 `query_timeout`。
 
 ```SQL
 CREATE MATERIALIZED VIEW mv 
