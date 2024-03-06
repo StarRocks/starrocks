@@ -16,8 +16,9 @@
 
 #include <string>
 #include <string_view>
-#include "util/slice.h"
+
 #include "common/status.h"
+#include "util/slice.h"
 
 namespace starrocks {
 

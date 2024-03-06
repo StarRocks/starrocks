@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/function_helper.h"
 #include "exprs/encryption_functions.h"
-#include "exprs/fpe.h"
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/status.h"
 #include "exprs/base64.h"
 #include "exprs/expr.h"
+#include "exprs/fpe.h"
+#include "exprs/function_helper.h"
 #include "util/aes_util.h"
 #include "util/debug_util.h"
 #include "util/integer_util.h"
@@ -444,11 +444,14 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_encrypt(FunctionContext* ctx, c
             return Status::InvalidArgument("key size must 16 or 24 or 32");
         }
 
-        const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
+        const std::string_view key = (key_value.data != nullptr)
+                                             ? std::string_view((char*)key_value.data, key_value.size)
+                                             : std::string_view(FPE::DEFAULT_KEY);
         std::string value;
         auto src_size = src_value.size > FPE::MIN_LENGTH ? src_value.size : FPE::MIN_LENGTH;
         value.resize(src_size);
-        RETURN_IF_ERROR(FPE::encrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
+        RETURN_IF_ERROR(
+                FPE::encrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
 
         result.append(Slice(value));
     }
@@ -480,7 +483,9 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_encrypt_num(FunctionContext* ctx, c
         }
 
         std::string value;
-        const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
+        const std::string_view key = (key_value.data != nullptr)
+                                             ? std::string_view((char*)key_value.data, key_value.size)
+                                             : std::string_view(FPE::DEFAULT_KEY);
         RETURN_IF_ERROR(FPE::encrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value));
 
         result.append(Slice(value));
@@ -513,12 +518,15 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_ff1_decrypt(FunctionContext* ctx, c
             return Status::InvalidArgument("key size must 16 or 24 or 32");
         }
 
-        const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
+        const std::string_view key = (key_value.data != nullptr)
+                                             ? std::string_view((char*)key_value.data, key_value.size)
+                                             : std::string_view(FPE::DEFAULT_KEY);
 
         std::string value;
         auto src_size = src_value.size > FPE::MIN_LENGTH ? src_value.size : FPE::MIN_LENGTH;
         value.resize(src_size);
-        RETURN_IF_ERROR(FPE::decrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
+        RETURN_IF_ERROR(
+                FPE::decrypt(std::string_view((char*)src_value.data, src_value.size), key, value.data(), length));
         result.append(Slice(value));
     }
 
@@ -548,7 +556,9 @@ StatusOr<ColumnPtr> EncryptionFunctions::fpe_decrypt_num(FunctionContext* ctx, c
             return Status::InvalidArgument("key size must 16 or 24 or 32");
         }
 
-        const std::string_view key = (key_value.data != nullptr) ? std::string_view((char*)key_value.data, key_value.size) : std::string_view(FPE::DEFAULT_KEY);
+        const std::string_view key = (key_value.data != nullptr)
+                                             ? std::string_view((char*)key_value.data, key_value.size)
+                                             : std::string_view(FPE::DEFAULT_KEY);
         RETURN_IF_ERROR(FPE::decrypt_num(std::string_view((char*)src_value.data, src_value.size), key, value));
 
         result.append(Slice(value));

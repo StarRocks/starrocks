@@ -801,9 +801,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
         ASSERT_EQ(results[j], v->get_data()[j]);
     }
-
 }
-
 
 class ShaTestFixture : public ::testing::TestWithParam<std::tuple<std::string, int, std::string>> {};
 
@@ -879,44 +877,47 @@ INSTANTIATE_TEST_SUITE_P(
 class FpeTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int, std::string>> {};
 
 TEST_P(FpeTestFixture, fpe_ff1_encryptTest) {
+    //LOG(INFO) << " fpe_ff1_encryptTest ";
     auto [str, key, radix, expected] = GetParam();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto plain = BinaryColumn::create();
-    plain->append(str);
-    plain->append(key);
+    auto str_plain = BinaryColumn::create();
+    str_plain->append(str);
+    auto key_plain = BinaryColumn::create();
+    key_plain->append(key);
 
     ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
-    columns.emplace_back(plain);
+    columns.emplace_back(str_plain);
+    columns.emplace_back(key_plain);
     columns.emplace_back(radix_column);
 
     ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
+    //ASSERT_TRUE(result->is_nullable());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     EXPECT_EQ(expected, v->get_data()[0].to_string());
 }
 
 INSTANTIATE_TEST_SUITE_P(
         FpeEncryptTest, FpeTestFixture,
-        ::testing::Values(
-            std::make_tuple("0459571", "abcdefghijk12345abcdefghijk12345", 10, "1123123"),
-            std::make_tuple("17651024676", "abcdefghijk12345abcdefghijk12345", 10, "23423274521"),
-            std::make_tuple("539696457650", "abcdefghijk12345", 10, "469823423432")
-        )
-);
+        ::testing::Values(std::make_tuple("1123123", "abcdefghijk12345abcdefghijk12345", 10, "0459571"),
+                          std::make_tuple("23423274521", "abcdefghijk12345abcdefghijk12345", 10, "17651024676"),
+                          std::make_tuple("469823423432", "abcdefghijk12345", 10, "539696457650")));
 
-// --gtest_filter=FpeTestFixture.fpe_ff1_decryptTest
+//--gtest_filter=FpeTestFixture.fpe_ff1_decryptTest
 TEST_P(FpeTestFixture, fpe_ff1_decryptTest) {
     auto [str, key, radix, expected] = GetParam();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
-    auto plain = BinaryColumn::create();
-    plain->append(str);
-    plain->append(key);
+    auto str_plain = BinaryColumn::create();
+    str_plain->append(str);
+    auto key_plain = BinaryColumn::create();
+    key_plain->append(key);
 
     ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
-    columns.emplace_back(plain);
+    columns.emplace_back(str_plain);
+    columns.emplace_back(key_plain);
     columns.emplace_back(radix_column);
 
     ColumnPtr result = EncryptionFunctions::fpe_ff1_decrypt(ctx.get(), columns).value();
@@ -926,12 +927,9 @@ TEST_P(FpeTestFixture, fpe_ff1_decryptTest) {
 
 INSTANTIATE_TEST_SUITE_P(
         FpeDecryptTest, FpeTestFixture,
-        ::testing::Values(
-            std::make_tuple("1123123", "abcdefghijk12345abcdefghijk12345", 10, "0459571"),
-            std::make_tuple("23423274521", "abcdefghijk12345abcdefghijk12345", 10, "17651024676"),
-            std::make_tuple("469823423432", "abcdefghijk12345", 10, "539696457650")
-        )
-);
+        ::testing::Values(std::make_tuple("0459571", "abcdefghijk12345abcdefghijk12345", 10, "1123123"),
+                          std::make_tuple("17651024676", "abcdefghijk12345abcdefghijk12345", 10, "23423274521"),
+                          std::make_tuple("539696457650", "abcdefghijk12345", 10, "469823423432")));
 
 // --gtest_filter=FpeTestFixture.fpe_ff1_encrypt_numTest
 class FpeNumTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {};
@@ -953,14 +951,13 @@ TEST_P(FpeNumTestFixture, fpe_ff1_encrypt_numTest) {
 INSTANTIATE_TEST_SUITE_P(
         FpeNumEncryptTest, FpeNumTestFixture,
         ::testing::Values(
-        std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
-        std::make_tuple("-82695393.42", "abcdefghijk12345abcdefghijk12345", "-115815106.800956527124541"),
-        std::make_tuple("-47724403.07", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
-        std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-181831555.57492613140701"),
-        std::make_tuple("38229200.77", "abcdefghijk12345abcdefghijk12345", "184295182.721481625269811"),
-        std::make_tuple("61386179.40", "abcdefghijk12345abcdefghijk12345", "171024887.068976512463771")
-)
-);
+                std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
+                std::make_tuple("-82695393.42", "abcdefghijk12345abcdefghijk12345", "-115815106.800956527124541"),
+                std::make_tuple("-47724403.07", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
+                std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-181831555.57492613140701"),
+                std::make_tuple("38229200.77", "abcdefghijk12345abcdefghijk12345", "184295182.721481625269811"),
+                std::make_tuple("61386179.40", "abcdefghijk12345abcdefghijk12345", "171024887.068976512463771")));
+
 // --gtest_filter=FpeTestFixture.fpe_ff1_decrypt_numTest
 TEST_P(FpeNumTestFixture, fpe_ff1_decrypt_numTest) {
     auto [str, key, expected] = GetParam();
@@ -980,16 +977,11 @@ TEST_P(FpeNumTestFixture, fpe_ff1_decrypt_numTest) {
 INSTANTIATE_TEST_SUITE_P(
         FpeNumDecryptTest, FpeNumTestFixture,
         ::testing::Values(
-        std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
-        std::make_tuple("-115815106.800956527124541", "abcdefghijk12345abcdefghijk12345", "-82695393.42"),
-        std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-47724403.07"),
-        std::make_tuple("-181831555.57492613140701", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
-        std::make_tuple("184295182.721481625269811", "abcdefghijk12345abcdefghijk12345", "38229200.77"),
-        std::make_tuple("171024887.068976512463771", "abcdefghijk12345abcdefghijk12345", "61386179.4")
-)
-);
-
-
-
+                std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
+                std::make_tuple("-115815106.800956527124541", "abcdefghijk12345abcdefghijk12345", "-82695393.42"),
+                std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-47724403.07"),
+                std::make_tuple("-181831555.57492613140701", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
+                std::make_tuple("184295182.721481625269811", "abcdefghijk12345abcdefghijk12345", "38229200.77"),
+                std::make_tuple("171024887.068976512463771", "abcdefghijk12345abcdefghijk12345", "61386179.4")));
 
 } // namespace starrocks
