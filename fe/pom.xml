@@ -665,8 +665,12 @@ under the License.
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
+<<<<<<< HEAD
                 <version>42.4.3</version>
                 <scope>test</scope>
+=======
+                <version>42.4.4</version>
+>>>>>>> a8246c2d17 ([Enhancement] Upgrade postgresql due to CVE-2024-1597 (#42190))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
