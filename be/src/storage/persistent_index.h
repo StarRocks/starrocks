@@ -162,6 +162,15 @@ struct EditVersionWithMerge {
     bool merged{false};
 };
 
+struct MergeCandidate {
+    int32_t start_idx;
+    int32_t merge_num;
+
+    bool operator<(const MergeCandidate& rhs) const {
+        return merge_num > rhs.merge_num || (merge_num == rhs.merge_num && start_idx > rhs.start_idx);
+    }
+};
+
 struct IndexPage;
 struct ImmutableIndexShard;
 class PersistentIndex;
@@ -418,6 +427,8 @@ private:
 
 class ImmutableIndex {
 public:
+    ~ImmutableIndex();
+
     // batch get
     // |n|: size of key/value array
     // |keys|: key array as slice array
@@ -494,7 +505,7 @@ public:
 
     bool has_bf() { return !_bf_vec.empty(); }
 
-    static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& index_rb,
+    static StatusOr<std::shared_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& index_rb,
                                                           bool load_bf_data);
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
@@ -789,6 +800,11 @@ public:
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
+    uint64_t get_next_task_id() { return ++_next_task_id; }
+
+    Status merge_flushed_l1(uint64_t id, int64_t start_idx, int64_t end_idx,
+                            std::vector<std::shared_ptr<ImmutableIndex>>& immu_indexes);
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
@@ -800,25 +816,18 @@ protected:
 private:
     size_t _dump_bound();
 
-    void _set_error(bool error, const string& msg) {
-        _error = error;
-        _error_msg = msg;
-    }
     // check _l0 should dump as snapshot or not
     bool _can_dump_directly();
     bool _need_flush_advance();
-    bool _need_merge_advance();
     Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
                                         std::vector<size_t>* replace_idxes);
     Status _delete_major_compaction_tmp_index_file();
-    Status _delete_tmp_index_file();
 
     Status _flush_l0();
 
     Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
                                       std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat,
                                       bool keep_delete);
-    Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
 
@@ -846,11 +855,11 @@ private:
 
     uint64_t _l1_l2_file_size() const;
 
-    void _get_l2_stat(const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
-                      std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat);
+    void _get_indexes_stat(const std::vector<ImmutableIndex*>& immu_indexes,
+                           std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat);
 
     StatusOr<EditVersion> _major_compaction_impl(const std::vector<EditVersion>& l2_versions,
-                                                 const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec);
+                                                 const std::vector<std::shared_ptr<ImmutableIndex>>& l2_vec);
 
     bool _enable_minor_compaction();
 
@@ -863,6 +872,15 @@ private:
     bool _need_rebuild_index(const PersistentIndexMetaPB& index_meta);
 
     Status _reload_usage_and_size_by_key_length(size_t l1_idx_start, size_t l1_idx_end, bool contain_l2);
+
+    void _set_error(bool error, const string& msg) {
+        _error = error;
+        _error_msg = msg;
+    }
+
+    Status _merge_multiple_immutable_index(ImmutableIndexWriter* writer, std::vector<ImmutableIndex*>& immu_indexes);
+
+    MergeCandidate _get_merge_candidate();
 
 protected:
     // prevent concurrent operations
@@ -883,7 +901,7 @@ protected:
     bool _dump_snapshot = false;
     bool _flushed = false;
     // add all l1 into vector
-    std::vector<std::unique_ptr<ImmutableIndex>> _l1_vec;
+    std::vector<std::shared_ptr<ImmutableIndex>> _l1_vec;
     // The usage and size is not exactly accurate after reload persistent index from disk becaues
     // we ignore the overlap kvs between l0 and l1. The general accuracy can already be used as a
     // reference to estimate nshard and npages We don't persist the overlap kvs info to reduce the
@@ -893,7 +911,7 @@ protected:
     // l2 files's version
     std::vector<EditVersionWithMerge> _l2_versions;
     // all l2
-    std::vector<std::unique_ptr<ImmutableIndex>> _l2_vec;
+    std::vector<std::shared_ptr<ImmutableIndex>> _l2_vec;
 
     bool _cancel_major_compaction = false;
 
@@ -914,6 +932,12 @@ private:
     std::atomic<double> _write_amp_score{0.0};
     // Latest major compaction time. In second.
     int64_t _latest_compaction_time = 0;
+
+    int64_t _flush_count = 0;
+    std::atomic<uint64_t> _next_task_id;
+    std::atomic<bool> _merge_compaction_running{false};
+    std::set<uint64_t> _running_merge_compaction_task_id;
+    std::set<uint64_t> _cancel_merge_compaction_task_id;
 };
 
 } // namespace starrocks

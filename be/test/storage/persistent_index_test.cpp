@@ -1347,7 +1347,7 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
 
 void build_persistent_index_from_tablet(size_t N) {
     FileSystem* fs = FileSystem::Default();
-    const std::string kPersistentIndexDir = "./persistent_index_test_build_from_tablet";
+    const std::string kPersistentIndexDir = "./persistent_index_test_build_from_tablet_" + std::to_string(rand());
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 

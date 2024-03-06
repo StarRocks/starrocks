@@ -63,6 +63,9 @@ constexpr size_t kBatchBloomFilterReadSize = 4ULL << 20;
 
 const char* const kIndexFileMagic = "IDX1";
 
+const string kFlushFileSuffix = ".tmp";
+const string kMajorCompactionFileSuffix = ".merged.tmp";
+
 bool write_pindex_bf = true;
 
 using KVPairPtr = const uint8_t*;
@@ -378,6 +381,15 @@ static void copy_kv_to_page(size_t key_size, size_t num_kv, const KVPairPtr* kv_
 
 static bool load_bf_or_not() {
     return config::enable_pindex_filter && StorageEngine::instance()->update_manager()->keep_pindex_bf();
+}
+
+static bool is_suffix(const std::string& full, const std::string& suffix) {
+    if (full.length() >= suffix.length() &&
+        full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_t key_size, size_t npage_hint,
@@ -2189,6 +2201,16 @@ size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint
 
 #endif
 
+ImmutableIndex::~ImmutableIndex() {
+    if (_file != nullptr) {
+        std::string full(_file->filename());
+        if (is_suffix(full, kFlushFileSuffix) && !is_suffix(full, kMajorCompactionFileSuffix)) {
+            FileSystem::Default()->delete_file(full);
+            _file.reset();
+        }
+    }
+}
+
 Status ImmutableIndex::_get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
                                                  uint32_t shard_bits,
                                                  std::unique_ptr<ImmutableIndexShard>* shard) const {
@@ -2822,7 +2844,7 @@ Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys, size_t key_s
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<RandomAccessFile>&& file,
+StatusOr<std::shared_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<RandomAccessFile>&& file,
                                                                bool load_bf_data) {
     ASSIGN_OR_RETURN(auto file_size, file->get_size());
     if (file_size < 12) {
@@ -2869,7 +2891,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         return Status::InternalError(msg);
     }
 
-    std::unique_ptr<ImmutableIndex> idx = std::make_unique<ImmutableIndex>();
+    std::shared_ptr<ImmutableIndex> idx = std::make_shared<ImmutableIndex>();
     idx->_version = EditVersion(meta.version());
     idx->_size = meta.size();
     if (meta.compression_type() > 0) {
@@ -3290,6 +3312,8 @@ Status PersistentIndex::prepare(const EditVersion& version, size_t n) {
     _dump_snapshot = false;
     _flushed = false;
     _version = version;
+    _merge_compaction_running = false;
+    _flush_count = 0;
 
     if (config::enable_parallel_get_and_bf) {
         _need_bloom_filter = true;
@@ -3354,43 +3378,49 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     // In addition, there may be I/O waste because we append wals firstly and do _flush_l0 or _merge_compaction.
     uint64_t l1_l2_file_size = _l1_l2_file_size();
     bool do_minor_compaction = false;
-    // if l1 is not empty,
-    if (_flushed) {
-        if (_enable_minor_compaction()) {
-            RETURN_IF_ERROR(_minor_compaction(index_meta));
-            do_minor_compaction = true;
+    {
+        std::lock_guard l(_lock);
+        for (auto& id : _running_merge_compaction_task_id) {
+            _cancel_merge_compaction_task_id.insert(id);
+        }
+        // if l1 is not empty,
+        if (_flushed) {
+            if (_enable_minor_compaction()) {
+                RETURN_IF_ERROR(_minor_compaction(index_meta));
+                do_minor_compaction = true;
+            } else {
+                RETURN_IF_ERROR(_merge_compaction());
+            }
+            if (stat != nullptr) {
+                stat->compaction_cost += watch.elapsed_time();
+                watch.reset();
+            }
         } else {
-            RETURN_IF_ERROR(_merge_compaction());
-        }
-        if (stat != nullptr) {
-            stat->compaction_cost += watch.elapsed_time();
-            watch.reset();
-        }
-    } else {
-        if (l1_l2_file_size != 0) {
-            // and l0 memory usage is large enough,
-            if (_l0_is_full(l1_l2_file_size)) {
-                // do l0 l1 merge compaction
-                _flushed = true;
-                if (_enable_minor_compaction()) {
-                    RETURN_IF_ERROR(_minor_compaction(index_meta));
-                    do_minor_compaction = true;
-                } else {
-                    RETURN_IF_ERROR(_merge_compaction());
+            if (l1_l2_file_size != 0) {
+                // and l0 memory usage is large enough,
+                if (_l0_is_full(l1_l2_file_size)) {
+                    // do l0 l1 merge compaction
+                    _flushed = true;
+                    if (_enable_minor_compaction()) {
+                        RETURN_IF_ERROR(_minor_compaction(index_meta));
+                        do_minor_compaction = true;
+                    } else {
+                        RETURN_IF_ERROR(_merge_compaction());
+                    }
+                    if (stat != nullptr) {
+                        stat->compaction_cost += watch.elapsed_time();
+                        watch.reset();
+                    }
                 }
+                // if l1 is empty, and l0 memory usage is large enough
+            } else if (_l0_is_full()) {
+                // do flush l0
+                _flushed = true;
+                RETURN_IF_ERROR(_flush_l0());
                 if (stat != nullptr) {
-                    stat->compaction_cost += watch.elapsed_time();
+                    stat->flush_or_wal_cost += watch.elapsed_time();
                     watch.reset();
                 }
-            }
-            // if l1 is empty, and l0 memory usage is large enough
-        } else if (_l0_is_full()) {
-            // do flush l0
-            _flushed = true;
-            RETURN_IF_ERROR(_flush_l0());
-            if (stat != nullptr) {
-                stat->flush_or_wal_cost += watch.elapsed_time();
-                watch.reset();
             }
         }
     }
@@ -3443,7 +3473,6 @@ Status PersistentIndex::on_commited() {
                 _version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
-    RETURN_IF_ERROR(_delete_tmp_index_file());
     _dump_snapshot = false;
     _flushed = false;
     _need_bloom_filter = false;
@@ -3494,11 +3523,11 @@ Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, I
 
 class GetFromImmutableIndexTask : public Runnable {
 public:
-    GetFromImmutableIndexTask(size_t num, ImmutableIndex* immu_index, const Slice* keys, IndexValue* values,
-                              std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info,
-                              PersistentIndex* index, IOStatEntry* io_stat_entry)
+    GetFromImmutableIndexTask(size_t num, std::shared_ptr<ImmutableIndex> immu_index, const Slice* keys,
+                              IndexValue* values, std::map<size_t, KeysInfo>* keys_info_by_key_size,
+                              KeysInfo* found_keys_info, PersistentIndex* index, IOStatEntry* io_stat_entry)
             : _num(num),
-              _immu_index(immu_index),
+              _immu_index(std::move(immu_index)),
               _keys(keys),
               _values(values),
               _keys_info_by_key_size(keys_info_by_key_size),
@@ -3508,14 +3537,14 @@ public:
 
     void run() override {
         auto scope = IOProfiler::scope(_io_stat_entry);
-        WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
-                                                           _found_keys_info),
+        WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index.get(), _num, _keys, _values,
+                                                           _keys_info_by_key_size, _found_keys_info),
                       "Failed to run GetFromImmutableIndexTask");
     }
 
 private:
     size_t _num;
-    ImmutableIndex* _immu_index;
+    std::shared_ptr<ImmutableIndex> _immu_index;
     const Slice* _keys;
     IndexValue* _values;
     std::map<size_t, KeysInfo>* _keys_info_by_key_size;
@@ -3554,24 +3583,27 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     }
 
     std::unique_lock<std::mutex> ul(_get_lock);
-    std::map<size_t, KeysInfo>::iterator iter;
-    std::string error_msg;
-    std::vector<std::vector<uint64_t>> get_values(_l2_vec.size() + _l1_vec.size(),
-                                                  std::vector<uint64_t>(n, NullIndexValue));
-    // store keys_info from old to new
-    _found_keys_info.resize(_l2_vec.size() + _l1_vec.size());
-    for (size_t i = 0; i < _l2_vec.size() + _l1_vec.size(); i++) {
-        ImmutableIndex* immu_index = i < _l2_vec.size() ? _l2_vec[i].get() : _l1_vec[i - _l2_vec.size()].get();
-        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(
-                n, immu_index, keys, reinterpret_cast<IndexValue*>(get_values[i].data()), &keys_info_by_key_size,
-                &_found_keys_info[i], this, IOProfiler::get_context()));
-        auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
-        if (!st.ok()) {
-            error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
-            LOG(ERROR) << error_msg;
-            return st;
+    std::vector<std::vector<uint64_t>> get_values;
+    {
+        std::lock_guard l(_lock);
+        std::map<size_t, KeysInfo>::iterator iter;
+        std::string error_msg;
+        get_values.resize(_l2_vec.size() + _l1_vec.size(), std::vector<uint64_t>(n, NullIndexValue));
+        // store keys_info from old to new
+        _found_keys_info.resize(_l2_vec.size() + _l1_vec.size());
+        for (size_t i = 0; i < _l2_vec.size() + _l1_vec.size(); i++) {
+            std::shared_ptr<ImmutableIndex> immu_index = i < _l2_vec.size() ? _l2_vec[i] : _l1_vec[i - _l2_vec.size()];
+            std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(
+                    n, std::move(immu_index), keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
+                    &keys_info_by_key_size, &_found_keys_info[i], this, IOProfiler::get_context()));
+            auto st = StorageEngine::instance()->update_manager()->pindex_apply_thread_pool()->submit(std::move(r));
+            if (!st.ok()) {
+                error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
+                LOG(ERROR) << error_msg;
+                return st;
+            }
+            _running_get_task++;
         }
-        _running_get_task++;
     }
     while (_running_get_task != 0) {
         _get_task_finished.wait(ul);
@@ -3593,33 +3625,33 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     return Status::OK();
 }
 
-void PersistentIndex::_get_l2_stat(const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
-                                   std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat) {
-    std::for_each(
-            l2_vec.begin(), l2_vec.end(), [&usage_and_size_stat](const std::unique_ptr<ImmutableIndex>& immu_index) {
-                for (const auto& [key_size, shard_info] : immu_index->_shard_info_by_length) {
-                    auto [l2_shard_offset, l2_shard_size] = shard_info;
-                    const auto size =
-                            std::accumulate(std::next(immu_index->_shards.begin(), l2_shard_offset),
-                                            std::next(immu_index->_shards.begin(), l2_shard_offset + l2_shard_size), 0L,
-                                            [](size_t s, const auto& e) { return s + e.size; });
-                    const auto usage =
-                            std::accumulate(std::next(immu_index->_shards.begin(), l2_shard_offset),
-                                            std::next(immu_index->_shards.begin(), l2_shard_offset + l2_shard_size), 0L,
-                                            [](size_t s, const auto& e) { return s + e.data_size; });
+void PersistentIndex::_get_indexes_stat(const std::vector<ImmutableIndex*>& immu_indexes,
+                                        std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat) {
+    std::for_each(immu_indexes.begin(), immu_indexes.end(), [&usage_and_size_stat](const ImmutableIndex* immu_index) {
+        for (const auto& [key_size, shard_info] : immu_index->_shard_info_by_length) {
+            auto [shard_offset, shard_size] = shard_info;
+            const auto size = std::accumulate(std::next(immu_index->_shards.begin(), shard_offset),
+                                              std::next(immu_index->_shards.begin(), shard_offset + shard_size), 0L,
+                                              [](size_t s, const auto& e) { return s + e.size; });
+            const auto usage = std::accumulate(std::next(immu_index->_shards.begin(), shard_offset),
+                                               std::next(immu_index->_shards.begin(), shard_offset + shard_size), 0L,
+                                               [](size_t s, const auto& e) { return s + e.data_size; });
 
-                    auto iter = usage_and_size_stat.find(key_size);
-                    if (iter == usage_and_size_stat.end()) {
-                        usage_and_size_stat.insert({key_size, {usage, size}});
-                    } else {
-                        iter->second.first += usage;
-                        iter->second.second += size;
-                    }
-                }
-            });
+            auto iter = usage_and_size_stat.find(key_size);
+            if (iter == usage_and_size_stat.end()) {
+                usage_and_size_stat.insert({key_size, {usage, size}});
+            } else {
+                iter->second.first += usage;
+                iter->second.second += size;
+            }
+        }
+    });
 }
 
 Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
+    if (is_error()) {
+        return Status::InternalError(_error_msg);
+    }
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     RETURN_IF_ERROR(_l0->get(n, keys, values, &num_found, not_founds_by_key_size));
@@ -3628,6 +3660,29 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     }
     return _get_from_immutable_index(n, keys, values, not_founds_by_key_size, nullptr);
 }
+
+class MergeTmpL1Task : public Runnable {
+public:
+    MergeTmpL1Task(uint64_t task_id, int64_t start_idx, int64_t end_idx,
+                   std::vector<std::shared_ptr<ImmutableIndex>> immu_indexes, PersistentIndex* index)
+            : _task_id(task_id),
+              _start_idx(start_idx),
+              _end_idx(end_idx),
+              _immu_indexes(std::move(immu_indexes)),
+              _index(index) {}
+
+    void run() override {
+        WARN_IF_ERROR(_index->merge_flushed_l1(_task_id, _start_idx, _end_idx, _immu_indexes),
+                      "Failed to merge flushed l1 files");
+    }
+
+private:
+    uint64_t _task_id;
+    int64_t _start_idx;
+    int64_t _end_idx;
+    std::vector<std::shared_ptr<ImmutableIndex>> _immu_indexes;
+    PersistentIndex* _index;
+};
 
 Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
                                                      std::vector<size_t>* replace_idxes) {
@@ -3638,8 +3693,33 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
         RETURN_IF_ERROR(flush_advance());
     }
 
-    if (_need_merge_advance()) {
-        RETURN_IF_ERROR(_merge_compaction_advance());
+    auto candidate = _get_merge_candidate();
+    if (!_merge_compaction_running && candidate.merge_num >= config::max_tmp_l1_num) {
+        // submit a merge compaction task
+        int32_t merge_num = candidate.merge_num;
+        int32_t start_idx = candidate.start_idx;
+        int32_t end_idx = start_idx + merge_num;
+        std::vector<std::shared_ptr<ImmutableIndex>> indexes;
+        {
+            std::lock_guard l(_lock);
+            indexes.reserve(merge_num);
+            for (int32_t i = start_idx; i < end_idx; i++) {
+                indexes.emplace_back(_l1_vec[i]);
+            }
+            uint64_t task_id = get_next_task_id();
+            std::shared_ptr<Runnable> r(
+                    std::make_shared<MergeTmpL1Task>(task_id, start_idx, end_idx, std::move(indexes), this));
+            auto st = StorageEngine::instance()->update_manager()->pindex_apply_thread_pool()->submit(std::move(r));
+            if (!st.ok()) {
+                std::string error_msg =
+                        strings::Substitute("submit merge flushed immutable index task failed: $0", st.to_string());
+                LOG(ERROR) << error_msg;
+                return Status::OK();
+            }
+            _merge_compaction_running = true;
+            _running_merge_compaction_task_id.insert(task_id);
+            return st;
+        }
     } else if (!_flushed) {
         _dump_snapshot |= _can_dump_directly();
         if (!_dump_snapshot) {
@@ -3841,7 +3921,7 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
 
 Status PersistentIndex::flush_advance() {
     // flush l0 into _l1_vec
-    int idx = _l1_vec.size();
+    int64_t idx = _flush_count++;
     std::string l1_tmp_file = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
                                                   _version.minor_number(), idx);
     RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true));
@@ -3913,21 +3993,35 @@ bool PersistentIndex::_need_flush_advance() {
     return _l0_is_full();
 }
 
-bool PersistentIndex::_need_merge_advance() {
+MergeCandidate PersistentIndex::_get_merge_candidate() {
     DCHECK(_l1_merged_num.size() == _l1_vec.size());
-    if (_l1_merged_num.empty()) {
-        return false;
+    if (_l1_merged_num.empty() || _merge_compaction_running) {
+        return MergeCandidate(-1, -1);
     }
-    int merged_num = _l1_merged_num[_l1_merged_num.size() - 1];
-    int merged_candidate_num = 1;
-    for (int i = _l1_merged_num.size() - 2; i >= 0; i--) {
-        if (_l1_merged_num[i] == merged_num) {
-            merged_candidate_num++;
+    int32_t merge_num = _l1_merged_num[0];
+    int32_t merged_candidate_num = 1;
+    int32_t start_idx = 0;
+    std::set<MergeCandidate> candidates;
+    for (int i = 1; i < _l1_merged_num.size(); i++) {
+        if (_l1_merged_num[i] == merge_num) {
+            if (merged_candidate_num >= config::max_tmp_l1_num) {
+                candidates.emplace(MergeCandidate(start_idx, merged_candidate_num));
+                merge_num = _l1_merged_num[i];
+                merged_candidate_num = 1;
+                start_idx = i;
+            } else {
+                merged_candidate_num++;
+            }
         } else {
-            break;
+            candidates.emplace(MergeCandidate(start_idx, merged_candidate_num));
+            merge_num = _l1_merged_num[i];
+            merged_candidate_num = 1;
+            start_idx = i;
         }
     }
-    return merged_candidate_num >= config::max_tmp_l1_num;
+    candidates.emplace(MergeCandidate(start_idx, merged_candidate_num));
+
+    return *candidates.begin();
 }
 
 static StatusOr<EditVersionWithMerge> parse_l2_filename(const std::string& filename) {
@@ -3956,7 +4050,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
             std::string path = dir + "/" + full;
             VLOG(1) << "delete expired index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
-            if (!st.ok()) {
+            if (!st.ok() && !st.is_not_found()) {
                 LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
                 return false;
             }
@@ -3972,7 +4066,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
                     std::string path = dir + "/" + full;
                     VLOG(1) << "delete expired index file " << path;
                     Status st = FileSystem::Default()->delete_file(path);
-                    if (!st.ok()) {
+                    if (!st.ok() && !st.is_not_found()) {
                         LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is "
                                      << st.to_string();
                         return false;
@@ -3985,46 +4079,15 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
     return FileSystem::Default()->iterate_dir(_path, cb);
 }
 
-static bool major_compaction_tmp_index_file(const std::string& full) {
-    std::string suffix = ".merged.tmp";
-    if (full.length() >= suffix.length() &&
-        full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
 Status PersistentIndex::_delete_major_compaction_tmp_index_file() {
     std::string dir = _path;
     auto cb = [&](std::string_view name) -> bool {
         std::string full(name);
-        if (major_compaction_tmp_index_file(full)) {
+        if (is_suffix(full, kMajorCompactionFileSuffix)) {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
-            if (!st.ok()) {
-                LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
-                return false;
-            }
-        }
-        return true;
-    };
-    return FileSystem::Default()->iterate_dir(_path, cb);
-}
-
-Status PersistentIndex::_delete_tmp_index_file() {
-    std::string dir = _path;
-    auto cb = [&](std::string_view name) -> bool {
-        std::string suffix = ".tmp";
-        std::string full(name);
-        if (full.length() >= suffix.length() &&
-            full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0 &&
-            !major_compaction_tmp_index_file(full)) {
-            std::string path = dir + "/" + full;
-            VLOG(1) << "delete tmp index file " << path;
-            Status st = FileSystem::Default()->delete_file(path);
-            if (!st.ok()) {
+            if (!st.ok() && !st.is_not_found()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
                 return false;
             }
@@ -4520,91 +4583,6 @@ Status PersistentIndex::_merge_compaction() {
     return writer->finish();
 }
 
-Status PersistentIndex::_merge_compaction_advance() {
-    DCHECK(_l1_vec.size() >= config::max_tmp_l1_num);
-    auto writer = std::make_unique<ImmutableIndexWriter>();
-    const std::string idx_file_path_tmp = strings::Substitute(
-            "$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(), _version.minor_number(), _l1_vec.size());
-    RETURN_IF_ERROR(writer->init(idx_file_path_tmp, _version, false));
-    int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
-    int merge_l1_end_idx = _l1_vec.size();
-    LOG(INFO) << strings::Substitute("merge compaction advance, path: $0, start_idx: $1, end_idx: $2", _path,
-                                     merge_l1_start_idx, merge_l1_end_idx);
-    // keep delete flag when older l1 or l2 exist
-    bool keep_delete = (merge_l1_start_idx != 0) || !_l2_vec.empty();
-
-    std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
-    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
-        auto [l0_shard_offset, l0_shard_size] = shard_info;
-        const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                      std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                      0L, [](size_t s, const auto& e) { return s + e->size(); });
-        const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                       0L, [](size_t s, const auto& e) { return s + e->usage(); });
-        usage_and_size_stat.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
-    }
-    for (int i = merge_l1_start_idx; i < merge_l1_end_idx; i++) {
-        for (const auto& [key_size, shard_info] : _l1_vec[i]->_shard_info_by_length) {
-            auto [l1_shard_offset, l1_shard_size] = shard_info;
-            const int64_t size =
-                    std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                    std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size), 0L,
-                                    [](size_t s, const auto& e) { return s + e.size; });
-            const int64_t usage =
-                    std::accumulate(std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset),
-                                    std::next(_l1_vec[i]->_shards.begin(), l1_shard_offset + l1_shard_size), 0L,
-                                    [](size_t s, const auto& e) { return s + e.data_size; });
-
-            auto iter = usage_and_size_stat.find(key_size);
-            if (iter == usage_and_size_stat.end()) {
-                usage_and_size_stat.insert({static_cast<uint32_t>(key_size), {usage, size}});
-            } else {
-                iter->second.first += usage;
-                iter->second.second += size;
-            }
-        }
-    }
-
-    RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), merge_l1_start_idx, merge_l1_end_idx, usage_and_size_stat,
-                                               keep_delete));
-    RETURN_IF_ERROR(writer->finish());
-    std::vector<std::unique_ptr<ImmutableIndex>> new_l1_vec;
-    std::vector<int> new_l1_merged_num;
-    size_t merge_num = 0;
-    {
-        std::unique_lock wrlock(_lock);
-        merge_num = _l1_merged_num[merge_l1_start_idx];
-        for (int i = 0; i < merge_l1_start_idx; i++) {
-            new_l1_vec.emplace_back(std::move(_l1_vec[i]));
-            new_l1_merged_num.emplace_back(_l1_merged_num[i]);
-        }
-
-        for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
-            _l1_vec[i]->destroy();
-        }
-    }
-
-    const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
-                                                          _version.minor_number(), new_l1_vec.size());
-    RETURN_IF_ERROR(FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path));
-    std::unique_ptr<RandomAccessFile> l1_rfile;
-    ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(idx_file_path));
-    auto l1_st = ImmutableIndex::load(std::move(l1_rfile), load_bf_or_not());
-    if (!l1_st.ok()) {
-        return l1_st.status();
-    }
-    new_l1_vec.emplace_back(std::move(l1_st).value());
-    new_l1_merged_num.emplace_back((merge_l1_end_idx - merge_l1_start_idx) * merge_num);
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.swap(new_l1_vec);
-        _l1_merged_num.swap(new_l1_merged_num);
-    }
-    _l0->clear();
-    return Status::OK();
-}
-
 // generate all possible key size in l1 and l2
 static void generate_all_key_size(size_t key_size, std::vector<size_t>& key_size_list) {
     if (key_size > 0) {
@@ -4616,8 +4594,150 @@ static void generate_all_key_size(size_t key_size, std::vector<size_t>& key_size
     }
 }
 
+Status PersistentIndex::_merge_multiple_immutable_index(ImmutableIndexWriter* writer,
+                                                        std::vector<ImmutableIndex*>& immu_indexes) {
+    std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
+    _get_indexes_stat(immu_indexes, usage_and_size_stat);
+    std::vector<size_t> key_size_list;
+    generate_all_key_size(_key_size, key_size_list);
+    for (const size_t key_size : key_size_list) {
+        size_t total_usage = 0;
+        size_t total_size = 0;
+        auto iter = usage_and_size_stat.find(key_size);
+        if (iter != usage_and_size_stat.end()) {
+            // we use the average usage and size as total usage and size, to avoid disk waste
+            // They are may smaller than real size, but we can increase page count later, so it's ok
+            total_usage = iter->second.first / immu_indexes.size();
+            total_size = iter->second.second / immu_indexes.size();
+        }
+
+        const auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage(total_usage);
+        const auto nbucket = MutableIndex::estimate_nbucket(key_size, total_usage, nshard, npage_hint);
+        const auto estimate_size_per_shard = total_size / nshard;
+
+        std::vector<std::vector<std::vector<KVRef>>> kvs_by_shard;
+        std::vector<int32_t> finished_idx(immu_indexes.size(), -1);
+        std::vector<std::pair<size_t, size_t>> shard_info(immu_indexes.size(), std::make_pair<size_t, size_t>(0, 0));
+        size_t index_num = 0;
+        for (int idx = 0; idx < immu_indexes.size(); idx++) {
+            auto iter = immu_indexes[idx]->_shard_info_by_length.find(key_size);
+            if (iter != immu_indexes[idx]->_shard_info_by_length.end()) {
+                shard_info[idx] = iter->second;
+                index_num += (iter->second.second / nshard) + 1;
+            }
+            std::vector<std::vector<KVRef>> elem(nshard);
+            kvs_by_shard.emplace_back(elem);
+        }
+        // use index_shards to store shard info when read from immutable indexes
+        std::vector<std::unique_ptr<ImmutableIndexShard>> index_shards(index_num);
+        uint32_t shard_bits = log2(nshard);
+        for (size_t shard_idx = 0; shard_idx < nshard; shard_idx++) {
+            size_t index_shard_idx = 0;
+            for (int idx = 0; idx < immu_indexes.size(); idx++) {
+                if (shard_info[idx].second == 0) {
+                    continue;
+                }
+                int32_t shard_idx_start = shard_idx * shard_info[idx].second / nshard;
+                int32_t shard_idx_end = (shard_idx + 1) * shard_info[idx].second / nshard;
+                do {
+                    //get kv for index
+                    if (finished_idx[idx] < shard_idx_start) {
+                        RETURN_IF_ERROR(immu_indexes[idx]->_get_kvs_for_shard(
+                                kvs_by_shard[idx], shard_info[idx].first + shard_idx_start, shard_bits,
+                                &index_shards[index_shard_idx]));
+                        finished_idx[idx] = shard_idx_start;
+                    }
+                    index_shard_idx++;
+                    shard_idx_start++;
+                } while (shard_idx_start < shard_idx_end);
+            }
+
+            //merge_shard_kvs
+            std::vector<KVRef> kvs;
+            std::vector<std::vector<KVRef>> immu_kvs(immu_indexes.size());
+            for (int idx = 0; idx < immu_indexes.size(); idx++) {
+                immu_kvs[idx].swap(kvs_by_shard[idx][shard_idx]);
+            }
+            // empty l0 kvs
+            std::vector<KVRef> empty_l0_kvs;
+            RETURN_IF_ERROR(merge_shard_kvs(key_size, empty_l0_kvs, immu_kvs, estimate_size_per_shard, kvs));
+            // write shard
+            RETURN_IF_ERROR(writer->write_shard(key_size, npage_hint, nbucket, kvs));
+        }
+    }
+    RETURN_IF_ERROR(writer->finish());
+    return Status::OK();
+}
+
+Status PersistentIndex::merge_flushed_l1(uint64_t id, int64_t start_idx, int64_t end_idx,
+                                         std::vector<std::shared_ptr<ImmutableIndex>>& immu_indexes) {
+    DeferOp defer([&]() {
+        std::lock_guard lg(_lock);
+        _merge_compaction_running = false;
+        _running_merge_compaction_task_id.erase(id);
+        _cancel_merge_compaction_task_id.erase(id);
+    });
+
+    {
+        std::lock_guard lg(_lock);
+        if (_cancel_merge_compaction_task_id.find(id) != _cancel_merge_compaction_task_id.end() ||
+            _l1_vec.size() < end_idx) {
+            LOG(INFO) << "cancel merge tmp l1 task, task_id:" << id << ", end_idx:" << end_idx << " vs "
+                      << _l1_vec.size();
+            return Status::Cancelled("cancel merge compaction task");
+        }
+    }
+
+    auto writer = std::make_unique<ImmutableIndexWriter>();
+    const std::string idx_file_path = strings::Substitute("$0/index.l1.$1.$2.$3.flushed.tmp", _path,
+                                                          _version.major_number(), _version.minor_number(), id);
+    RETURN_IF_ERROR(writer->init(idx_file_path, _version, false));
+    LOG(INFO) << strings::Substitute("run merge tmp l1 task, path: $0, start_idx: $1, end_idx: $2", _path, start_idx,
+                                     end_idx);
+    std::vector<ImmutableIndex*> merge_indexes;
+    for (auto& index : immu_indexes) {
+        merge_indexes.emplace_back(index.get());
+    }
+    RETURN_IF_ERROR(_merge_multiple_immutable_index(writer.get(), merge_indexes));
+
+    LOG(INFO) << "finish write " << idx_file_path;
+    std::unique_ptr<RandomAccessFile> l1_rfile;
+    ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(idx_file_path));
+    auto l1_st = ImmutableIndex::load(std::move(l1_rfile), load_bf_or_not());
+    if (!l1_st.ok()) {
+        return l1_st.status();
+    }
+    LOG(INFO) << "load immutable index:" << idx_file_path << " success";
+
+    std::vector<std::shared_ptr<ImmutableIndex>> new_l1_vec;
+    std::vector<int> new_l1_merged_num;
+    size_t merge_num = 0;
+    {
+        std::lock_guard lg(_lock);
+        if (_cancel_merge_compaction_task_id.find(id) != _cancel_merge_compaction_task_id.end()) {
+            return Status::Cancelled("cancel merge compaction task");
+        }
+        merge_num = _l1_merged_num[start_idx];
+        for (int i = 0; i < start_idx; i++) {
+            new_l1_vec.emplace_back(_l1_vec[i]);
+            new_l1_merged_num.emplace_back(_l1_merged_num[i]);
+        }
+
+        new_l1_vec.emplace_back(std::move(l1_st).value());
+        new_l1_merged_num.emplace_back((end_idx - start_idx) * merge_num);
+        for (int i = end_idx; i < _l1_vec.size(); i++) {
+            new_l1_vec.emplace_back(_l1_vec[i]);
+            new_l1_merged_num.emplace_back(_l1_merged_num[i]);
+        }
+        _l1_vec.swap(new_l1_vec);
+        _l1_merged_num.swap(new_l1_merged_num);
+    }
+
+    return Status::OK();
+}
+
 static void major_compaction_debug_str(const std::vector<EditVersion>& l2_versions,
-                                       const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec,
+                                       const std::vector<std::shared_ptr<ImmutableIndex>>& l2_vec,
                                        const EditVersion& output_version,
                                        const std::unique_ptr<ImmutableIndexWriter>& writer,
                                        std::stringstream& debug_str) {
@@ -4631,7 +4751,7 @@ static void major_compaction_debug_str(const std::vector<EditVersion>& l2_versio
 }
 
 StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
-        const std::vector<EditVersion>& l2_versions, const std::vector<std::unique_ptr<ImmutableIndex>>& l2_vec) {
+        const std::vector<EditVersion>& l2_versions, const std::vector<std::shared_ptr<ImmutableIndex>>& l2_vec) {
     DCHECK(l2_versions.size() == l2_vec.size());
     MonotonicStopWatch watch;
     watch.start();
@@ -4641,6 +4761,12 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
     const std::string idx_file_path = strings::Substitute("$0/index.l2.$1.$2$3", _path, new_l2_version.major_number(),
                                                           new_l2_version.minor_number(), MergeSuffix);
     RETURN_IF_ERROR(writer->init(idx_file_path, new_l2_version, true));
+
+    std::vector<ImmutableIndex*> merge_indexes;
+    for (auto& l2 : l2_vec) {
+        merge_indexes.emplace_back(l2.get());
+    }
+    /*
     std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
     _get_l2_stat(l2_vec, usage_and_size_stat);
     std::vector<size_t> key_size_list;
@@ -4712,6 +4838,8 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
         }
     }
     RETURN_IF_ERROR(writer->finish());
+*/
+    RETURN_IF_ERROR(_merge_multiple_immutable_index(writer.get(), merge_indexes));
     _write_amp_score.store(0.0);
     std::stringstream debug_str;
     major_compaction_debug_str(l2_versions, l2_vec, new_l2_version, writer, debug_str);
@@ -4757,7 +4885,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     }
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
-    std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    std::vector<std::shared_ptr<ImmutableIndex>> l2_vec;
     DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
     for (int i = 0; i < index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(index_meta.l2_versions(i));
@@ -4810,7 +4938,7 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
     }
     // 1. load current l2 vec
     std::vector<EditVersion> l2_versions;
-    std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
+    std::vector<std::shared_ptr<ImmutableIndex>> l2_vec;
     DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
     for (int i = 0; i < prev_index_meta.l2_versions_size(); i++) {
         l2_versions.emplace_back(prev_index_meta.l2_versions(i));

@@ -100,10 +100,11 @@ Status UpdateManager::init() {
     REGISTER_GAUGE_STARROCKS_METRIC(update_apply_queue_count,
                                     [this]() { return _apply_thread_pool->num_queued_tasks(); });
 
-    int max_get_thread_cnt =
+    int max_pindex_apply_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
-    RETURN_IF_ERROR(
-            ThreadPoolBuilder("get_pindex").set_max_threads(max_get_thread_cnt).build(&_get_pindex_thread_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("pindex_apply")
+                            .set_max_threads(max_pindex_apply_thread_cnt)
+                            .build(&_pindex_apply_thread_pool));
 
     _persistent_index_compaction_mgr = std::make_unique<PersistentIndexCompactionManager>();
     RETURN_IF_ERROR(_persistent_index_compaction_mgr->init());
@@ -111,8 +112,8 @@ Status UpdateManager::init() {
 }
 
 void UpdateManager::stop() {
-    if (_get_pindex_thread_pool) {
-        _get_pindex_thread_pool->shutdown();
+    if (_pindex_apply_thread_pool) {
+        _pindex_apply_thread_pool->shutdown();
     }
     if (_apply_thread_pool) {
         _apply_thread_pool->shutdown();
