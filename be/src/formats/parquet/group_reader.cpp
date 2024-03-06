@@ -593,7 +593,7 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     size_t real_count = count;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         _column_reader_opts.context->next_row = 0;
         count = *row_count;
         Status status = _column_readers[slot_id]->next_batch(&count, (*chunk)->get_column_by_slot_id(slot_id).get());
@@ -626,7 +626,7 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const 
     ctx->filter = &empty_filter;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         _column_reader_opts.context->next_row = 0;
 
         ctx->rows_to_skip = rows_to_skip;
