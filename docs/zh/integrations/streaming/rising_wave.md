@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# **从 RisingWave 持续导入**
+# 从 RisingWave 持续导入
 
 [RisingWave](https://docs.risingwave.com/) 是 Apache 2.0 协议开源的分布式流数据库。旨在让用户以操作传统数据库的方式来处理流数据。通过创建实时物化视图，RisingWave 可以让用户轻松编写流计算逻辑。用户可以访问物化视图来对流计算结果进行及时、一致的查询。想快速上手 RisingWave 可参考[此文档](https://docs.risingwave.com/docs/current/get-started/)。
 
@@ -38,7 +38,7 @@ RisingWave 目前对 StarRocks Sink 仅支持 At-least-once 语义，这意味�
 | force_append_only                                            | （选填）当输出类型为 append-only 而 Sink 实际有可能输出 upsert/delete 变更时，将 upsert 和 delete 数据丢弃，强行让 Sink 输出 append-only 流。 |
 | primary_key                                                  | （选填）StarRocks 表的主键。当 `type` 为 `upsert` 时，需要填入该项。 |
 
-## **数据类型映射**
+## 数据类型映射
 
 | RisingWave 类型                                       | StarRocks 类型 |
 | ----------------------------------------------------- | -------------- |
@@ -53,7 +53,7 @@ RisingWave 目前对 StarRocks Sink 仅支持 At-least-once 语义，这意味�
 | VARCHAR                                               | VARCHAR        |
 | TIME（建议预先转类型为 VARCHAR）                         | 不支持         |
 | TIMESTAMP                                             | DATETIME       |
-| TIMESTAMP WITH TIME ZONE（建议预先转类型为TIMESTAMP）     | 不支持         |
+| TIMESTAMP WITH TIME ZONE（建议预先转类型为 TIMESTAMP）     | 不支持         |
 | INTERVAL（建议预先转类型为 VARCHAR）                      | 不支持         |
 | STRUCT                                                | JSON           |
 | ARRAY                                                 | ARRAY          |
@@ -61,7 +61,7 @@ RisingWave 目前对 StarRocks Sink 仅支持 At-least-once 语义，这意味�
 | JSONB                                                 | JSON           |
 | SERIAL                                                | BIGINT         |
 
-## **使用示例**
+## 使用示例
 
 1. 在 StarRocks 上创建数据库 `demo`，并创建主键表 `score_board`。
 
