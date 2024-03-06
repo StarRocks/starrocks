@@ -141,28 +141,8 @@ public class UpdatePlanner {
                 }
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
-<<<<<<< HEAD
-            } else if (table instanceof SystemTable) {
-                DataSink dataSink = new SchemaTableSink((SystemTable) table);
-=======
-
-                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
-                session.getSessionVariable().setPreferComputeNode(false);
-                session.getSessionVariable().setUseComputeNodes(0);
-                OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-                TableName catalogDbTable = updateStmt.getTableName();
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
-                        catalogDbTable.getDb());
-                try {
-                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(),
-                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-                    olapTableSink.complete();
-                } catch (UserException e) {
-                    throw new SemanticException(e.getMessage());
-                }
             } else if (targetTable instanceof SystemTable) {
                 DataSink dataSink = new SchemaTableSink((SystemTable) targetTable);
->>>>>>> 677cf42eb4 ([BugFix] Keep update statement output column's type consistent with target table's columns (#41969))
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + targetTable.getClass().getName());
