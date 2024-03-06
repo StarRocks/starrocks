@@ -46,6 +46,8 @@ protected:
         _request.query_options.__set_connector_sink_shuffle_buffer_size_mb(32);
         auto rs = std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                                  _request.query_options, _request.query_globals, _exec_env);
+        ASSERT_EQ(rs->query_options().connector_sink_shuffle_buffer_size_mb, 32);
+
         rs->set_func_version(0);
         _fragment_context->set_runtime_state(std::move(rs));
         _runtime_state = _fragment_context->runtime_state();
@@ -92,7 +94,8 @@ TEST_F(ExchangeSinkOperatorTest, test_push_random_scale) {
     std::vector<int32_t> output_columns;
     // auto mock_sink_buffer = std::make_shared<MockSinkBuffer>(_fragment_context, destinations, false);
     auto mock_sink_buffer = std::make_shared<SinkBuffer>(_fragment_context, destinations, false);
-    ASSERT_EQ(mock_sink_buffer->connector_sink_need_scaling(0, 0), true);
+    auto is_scaling = mock_sink_buffer->connector_sink_need_scaling(0, 0);
+    ASSERT_EQ(is_scaling, true);
 
     PlanNodeId id = 2;
     auto exchange_sink_operator_factory = std::make_shared<ExchangeSinkOperatorFactory>(
