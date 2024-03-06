@@ -640,6 +640,12 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 }
 
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
+    if (_scan_row_count == _total_row_count) {
+        rep -= 1;
+        if (rep > 0) {
+            _scan_row_count = 0;
+        }
+    }
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
         _scanner_ctx->update_not_existed_columns_of_chunk(chunk, read_size);
