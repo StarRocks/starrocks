@@ -160,7 +160,7 @@ struct HdfsScannerParams {
     // The file last modification time
     int64_t modification_time = 0;
 
-    TupleDescriptor* tuple_desc = nullptr;
+    const TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
