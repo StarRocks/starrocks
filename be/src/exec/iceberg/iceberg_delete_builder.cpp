@@ -209,10 +209,7 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
         auto* slot = slot_descs[i];
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-        column.col_idx = i;
-        column.col_type = slot->type();
-        column.slot_id = slot->id();
-        column.col_name = slot->col_name();
+        column.idx_in_chunk = i;
         column.decode_needed = true;
         columns.emplace_back(column);
     }
