@@ -366,7 +366,58 @@ PROPERTIES (
 
 **replication_num**: number of replicas in the specified partition. Default number: 3.
 
+<<<<<<< HEAD
 If the table has only one partition, the properties belong to the table. If the table has two levels of partitions, the properties belong to each partition. You can also specify different properties for different partitions by using ALTER TABLE ADD PARTITION or ALTER TABLE MODIFY PARTITION.
+=======
+    - The disk types reported by BEs (`storage_root_path`) contain only SSD.
+    - The disk types reported by BEs (`storage_root_path`) contain both SSD and HDD. Note that from v2.3.10, v2.4.5, v2.5.4, and v3.0 onwards, the system sets `storage_medium` to SSD when `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is specified.
+
+  - The system automatically sets this parameter to HDD in the following scenarios:
+
+    - The disk types reported by BEs (`storage_root_path`) contain only HDD.
+    - From 2.3.10, 2.4.5, 2.5.4, and 3.0 onwards,  the system sets `storage_medium` to HDD when `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is not specified.
+
+- `storage_cooldown_ttl` or `storage_cooldown_time`: the automatic storage cooldown time or time interval. Automatic storage cooldown refers to automatically migrate data from SSD to HDD. This feature is only effective when the initial storage medium is SSD.
+
+  **Parameter**
+
+  - `storage_cooldown_ttl`: the **time interval** of automatic storage cooldown for the partitions in this table. If you need to retain the most recent partitions on SSD and automatically cool down older partitions to HDD after a certain time interval, you can use this parameter. The automatic storage cooldown time for each partition is calculated using the value of this parameter plus the upper time bound of the partition.
+
+  The supported values are `<num> YEAR`, `<num> MONTH`, `<num> DAY`, and `<num> HOUR`. `<num>` is a non-negative integer. The default value is null, indicating that storage cooldown is not automatically performed.
+
+  For example, you specify the value as `"storage_cooldown_ttl"="1 DAY"` when creating the table, and the partition `p20230801` with a range of `[2023-08-01 00:00:00,2023-08-02 00:00:00)` exists. The automatic storage cooldown time for this partition is `2023-08-03 00:00:00`, which is `2023-08-02 00:00:00 + 1 DAY`. If you specify the value as `"storage_cooldown_ttl"="0 DAY"` when creating the table, the automatic storage cooldown time for this partition is `2023-08-02 00:00:00`.
+
+  - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md).
+
+**Usages**
+
+- The comparison between the parameters related to automatic storage cooldown is as follows:
+  - `storage_cooldown_ttl`: A table property that specifies the time interval of automatic storage cooldown for partitions in the table. The system automatically cools down a partition at the time `the value of this parameter plus the upper time bound of the partition`. So automatic storage cooldown is performed at the partition granularity, which is more flexible.
+  - `storage_cooldown_time`: A table property that specifies the automatic storage cooldown time (**absolute time**) for this table. Also, you can configure different properties for specified partitions after table creation.
+  - `storage_cooldown_second`: A static FE parameter that specifies the automatic storage cooldown latency for all tables within the cluster.
+
+- The table property `storage_cooldown_ttl` or `storage_cooldown_time` takes precedence over the FE static parameter `storage_cooldown_second`.
+- When configuring these parameters, you need to specify `"storage_medium = "SSD"`.
+- If you do not configure these parameters, automatic storage cooldown is not be automatically performed.
+- Execute `SHOW PARTITIONS FROM <table_name>` to view the automatic storage cooldown time for each partition.
+
+**Limit**
+
+- Expression and List partitioning are not supported.
+- The partition column need to be of date type.
+- Multiple partition columns are not supported.
+- Primary Key tables are not supported.
+
+**Set the number of replicas for each tablet in partitions**
+
+`replication_num`: number of replicas for each table in the partitions. Default number: `3`.
+
+```sql
+PROPERTIES (
+    "replication_num" = "<num>"
+)
+```
+>>>>>>> 60f645d81f ([Doc] fix chinese characters in Branch 3.1 (backport #42140) (#42226))
 
 #### Add bloom filter index for a column
 

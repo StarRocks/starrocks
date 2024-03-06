@@ -123,7 +123,7 @@ When creating a table, it is recommended to place common filter fields at the be
 
 A VARCHAR field must placed at the end of a sparse index because the index gets truncated from the VARCHAR field. If the VARCHAR field appears first, the index may be less than 36 bytes.
 
-Use the above `site_visit` table as an example. The table has four columns: `siteid, city, username, pv`. The sort key contains three columns `siteid，city，username`, which occupy 4, 2, and 32 bytes respectively. So the prefix index (sparse index) can be the first 30 bytes of `siteid + city + username`.
+Use the above `site_visit` table as an example. The table has four columns: `siteid, city, username, pv`. The sort key contains three columns `siteid, city, username`, which occupy 4, 2, and 32 bytes respectively. So the prefix index (sparse index) can be the first 30 bytes of `siteid + city + username`.
 
 In addition to sparse indexes, StarRocks also provides bloomfilter indexes, which are effective for filtering columns with high discrimination. If you want to place VARCHAR fields before other fields, you can create bloomfilter indexes.
 

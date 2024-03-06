@@ -68,6 +68,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### Query engine
 
+<<<<<<< HEAD
 | Parameter                                | Unit | Default      | Description                                                  |
 | ---------------------------------------- | ---- | ------------ | ------------------------------------------------------------ |
 | max_allowed_in_element_num_of_delete     | -    | 10000        | The maximum number of elements allowed for the IN predicate in a DELETE statement. |
@@ -102,6 +103,222 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | enable_local_replica_selection           | -    | FALSE        | Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to FALSE, both local replicas and non-local replicas can be selected. The default value is FALSE. |
 | max_distribution_pruner_recursion_depth  | -    | 100          | The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption. |
 |enable_udf                                |  -   |    FALSE     | Whether to enable UDF .                            |
+=======
+##### max_allowed_in_element_num_of_delete
+
+- Unit: -
+- Default: 10000
+- Description: The maximum number of elements allowed for the IN predicate in a DELETE statement.
+
+##### enable_materialized_view
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable the creation of materialized views.
+
+##### enable_decimal_v3
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to support the DECIMAL V3 data type.
+
+##### expr_children_limit
+
+- Unit: -
+- Default: 10000
+- Description: The maximum number of child expressions allowed in an expression.
+
+##### enable_sql_blacklist
+
+- Unit: -
+- Default: FALSE
+- Description: Whether to enable blacklist check for SQL queries. When this feature is enabled, queries in the blacklist cannot be executed.
+
+##### dynamic_partition_check_interval_seconds
+
+- Unit: s
+- Default: 600
+- Description: The interval at which new data is checked. If new data is detected, StarRocks automatically creates partitions for the data.
+
+##### dynamic_partition_enable
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
+
+##### http_slow_request_threshold_ms
+
+- Unit: ms
+- Default: 5000
+- Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
+- Introduced in: 2.5.15, 3.1.5
+
+##### max_partitions_in_one_batch
+
+- Unit: -
+- Default: 4096
+- Description: The maximum number of partitions that can be created when you bulk create partitions.
+
+##### max_query_retry_time
+
+- Unit: -
+- Default: 2
+- Description: The maximum number of query retries on an FE.
+
+##### max_create_table_timeout_second
+
+- Unit: s
+- Default: 600
+- Description: The maximum timeout duration for creating a table.
+
+##### create_table_max_serial_replicas
+
+- Unit: -
+- Default: 128
+- Description: The maximum number of replicas to create serially. If actual replica count exceeds this, replicas will be created concurrently. Try to reduce this config if table creation is taking a long time to complete.
+
+##### max_running_rollup_job_num_per_table
+
+- Unit: -
+- Default: 1
+- Description: The maximum number of rollup jobs can run in parallel for a table.
+
+##### max_planner_scalar_rewrite_num
+
+- Unit: -
+- Default: 100000
+- Description: The maximum number of times that the optimizer can rewrite a scalar operator.
+
+##### enable_statistic_collect
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to collect statistics for the CBO. This feature is enabled by default.
+
+##### enable_collect_full_statistic
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable automatic full statistics collection. This feature is enabled by default.
+
+##### statistic_auto_collect_ratio
+
+- Unit: -
+- Default: 0.8
+- Description: The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered.
+
+##### statistic_max_full_collect_data_size
+
+- Unit: LONG
+- Default: 107374182400
+- Description: The size, in bytes, of the largest partition for the automatic collection of statistics. If a partition exceeds this value, then sampled collection is performed instead of full.
+
+##### statistic_collect_max_row_count_per_query
+
+- Unit: INT
+- Default: 5000000000
+- Description: The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded.
+
+##### statistic_collect_interval_sec
+
+- Unit: s
+- Default: 300
+- Description: The interval for checking data updates during automatic collection.
+
+##### statistic_auto_analyze_start_time
+
+- Unit: STRING
+- Default: 00:00:00
+- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+
+##### statistic_auto_analyze_end_time
+
+- Unit: STRING
+- Default: 23:59:59
+- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+
+##### statistic_sample_collect_rows
+
+- Unit: -
+- Default: 200000
+- Description: The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.
+
+##### histogram_buckets_size
+
+- Unit: -
+- Default: 64
+- Description: The default bucket number for a histogram.
+
+##### histogram_mcv_size
+
+- Unit: -
+- Default: 100
+- Description: The number of most common values (MCV) for a histogram.
+
+##### histogram_sample_ratio
+
+- Unit: -
+- Default: 0.1
+- Description: The sampling ratio for a histogram.
+
+##### histogram_max_sample_row_count
+
+- Unit: -
+- Default: 10000000
+- Description: The maximum number of rows to collect for a histogram.
+
+##### statistics_manager_sleep_time_sec
+
+- Unit: s
+- Default: 60
+- Description: The interval at which metadata is scheduled. The system performs the following operations based on this interval:
+  - Create tables for storing statistics.
+  - Delete statistics that have been deleted.
+  - Delete expired statistics.
+
+##### statistic_update_interval_sec
+
+- Unit: s
+- Default: `24 * 60 * 60`
+- Description: The interval at which the cache of statistical information is updated. Unit: seconds.
+
+##### statistic_analyze_status_keep_second
+
+- Unit: s
+- Default: 259200
+- Description: The duration to retain the history of collection tasks. The default value is 3 days.
+
+##### statistic_collect_concurrency
+
+- Unit: -
+- Default: 3
+- Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collection tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
+
+#### enable_statistic_collect_on_first_load
+
+- Unit: -
+- Default: true
+- Description: Whether to automatically collect statistics when data is loaded into a table for the first time. If a table has multiple partitions, any data loading into an empty partition of this table will trigger automatic statistics collection on this partition. If new tables are frequently created and data is frequently loaded, the memory and CPU overhead will increase.
+- Introduced in: v3.1
+
+##### enable_local_replica_selection
+
+- Unit: -
+- Default: FALSE
+- Description: Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to `FALSE`, both local replicas and non-local replicas can be selected. The default value is FALSE.
+
+##### max_distribution_pruner_recursion_depth
+
+- Unit: -
+- Default: 100
+- Description: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
+
+##### enable_udf
+
+- Unit: -
+- Default: FALSE
+- Description: Whether to enable UDF.
+>>>>>>> 60f645d81f ([Doc] fix chinese characters in Branch 3.1 (backport #42140) (#42226))
 
 #### Loading and unloading
 
@@ -219,6 +436,7 @@ This section provides an overview of the static parameters that you can configur
 
 #### Server
 
+<<<<<<< HEAD
 | Parameter                            | Default           | Description                                                                                                                                                                                                                                                                                                                                                                                               |
 |--------------------------------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | frontend_address                     | 0.0.0.0           | The IP address of the FE node.                                                                                                                                                                                                                                                                                                                                                                            |
@@ -242,6 +460,116 @@ This section provides an overview of the static parameters that you can configur
 | max_connection_scheduler_threads_num | 4096              | The maximum number of threads that are supported by the connection scheduler.                                                                                                                                                                                                                                                                                                                             |
 | qe_max_connection                    | 1024              | The maximum number of connections that can be established by all users to the FE node.                                                                                                                                                                                                                                                                                                                    |
 | check_java_version                   | TRUE              | Specifies whether to check version compatibility between the executed and compiled Java programs. If the versions are incompatible, StarRocks reports errors and aborts the startup of Java programs.                                                                                                                                                                                                     |
+=======
+##### frontend_address
+
+- **Default:** 0.0.0.0
+- **Description:** The IP address of the FE node.
+
+##### priority_networks
+
+- **Default:** Empty string
+- **Description:** Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected.
+
+##### http_port
+
+- **Default:** 8030
+- **Description:** The port on which the HTTP server in the FE node listens.
+
+##### http_worker_threads_num
+
+- **Default:** 0
+- **Description:** Number of worker threads for http server to deal with http requests. For a negative or 0 value, the number of threads will be twice the number of cpu cores.
+- Introduced in: 2.5.18, 3.0.10, 3.1.7, 3.2.2
+
+##### http_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the HTTP server in the FE node.
+
+##### cluster_name
+
+- **Default:** StarRocks Cluster
+- **Description:** The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page.
+
+##### rpc_port
+
+- **Default:** 9020
+- **Description:** The port on which the Thrift server in the FE node listens.
+
+##### thrift_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the Thrift server in the FE node.
+
+##### thrift_server_max_worker_threads
+
+- **Default:** 4096
+- **Description:** The maximum number of worker threads that are supported by the Thrift server in the FE node.
+
+##### thrift_client_timeout_ms
+
+- **Default:** 5000
+- **Description:** The length of time after which idle client connections time out. Unit: ms.
+
+##### thrift_server_queue_size
+
+- **Default:** 4096
+- **Description:** The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
+
+##### brpc_idle_wait_max_time
+
+- **Default:** 10000
+- **Description:** The maximum length of time for which bRPC clients wait as in the idle state. Unit: ms.
+
+##### query_port
+
+- **Default:** 9030
+- **Description:** The port on which the MySQL server in the FE node listens.
+
+##### mysql_service_nio_enabled
+
+- **Default:** TRUE
+- **Description:** Specifies whether asynchronous I/O is enabled for the FE node.
+
+##### mysql_service_io_threads_num
+
+- **Default:** 4
+- **Description:** The maximum number of threads that can be run by the MySQL server in the FE node to process I/O events.
+
+##### mysql_nio_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the MySQL server in the FE node.
+
+##### max_mysql_service_task_threads_num
+
+- **Default:** 4096
+- **Description:** The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
+
+##### mysql_server_version
+
+- **Default:** 5.1.0
+- **Description:** The MySQL server version returned to the client. Modifying this parameter will affect the version information in the following situations:
+  1. `select version();`
+  2. Handshake packet version
+  3. Value of the global variable `version` (`show variables like 'version';`)
+
+##### max_connection_scheduler_threads_num
+
+- **Default:** 4096
+- **Description:** The maximum number of threads that are supported by the connection scheduler.
+
+##### qe_max_connection
+
+- **Default:** 1024
+- **Description:** The maximum number of connections that can be established by all users to the FE node.
+
+##### check_java_version
+
+- **Default:** TRUE
+- **Description:** Specifies whether to check version compatibility between the executed and compiled Java programs. If the versions are incompatible, StarRocks reports errors and aborts the startup of Java programs.
+>>>>>>> 60f645d81f ([Doc] fix chinese characters in Branch 3.1 (backport #42140) (#42226))
 
 #### Metadata and cluster management
 
@@ -336,6 +664,7 @@ curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<val
 
 BE dynamic parameters are as follows.
 
+<<<<<<< HEAD
 | Configuration item | Default | Unit | Description |
 | ------------------ | ------- | ---- | ----------- |
 | enable_stream_load_verbose_log | false | N/A | Specifies whether to log the HTTP requests and responses for Stream Load jobs. This parameter is introduced in 2.5.17, 3.0.9, 3.1.6, and 3.2.1. |
@@ -407,6 +736,486 @@ BE dynamic parameters are as follows.
 | size_tiered_level_multiple | 5 | N/A | The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy. |
 | size_tiered_min_level_size | 131072 | Byte | The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction. |
 | storage_page_cache_limit | 20% | N/A | The PageCache size. STRING. It can be specified as size, for example, `20G`, `20480M`, `20971520K`, or `21474836480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`. |
+=======
+#### enable_stream_load_verbose_log
+
+- **Default:** false
+- **Description:** Specifies whether to log the HTTP requests and responses for Stream Load jobs.
+- **Introduced in:** 2.5.17, 3.0.9, 3.1.6, 3.2.1
+
+#### report_task_interval_seconds
+
+- **Default:** 10 seconds
+- **Description:** The time interval at which to report the state of a task. A task can be creating a table, dropping a table, loading data, or changing a table schema.
+
+#### report_disk_state_interval_seconds
+
+- **Default:** 60 seconds
+- **Description:** The time interval at which to report the storage volume state, which includes the size of data within the volume.
+
+#### report_tablet_interval_seconds
+
+- **Default:** 60 seconds
+- **Description:** The time interval at which to report the most updated version of all tablets.
+
+#### report_workgroup_interval_seconds
+
+- **Default:** 5 seconds
+- **Description:** The time interval at which to report the most updated version of all workgroups.
+
+#### max_download_speed_kbps
+
+- **Default:** 50,000 KB/s
+- **Description:** The maximum download speed of each HTTP request. This value affects the performance of data replica synchronization across BE nodes.
+
+#### download_low_speed_limit_kbps
+
+- **Default:** 50 KB/s
+- **Description:** The download speed lower limit of each HTTP request. An HTTP request aborts when it constantly runs with a lower speed than this value within the time span specified in the configuration item `download_low_speed_time`.
+
+#### download_low_speed_time
+
+- **Default:** 300 seconds
+- **Description:** The maximum time that an HTTP request can run with a download speed lower than the limit. An HTTP request aborts when it constantly runs with a lower speed than the value of `download_low_speed_limit_kbps` within the time span specified in this configuration item.
+
+#### status_report_interval
+
+- **Default:** 5 seconds
+- **Description:** The time interval at which a query reports its profile, which can be used for query statistics collection by FE.
+
+#### scanner_thread_pool_thread_num
+
+- **Default:** 48 (Number of Threads)
+- **Description:** The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool.
+
+#### thrift_client_retry_interval_ms
+
+- **Default:** 100 ms
+- **Description:** The time interval at which a thrift client retries.
+
+#### scanner_thread_pool_queue_size
+
+- **Default:** 102,400
+- **Description:** The number of scan tasks supported by the storage engine.
+
+#### scanner_row_num
+
+- **Default:** 16,384
+- **Description:** The maximum row count returned by each scan thread in a scan.
+
+#### max_scan_key_num
+
+- **Default:** 1,024 (Maximum Number of Scan Keys per Query)
+- **Description:** The maximum number of scan keys segmented by each query.
+
+#### max_pushdown_conditions_per_column
+
+- **Default:** 1,024
+- **Description:** The maximum number of conditions that allow pushdown in each column. If the number of conditions exceeds this limit, the predicates are not pushed down to the storage layer.
+
+#### exchg_node_buffer_size_bytes
+
+- **Default:** 10,485,760 Bytes
+- **Description:** The maximum buffer size on the receiver end of an exchange node for each query. This configuration item is a soft limit. A backpressure is triggered when data is sent to the receiver end with an excessive speed.
+
+#### memory_limitation_per_thread_for_schema_change
+
+- **Default:** 2 GB
+- **Description:** The maximum memory size allowed for each schema change task.
+
+#### update_cache_expire_sec
+
+- **Default:** 360 seconds
+- **Description:** The expiration time of Update Cache.
+
+#### file_descriptor_cache_clean_interval
+
+- **Default:** 3,600 seconds
+- **Description:** The time interval at which to clean file descriptors that have not been used for a certain period of time.
+
+#### disk_stat_monitor_interval
+
+- **Default:** 5 seconds
+- **Description:** The time interval at which to monitor health status of disks.
+
+#### unused_rowset_monitor_interval
+
+- **Default:** 30 seconds
+- **Description:** The time interval at which to clean the expired rowsets.
+
+#### max_percentage_of_error_disk
+
+- **Default:** 0%
+- **Description:** The maximum percentage of error that is tolerable in a storage volume before the corresponding BE node quits.
+
+#### default_num_rows_per_column_file_block
+
+- **Default:** 1,024
+- **Description:** The maximum number of rows that can be stored in each row block.
+
+#### pending_data_expire_time_sec
+
+- **Default:** 1,800 seconds
+- **Description:** The expiration time of the pending data in the storage engine.
+
+#### inc_rowset_expired_sec
+
+- **Default:** 1,800 seconds
+- **Description:** The expiration time of the incoming data. This configuration item is used in incremental clone.
+
+#### tablet_rowset_stale_sweep_time_sec
+
+- **Default:** 1,800 seconds
+- **Description:** The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading.
+
+#### snapshot_expire_time_sec
+
+- **Default:** 172,800 seconds
+- **Description:** The expiration time of snapshot files. The system cleans snapshot files at a specified interval. If a snapshot is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`.
+
+#### trash_file_expire_time_sec
+
+- **Default:** 86,400 seconds
+- **Description:** The maximum duration files can be retained in trash. The system cleans trash files at a specified interval. If a trash file is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`. Since v2.5.17, v3.0.9, and v3.1.6, the default value has been changed from 259200 to 86400.
+
+#### base_compaction_check_interval_seconds
+
+- **Default:** 60 seconds
+- **Description:** The time interval of thread polling for a Base Compaction.
+
+#### min_base_compaction_num_singleton_deltas
+
+- **Default:** 5
+- **Description:** The minimum number of segments that trigger a Base Compaction.
+
+#### max_base_compaction_num_singleton_deltas
+
+- **Default:** 100
+- **Description:** The maximum number of segments that can be compacted in each Base Compaction.
+
+#### base_compaction_interval_seconds_since_last_operation
+
+- **Default:** 86,400 seconds
+- **Description:** The time interval since the last Base Compaction. This configuration item is one of the conditions that trigger a Base Compaction.
+
+#### cumulative_compaction_check_interval_seconds
+
+- **Default:** 1 second
+- **Description:** The time interval of thread polling for a Cumulative Compaction.
+
+#### min_cumulative_compaction_num_singleton_deltas
+
+- **Default:** 5
+- **Description:** The minimum number of segments to trigger Cumulative Compaction.
+
+#### max_cumulative_compaction_num_singleton_deltas
+
+- **Default:** 1000
+- **Description:** The maximum number of segments that can be merged in a single Cumulative Compaction. You can reduce this value if OOM occurs during compaction.
+
+#### max_compaction_candidate_num
+
+- **Default:** 40960
+- **Description:** The maximum number of candidate tablets for compaction. If the value is too large, it will cause high memory usage and high CPU load.
+
+#### update_compaction_check_interval_seconds
+
+- **Default:** 60
+- **Unit:** Second
+- **Description:** The time interval at which to check compaction for Primary Key tables.
+
+#### update_compaction_num_threads_per_disk
+
+- **Default:** 1
+- **Description:** The number of Compaction threads per disk for Primary Key tables.
+
+#### update_compaction_per_tablet_min_interval_seconds
+
+- **Default:** 120
+- **Description:** The minimum time interval at which compaction is triggered for each tablet in a Primary Key table.
+
+#### max_update_compaction_num_singleton_deltas
+
+- **Default:** 1000
+- **Description:** The maximum number of rowsets that can be merged in a single Compaction for Primary Key tables.
+
+#### update_compaction_size_threshold
+
+- **Default:** 268435456
+- **Unit:** Byte
+- **Description:** The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand.
+
+#### update_compaction_result_bytes
+
+- **Default:** 1073741824
+- **Unit:** Byte
+- **Description:** The maximum result size of a single compaction for Primary Key tables.
+
+#### update_compaction_delvec_file_io_amp_ratio
+
+- **Default:** 2
+- **Description:** Used to control the priority of compaction for rowsets that contain Delvec files in Primary Key tables. The larger the value, the higher the priority.
+
+#### repair_compaction_interval_seconds
+
+- **Default:** 600
+- **Unit:** Second
+- **Description:** The time interval to poll Repair Compaction threads.
+
+#### update_compaction_result_bytes
+
+- **Default:** 1073741824
+- **Unit:** Byte
+- **Description:** The maximum result size of a single compaction for Primary Key tables.
+
+#### update_compaction_delvec_file_io_amp_ratio
+
+- **Default:** 2
+- **Description:** Used to control the priority of compaction for rowsets that contain Delvec files in Primary Key tables. The larger the value, the higher the priority.
+
+#### repair_compaction_interval_seconds
+
+- **Default:** 600
+- **Unit:** Second
+- **Description:** The time interval to poll Repair Compaction threads.
+
+#### min_compaction_failure_interval_sec
+
+- **Default:** 120
+- **Unit:** Second
+- **Description:** The minimum time interval at which a tablet compaction can be scheduled since the previous compaction failure.
+
+#### max_compaction_concurrency
+
+- **Default:** -1
+- **Description:** The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency.
+
+#### periodic_counter_update_period_ms
+
+- **Default:** 500 ms
+- **Description:** The time interval at which to collect the Counter statistics.
+
+#### pindex_major_compaction_limit_per_disk
+
+- **Default:** 1
+- **Description:** The maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks.
+- **Introduced in:** 3.0.9
+
+#### load_error_log_reserve_hours
+
+- **Default:** 48
+- **Unit:** Hour
+- **Description:** The time for which data loading logs are reserved.
+
+#### streaming_load_max_mb
+
+- **Default:** 102400
+- **Unit:** MB
+- **Description:** The maximum size of a file that can be streamed into StarRocks.
+
+#### streaming_load_max_batch_size_mb
+
+- **Default:** 100
+- **Unit:** MB
+- **Description:** The maximum size of a JSON file that can be streamed into StarRocks.
+
+#### memory_maintenance_sleep_time_s
+
+- **Default:** 10
+- **Unit:** Second
+- **Description:** The time interval at which ColumnPool GC is triggered. StarRocks executes GC periodically and returns the released memory to the operating system.
+
+#### write_buffer_size
+
+- **Default:** 104857600
+- **Unit:** Byte
+- **Description:** The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush.
+
+#### tablet_stat_cache_update_interval_second
+
+- **Default:** 300 seconds
+- **Description:** The time interval at which to update Tablet Stat Cache.
+
+#### result_buffer_cancelled_interval_time
+
+- **Default:** 300 seconds
+- **Description:** The wait time before BufferControlBlock releases data.
+
+#### thrift_rpc_timeout_ms
+
+- **Default:** 5,000 ms
+- **Description:** The timeout for a thrift RPC.
+
+#### txn_commit_rpc_timeout_ms
+
+- **Default:** 60,000
+- **Description:** The timeout for a transaction commit RPC. Since v3.1.0, this parameter is deprecated.
+- **Unit:** ms
+
+#### max_consumer_num_per_group
+
+- **Default:** 3 (Maximum Number of Consumers in a Consumer Group of Routine Load)
+- **Description:** The maximum number of consumers in a consumer group of Routine Load.
+
+#### max_memory_sink_batch_count
+
+- **Default:** 20 (Maximum Number of Scan Cache Batches)
+- **Description:** The maximum number of Scan Cache batches.
+
+#### scan_context_gc_interval_min
+
+- **Default:** 5 minutes
+- **Description:** The time interval at which to clean the Scan Context.
+
+#### path_gc_check_step
+
+- **Default:** 1,000 (Maximum Number of Files Scanned Continuously Each Time)
+- **Description:** The maximum number of files that can be scanned continuously each time.
+
+#### path_gc_check_step_interval_ms
+
+- **Default:** 10 ms
+- **Description:** The time interval between file scans.
+
+#### path_scan_interval_second
+
+- **Default:** 86,400 seconds
+- **Description:** The time interval at which GC cleans expired data.
+
+#### storage_flood_stage_usage_percent
+
+- **Default:** 95
+- **Description:** Hard limit of the storage usage percentage in all BE directories. If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected. You need to set this item together with the FE configuration item `storage_usage_hard_limit_percent` to allow the configurations to take effect.
+
+#### storage_flood_stage_left_capacity_bytes
+
+- **Default:** 107,374,182,400 Bytes (Remaining Storage Space Threshold for Load and Restore Job Rejection)
+- **Description:** Hard limit of the remaining storage space in all BE directories. If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected. You need to set this item together with the FE configuration item `storage_usage_hard_limit_reserve_bytes` to allow the configurations to take effect.
+
+#### tablet_meta_checkpoint_min_new_rowsets_num
+
+- **Default:** 10 (Minimum Number of Rowsets to Trigger a TabletMeta Checkpoint)
+- **Description:** The minimum number of rowsets to create since the last TabletMeta Checkpoint.
+
+#### tablet_meta_checkpoint_min_interval_secs
+
+- **Default:** 600 seconds
+- **Description:** The time interval of thread polling for a TabletMeta Checkpoint.
+
+#### max_runnings_transactions_per_txn_map
+
+- **Default:** 100 (Maximum Number of Concurrent Transactions per Partition)
+- **Description:** The maximum number of transactions that can run concurrently in each partition.
+
+#### tablet_max_pending_versions
+
+- **Default:** 1,000 (Maximum Number of Pending Versions on a Primary Key Tablet)
+- **Description:** The maximum number of pending versions that are tolerable on a Primary Key tablet. Pending versions refer to versions that are committed but not applied yet.
+
+#### tablet_max_versions
+
+- **Default:** 1,000 (Maximum Number of Versions Allowed on a Tablet)
+- **Description:** The maximum number of versions allowed on a tablet. If the number of versions exceeds this value, new write requests will fail.
+
+#### max_hdfs_file_handle
+
+- **Default:** 1,000 (Maximum Number of HDFS File Descriptors)
+- **Description:** The maximum number of HDFS file descriptors that can be opened.
+
+#### be_exit_after_disk_write_hang_second
+
+- **Default:** 60 seconds
+- **Description:** The length of time that the BE waits to exit after the disk hangs.
+
+#### min_cumulative_compaction_failure_interval_sec
+
+- **Default:** 30 seconds
+- **Description:** The minimum time interval at which Cumulative Compaction retries upon failures.
+
+#### size_tiered_level_num
+
+- **Default:** 7 (Number of Levels for Size-tiered Compaction)
+- **Description:** The number of levels for the Size-tiered Compaction strategy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item.
+
+#### size_tiered_level_multiple
+
+- **Default:** 5 (Multiple of Data Size Between Contiguous Levels in Size-tiered Compaction)
+- **Description:** The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy.
+
+#### size_tiered_level_multiple_dupkey
+
+- **Default:** 10
+- **Description:** In the Size-tiered Compaction policy, the multiple of the data amount difference between two adjacent levels for Duplicate Key tables.
+
+#### size_tiered_min_level_size
+
+- **Default:** 131,072 Bytes
+- **Description:** The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction.
+
+#### storage_page_cache_limit
+
+- **Default:** 20%
+- **Description:** The PageCache size. It can be specified as size, for example, `20G`, `20,480M`, `20,971,520K`, or `21,474,836,480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`.
+
+#### compaction_memory_limit_per_worker
+
+- **Default**: 2147483648 (2 GB)
+- **Unit**: Byte
+- **Description**: The maximum memory usage per compaction thread.
+
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- **Default:** false
+- **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
+- **Introduced in:** v3.1.7, v3.2.3
+
+#### lake_pk_compaction_max_input_rowsets
+
+- **Default:** 1000
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
+- **Introduced in:** v3.1.8, v3.2.3
+
+#### compact_threads
+
+- **Default:** 4
+- **Description:** The maximum number of threads used for concurrent compaction tasks. This configuration is changed to dynamic from v3.1.7 and v3.2.2 onwards.
+- **Introduced in:** v3.0.0
+
+#### update_compaction_ratio_threshold
+
+- **Default:** 0.5
+- **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
+#### create_tablet_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### number_tablet_writer_threads
+
+- **Default**: 16
+- **Unit**: N/A
+- **Description**: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- **Default**: 8
+- **Unit**: N/A
+- **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### starlet_use_star_cache
+
+- **Default**: true
+- **Description**: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
+- **Introduced in:** v3.1
+
+#### starlet_cache_evict_high_water
+
+- **Default**: 0.2
+- **Description**: In a shared-data cluster, if the percentage of the available disk capacity is below this value, file data cache eviction will be triggered. The default value indicates that file data cache will use at most 80% of the disk capacity.
+- **Introduced in:** v3.0
+>>>>>>> 60f645d81f ([Doc] fix chinese characters in Branch 3.1 (backport #42140) (#42226))
 
 ### Configure BE static parameters
 
@@ -850,7 +1659,29 @@ BE static parameters are as follows.
 
 - **Default**: TRUE
 - **Unit**: N/A
+<<<<<<< HEAD
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
+=======
+- **Description**: Whether to enable the Size-tiered Compaction strategy (excluding Primary Key tables). TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
+
+#### enable_pk_size_tiered_compaction_strategy
+
+- **Default:** true
+- **Description:** Whether to enable the Size-tiered Compaction policy for Primary Key tables.
+- **Introduced in**: v3.2.4, v3.1.10
+
+#### lake_service_max_concurrency
+
+- **Default**: 0
+- **Unit**: N/A
+- **Description**: The maximum concurrency of RPC requests in a shared-data cluster. Incoming requests will be rejected when this threshold is reached. When this item is set to 0, no limit is imposed on the concurrency.
+
+#### starlet_star_cache_disk_size_percent
+
+- **Default**: 80
+- **Description**: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- **Introduced in:** v3.1
+>>>>>>> 60f645d81f ([Doc] fix chinese characters in Branch 3.1 (backport #42140) (#42226))
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |

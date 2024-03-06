@@ -72,7 +72,13 @@ The database and table. This parameter supports the following three formats:
 
 ### resource_name
 
+<<<<<<< HEAD
 The resource name. This parameter supports the following two formats:
+=======
+* You must first run SET CATALOG before you run this command.
+* You can also use `<db_name>.<table_name>` to represent a table.
+* You can grant the SELECT privilege on all tables in Internal and External Catalogs to read data from these tables. For tables in Hive Catalogs, you can grant the INSERT privilege to write data into such tables (supported since v3.1).
+>>>>>>> 60f645d81f ([Doc] fix chinese characters in Branch 3.1 (backport #42140) (#42226))
 
 - `*`: indicates all the resources.
 - `resource`: indicates a specific resource.
