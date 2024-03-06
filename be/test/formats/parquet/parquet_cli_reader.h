@@ -228,10 +228,7 @@ private:
         for (int i = 0; i < tuple_desc->slots().size(); i++) {
             SlotDescriptor* slot = tuple_desc->slots()[i];
             HdfsScannerContext::ColumnInfo c;
-            c.col_name = slot->col_name();
-            c.col_idx = i;
-            c.slot_id = slot->id();
-            c.col_type = slot->type();
+            c.idx_in_chunk = i;
             c.slot_desc = slot;
             columns->emplace_back(c);
         }
