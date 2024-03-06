@@ -965,6 +965,12 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
                 fmt::format("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id()));
     }
 
+    auto tablet_id = best_tablet->tablet_id();
+    auto new_tablet = _tablet_manager->get_tablet(tablet_id);
+    if (new_tablet != nullptr && new_tablet->data_dir()->path_hash() != data_dir->path_hash()) {
+        return Status::InternalError(fmt::format("tablet has been migrated, tablet_id: {}", tablet_id));
+    }
+
     Status res;
     int64_t duration_ns = 0;
     {
