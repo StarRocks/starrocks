@@ -1279,7 +1279,7 @@ build_libfpe() {
 
     ${BUILD_SYSTEM} -j$PARALLEL
     cp src/libubiqfpe.a $TP_INSTALL_DIR/lib
-    cp -r $TP_SOURCE_DIR/$LIBFPE_SOURCE/src/include  $TP_INSTALL_DIR/installed
+    cp -r $TP_SOURCE_DIR/$LIBFPE_SOURCE/src/include  $TP_INSTALL_DIR/include/
 }
 
 # restore cxxflags/cppflags/cflags to default one
