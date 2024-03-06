@@ -18,8 +18,13 @@ on:
         type: string
       TAR_PATH:
         description: 'TAR PATH'
-        required: true
+        required: false
         type: string
+      IS_REBUILD:
+        description: 'REBUILD'
+        type: 'boolean'
+        default: false
+
 
 permissions:
   checks: write
@@ -75,30 +80,47 @@ jobs:
       - info
     timeout-minutes: 90
     name: BE UT
+    continue-on-error: true
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [ Release, ASAN ]
     steps:
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
         timeout-minutes: 90
+        env:
+          build_type: ${{ matrix.build_type }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module be
+          ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module be --build ${build_type}
 
       - name: clean ECI
         if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          echo "${{ steps.run_ut.outcome }}" > ./${{ matrix.build_type }}.txt
 
-      - name: Upload log
+      - name: Upload Log
+        uses: actions/upload-artifact@v4
+        if: always() && steps.run_ut.outcome == 'failure'
+        with:
+          name: BE UT LOG
+          path: ${{ steps.run_ut.outputs.BE_LOG }}
+          retention-days: 1
+          overwrite: true
+
+      - name: Upload BE UT Result
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: BE UT LOG
-          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          name: BE-UT-RESULT-${{ matrix.build_type }}
+          path: ${{ matrix.build_type }}.txt
           retention-days: 1
           overwrite: true
 
@@ -107,6 +129,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -f ${{ steps.run_ut.outputs.BE_LOG }}
           rm -rf ${{ github.workspace }}/*
 
   fe-ut:
@@ -189,13 +212,12 @@ jobs:
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
           rm -rf ${{ github.workspace }}/*
 
-
   build:
     runs-on: [self-hosted, normal]
     name: BUILD
     needs:
       - info
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || inputs.IS_REBUILD
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
@@ -235,8 +257,10 @@ jobs:
   deploy:
     runs-on: [self-hosted, normal]
     if: >
-      always() &&
-      ((github.event_name == 'schedule' && needs.build.result == 'success') || github.event_name != 'schedule')
+      always() && (
+      (github.event_name == 'schedule' && needs.build.result == 'success') ||
+      (github.event_name != 'schedule' && inputs.IS_REBUILD && needs.build.result == 'success') ||
+      (github.event_name != 'schedule' && !inputs.IS_REBUILD))
     needs:
       - info
       - build
@@ -269,7 +293,7 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
           
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.IS_REBUILD }}" == "true" ]]; then
             tar_path=${SELF_TAR_PATH}
             echo "is_self_build=true" >> $GITHUB_OUTPUT
           else

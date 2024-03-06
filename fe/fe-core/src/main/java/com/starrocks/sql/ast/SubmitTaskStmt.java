@@ -15,7 +15,9 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TaskName;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -26,31 +28,29 @@ public class SubmitTaskStmt extends DdlStmt {
 
     private String taskName;
 
-    private Map<String, String> properties;
+    private Map<String, String> properties = Maps.newHashMap();
 
     private int sqlBeginIndex;
 
     private String sqlText;
+    private TaskSchedule schedule;
 
     private CreateTableAsSelectStmt createTableAsSelectStmt;
     private InsertStmt insertStmt;
 
-    public SubmitTaskStmt(TaskName taskName, Map<String, String> properties, int sqlBeginIndex,
-                          CreateTableAsSelectStmt createTableAsSelectStmt, NodePosition pos) {
+    public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, CreateTableAsSelectStmt createTableAsSelectStmt,
+                          NodePosition pos) {
         super(pos);
         this.dbName = taskName.getDbName();
         this.taskName = taskName.getName();
-        this.properties = properties;
         this.sqlBeginIndex = sqlBeginIndex;
         this.createTableAsSelectStmt = createTableAsSelectStmt;
     }
 
-    public SubmitTaskStmt(TaskName taskName, Map<String, String> properties, int sqlBeginIndex,
-                          InsertStmt insertStmt, NodePosition pos) {
+    public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, InsertStmt insertStmt, NodePosition pos) {
         super(pos);
         this.dbName = taskName.getDbName();
         this.taskName = taskName.getName();
-        this.properties = properties;
         this.sqlBeginIndex = sqlBeginIndex;
         this.insertStmt = insertStmt;
     }
@@ -93,6 +93,14 @@ public class SubmitTaskStmt extends DdlStmt {
 
     public void setSqlText(String sqlText) {
         this.sqlText = sqlText;
+    }
+
+    public void setSchedule(TaskSchedule schedule) {
+        this.schedule = schedule;
+    }
+
+    public TaskSchedule getSchedule() {
+        return schedule;
     }
 
     public CreateTableAsSelectStmt getCreateTableAsSelectStmt() {

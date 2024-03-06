@@ -48,6 +48,7 @@
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -127,6 +128,8 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                     PTabletWriterAddBatchResult* response) {
+    MonotonicStopWatch watch;
+    watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     auto t0 = std::chrono::steady_clock::now();
     int64_t wait_memtable_flush_time_us = 0;
@@ -277,6 +280,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+    auto wait_writer_ts = watch.elapsed_time();
 
     // Abort tablets which primary replica already failed
     if (response->status().status_code() != TStatusCode::OK) {
@@ -321,6 +325,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             }
         }
     }
+    auto wait_replica_ts = watch.elapsed_time();
 
     {
         std::lock_guard lock(_senders[request.sender_id()].lock);
@@ -399,6 +404,12 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             response->mutable_status()->add_error_msgs(std::string(_status.message()));
         }
     }
+    auto wait_writer_us = wait_writer_ts / 1000 - wait_memtable_flush_time_us;
+    auto wait_replica_us = (wait_replica_ts - wait_writer_ts) / 1000;
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+            wait_memtable_flush_time_us);
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_us);
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_us);
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {

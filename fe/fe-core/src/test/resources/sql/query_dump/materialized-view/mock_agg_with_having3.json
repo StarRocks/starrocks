@@ -5,9 +5,9 @@
     "db_mock_000.tbl_mock_007": "CREATE TABLE db_mock_000.tbl_mock_007 (\nmock_013 date ,\nmock_010 date ,\nmock_011 varchar(90) ,\nmock_008 varchar(60) ,\nmock_009 varchar(90) ,\nmock_012 varchar(90) \n) ENGINE\u003d OLAP \nDUPLICATE KEY(mock_013, mock_010, mock_011)\nDISTRIBUTED BY HASH(mock_013, mock_010, mock_008) BUCKETS 50 \nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n);",
     "db_mock_000.tbl_mock_014": "CREATE TABLE db_mock_000.tbl_mock_014 (\nmock_004 date ,\nmock_006 varchar(240) ,\nmock_015 varchar(900) \n) ENGINE\u003d OLAP \nDUPLICATE KEY(mock_004, mock_006)\nDISTRIBUTED BY HASH(mock_004, mock_006) BUCKETS 25 \nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n);",
     "db_mock_000.tbl_mock_016": "CREATE TABLE db_mock_000.tbl_mock_016 (\nmock_004 date ,\nmock_018 varchar(240) ,\nmock_017 varchar(240) \n) ENGINE\u003d OLAP \nDUPLICATE KEY(mock_004, mock_018)\nDISTRIBUTED BY HASH(mock_004, mock_018) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n);",
-    "db_mock_000.tbl_mock_019": "CREATE MATERIALIZED VIEW `tbl_mock_019` (`mock_003`, `mock_006`, `mock_004`, `mock_020`)\n\nDISTRIBUTED BY HASH(mock_004, mock_006) BUCKETS 50 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n)\nAS SELECT tbl_mock_025.mock_003, tbl_mock_025.mock_006, tbl_mock_025.mock_004, sum(tbl_mock_025.mock_002) AS mock_020\nFROM db_mock_000.tbl_mock_001 AS tbl_mock_025\nGROUP BY 1, 2, 3;",
-    "db_mock_000.tbl_mock_021": "CREATE MATERIALIZED VIEW `tbl_mock_021` (`mock_006`, `mock_015`, `mock_009`, `mock_005`, `mock_012`, `mock_018`, `mock_022`, `mock_002`, `mock_003`, `mock_004`, `mock_020`)\n\nDISTRIBUTED BY HASH(mock_006) BUCKETS 50 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n)\nAS SELECT tbl_mock_025.mock_006, tbl_mock_028.mock_015, tbl_mock_027.mock_009, tbl_mock_025.mock_005, tbl_mock_027.mock_012, tbl_mock_029.mock_018, tbl_mock_025.mock_004 AS mock_022, tbl_mock_025.mock_002, tbl_mock_026.mock_003, tbl_mock_026.mock_004, tbl_mock_026.mock_020\nFROM db_mock_000.tbl_mock_001 AS tbl_mock_025 INNER JOIN db_mock_000.tbl_mock_019 AS tbl_mock_026 ON tbl_mock_025.mock_006 \u003d tbl_mock_026.mock_006 LEFT OUTER JOIN db_mock_000.tbl_mock_007 AS tbl_mock_027 ON (((tbl_mock_027.mock_008 \u003d \u00271\u0027) AND (tbl_mock_025.mock_006 \u003d tbl_mock_027.mock_011)) AND (tbl_mock_027.mock_013 \u003c\u003d \u00272023-03-31\u0027)) AND (tbl_mock_027.mock_010 \u003e \u00272023-03-31\u0027) LEFT OUTER JOIN db_mock_000.tbl_mock_014 AS tbl_mock_028 ON (tbl_mock_025.mock_006 \u003d tbl_mock_028.mock_006) AND (tbl_mock_028.mock_004 \u003d \u00272023-03-31\u0027) LEFT OUTER JOIN db_mock_000.tbl_mock_016 AS tbl_mock_029 ON (tbl_mock_025.mock_005 \u003d tbl_mock_029.mock_017) AND (tbl_mock_029.mock_004 \u003d \u00272023-03-31\u0027);",
-    "db_mock_000.tbl_mock_023": "CREATE MATERIALIZED VIEW `tbl_mock_023` (`mock_006`, `mock_015`, `mock_009`, `mock_005`, `mock_012`, `mock_018`, `mock_022`, `mock_003`, `mock_004`, `mock_020`, `mock_002`)\n\nDISTRIBUTED BY HASH(mock_006) BUCKETS 50 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n)\nAS SELECT tbl_mock_021.mock_006, tbl_mock_021.mock_015, tbl_mock_021.mock_009, tbl_mock_021.mock_005, tbl_mock_021.mock_012, tbl_mock_021.mock_018, tbl_mock_021.mock_022, tbl_mock_021.mock_003, tbl_mock_021.mock_004, tbl_mock_021.mock_020, sum(tbl_mock_021.mock_002) AS mock_002\nFROM db_mock_000.tbl_mock_021\nGROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;"
+    "db_mock_000.test_mv0": "CREATE MATERIALIZED VIEW `test_mv0` (`mock_003`, `mock_006`, `mock_004`, `mock_020`)\n\nDISTRIBUTED BY HASH(mock_004, mock_006) BUCKETS 50 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n)\nAS SELECT tbl_mock_025.mock_003, tbl_mock_025.mock_006, tbl_mock_025.mock_004, sum(tbl_mock_025.mock_002) AS mock_020\nFROM db_mock_000.tbl_mock_001 AS tbl_mock_025\nGROUP BY 1, 2, 3;",
+    "db_mock_000.test_mv1": "CREATE MATERIALIZED VIEW `test_mv1` (`mock_006`, `mock_015`, `mock_009`, `mock_005`, `mock_012`, `mock_018`, `mock_022`, `mock_002`, `mock_003`, `mock_004`, `mock_020`)\n\nDISTRIBUTED BY HASH(mock_006) BUCKETS 50 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n)\nAS SELECT tbl_mock_025.mock_006, tbl_mock_028.mock_015, tbl_mock_027.mock_009, tbl_mock_025.mock_005, tbl_mock_027.mock_012, tbl_mock_029.mock_018, tbl_mock_025.mock_004 AS mock_022, tbl_mock_025.mock_002, tbl_mock_026.mock_003, tbl_mock_026.mock_004, tbl_mock_026.mock_020\nFROM db_mock_000.tbl_mock_001 AS tbl_mock_025 INNER JOIN db_mock_000.test_mv0 AS tbl_mock_026 ON tbl_mock_025.mock_006 \u003d tbl_mock_026.mock_006 LEFT OUTER JOIN db_mock_000.tbl_mock_007 AS tbl_mock_027 ON (((tbl_mock_027.mock_008 \u003d \u00271\u0027) AND (tbl_mock_025.mock_006 \u003d tbl_mock_027.mock_011)) AND (tbl_mock_027.mock_013 \u003c\u003d \u00272023-03-31\u0027)) AND (tbl_mock_027.mock_010 \u003e \u00272023-03-31\u0027) LEFT OUTER JOIN db_mock_000.tbl_mock_014 AS tbl_mock_028 ON (tbl_mock_025.mock_006 \u003d tbl_mock_028.mock_006) AND (tbl_mock_028.mock_004 \u003d \u00272023-03-31\u0027) LEFT OUTER JOIN db_mock_000.tbl_mock_016 AS tbl_mock_029 ON (tbl_mock_025.mock_005 \u003d tbl_mock_029.mock_017) AND (tbl_mock_029.mock_004 \u003d \u00272023-03-31\u0027);",
+    "db_mock_000.test_mv2": "CREATE MATERIALIZED VIEW `test_mv2` (`mock_006`, `mock_015`, `mock_009`, `mock_005`, `mock_012`, `mock_018`, `mock_022`, `mock_003`, `mock_004`, `mock_020`, `mock_002`)\n\nDISTRIBUTED BY HASH(mock_006) BUCKETS 50 \nREFRESH MANUAL\nPROPERTIES (\n\"replication_num\" \u003d \"1\"\n)\nAS SELECT test_mv1.mock_006, test_mv1.mock_015, test_mv1.mock_009, test_mv1.mock_005, test_mv1.mock_012, test_mv1.mock_018, test_mv1.mock_022, test_mv1.mock_003, test_mv1.mock_004, test_mv1.mock_020, sum(test_mv1.mock_002) AS mock_002\nFROM db_mock_000.test_mv1\nGROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;"
   },
   "table_row_count": {
     "db_mock_000.tbl_mock_016": {
@@ -22,14 +22,14 @@
     "db_mock_000.tbl_mock_007": {
       "tbl_mock_007": 0
     },
-    "db_mock_000.tbl_mock_019": {
-      "tbl_mock_019": 1
+    "db_mock_000.test_mv0": {
+      "test_mv0": 1
     },
-    "db_mock_000.tbl_mock_021": {
-      "tbl_mock_021": 3
+    "db_mock_000.test_mv1": {
+      "test_mv1": 3
     },
-    "db_mock_000.tbl_mock_023": {
-      "tbl_mock_023": 0
+    "db_mock_000.test_mv2": {
+      "test_mv2": 0
     }
   },
   "column_statistics": {
@@ -58,13 +58,13 @@
       "mock_008": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
       "mock_012": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
     },
-    "db_mock_000.tbl_mock_019": {
+    "db_mock_000.test_mv0": {
       "mock_004": "[-Infinity, Infinity, 1.0, 4.0, 1.0] ESTIMATE",
       "mock_020": "[3.3, 3.3, 0.0, 16.0, 1.0] ESTIMATE",
       "mock_006": "[-Infinity, Infinity, 0.0, 1.0, 1.0] ESTIMATE",
       "mock_003": "[-Infinity, Infinity, 0.0, 1.0, 1.0] ESTIMATE"
     },
-    "db_mock_000.tbl_mock_021": {
+    "db_mock_000.test_mv1": {
       "mock_022": "[-Infinity, Infinity, 1.0, 4.0, 1.0] ESTIMATE",
       "mock_004": "[-Infinity, Infinity, 1.0, 4.0, 1.0] ESTIMATE",
       "mock_009": "[-Infinity, Infinity, 1.0, 0.0, 1.0] ESTIMATE",
@@ -77,7 +77,7 @@
       "mock_002": "[1.1, 1.1, 0.0, 16.0, 1.0] ESTIMATE",
       "mock_003": "[-Infinity, Infinity, 0.0, 0.3333333333333333, 1.0] ESTIMATE"
     },
-    "db_mock_000.tbl_mock_023": {
+    "db_mock_000.test_mv2": {
       "mock_009": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
       "mock_020": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
       "mock_005": "[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",

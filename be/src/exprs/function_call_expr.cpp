@@ -21,12 +21,12 @@
 #include "exprs/anyval_util.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
-#include "exprs/like_predicate.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 #include "storage/rowset/bloom_filter.h"
 #include "util/failpoint/fail_point.h"
+#include "util/slice.h"
 #include "util/utf8.h"
 
 namespace starrocks {
@@ -177,52 +177,53 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 }
 
 bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
-                                                    size_t index_gram_num) const {
+                                                    const NgramBloomFilterReaderOptions& reader_options) const {
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-    std::vector<Slice>& ngram_set = fn_ctx->get_ngram_set();
+    std::unique_ptr<NgramBloomFilterState>& ngram_state = fn_ctx->get_ngram_state();
 
-    const auto& gram_num_column = fn_ctx->get_constant_column(2);
-    // case like ngram_search(col,"needle", 5) when col has a 4gram bloom filter, don't use this index
-    if (gram_num_column != nullptr) {
-        size_t predicate_gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
-        if (index_gram_num != predicate_gram_num) {
-            return true;
-        }
-    }
-
-    if (UNLIKELY(ngram_set.size() == 0)) {
-        Slice needle;
-        if (_fn_desc->name == "like" || _fn_desc->name == "regex") {
-            // not implemented right now
-            return true;
+    // initialize ngram_state: determine whether this index useful or not, split needle into ngram_set if useful
+    if (ngram_state == nullptr) {
+        ngram_state = std::make_unique<NgramBloomFilterState>();
+        std::vector<Slice>& ngram_set = ngram_state->ngram_set;
+        bool index_useful;
+        if (_fn_desc->name == "LIKE") {
+            index_useful = split_like_string_to_ngram(fn_ctx, reader_options, ngram_set);
         } else {
-            // checked in support_ngram_bloom_filter(size_t gram_num), so it 's safe to get const column's value
-            const auto& needle_column = fn_ctx->get_constant_column(1);
-            needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+            index_useful = split_normal_string_to_ngram(fn_ctx, reader_options, ngram_state.get(), _fn_desc->name);
         }
-
-        std::vector<size_t> index;
-        size_t slice_gram_num = get_utf8_index(needle, &index);
-        ngram_set.reserve(slice_gram_num - index_gram_num + 1);
-
-        size_t j;
-        for (j = 0; j + index_gram_num <= slice_gram_num; j++) {
-            // find next ngram
-            size_t cur_ngram_length = j + index_gram_num < slice_gram_num ? index[j + index_gram_num] - index[j]
-                                                                          : needle.get_size() - index[j];
-            Slice cur_ngram = Slice(needle.data + index[j], cur_ngram_length);
-
-            ngram_set.push_back(cur_ngram);
-        }
+        ngram_state->initialized = true;
+        ngram_state->index_useful = index_useful;
     }
 
-    for (auto& ngram : ngram_set) {
-        if (bf->test_bytes(ngram.get_data(), ngram.get_size())) {
-            return true;
-        }
+    DCHECK(ngram_state != nullptr);
+    DCHECK(ngram_state->initialized);
+
+    // this index can not be used to this function
+    if (!ngram_state->index_useful) {
+        return true;
     }
-    // if neither ngram in target hit bf, this page has nothing to do with target,so filter it!
-    return false;
+
+    // if empty, which means needle is too short, so index_valid should be false
+    DCHECK(!ngram_state->ngram_set.empty());
+    if (_fn_desc->name == "LIKE") {
+        for (auto& ngram : ngram_state->ngram_set) {
+            // if any ngram in needle doesn't hit bf, this page has nothing to do with target,so filter it
+            if (!bf->test_bytes(ngram.get_data(), ngram.get_size())) {
+                return false;
+            }
+        }
+        // if all ngram in needle hit bf, this page may have something to do with needle, so don't filter it
+        return true;
+    } else {
+        for (auto& ngram : ngram_state->ngram_set) {
+            // if any ngram in needle hit bf, this page may have something to do with needle, so don't filter it
+            if (bf->test_bytes(ngram.get_data(), ngram.get_size())) {
+                return true;
+            }
+        }
+        // if neither ngram in needle hit bf, this page has nothing to do with target,so filter it!
+        return false;
+    }
 }
 
 bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context) const {
@@ -232,8 +233,113 @@ bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context
         return false;
     }
 
-    return _fn_desc->name == "regex" || _fn_desc->name == "like" || _fn_desc->name == "ngram_search" ||
+    return _fn_desc->name == "LIKE" || _fn_desc->name == "ngram_search" ||
            _fn_desc->name == "ngram_search_case_insensitive";
 }
 
+// return false if this index can not be used, otherwise set ngram_set and return true
+bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(FunctionContext* fn_ctx,
+                                                              const NgramBloomFilterReaderOptions& reader_options,
+                                                              NgramBloomFilterState* ngram_state,
+                                                              const string& func_name) const {
+    size_t index_gram_num = reader_options.index_gram_num;
+    bool index_case_sensitive = reader_options.index_case_sensitive;
+    std::vector<Slice>& ngram_set = ngram_state->ngram_set;
+
+    auto gram_num_column = fn_ctx->get_constant_column(2);
+    if (gram_num_column != nullptr) {
+        size_t predicate_gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
+        // case like ngram_search(col,"needle", 5) when col has a 4gram bloom filter, don't use this index
+        if (index_gram_num != predicate_gram_num) {
+            return false;
+        }
+    }
+
+    // if ngram bloom filter is case_sensitive,but function is case insensitive
+    if (index_case_sensitive && func_name == "ngram_search_case_insensitive") {
+        return false;
+    }
+
+    // checked in support_ngram_bloom_filter(size_t gram_num), so it 's safe to get const column's value
+    Slice needle;
+    const auto& needle_column = fn_ctx->get_constant_column(1);
+
+    if (index_case_sensitive) {
+        needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+    } else {
+        // for case_insensitive, we need to convert needle to lower case
+        std::string& buf = ngram_state->buffer;
+        needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column).tolower(buf);
+    }
+
+    std::vector<size_t> index;
+    size_t slice_gram_num = get_utf8_index(needle, &index);
+    // case like "ngram_search
+    if (slice_gram_num < index_gram_num) {
+        return false;
+    }
+    ngram_set.reserve(slice_gram_num - index_gram_num + 1);
+
+    size_t j;
+    for (j = 0; j + index_gram_num <= slice_gram_num; j++) {
+        // find next ngram
+        size_t cur_ngram_length = j + index_gram_num < slice_gram_num ? index[j + index_gram_num] - index[j]
+                                                                      : needle.get_size() - index[j];
+        Slice cur_ngram = Slice(needle.data + index[j], cur_ngram_length);
+
+        ngram_set.push_back(cur_ngram);
+    }
+    // case like "ngram_search(col, "nee", 3) when col has a 4gram bloom filter, don't use this index
+    if (ngram_set.empty()) return false;
+    return true;
+}
+
+bool VectorizedFunctionCallExpr::split_like_string_to_ngram(FunctionContext* fn_ctx,
+                                                            const NgramBloomFilterReaderOptions& reader_options,
+                                                            std::vector<Slice>& ngram_set) const {
+    size_t index_gram_num = reader_options.index_gram_num;
+    auto needle_column = fn_ctx->get_constant_column(1);
+    if (needle_column == nullptr) {
+        return false;
+    }
+
+    Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+
+    size_t cur_valid_grams_num = 0;
+    size_t cur_grams_begin_index = 0;
+    bool escaped = false;
+
+    // when iteration begin,[cur_grams_begin_index, i) is the current ngram
+    // cur_valid_grams_num is the number of utf-8 gram in slice[cur_grams_begin_index, i)
+    // escaped means needle[i - 1] is '\\'
+    for (size_t i = 0; i < needle.size;) {
+        if (escaped && (needle[i] == '%' || needle[i] == '_' || needle[i] == '\\')) {
+            ++cur_valid_grams_num;
+            escaped = false;
+            ++i;
+        } else if (!escaped && (needle[i] == '%' || needle[i] == '_')) {
+            cur_valid_grams_num = 0;
+            escaped = false;
+            ++i;
+            cur_grams_begin_index = i;
+        } else if (!escaped && needle[i] == '\\') {
+            escaped = true;
+            ++i;
+        } else {
+            size_t cur_gram_length = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(needle.data[i])];
+            i += cur_gram_length;
+            ++cur_valid_grams_num;
+            escaped = false;
+        }
+
+        if (cur_valid_grams_num == index_gram_num) {
+            ngram_set.emplace_back(needle.data + cur_grams_begin_index, i - cur_grams_begin_index);
+            cur_valid_grams_num = 0;
+            cur_grams_begin_index = i;
+        }
+    }
+    // case like "like(col, "nee") when col has a 4gram bloom filter, don't use this index
+    if (ngram_set.empty()) return false;
+    return true;
+}
 } // namespace starrocks

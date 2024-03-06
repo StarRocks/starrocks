@@ -96,6 +96,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.setAppliedUnionAllRewrite;
 
 /*
  * SPJG materialized view rewriter, based on
@@ -111,7 +112,6 @@ public class MaterializedViewRewriter {
     protected final OptimizerContext optimizerContext;
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
-    public static final int OP_UNION_ALL_BIT = 1 << 0;
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -805,6 +805,33 @@ public class MaterializedViewRewriter {
         return null;
     }
 
+    /**
+     * Collect ForeignKeyConstraint from child and mv's definition.
+     * @param mvTableScanDesc: child's table scan desc
+     * @param mv: mv's definition
+     * @return: ForeignKeyConstraint list associated with the child, empty list if no FK constraint.
+     */
+    private List<ForeignKeyConstraint> getForeignKeyConstraint(TableScanDesc mvTableScanDesc,
+                                                               MaterializedView mv) {
+        List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
+        Table mvChildTable = mvTableScanDesc.getTable();
+        if (mvChildTable.getForeignKeyConstraints() != null) {
+            foreignKeyConstraints.addAll(mvChildTable.getForeignKeyConstraints());
+        }
+
+        if (mv.getForeignKeyConstraints() != null) {
+            // add ForeignKeyConstraint from mv
+            mv.getForeignKeyConstraints().stream().filter(foreignKeyConstraint -> {
+                if (foreignKeyConstraint.getChildTableInfo() == null) {
+                    return false;
+                }
+                Table table = foreignKeyConstraint.getChildTableInfo().getTableChecked();
+                return table.equals(mvChildTable);
+            }).forEach(foreignKeyConstraints::add);
+        }
+        return foreignKeyConstraints;
+    }
+
     // check whether query can be rewritten by view even though the view has additional tables.
     // In order to do that, we should make sure that the additional joins(which exists in view
     // but not in query) are lossless join.
@@ -841,28 +868,7 @@ public class MaterializedViewRewriter {
 
         // add edges to directed graph by FK-UK
         for (TableScanDesc mvTableScanDesc : mvGraph.nodes()) {
-            Table mvChildTable = mvTableScanDesc.getTable();
-            List<ForeignKeyConstraint> foreignKeyConstraints = mvChildTable.getForeignKeyConstraints();
-            List<ForeignKeyConstraint> mvForeignKeyConstraints = Lists.newArrayList();
-            if (materializedView.getForeignKeyConstraints() != null) {
-                // add ForeignKeyConstraint from mv
-                materializedView.getForeignKeyConstraints().stream().filter(foreignKeyConstraint -> {
-                    if (foreignKeyConstraint.getChildTableInfo() == null) {
-                        return false;
-                    }
-                    Table table = foreignKeyConstraint.getChildTableInfo().getTableChecked();
-                    return table.equals(mvChildTable);
-                }).forEach(mvForeignKeyConstraints::add);
-            }
-
-            if (foreignKeyConstraints == null) {
-                foreignKeyConstraints = mvForeignKeyConstraints;
-            } else if (materializedView.getForeignKeyConstraints() != null) {
-                foreignKeyConstraints.addAll(mvForeignKeyConstraints);
-            }
-            if (foreignKeyConstraints.isEmpty()) {
-                continue;
-            }
+            List<ForeignKeyConstraint> foreignKeyConstraints = getForeignKeyConstraint(mvTableScanDesc, materializedView);
 
             for (ForeignKeyConstraint foreignKeyConstraint : foreignKeyConstraints) {
                 Collection<TableScanDesc> mvParentTableScanDescs =
@@ -1301,11 +1307,10 @@ public class MaterializedViewRewriter {
         return addJoinDerivePredicate(rewriteContext, rewriter, mvColumnRefToScalarOp, compensationPredicate);
     }
 
-    private ScalarOperator addJoinDerivePredicate(
-            RewriteContext rewriteContext,
-            ColumnRewriter rewriter,
-            Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
-            ScalarOperator compensationPredicate) {
+    private ScalarOperator addJoinDerivePredicate(RewriteContext rewriteContext,
+                                                  ColumnRewriter rewriter,
+                                                  Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp,
+                                                  ScalarOperator compensationPredicate) {
         // unnecessary to add the derived compensation predicates if compensationPredicate has related null rejecting predicate
         List<ScalarOperator> predicates = Utils.extractConjuncts(compensationPredicate);
         List<ScalarOperator> derivedPredicates = Lists.newArrayList();
@@ -1551,16 +1556,6 @@ public class MaterializedViewRewriter {
                 });
     }
 
-    private void setAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
-        op.setOpRuleMask(opRuleMask);
-    }
-
-    private boolean isAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
-    }
-
     private PredicateSplit getUnionRewriteQueryCompensation(RewriteContext rewriteContext,
                                                             ColumnRewriter columnRewriter) {
         final PredicateSplit mvCompensationToQuery = getCompensationPredicates(columnRewriter,
@@ -1571,10 +1566,6 @@ public class MaterializedViewRewriter {
                 false);
         if (mvCompensationToQuery != null) {
             return mvCompensationToQuery;
-        }
-        // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (isAppliedUnionAllRewrite(rewriteContext.getQueryExpression().getOp())) {
-            return null;
         }
 
         logMVRewrite(mvRewriteContext, "Try to pull up query's predicates to make possible for union rewrite");
@@ -1742,6 +1733,7 @@ public class MaterializedViewRewriter {
         //                                       /      \
         //                                  EXTRA-OP    MV-SCAN
         setAppliedUnionAllRewrite(queryInput.getOp());
+        setAppliedUnionAllRewrite(viewInput.getOp());
 
         // createUnion will return the union all result of queryInput and viewInput
         //           Union
