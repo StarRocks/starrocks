@@ -59,23 +59,36 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         for (size_t i = 0; i < _column_ids.size(); ++i) {
             ASSIGN_OR_RETURN(result_columns[i], _expr_ctxs[i]->evaluate(chunk.get()));
 
-            if (result_columns[i]->only_null()) {
-                result_columns[i] = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), true);
-                result_columns[i]->append_nulls(chunk->num_rows());
-            } else if (result_columns[i]->is_constant()) {
-                // Note: we must create a new column every time here,
-                // because result_columns[i] is shared_ptr
-                ColumnPtr new_column = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), false);
-                auto* const_column = down_cast<ConstColumn*>(result_columns[i].get());
-                new_column->append(*const_column->data_column(), 0, 1);
-                new_column->assign(chunk->num_rows(), 0);
-                result_columns[i] = std::move(new_column);
-            }
+            // Not sure why we need following code
+            // 1. why only null and constant column need to be unpacked.
+            // 2. why in other cases, we don't need to copy column.
+            // I don't see in any place we may change column in the chunk.
+            // so I think there is no need to copy/unpack.
+
+            // if (result_columns[i]->only_null()) {
+            //     result_columns[i] = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), true);
+            //     result_columns[i]->append_nulls(chunk->num_rows());
+            // } else if (result_columns[i]->is_constant()) {
+            //     // Note: we must create a new column every time here,
+            //     // because result_columns[i] is shared_ptr
+            //     ColumnPtr new_column = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), false);
+            //     auto* const_column = down_cast<ConstColumn*>(result_columns[i].get());
+            //     new_column->append(*const_column->data_column(), 0, 1);
+            //     new_column->assign(chunk->num_rows(), 0);
+            //     result_columns[i] = std::move(new_column);
+            // }
 
             // follow SlotDescriptor is_null flag
             if (_type_is_nullable[i] && !result_columns[i]->is_nullable()) {
-                result_columns[i] =
-                        NullableColumn::create(result_columns[i], NullColumn::create(result_columns[i]->size(), 0));
+                if (result_columns[i]->is_constant()) {
+                    // auto t = down_cast<ConstColumn*>(result_columns[i].get());
+                    // size_t size = t->size();
+                    // ColumnPtr tmp = NullableColumn::create(t->data_column(), NullColumn::create(1, 0));
+                    // result_columns[i] = ConstColumn::create(tmp, size);
+                } else {
+                    result_columns[i] =
+                            NullableColumn::create(result_columns[i], NullColumn::create(result_columns[i]->size(), 0));
+                }
             }
         }
         RETURN_IF_HAS_ERROR(_expr_ctxs);
@@ -85,6 +98,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     for (size_t i = 0; i < result_columns.size(); ++i) {
         _cur_chunk->append_column(result_columns[i], _column_ids[i]);
     }
+
     _cur_chunk->owner_info() = chunk->owner_info();
     TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();

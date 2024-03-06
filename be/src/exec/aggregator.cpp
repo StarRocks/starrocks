@@ -344,10 +344,12 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     size_t group_by_size = _group_by_expr_ctxs.size();
     _group_by_columns.resize(group_by_size);
+    _const_group_by_columns.resize(group_by_size);
     _group_by_types = _params->group_by_types;
     _has_nullable_key = _params->has_nullable_key;
 
-    _tmp_agg_states.resize(_state->chunk_size());
+    // use the last one as the optimization hint.
+    _tmp_agg_states.resize(_state->chunk_size() + 1);
 
     auto& aggregate_functions = _params->aggregate_functions;
     size_t agg_size = aggregate_functions.size();
@@ -1103,8 +1105,11 @@ ChunkPtr Aggregator::_build_output_chunk(const Columns& group_by_columns, const 
 
 void Aggregator::_reset_exprs() {
     SCOPED_TIMER(_agg_stat->expr_release_timer);
-    for (auto& _group_by_column : _group_by_columns) {
-        _group_by_column = nullptr;
+    for (auto& c : _group_by_columns) {
+        c = nullptr;
+    }
+    for (auto& c : _const_group_by_columns) {
+        c = nullptr;
     }
 
     for (size_t i = 0; i < _agg_input_columns.size(); i++) {
@@ -1117,17 +1122,28 @@ void Aggregator::_reset_exprs() {
 
 Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
     SCOPED_TIMER(_agg_stat->expr_compute_timer);
+
     // Compute group by columns
+    _all_const_group_by_columns = true;
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {
         ASSIGN_OR_RETURN(_group_by_columns[i], _group_by_expr_ctxs[i]->evaluate(chunk));
         DCHECK(_group_by_columns[i] != nullptr);
+        if (!_group_by_columns[i]->is_constant()) {
+            _all_const_group_by_columns = false;
+        }
+    }
+
+    for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {
         if (_group_by_columns[i]->is_constant()) {
+            if (_all_const_group_by_columns) {
+                _const_group_by_columns[i] = _group_by_columns[i];
+            }
+
             // All hash table could handle only null, and we don't know the real data
             // type for only null column, so we don't unpack it.
             if (!_group_by_columns[i]->only_null()) {
-                auto* const_column = static_cast<ConstColumn*>(_group_by_columns[i].get());
-                const_column->data_column()->assign(chunk->num_rows(), 0);
-                _group_by_columns[i] = const_column->data_column();
+                _group_by_columns[i] =
+                        ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), _group_by_columns[i]);
             }
         }
         // Scalar function compute will return non-nullable column
@@ -1308,11 +1324,25 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
         }
     }
 
-    _hash_map_variant.visit([&](auto& hash_map_with_key) {
-        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
-                                          &_tmp_agg_states);
-    });
+    // if all const columns, we can evaluate column data once, and copy them.
+    if (_all_const_group_by_columns) {
+        _hash_map_variant.visit([&](auto& hash_map_with_key) {
+            using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+            hash_map_with_key->build_hash_map(1, _const_group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
+                                              &_tmp_agg_states);
+        });
+        for (size_t i = 1; i < chunk_size; i++) {
+            _tmp_agg_states[i] = _tmp_agg_states[0];
+        }
+        // use the last one as the hint that all the data are the same.
+        _tmp_agg_states[chunk_size] = CONST_COLUMN_AGG_DATA_PTR;
+    } else {
+        _hash_map_variant.visit([&](auto& hash_map_with_key) {
+            using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+            hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(),
+                                              AllocateState<MapType>(this), &_tmp_agg_states);
+        });
+    }
 }
 
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {

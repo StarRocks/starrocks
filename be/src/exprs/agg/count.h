@@ -48,6 +48,19 @@ public:
         ++this->data(state).count;
     }
 
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+                      AggDataPtr* states) const override {
+        bool const_states = (states[chunk_size] == CONST_COLUMN_AGG_DATA_PTR);
+        if (const_states) {
+            this->data(states[0] + state_offset).count += chunk_size;
+            return;
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            ++this->data(states[i] + state_offset).count;
+        }
+    }
+
     AggStateTableKind agg_state_table_kind(bool is_append_only) const override { return AggStateTableKind::RESULT; }
 
     void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

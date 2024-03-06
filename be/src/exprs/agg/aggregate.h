@@ -42,6 +42,10 @@ enum AggStateTableKind { RESULT = 0, INTERMEDIATE = 1, DETAIL_RESULT = 2, DETAIL
 using AggDataPtr = uint8_t*;
 using ConstAggDataPtr = const uint8_t*;
 
+// if we use constexpr not const here,
+// we will get compilation error like `error: ‘reinterpret_cast’ from integer to pointer`
+static const AggDataPtr CONST_COLUMN_AGG_DATA_PTR = reinterpret_cast<AggDataPtr>(0x1);
+
 // Aggregate function interface
 // Aggregate function instances don't contain aggregation state, the aggregation state is stored in
 // other objects

@@ -471,6 +471,9 @@ protected:
     // Exprs used to evaluate group by column
     std::vector<ExprContext*> _group_by_expr_ctxs;
     Columns _group_by_columns;
+    Columns _const_group_by_columns;
+    bool _all_const_group_by_columns = true;
+
     std::vector<ColumnType> _group_by_types;
 
     // Tuple into which Update()/Merge()/Serialize() results are stored.
