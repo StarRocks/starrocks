@@ -453,7 +453,7 @@ public:
 
         // get event
         uint8_t event_level = 0;
-        const ArrayColumn* event_column;
+        const ArrayColumn* event_column = nullptr;
         size_t offset = 0;
         size_t array_size = 0;
 
@@ -465,14 +465,13 @@ public:
             auto offsets_ptr = offsets.get_data().data();
             offset = offsets_ptr[0];
             array_size = offsets_ptr[1] - offsets_ptr[0];
-        } else if (columns[3]->is_array()) {
+        } else {
+            DCHECK(columns[3]->is_array());
             event_column = down_cast<const ArrayColumn*>(columns[3]);
             const UInt32Column& offsets = event_column->offsets();
             auto offsets_ptr = offsets.get_data().data();
             offset = offsets_ptr[row_num];
             array_size = offsets_ptr[row_num + 1] - offsets_ptr[row_num];
-        } else {
-            DCHECK(false);
         }
 
         const Column& elements = event_column->elements();
