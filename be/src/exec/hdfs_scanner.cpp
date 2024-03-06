@@ -107,14 +107,10 @@ Status HdfsScanner::_build_scanner_context() {
 
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-        column.col_idx = _scanner_params.materialize_index_in_chunk[i];
-        column.col_type = slot->type();
-        column.slot_id = slot->id();
-        column.col_name = slot->col_name();
+        column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
         column.decode_needed =
                 slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
                                                     _scanner_params.slots_of_mutli_slot_conjunct.end();
-
         ctx.materialized_columns.emplace_back(std::move(column));
     }
 
@@ -122,11 +118,7 @@ Status HdfsScanner::_build_scanner_context() {
         auto* slot = _scanner_params.partition_slots[i];
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-        column.col_idx = _scanner_params.partition_index_in_chunk[i];
-        column.col_type = slot->type();
-        column.slot_id = slot->id();
-        column.col_name = slot->col_name();
-
+        column.idx_in_chunk = _scanner_params.partition_index_in_chunk[i];
         ctx.partition_columns.emplace_back(std::move(column));
     }
 
@@ -358,11 +350,11 @@ void HdfsScannerContext::update_materialized_columns(const std::unordered_set<st
     std::vector<ColumnInfo> updated_columns;
 
     for (auto& column : materialized_columns) {
-        auto col_name = column.formated_col_name(case_sensitive);
+        auto col_name = column.formatted_name(case_sensitive);
         // if `can_use_any_column`, we can set this column to non-existed column without reading it.
         if (names.find(col_name) == names.end() || can_use_any_column) {
             not_existed_slots.push_back(column.slot_desc);
-            SlotId slot_id = column.slot_id;
+            SlotId slot_id = column.slot_id();
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot[slot_id]) {
                     conjunct_ctxs_of_non_existed_slots.emplace_back(ctx);
