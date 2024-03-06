@@ -475,8 +475,6 @@ private:
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
-    void _get_allowed_compaction_level(std::set<int32_t>* allow_compaction_level);
-
 private:
     Tablet& _tablet;
 

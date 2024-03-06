@@ -2704,6 +2704,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     int64_t total_merged_segments = 0;
     RowsetStats stat;
     std::set<int32_t> compaction_level_candidate;
+    max_score = 0;
     do {
         auto iter = candidates_by_level.find(compaction_level);
         if (iter == candidates_by_level.end()) {
