@@ -19,18 +19,18 @@
 namespace starrocks {
 
 struct HdfsReadMetricsKey {
-    static constexpr std::string_view kTotalOpenFSTimeNs = "TotalOpenFSTimeNs";
-    static constexpr std::string_view kTotalOpenFileTimeNs = "TotalOpenFileTimeNs";
+    static constexpr const char* kTotalOpenFSTimeNs = "TotalOpenFSTimeNs";
+    static constexpr const char* kTotalOpenFileTimeNs = "TotalOpenFileTimeNs";
 
-    static constexpr std::string_view kTotalBytesRead = "TotalBytesRead";
-    static constexpr std::string_view kTotalLocalBytesRead = "TotalLocalBytesRead";
-    static constexpr std::string_view kTotalShortCircuitBytesRead = "TotalShortCircuitBytesRead";
-    static constexpr std::string_view kTotalZeroCopyBytesRead = "TotalZeroCopyBytesRead";
+    static constexpr const char* kTotalBytesRead = "TotalBytesRead";
+    static constexpr const char* kTotalLocalBytesRead = "TotalLocalBytesRead";
+    static constexpr const char* kTotalShortCircuitBytesRead = "TotalShortCircuitBytesRead";
+    static constexpr const char* kTotalZeroCopyBytesRead = "TotalZeroCopyBytesRead";
 
     // metrics for hedged read
-    static constexpr std::string_view kTotalHedgedReadOps = "TotalHedgedReadOps";
-    static constexpr std::string_view kTotalHedgedReadOpsInCurThread = "TotalHedgedReadOpsInCurThread";
-    static constexpr std::string_view kTotalHedgedReadOpsWin = "TotalHedgedReadOpsWin";
+    static constexpr const char* kTotalHedgedReadOps = "TotalHedgedReadOps";
+    static constexpr const char* kTotalHedgedReadOpsInCurThread = "TotalHedgedReadOpsInCurThread";
+    static constexpr const char* kTotalHedgedReadOpsWin = "TotalHedgedReadOpsWin";
 };
 
 std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options);
