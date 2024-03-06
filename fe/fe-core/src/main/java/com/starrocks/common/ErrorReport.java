@@ -54,6 +54,7 @@ public class ErrorReport {
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             ctx.getState().setError(errMsg);
+            ctx.getState().setErrorCode(errorCode);
         }
         // TODO(zc): think about LOG to file
         return errMsg;

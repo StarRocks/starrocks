@@ -97,15 +97,15 @@ select * from tab1 where v2 = 200;
 -- !result
 alter table tab1 set ("primary_index_cache_expire_sec" = "add");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Property primary_index_cache_expire_sec must be integer: add.')
+E: (5064, 'Getting analyzing error. Detail message: Property primary_index_cache_expire_sec must be integer: add.')
 -- !result
 alter table tab1 set ("primary_index_cache_expire_sec" = "-1");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Property primary_index_cache_expire_sec must not be less than 0.')
+E: (5064, 'Getting analyzing error. Detail message: Property primary_index_cache_expire_sec must not be less than 0.')
 -- !result
 alter table tab1 set ("primary_index_cache_expire_sec" = "-3600");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Property primary_index_cache_expire_sec must not be less than 0.')
+E: (5064, 'Getting analyzing error. Detail message: Property primary_index_cache_expire_sec must not be less than 0.')
 -- !result
 CREATE table tab2 (
       k1 INTEGER,

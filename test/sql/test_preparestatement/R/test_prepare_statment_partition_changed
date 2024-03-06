@@ -6,9 +6,8 @@ CREATE TABLE IF NOT EXISTS prepare_stmt (
 PRIMARY KEY (k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- result:
-[]
 -- !result
 PREPARE stmt1 FROM insert overwrite prepare_stmt values (?, ?);
 -- result:
-E: (1064, 'Invalid statement type for prepared statement')
+E: (1295, 'Getting analyzing error. Detail message: This command is not supported in the prepared statement protocol yet.')
 -- !result
