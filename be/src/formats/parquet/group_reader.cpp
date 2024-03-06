@@ -465,35 +465,25 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
     // collect io of active column
     for (const auto& index : _active_column_indices) {
         const auto& column = _param.read_cols[index];
-<<<<<<< HEAD
-        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
         if (column.t_iceberg_schema_field == nullptr) {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, true, ranges, &end);
+            _collect_field_io_range(*schema_node, column.slot_type(), true, ranges, &end);
         } else {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, true, ranges,
+            _collect_field_io_range(*schema_node, column.slot_type(), column.t_iceberg_schema_field, true, ranges,
                                     &end);
         }
-=======
-        SlotId slot_id = column.slot_id();
-        _column_readers[slot_id]->collect_column_io_range(ranges, &end, type, true);
->>>>>>> 712adb44dc ([Refactor] reduce column info fields and group reader params (#42085))
     }
 
     // collect io of lazy column
     for (const auto& index : _lazy_column_indices) {
         const auto& column = _param.read_cols[index];
-<<<<<<< HEAD
-        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
         if (column.t_iceberg_schema_field == nullptr) {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, false, ranges, &end);
+            _collect_field_io_range(*schema_node, column.slot_type(), false, ranges, &end);
         } else {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, false,
-                                    ranges, &end);
+            _collect_field_io_range(*schema_node, column.slot_type(), column.t_iceberg_schema_field, false, ranges,
+                                    &end);
         }
-=======
-        SlotId slot_id = column.slot_id();
-        _column_readers[slot_id]->collect_column_io_range(ranges, &end, type, false);
->>>>>>> 712adb44dc ([Refactor] reduce column info fields and group reader params (#42085))
     }
     *end_offset = end;
 }
