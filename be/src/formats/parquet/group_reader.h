@@ -45,10 +45,7 @@ struct GroupReaderParam {
         // column type in parquet file
         tparquet::Type::type type_in_parquet;
 
-        // column index in chunk
-        int32_t idx_in_chunk;
-
-        const SlotDescriptor* slot_desc = nullptr;
+        SlotDescriptor* slot_desc = nullptr;
 
         const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
 
