@@ -86,6 +86,7 @@ public:
 
     // For UT Only
     TPartitionType::type get_part_type() { return _part_type; }
+    void set_is_local(bool is_local);
 
 private:
     bool _is_large_chunk(size_t sz) const {

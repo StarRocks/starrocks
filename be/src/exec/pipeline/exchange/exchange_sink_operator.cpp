@@ -101,6 +101,8 @@ public:
     size_t _channel_total_bytes = 0;
 
     bool is_local();
+    // For UT Only
+    void set_is_local(bool is_local) { _ignore_local_data = is_local; }
 
 private:
     Status _close_internal(RuntimeState* state, FragmentContext* fragment_ctx);
@@ -788,6 +790,15 @@ int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkPara
     }
 
     return attachment_physical_bytes;
+}
+
+// For UT Only
+void ExchangeSinkOperator::set_is_local(bool is_local) {
+    for (Channel* channel : _channels) {
+        if (channel != nullptr) {
+            channel->set_is_local(is_local);
+        }
+    }
 }
 
 ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(

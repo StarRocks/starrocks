@@ -107,6 +107,10 @@ TEST_F(ExchangeSinkOperatorTest, test_push_random_scale) {
     ASSERT_EQ(exchange_sink_operator->get_part_type(), TPartitionType::RANDOM_SCALE);
 
     auto chunk = std::make_shared<Chunk>();
+    auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true);
+    col0->append_datum((int32_t)1);
+    chunk->append_column(col0, 0);
+    exchange_sink_operator->set_is_local(true);
     EXPECT_OK(exchange_sink_operator->push_chunk(_runtime_state, chunk));
 }
 } // namespace starrocks::pipeline
