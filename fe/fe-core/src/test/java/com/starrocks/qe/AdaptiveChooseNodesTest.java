@@ -14,8 +14,10 @@
 
 package com.starrocks.qe;
 
+import com.google.api.client.util.Lists;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.scheduler.assignment.RemoteFragmentAssignmentStrategy;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -27,8 +29,13 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
@@ -115,6 +122,39 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
         Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getInstances()
                 .stream().map(e -> e.getWorkerId()).collect(Collectors.toSet()).size());
         Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getNumSendersPerExchange().size());
+    }
+
+    @ParameterizedTest
+    @MethodSource("getCases")
+    public void testNumberEstimateFormula(long outputOfMostLeftChild, long maxOutputOfRightChild, int dop,
+                                          int candidateSize, long expected) {
+        Assert.assertEquals(expected,
+                RemoteFragmentAssignmentStrategy.getOptimalNodeNums(outputOfMostLeftChild,
+                        maxOutputOfRightChild, dop, candidateSize));
+    }
+
+    private static Stream<Arguments> getCases() {
+        List<Arguments> cases = Lists.newArrayList();
+
+        // very small data only need one node
+        cases.add(Arguments.of(10000L, 10000L, 8, 16, 1L));
+
+        // left table 1 million rows, right table 10000 rows, 16 dop, need one node
+        cases.add(Arguments.of(1000000L, 10000L, 16, 16, 1));
+
+        // left table 1 million rows, right table 1 million rows, 16 dop, need 2 nodes
+        cases.add(Arguments.of(1000000L, 1000000L, 16, 16, 2));
+
+        // left table 1 million rows, right table 100 million rows, 16 dop, need 125 nodes
+        cases.add(Arguments.of(1000000L, 100000000L, 16, 128, 125));
+
+        // left table 100 million rows, right table 1 million rows, 16 dop, need 10 nodes
+        cases.add(Arguments.of(100000000L, 1000000L, 16, 16, 10));
+
+        // left table 10 billion rows, right table 1 million rows, 16 dop, need 18 nodes
+        cases.add(Arguments.of(10000000000L, 1000000L, 16, 32, 18));
+
+        return cases.stream();
     }
 
     @AfterAll

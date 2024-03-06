@@ -199,13 +199,8 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
                 .orElse(fragment.getChild(0).getPlanRoot().getCardinality());
         long outputOfMostLeftChild = sortedFragments.get(0).getPlanRoot().getCardinality();
 
-        long baseNodeNums = Math.max(1, maxOutputOfRightChild / TINY_SCALE_ROWS_LIMIT / fragment.getPipelineDop());
-        double base = Math.max(Math.E, baseNodeNums);
-
-        long amplifyFactor = Math.round(Math.max(1,
-                Math.log(outputOfMostLeftChild / TINY_SCALE_ROWS_LIMIT / fragment.getPipelineDop()) / Math.log(base)));
-
-        long nodeNums = Math.min(amplifyFactor * baseNodeNums, candidates.size());
+        long nodeNums = getOptimalNodeNums(outputOfMostLeftChild, maxOutputOfRightChild, fragment.getPipelineDop(),
+                candidates.size());
 
         SessionVariableConstants.ChooseInstancesMode mode = connectContext.getSessionVariable()
                 .getChooseExecuteInstancesMode();
@@ -227,6 +222,16 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         } else {
             return Sets.newHashSet(childHosts);
         }
+    }
+
+    public static long getOptimalNodeNums(long outputOfMostLeftChild, long maxOutputOfRightChild, int dop, int candidateSize) {
+        long baseNodeNums = (long) Math.ceil((double) maxOutputOfRightChild / TINY_SCALE_ROWS_LIMIT / dop);
+        double base = Math.max(Math.E, baseNodeNums);
+
+        long amplifyFactor = Math.round(Math.max(1,
+                Math.log(outputOfMostLeftChild / TINY_SCALE_ROWS_LIMIT / dop) / Math.log(base)));
+
+        return Math.min(amplifyFactor * baseNodeNums, candidateSize);
     }
 
 }

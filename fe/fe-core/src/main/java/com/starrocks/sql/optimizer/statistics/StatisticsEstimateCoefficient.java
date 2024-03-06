@@ -53,7 +53,7 @@ public class StatisticsEstimateCoefficient {
     // default shuffle column row count limit
     public static final double DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT = 200000;
 
-    public static final long TINY_SCALE_ROWS_LIMIT = 100000;
+    public static final long TINY_SCALE_ROWS_LIMIT = 50000;
 
     // a small scale rows, such as default push down aggregate row count limit, 100w
     public static final long SMALL_SCALE_ROWS_LIMIT = 1000000;

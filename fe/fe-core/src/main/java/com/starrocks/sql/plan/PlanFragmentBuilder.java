@@ -400,7 +400,7 @@ public class PlanFragmentBuilder {
             for (PlanFragment child : fragment.getChildren()) {
                 computeFragmentCost(context, child);
             }
-            OptExpression output = getOptExpression(context, fragment.getPlanRoot());
+            OptExpression output = getOptExpressionFromPlanNode(context, fragment.getPlanRoot());
 
             // scan fragment
             if (fragment.getLeftMostNode() instanceof ScanNode) {
@@ -409,13 +409,13 @@ public class PlanFragmentBuilder {
             }
 
             List<OptExpression> inputs = fragment.getChildren().stream().map(PlanFragment::getPlanRoot)
-                    .map(p -> getOptExpression(context, p)).collect(Collectors.toList());
+                    .map(p -> getOptExpressionFromPlanNode(context, p)).collect(Collectors.toList());
 
             double childCost = inputs.stream().map(OptExpression::getCost).reduce(Double::sum).orElse(0D);
             fragment.setFragmentCost(output.getCost() - childCost);
         }
 
-        private OptExpression getOptExpression(ExecPlan context, PlanNode node) {
+        private OptExpression getOptExpressionFromPlanNode(ExecPlan context, PlanNode node) {
             if (context.getOptExpression(node.getId().asInt()) == null && node instanceof ProjectNode) {
                 node = node.getChild(0);
             }
