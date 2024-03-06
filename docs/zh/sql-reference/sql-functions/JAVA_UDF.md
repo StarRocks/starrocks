@@ -297,7 +297,7 @@ public class WindowSumInt {
 
 方法的含义
 
-更新窗口数据。窗口函数的详细说明，请参见[窗口函数](../sql-reference/sql-functions/Window_function.md]。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
+更新窗口数据。窗口函数的详细说明，请参见[窗口函数](./Window_function.md)。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
 
 - peer_group_start：是当前分区开始的位置。<br />分区：OVER子句中 PARTITION BY 指定分区列， 分区列的值相同的行被视为在同一个分区内。
 - peer_group_end：当前分区结束的位置。

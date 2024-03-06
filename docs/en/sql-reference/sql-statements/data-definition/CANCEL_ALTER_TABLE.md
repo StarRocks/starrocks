@@ -29,10 +29,21 @@ This statement is a synchronous operation and requires you to have the `ALTER_PR
 
 ## Parameters
 
+<<<<<<< HEAD
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
 | db_name       | No           | The name of the database to which the table belongs. If this parameter is not specified, your current database is used by default. |
 | table_name    | Yes          | The table name.                                              |
+=======
+- `{COLUMN ｜ OPTIMIZE | ROLLUP}`
+
+  - If `COLUMN` is specified, this statement cancels operations of modifying columns.
+  - If `OPTIMIZE` is specified, this statement cancels operations of optimizing table schema.
+  - If `ROLLUP` is specified, this statement cancels operations of adding or deleting the rollup index.
+
+- `db_name`: optional. The name of the database to which the table belongs. If this parameter is not specified, your current database is used by default.
+- `table_name`: required. The table name.
+>>>>>>> 31d80e5ff1 ([Doc] add rising_wave.md to integrations (#42140))
 
 ## Examples
 
