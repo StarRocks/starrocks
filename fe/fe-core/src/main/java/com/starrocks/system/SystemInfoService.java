@@ -935,7 +935,7 @@ public class SystemInfoService {
             if (db != null) {
                 db.readLock();
                 try {
-                    atomicLong.set(newReportVersion);
+                    updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
                 } finally {
                     db.readUnlock();
@@ -945,6 +945,12 @@ public class SystemInfoService {
             }
         } else {
             LOG.warn("failed to update backend report version, backend {} does not exist", backendId);
+        }
+    }
+
+    protected synchronized void updateReportVersionIncrementally(AtomicLong currentVersion, long newVersion) {
+        if (currentVersion.get() < newVersion) {
+            currentVersion.set(newVersion);
         }
     }
 

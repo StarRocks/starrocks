@@ -343,6 +343,8 @@ public class MasterImpl {
                                 "finish recover create replica task. set replica to good. tablet {}, replica {}, backend {}",
                                 tabletId, task.getBackendId(), replica.getId());
                     }
+                } else {
+                    LOG.warn("tablet_info is not set in finishTaskRequest");
                 }
 
                 // this should be called before 'countDownLatch()'
@@ -350,7 +352,7 @@ public class MasterImpl {
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
-                LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}",
+                LOG.info("finish create replica. tablet id: {}, be: {}, report version: {}",
                         tabletId, task.getBackendId(), request.getReport_version());
             }
         } finally {

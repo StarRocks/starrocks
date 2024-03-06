@@ -21,6 +21,7 @@
 
 package com.starrocks.utframe;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
 import com.starrocks.master.MasterImpl;
@@ -73,6 +74,7 @@ import com.starrocks.thrift.TScanOpenResult;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTransmitDataParams;
 import com.starrocks.thrift.TTransmitDataResult;
@@ -86,6 +88,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.starrocks.thrift.TTaskType.CREATE;
 
 /*
  * Mocked Backend
@@ -101,6 +105,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MockedBackend {
     private static final AtomicInteger basePort = new AtomicInteger(8000);
+    private static final long PATH_HASH = 123456;
 
     private final String host;
     private final int brpcPort;
@@ -206,6 +211,13 @@ public class MockedBackend {
                         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
                                 request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
                         finishTaskRequest.setReport_version(++reportVersion);
+                        if (request.getTask_type() == CREATE) {
+                            TTabletInfo tabletInfo = new TTabletInfo();
+                            tabletInfo.setPath_hash(PATH_HASH);
+                            tabletInfo.setData_size(0);
+                            tabletInfo.setTablet_id(request.getSignature());
+                            finishTaskRequest.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
+                        }
                         master.finishTask(finishTaskRequest);
                     } catch (Exception e) {
                         e.printStackTrace();
