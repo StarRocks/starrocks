@@ -16,7 +16,9 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
@@ -1707,6 +1709,25 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testBucketAggregate() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setEnablePartitionBucketOptimize(true);
+        String sql;
+        String plan;
+        {
+            sql = "select distinct L_ORDERKEY,L_SHIPDATE from lineitem_partition_colocate;";
+            ExecPlan execPlan = getExecPlan(sql);
+            ScanNode scanNode = execPlan.getScanNodes().get(0);
+            plan = getFragmentPlan(sql);
+            Assert.assertTrue(((OlapScanNode) scanNode).getWithoutColocateRequirement());
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                    "  |  group by: 1: L_ORDERKEY, 11: L_SHIPDATE");
+        }
+        connectContext.getSessionVariable().setEnablePartitionBucketOptimize(false);
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testMergeAggPruneColumnPruneWindow() throws Exception {
         String sql = "select v2 " +
                 "from ( " +
@@ -2298,7 +2319,6 @@ public class AggregateTest extends PlanTestBase {
         assertNotContains(plan, "multi_distinct_count");
     }
 
-
     @Test
     public void testRemoveExchange() throws Exception {
         int oldValue = connectContext.getSessionVariable().getNewPlannerAggStage();
@@ -2350,13 +2370,11 @@ public class AggregateTest extends PlanTestBase {
         getCostExplain(sql);
         plan = getCostExplain(sql);
 
-
         sql = "select percentile_cont(1, cast(0.4 as DOUBLE));";
         expectedException.expect(SemanticException.class);
         expectedException.expectMessage("Getting analyzing error. " +
                 "Detail message: percentile_cont 's second parameter's data type is wrong .");
         getCostExplain(sql);
-
 
         sql = "select PERCENTILE_DISC(1, cast(0.4 as DOUBLE));";
         expectedException.expect(SemanticException.class);
@@ -2387,7 +2405,6 @@ public class AggregateTest extends PlanTestBase {
                         "  |  output: count(2: v2), count(8: count)\n" +
                         "  |  group by: ");
 
-
         sql = "select count(distinct v2), count(v3) from t0 join t1 group by 'a'";
         plan = getFragmentPlan(sql);
         assertCContains(plan, "STREAM DATA SINK\n" +
@@ -2414,9 +2431,9 @@ public class AggregateTest extends PlanTestBase {
                 "count(distinct v2), sum(v4) from t0 join t1 group by v3";
         plan = getFragmentPlan(sql);
         assertCContains(plan, "4:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: sum(4: v4)\n" +
-                "  |  group by: 2: v2, 3: v3",
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(4: v4)\n" +
+                        "  |  group by: 2: v2, 3: v3",
                 "7:AGGREGATE (update finalize)\n" +
                         "  |  output: count(2: v2), sum(8: sum)\n" +
                         "  |  group by: 3: v3");
@@ -2447,13 +2464,13 @@ public class AggregateTest extends PlanTestBase {
                 "count(distinct v2), array_length(array_agg(v1)) from t0 join t1 group by v4";
         plan = getFragmentPlan(sql);
         assertCContains(plan, "STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 08\n" +
-                "    HASH_PARTITIONED: 4: v4\n" +
-                "\n" +
-                "  7:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(2: v2), array_agg(8: array_agg)\n" +
-                "  |  group by: 4: v4",
+                        "    EXCHANGE ID: 08\n" +
+                        "    HASH_PARTITIONED: 4: v4\n" +
+                        "\n" +
+                        "  7:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: count(2: v2), array_agg(8: array_agg)\n" +
+                        "  |  group by: 4: v4",
                 "9:AGGREGATE (merge finalize)\n" +
                         "  |  output: count(7: count), array_agg(8: array_agg)\n" +
                         "  |  group by: 4: v4\n" +
@@ -2614,10 +2631,10 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), ', ')");
 
-        sql = "select /*+ set_var('sql_mode' = 'GROUP_CONCAT_LEGACY, ONLY_full_group_by') */ group_concat(v1, '-') from t0";
+        sql =
+                "select /*+ set_var('sql_mode' = 'GROUP_CONCAT_LEGACY, ONLY_full_group_by') */ group_concat(v1, '-') from t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
-
 
         sql = "select /*+ set_var(sql_mode = '68719476768') */ group_concat(v1, '-') from t0";
         plan = getFragmentPlan(sql);
@@ -2628,7 +2645,8 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
 
         // overwrite the GROUP_CONCAT_LEGACY
-        sql = "select /*+ set_var(sql_mode = 68719476768) */ /*+ set_var(sql_mode = 32) */ group_concat(v1, '-') from t0";
+        sql =
+                "select /*+ set_var(sql_mode = 68719476768) */ /*+ set_var(sql_mode = 32) */ group_concat(v1, '-') from t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-', ',')");
     }
