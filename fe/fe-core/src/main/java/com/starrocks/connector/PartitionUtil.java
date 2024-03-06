@@ -427,10 +427,6 @@ public class PartitionUtil {
         boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
 
-<<<<<<< HEAD
-            Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, endKey));
-=======
         PrimitiveType partitionColPrimType = partitionColumn.getPrimitiveType();
         DateTimeInterval partitionDateTimeInterval = getDateTimeInterval(table, partitionColumn);
 
@@ -449,7 +445,6 @@ public class PartitionUtil {
             PartitionKey upperBound = nextPartitionKey(lowerBound, partitionDateTimeInterval, partitionColPrimType,
                     isConvertToDate);
             mvPartitionRangeMap.put(partitionKeyName, Range.closedOpen(lowerBound, upperBound));
->>>>>>> 3be33b8632 ([BugFix] Fix mv partition range bug for external tables (#41957))
         }
         return mvPartitionRangeMap;
     }

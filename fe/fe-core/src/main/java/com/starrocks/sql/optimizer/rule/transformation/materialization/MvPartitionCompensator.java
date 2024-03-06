@@ -308,7 +308,7 @@ public class MvPartitionCompensator {
 
         List<Range<PartitionKey>> ranges = Lists.newArrayList();
         MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
