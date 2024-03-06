@@ -47,7 +47,6 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -269,10 +268,14 @@ public class StatementPlanner {
             return;
         }
         List<Database> dbList = new ArrayList<>(dbs.values());
+<<<<<<< HEAD
         dbList.sort(Comparator.comparingLong(Database::getId));
         for (Database db : dbList) {
             db.readLock();
         }
+=======
+        locker.lockDatabases(dbList, LockType.READ);
+>>>>>>> de1ae9786d ([BugFix] Fix mv refresh possible deadlock between checkBaseTablePartitionChange and prepareRefreshPlan (#42052))
     }
 
     // unLock all database after analyze
@@ -280,9 +283,14 @@ public class StatementPlanner {
         if (dbs == null) {
             return;
         }
+<<<<<<< HEAD
         for (Database db : dbs.values()) {
             db.readUnlock();
         }
+=======
+        List<Database> dbList = new ArrayList<>(dbs.values());
+        locker.unlockDatabases(dbList, LockType.READ);
+>>>>>>> de1ae9786d ([BugFix] Fix mv refresh possible deadlock between checkBaseTablePartitionChange and prepareRefreshPlan (#42052))
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.
