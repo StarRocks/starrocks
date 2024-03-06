@@ -951,7 +951,7 @@ TEST_P(FpeNumTestFixture, fpe_ff1_encrypt_numTest) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        FpeNumEncryptTest, FpeNumETestFixture,
+        FpeNumEncryptTest, FpeNumTestFixture,
         ::testing::Values(
         std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
         std::make_tuple("-82695393.42", "abcdefghijk12345abcdefghijk12345", "-115815106.800956527124541"),
