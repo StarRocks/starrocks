@@ -870,4 +870,28 @@ public class SharedDataStorageVolumeMgrTest {
                     () -> svm.createStorageVolume(svName, "s3", locations, params, Optional.empty(), ""));
         }
     }
+
+    @Test
+    public void testUpgrade() throws IOException, SRMetaBlockException, SRMetaBlockEOFException,
+            DdlException, AlreadyExistsException {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        svm.createBuiltinStorageVolume();
+        svm.replayBindDbToStorageVolume(null, 1L);
+        svm.replayBindTableToStorageVolume(null, 2L);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(out);
+        svm.save(dos);
+
+        InputStream in = new ByteArrayInputStream(out.toByteArray());
+        DataInputStream dis = new DataInputStream(in);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
+        svm1.load(reader);
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getDefaultStorageVolume().getName());
+        Assert.assertTrue(svm1.storageVolumeToDbs.isEmpty());
+        Assert.assertTrue(svm1.storageVolumeToTables.isEmpty());
+        Assert.assertTrue(svm1.dbToStorageVolume.isEmpty());
+        Assert.assertTrue(svm1.tableToStorageVolume.isEmpty());
+    }
 }
