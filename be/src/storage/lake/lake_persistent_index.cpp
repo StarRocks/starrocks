@@ -214,8 +214,8 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version) {
 
 void LakePersistentIndex::commit(MetaFileBuilder* builder) {
     if (_sstable->sstables_size() > 0) {
-        auto sstable_meta = std::make_shared<PersistentIndexSstableMetaPB>(*_sstable_meta);
-        builder->set_sstable_meta(std::move(sstable_meta));
+        auto sstable = std::make_shared<PersistentIndexSstablePB>(*_sstable);
+        builder->set_sstable(std::move(sstable));
         _sstable = _sstable_meta->add_sstables();
     }
 }

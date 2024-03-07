@@ -274,8 +274,8 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
 }
 
 void MetaFileBuilder::_finalize_sstable() {
-    if (_sstable_meta != nullptr) {
-        _tablet_meta->mutable_pindex_sstable_meta()->CopyFrom(*_sstable_meta);
+    if (_sstable != nullptr) {
+        _tablet_meta->mutable_pindex_sstable_meta()->mutable_sstables()->Add(std::move(*_sstable));
     }
 }
 

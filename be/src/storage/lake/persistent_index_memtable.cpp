@@ -14,6 +14,8 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include <butil/time.h> // NOLINT
+
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/filenames.h"
@@ -203,10 +205,16 @@ size_t PersistentIndexMemtable::memory_usage() {
 
 Status PersistentIndexMemtable::flush(int64_t txn_id, SstablePB* sstable) {
     auto name = gen_sst_filename(txn_id);
+    auto start_ts = butil::gettimeofday_us();
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_id, name)));
+    auto end_ts = butil::gettimeofday_us();
+    TRACE_COUNTER_INCREMENT("new_writable_file", end_ts - start_ts);
     uint64_t filesz;
     RETURN_IF_ERROR(LakePersistentIndexSstable::build_sstable(_map, wf.get(), &filesz));
+    start_ts = butil::gettimeofday_us();
     RETURN_IF_ERROR(wf->close());
+    end_ts = butil::gettimeofday_us();
+    TRACE_COUNTER_INCREMENT("wf_close", end_ts - start_ts);
     sstable->set_filename(name);
     sstable->set_filesz(filesz);
     return Status::OK();
