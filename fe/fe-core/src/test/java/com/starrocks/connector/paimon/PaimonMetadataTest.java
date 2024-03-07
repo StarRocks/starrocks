@@ -47,7 +47,7 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
@@ -124,7 +124,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetTable(@Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+    public void testGetTable(@Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         List<DataField> fields = new ArrayList<>();
         fields.add(new DataField(1, "col2", new IntType(true)));
         fields.add(new DataField(2, "col3", new DoubleType(false)));
@@ -155,7 +155,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testTableExists(@Mocked AbstractFileStoreTable paimonNativeTable) {
+    public void testTableExists(@Mocked FileStoreTable paimonNativeTable) {
         new Expectations() {
             {
                 paimonNativeCatalog.tableExists((Identifier) any);
@@ -166,7 +166,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testListPartitionNames(@Mocked AbstractFileStoreTable paimonNativeTable,
+    public void testListPartitionNames(@Mocked FileStoreTable paimonNativeTable,
                                        @Mocked ReadBuilder readBuilder) throws Catalog.TableNotExistException {
 
         RowType partitionRowType = RowType.of(
@@ -199,7 +199,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetRemoteFileInfos(@Mocked AbstractFileStoreTable paimonNativeTable,
+    public void testGetRemoteFileInfos(@Mocked FileStoreTable paimonNativeTable,
                                        @Mocked ReadBuilder readBuilder)
             throws Catalog.TableNotExistException {
         new Expectations() {
@@ -221,7 +221,49 @@ public class PaimonMetadataTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPrunePaimonPartition(@Mocked AbstractFileStoreTable paimonNativeTable,
+=======
+    public void testGetCloudConfiguration() {
+        CloudConfiguration cc = metadata.getCloudConfiguration();
+        Assert.assertEquals(cc.getCloudType(), CloudType.DEFAULT);
+    }
+
+    @Test
+    public void testGetCreateTime(@Mocked SchemasTable schemasTable,
+                                  @Mocked ReadBuilder readBuilder,
+                                  @Mocked RecordReader<InternalRow> recordReader) throws Exception {
+        RowType rowType = new RowType(Arrays.asList(new DataField(0, "schema_id", new BigIntType(false)),
+                new DataField(1, "fields", SerializationUtils.newStringType(false)),
+                new DataField(2, "partition_keys", SerializationUtils.newStringType(false)),
+                new DataField(3, "primary_keys", SerializationUtils.newStringType(false)),
+                new DataField(4, "options", SerializationUtils.newStringType(false)),
+                new DataField(5, "comment", SerializationUtils.newStringType(true)),
+                new DataField(6, "update_time", new TimestampType(false, 3))));
+        RecordReaderIterator iterator = new RecordReaderIterator<>(recordReader);
+        PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
+        Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = schemasTable;
+                schemasTable.rowType();
+                result = rowType;
+                schemasTable.newReadBuilder().withProjection(new int[] {0, 6}).
+                        withFilter(equal).newRead().createReader(schemasTable.newScan().plan());
+                result = recordReader;
+                new RecordReaderIterator<>(recordReader);
+                result = iterator;
+            }
+        };
+
+        long creteTime = metadata.getTableCreateTime("db1", "tbl1");
+        Assert.assertEquals(0, creteTime);
+    }
+
+    @Test
+    public void testPrunePaimonPartition(@Mocked FileStoreTable paimonNativeTable,
+>>>>>>> 3bf4701f9a ([Enhancement]Upgrade paimon version to 0.7 (#42280))
                                          @Mocked ReadBuilder readBuilder) {
         new MockUp<MetadataMgr>() {
             @Mock
