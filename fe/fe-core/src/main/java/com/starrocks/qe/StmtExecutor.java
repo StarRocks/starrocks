@@ -1634,6 +1634,11 @@ public class StmtExecutor {
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
         }
+        RuntimeProfile profile = RuntimeProfileParser.parseFrom(
+                CompressionUtils.gzipDecompressString(profileElement.profileContent));
+        if (profile == null) {
+            throw new AnalysisException(String.format("profile of %s is null, may be using async profile", queryId));
+        }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
                 RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
                 planNodeIds, context.getSessionVariable().getColorExplainOutput()));
