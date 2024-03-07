@@ -213,6 +213,12 @@ public class OffHeapColumnVector {
             putArrayOffset(elementsAppended, offset, 0);
         }
 
+        if (type.isStruct()) {
+            for (int i = 0; i < childColumns.length; i++) {
+                childColumns[i].appendValue(null);
+            }
+        }
+
         return elementsAppended++;
     }
 
@@ -480,13 +486,6 @@ public class OffHeapColumnVector {
         ColumnType.TypeValue typeValue = type.getTypeValue();
         if (o == null) {
             appendNull();
-            if (type.isStruct()) {
-                List<ColumnValue> nulls = new ArrayList<>();
-                for (int i = 0; i < type.childTypes.size(); i++) {
-                    nulls.add(null);
-                }
-                appendStruct(nulls);
-            }
             return;
         }
 
