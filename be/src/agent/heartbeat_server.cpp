@@ -44,6 +44,9 @@
 #include "agent/master_info.h"
 #include "common/status.h"
 #include "gen_cpp/HeartbeatService.h"
+#ifdef USE_STAROS
+#include "http/action/update_config_action.h"
+#endif
 #include "runtime/heartbeat_flags.h"
 #include "service/backend_options.h"
 #include "storage/storage_engine.h"
@@ -118,6 +121,19 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     }
 
     static auto num_hardware_cores = static_cast<int32_t>(CpuInfo::num_cores());
+
+#ifdef USE_STAROS
+    if (master_info.run_mode == TRunMode::SHARED_DATA && reboot_time == 0) {
+        auto update_config = UpdateConfigAction::instance();
+        if (update_config == nullptr) {
+            LOG(WARNING) << "update flush thread number ignored: UpdateConfigAction is not inited";
+        } else {
+            auto s = update_config->update_config("flush_thread_num_per_store", std::to_string(2 * num_hardware_cores));
+            LOG(INFO) << "update flush thread number up to " << 2 * num_hardware_cores << ", status: " << s;
+        }
+    }
+#endif
+
     if (res.ok()) {
         heartbeat_result.backend_info.__set_be_port(config::be_port);
         heartbeat_result.backend_info.__set_http_port(config::be_http_port);
