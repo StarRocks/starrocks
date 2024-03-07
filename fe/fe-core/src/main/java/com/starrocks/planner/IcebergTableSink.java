@@ -53,9 +53,9 @@ public class IcebergTableSink extends DataSink {
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
-    private final boolean isMergeOps;
+    private final int updateMode;// 0-insert, 1-update, 2-delete
 
-    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink, boolean isMergeOps) {
+    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink, int updateMode) {
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
         this.location = nativeTable.location();
@@ -92,11 +92,11 @@ public class IcebergTableSink extends DataSink {
 
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
-        this.isMergeOps = isMergeOps;
+        this.updateMode = updateMode;
     }
 
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink) {
-        this(icebergTable, desc, isStaticPartitionSink, false);
+        this(icebergTable, desc, isStaticPartitionSink, 0);
     }
 
     @Override
@@ -117,7 +117,7 @@ public class IcebergTableSink extends DataSink {
         tIcebergTableSink.setLocation(location);
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
-        tIcebergTableSink.setIs_merge_ops(isMergeOps);
+        tIcebergTableSink.setUpdate_mode(updateMode);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tIcebergTableSink.setCompression_type(compression);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();

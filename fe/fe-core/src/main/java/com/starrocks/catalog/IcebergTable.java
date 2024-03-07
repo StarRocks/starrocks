@@ -358,7 +358,7 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean supportsUpdate() {
-        return true;
+        return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT).equalsIgnoreCase(PARQUET_FORMAT);
     }
 
     @Override

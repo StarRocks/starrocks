@@ -375,7 +375,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             scan = scan.includeColumnStats();
         }
 
-        if (icebergPredicate.op() != Expression.Operation.TRUE && !isMergeOps(icebergTable)) {
+        if (icebergPredicate.op() != Expression.Operation.TRUE) {// && !isMergeOps(icebergTable)
             scan = scan.filter(icebergPredicate);
         }
 

@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
@@ -387,7 +388,8 @@ public class QueryAnalyzer {
                     fields.add(field);
                 }
                 if(table instanceof IcebergTable
-                        && session.getExecutor().getParsedStmt() instanceof DeleteStmt){
+                        && (session.getExecutor().getParsedStmt() instanceof DeleteStmt
+                        ||session.getExecutor().getParsedStmt() instanceof UpdateStmt)){
                     Column filePath = new Column("file_path", Type.STRING,true);
                     Field fileField = new Field("file_path", filePath.getType(), tableName, new SlotRef(tableName, filePath.getName(), filePath.getName()), true,
                             filePath.isAllowNull());

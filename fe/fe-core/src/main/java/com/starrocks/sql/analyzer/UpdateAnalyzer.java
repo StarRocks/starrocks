@@ -246,6 +246,16 @@ public class UpdateAnalyzer {
             item.setExpr(expr);
         }
 
+        if (table.isIcebergTable()) {
+            selectList.addItem(new SelectListItem(new SlotRef(tableName, "file_path"), "file_path"));
+            selectList.addItem(new SelectListItem(new SlotRef(tableName, "pos"), "pos"));
+
+            assignColumnList.add(new Column("file_path", Type.VARCHAR, true));
+            assignColumnList.add(new Column("pos", Type.BIGINT, true));
+            //selectList.addItem(new SelectListItem(new StringLiteral("file_path"), "file_path"));
+            //selectList.addItem(new SelectListItem(posSlot, "pos"));
+        }
+
         Relation relation = new TableRelation(tableName);
         if (updateStmt.getFromRelations() != null) {
             for (Relation r : updateStmt.getFromRelations()) {
@@ -260,6 +270,13 @@ public class UpdateAnalyzer {
         QueryStatement queryStatement = new QueryStatement(selectRelation);
         queryStatement.setIsExplain(updateStmt.isExplain(), updateStmt.getExplainLevel());
         new QueryAnalyzer(session).analyze(queryStatement);
+
+        if (table.isIcebergTable()) {
+            table.getBaseSchema()
+                    .add(new Column("file_path", Type.VARCHAR, true));
+
+            table.getBaseSchema().add(new Column("pos", Type.BIGINT, true));
+        }
 
         updateStmt.setTable(table);
         updateStmt.setQueryStatement(queryStatement);

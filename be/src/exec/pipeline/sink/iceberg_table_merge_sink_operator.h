@@ -34,9 +34,11 @@ public:
                              std::string location, std::string file_format, TCompressionType::type compression_codec,
                              const TCloudConfiguration& cloud_conf, IcebergTableDescriptor* iceberg_table,
                              FragmentContext* fragment_ctx, const std::shared_ptr<::parquet::schema::GroupNode>& schema,
+                             const std::shared_ptr<::parquet::schema::GroupNode>& pos_del_file_schema,
                              const std::vector<ExprContext*>& output_expr_ctxs,
                              const vector<ExprContext*>& partition_output_expr, bool is_static_partition_insert,
-                             std::atomic<int32_t>& num_sinkers)
+                             std::atomic<int32_t>& num_sinkers,
+                             int32_t _update_mode)
             : Operator(factory, id, "iceberg_table_sink", plan_node_id, false, driver_sequence),
               _location(std::move(location)),
               _iceberg_table_data_location(_location + "/data/"),
@@ -45,10 +47,12 @@ public:
               _cloud_conf(cloud_conf),
               _iceberg_table(iceberg_table),
               _parquet_file_schema(std::move(schema)),
+              _pos_del_file_schema(std::move(pos_del_file_schema)),
               _output_expr(output_expr_ctxs),
               _partition_expr(partition_output_expr),
               _is_static_partition_insert(is_static_partition_insert),
-              _num_sinkers(num_sinkers) {}
+              _num_sinkers(num_sinkers),
+              _update_mode(_update_mode) {}// 0-insert, 1-update, 2-delete
 
 
     ~IcebergTableMergeSinkOperator() override = default;
@@ -73,9 +77,12 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+    Status push_delete_chunk(RuntimeState* state, const ChunkPtr& chunk);
+
     static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
 
     static void add_iceberg_delete_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
+    static void add_iceberg_update_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
 
     static Status partition_value_to_string(Column* column, std::string& partition_value);
 
@@ -94,10 +101,12 @@ private:
     std::vector<ExprContext*> _output_expr;
     std::vector<ExprContext*> _partition_expr;
     std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _pos_partition_writers;
     std::unique_ptr<starrocks::RollingAsyncParquetWriter> _pos_file_writer = nullptr;
     std::atomic<bool> _is_finished = false;
     bool _is_static_partition_insert = false;
     std::atomic<int32_t>& _num_sinkers;
+    int32_t _update_mode;
 };
 
 class IcebergTableMergeSinkOperatorFactory final : public OperatorFactory {
@@ -113,8 +122,8 @@ public:
         _increment_num_sinkers_no_barrier();
         return std::make_shared<IcebergTableMergeSinkOperator>(
                 this, _id, _plan_node_id, driver_sequence, _location, _file_format, _compression_codec, _cloud_conf,
-                _iceberg_table, _fragment_ctx, _parquet_file_schema, _output_expr_ctxs, _partition_expr_ctxs,
-                is_static_partition_insert, _num_sinkers);
+                _iceberg_table, _fragment_ctx, _parquet_file_schema,_pos_del_file_schema, _output_expr_ctxs, _partition_expr_ctxs,
+                is_static_partition_insert, _num_sinkers, _update_mode);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -137,9 +146,11 @@ private:
     TCloudConfiguration _cloud_conf;
 
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
+    std::shared_ptr<::parquet::schema::GroupNode> _pos_del_file_schema;
     std::vector<ExprContext*> _partition_expr_ctxs;
     bool is_static_partition_insert = false;
     std::atomic<int32_t> _num_sinkers = 0;
+    int32_t _update_mode;
 };
 
 } // namespace pipeline

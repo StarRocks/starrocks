@@ -19,12 +19,14 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SchemaTableSink;
@@ -122,6 +124,10 @@ public class UpdatePlanner {
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             } else if (table instanceof SystemTable) {
                 DataSink dataSink = new SchemaTableSink((SystemTable) table);
+                execPlan.getFragments().get(0).setSink(dataSink);
+            } else if (table instanceof IcebergTable) {
+                descriptorTable.getTupleDescs().stream().forEach(t -> t.setTable(table));
+                DataSink dataSink = new IcebergTableSink((IcebergTable) table, olapTuple, true,1);
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + table.getClass().getName());

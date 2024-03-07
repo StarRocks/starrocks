@@ -572,7 +572,7 @@ CONF_mInt32(path_scan_interval_second, "86400");
 // The following 2 configs limit the max usage of disk capacity of a data dir.
 // If both of these 2 threshold reached, no more data can be writen into that data dir.
 // The percent of max used capacity of a data dir
-CONF_mInt32(storage_flood_stage_usage_percent, "95"); // 95%
+CONF_mInt32(storage_flood_stage_usage_percent, "100"); // 95%
 // The min bytes that should be left of a data dir
 CONF_mInt64(storage_flood_stage_left_capacity_bytes, "107374182400"); // 100GB
 // When choosing storage root path for tablet creation, disks with usage larger than the

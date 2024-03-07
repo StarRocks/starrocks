@@ -230,7 +230,7 @@ struct TIcebergTableSink {
     4: optional Types.TCompressionType compression_type
     5: optional bool is_static_partition_sink
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
-    7: optional bool is_merge_ops
+    7: optional i32 update_mode
 }
 
 struct THiveTableSink {

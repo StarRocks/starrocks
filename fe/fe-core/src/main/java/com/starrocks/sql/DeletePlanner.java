@@ -112,11 +112,8 @@ public class DeletePlanner {
                 dataSink = new OlapTableSink((OlapTable) table, olapTuple, partitionIds, ((OlapTable) table).writeQuorum(),
                         ((OlapTable) table).enableReplicatedStorage(), false, false);
             }else if (table instanceof IcebergTable) {
-//                Column filePath = new Column("file_path", Type.STRING, true);
-//                Column pos = new Column("pos", Type.BIGINT, true);
-//                table.setNewFullSchema(Arrays.asList(filePath,pos));
                 descriptorTable.getTupleDescs().stream().forEach(t -> t.setTable(table));
-                dataSink = new IcebergTableSink((IcebergTable) table,olapTuple,false, true);
+                dataSink = new IcebergTableSink((IcebergTable) table,olapTuple,false, 2);
             }else {
                 throw new SemanticException("Unknown table type " + table.getType());
             }
