@@ -54,7 +54,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
         _tablet_id = metadata.id();
         _status = _do_load(op_write, metadata, tablet, need_lock);
         if (!_status.ok()) {
-            if (!_status.is_uninitialized()) {
+            if (!_status.is_uninitialized() && !_status.is_cancelled()) {
                 LOG(WARNING) << "load RowsetUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
                              << get_stack_trace();
             }
