@@ -434,6 +434,7 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             Database db = new Database(createDbInfo.getId(), createDbInfo.getDbName());
             unprotectCreateDb(db);
+            // If user upgrades from 3.0, the storage volume id will be null
             if (createDbInfo.getStorageVolumeId() != null) {
                 stateMgr.getStorageVolumeMgr().replayBindDbToStorageVolume(createDbInfo.getStorageVolumeId(), db.getId());
             }
@@ -2340,6 +2341,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
+        // If user upgrades from 3.0, the storage volume id will be null
         if (table.isCloudNativeTableOrMaterializedView() && info.getStorageVolumeId() != null) {
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                     .replayBindTableToStorageVolume(info.getStorageVolumeId(), table.getId());

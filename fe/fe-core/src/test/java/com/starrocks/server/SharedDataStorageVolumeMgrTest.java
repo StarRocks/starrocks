@@ -67,6 +67,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -876,8 +877,12 @@ public class SharedDataStorageVolumeMgrTest {
             DdlException, AlreadyExistsException {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         svm.createBuiltinStorageVolume();
-        svm.replayBindDbToStorageVolume(null, 1L);
-        svm.replayBindTableToStorageVolume(null, 2L);
+        Set<Long> dbs = new HashSet<>();
+        dbs.add(1L);
+        svm.storageVolumeToDbs.put(null, dbs);
+        Set<Long> tables = new HashSet<>();
+        tables.add(2L);
+        svm.storageVolumeToTables.put(null, tables);
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(out);

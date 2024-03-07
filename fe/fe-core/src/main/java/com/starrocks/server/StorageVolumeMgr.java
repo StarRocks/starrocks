@@ -49,7 +49,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -381,22 +380,14 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         // If user upgrades from 3.0 and the createTableInfo and createDbInfo is replayed,
         // the image will look like: "svToDbs":{"null":[12288,81921,49154,65541,20485]}, "svToTables":{"null":[12288]}
         // The mapping null to dbs and tables should be removed. These code can be removed when 3.0 is not supported.
-        for (Iterator<Map.Entry<String, Set<Long>>> it = storageVolumeToDbs.entrySet().iterator(); it.hasNext();) {
-            Map.Entry<String, Set<Long>> entry = it.next();
-            if (String.valueOf(entry.getKey()).equals("null")) {
-                it.remove();
-                continue;
-            }
+        storageVolumeToDbs.remove("null");
+        for (Map.Entry<String, Set<Long>> entry : storageVolumeToDbs.entrySet()) {
             for (Long dbId : entry.getValue()) {
                 dbToStorageVolume.put(dbId, entry.getKey());
             }
         }
-        for (Iterator<Map.Entry<String, Set<Long>>> it = storageVolumeToTables.entrySet().iterator(); it.hasNext();) {
-            Map.Entry<String, Set<Long>> entry = it.next();
-            if (String.valueOf(entry.getKey()).equals("null")) {
-                it.remove();
-                continue;
-            }
+        storageVolumeToTables.remove("null");
+        for (Map.Entry<String, Set<Long>> entry : storageVolumeToTables.entrySet()) {
             for (Long tableId : entry.getValue()) {
                 tableToStorageVolume.put(tableId, entry.getKey());
             }
