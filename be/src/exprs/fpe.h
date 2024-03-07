@@ -26,12 +26,12 @@ class FPE {
 public:
     FPE() = delete;
 
-    static std::string trim_leading_zeros(const std::string& str, size_t num_flag_pos);
-    static std::string trim_zeros(const std::string& str, size_t num_flag_pos);
-    static Status encrypt(std::string_view num_str, std::string_view key, char* buffer, int radix);
-    static Status encrypt_num(std::string_view num_str, std::string_view key, std::string& value);
-    static Status decrypt(std::string_view num_str, std::string_view key, char* buffer, int radix);
-    static Status decrypt_num(std::string_view num_str, std::string_view key, std::string& value);
+    static void trim_leading_zeros(const std::string& result, size_t num_flag_pos, std::string& value);
+    static void trim_zeros(const std::string& result, size_t num_flag_pos, std::string& value);
+    static Status encrypt(std::string_view num_str, const std::vector<uint8_t>& key, char* buffer, int radix);
+    static Status encrypt_num(std::string_view num_str, const std::vector<uint8_t>& key, std::string& value);
+    static Status decrypt(std::string_view num_str, const std::vector<uint8_t>& key, char* buffer, int radix);
+    static Status decrypt_num(std::string_view num_str, const std::vector<uint8_t>& key, std::string& value);
 
 public:
     static const std::string_view DEFAULT_KEY;
@@ -39,8 +39,6 @@ public:
     static const int MIN_LENGTH = 6;
 
 private:
-    static std::string current_key;
-    static std::vector<uint8_t> fpe_key;
     static const char FIXED_NUM = '1';
     constexpr static const double EXPANDED = 100000.0 * 1000000000.0;
     constexpr static const int EXPANDED_LENGTH = 14;
