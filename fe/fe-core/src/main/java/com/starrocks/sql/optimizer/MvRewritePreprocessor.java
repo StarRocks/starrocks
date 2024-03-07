@@ -274,8 +274,6 @@ public class MvRewritePreprocessor {
         logMVPrepare(connectContext, "  enable_experimental_mv: {}", Config.enable_experimental_mv);
         logMVPrepare(connectContext, "  enable_materialized_view_rewrite: {}",
                 sessionVariable.isEnableMaterializedViewRewrite());
-        logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
-                sessionVariable.isEnableViewBasedMvRewrite());
         logMVPrepare(connectContext, "  enable_materialized_view_union_rewrite: {}",
                 sessionVariable.isEnableMaterializedViewUnionRewrite());
         logMVPrepare(connectContext, "  enable_materialized_view_view_delta_rewrite: {}",
@@ -292,6 +290,8 @@ public class MvRewritePreprocessor {
                 sessionVariable.isEnableSyncMaterializedViewRewrite());
         logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
                 sessionVariable.isEnableViewBasedMvRewrite());
+        logMVPrepare(connectContext, "  enable_materialized_view_aggregate_rollup_rewrite: {}",
+                sessionVariable.isEnableMaterializedViewAggregateRollupRewrite());
 
         // limit
         logMVPrepare(connectContext, "---------------------------------");

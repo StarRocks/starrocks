@@ -5405,4 +5405,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
     }
+
+    @Test
+    public void testAggregateRollupConfig() {
+        String mv = "select deptno as col1, locationid + 1 as b, count(*) as c, sum(empid) as s " +
+                "from emps group by locationid + 1, deptno";
+        connectContext.getSessionVariable().setEnableMaterializedViewAggregateRollupRewrite(true);
+        testRewriteOK(mv, "select count(*) as c, deptno from emps group by deptno");
+        testRewriteOK(mv, "select count(*) as c, locationid + 1 from emps group by locationid + 1");
+        connectContext.getSessionVariable().setEnableMaterializedViewAggregateRollupRewrite(false);
+        testRewriteFail(mv, "select count(*) as c, deptno from emps group by deptno");
+        testRewriteFail(mv, "select count(*) as c, locationid + 1 from emps group by locationid + 1");
+        connectContext.getSessionVariable().setEnableMaterializedViewAggregateRollupRewrite(true);
+    }
 }
