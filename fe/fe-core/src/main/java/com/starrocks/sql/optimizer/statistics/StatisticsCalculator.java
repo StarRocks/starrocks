@@ -294,9 +294,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         builder.setOutputRowCount(tableRowCount);
+        if (isRewrittenMvGE(node, table, context)) {
+            builder.setShadowColumns(colRefToColumnMetaMap.keySet());
+        }
         // 4. estimate cardinality
         context.setStatistics(builder.build());
+
         return visitOperator(node, context);
+    }
+
+    private boolean isRewrittenMvGE(Operator node, Table table, ExpressionContext context) {
+        return table.isMaterializedView()
+                && node instanceof LogicalOlapScanOperator
+                && context.getGroupExpression() != null
+                && node.getOpType() != context.getGroupExpression().getGroup().getFirstLogicalExpression().getOp().getOpType();
     }
 
     @Override

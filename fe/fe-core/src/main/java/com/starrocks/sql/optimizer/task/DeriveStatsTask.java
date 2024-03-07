@@ -20,8 +20,12 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+
+import java.util.Map;
 
 /**
  * DeriveStatsTask derives any stats needed for costing a GroupExpression.
@@ -61,7 +65,22 @@ public class DeriveStatsTask extends OptimizerTask {
         // choose best statistics
         Statistics groupExpressionStatistics = expressionContext.getStatistics();
         if (needUpdateGroupStatistics(currentStatistics, groupExpressionStatistics)) {
-            groupExpression.getGroup().setStatistics(groupExpressionStatistics);
+            if (isMaterializedView(groupExpression)) {
+                // use statistics of materialized view because it is more accurate
+                Statistics.Builder newBuilder = Statistics.buildFrom(currentStatistics);
+                newBuilder.setOutputRowCount(groupExpressionStatistics.getOutputRowCount());
+                Map<ColumnRefOperator, ColumnStatistic> newColumnStatisticMap = groupExpressionStatistics.getColumnStatistics();
+                // update ColumnStatistics, exclude shadow columns of mv
+                for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : currentStatistics.getColumnStatistics().entrySet()) {
+                    if (newColumnStatisticMap.containsKey(entry.getKey())) {
+                        newBuilder.addColumnStatistic(entry.getKey(), newColumnStatisticMap.get(entry.getKey()));
+                    }
+                }
+                newBuilder.setTableRowCountMayInaccurate(groupExpressionStatistics.isTableRowCountMayInaccurate());
+                groupExpression.getGroup().setStatistics(newBuilder.build());
+            } else {
+                groupExpression.getGroup().setStatistics(groupExpressionStatistics);
+            }
         }
 
         // do set group statistics when the groupExpression is a materialized view scan

@@ -14,12 +14,14 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -33,11 +35,13 @@ public class Statistics {
     // Table row count in FE depends on BE reporting，but FE may not get report from BE which just started，
     // this causes the table row count stored in FE to be inaccurate.
     private final boolean tableRowCountMayInaccurate;
+    private final Collection<ColumnRefOperator> shadowColumns;
 
     private Statistics(Builder builder) {
         this.outputRowCount = builder.outputRowCount;
         this.columnStatistics = builder.columnStatistics;
         this.tableRowCountMayInaccurate = builder.tableRowCountMayInaccurate;
+        this.shadowColumns = builder.shadowColumns;
     }
 
     public double getOutputRowCount() {
@@ -48,6 +52,9 @@ public class Statistics {
         double totalSize = 0;
         boolean nonEmpty = false;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (shadowColumns.contains(entry.getKey())) {
+                continue;
+            }
             if (outputColumns.contains(entry.getKey().getId())) {
                 if (!entry.getValue().isUnknown()) {
                     totalSize += entry.getValue().getAverageRowSize();
@@ -67,6 +74,9 @@ public class Statistics {
         // Make it at least 1 byte, otherwise the cost model would propagate estimate error
         double totalSize = 0;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (shadowColumns.contains(entry.getKey())) {
+                continue;
+            }
             if (!entry.getValue().isUnknown()) {
                 totalSize += entry.getValue().getAverageRowSize();
             } else {
@@ -143,6 +153,9 @@ public class Statistics {
         private double outputRowCount;
         private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
         private boolean tableRowCountMayInaccurate;
+        // columns not used to compute costs
+        // which is used by mv rewrite to make the cost accurate
+        private Collection<ColumnRefOperator> shadowColumns;
 
         public Builder() {
             this(NaN, new HashMap<>(), false);
@@ -153,6 +166,7 @@ public class Statistics {
             this.outputRowCount = outputRowCount;
             this.columnStatistics = new HashMap<>(columnStatistics);
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
+            this.shadowColumns = Lists.newArrayList();
         }
 
         public Builder setOutputRowCount(double outputRowCount) {
@@ -194,6 +208,11 @@ public class Statistics {
                     this.columnStatistics.put(k, v);
                 }
             });
+            return this;
+        }
+
+        public Builder setShadowColumns(Collection<ColumnRefOperator> shadowColumns) {
+            this.shadowColumns = shadowColumns;
             return this;
         }
 
