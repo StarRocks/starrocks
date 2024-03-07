@@ -275,6 +275,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
             }
         });
+        _config_callback.emplace("starlet_delete_files_max_key_in_batch", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("delete_files_max_key_in_batch", value).empty()) {
+                LOG(WARNING) << "Failed to update delete_files_max_key_in_batch";
+            }
+        });
 #endif // USE_STAROS
     });
 
