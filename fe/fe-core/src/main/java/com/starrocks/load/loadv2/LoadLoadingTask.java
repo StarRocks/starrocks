@@ -104,7 +104,7 @@ public class LoadLoadingTask extends LoadTask {
     private final int fileNum;
 
     private final LoadJob.JSONOptions jsonOptions;
-    private Boolean flexibleColumnMapping;
+    private boolean flexibleColumnMapping;
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
