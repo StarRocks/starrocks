@@ -21,6 +21,7 @@
 #include "gen_cpp/parquet_types.h"
 #include "util/bit_stream_utils.h"
 #include "util/rle_encoding.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class Slice;
@@ -30,7 +31,7 @@ namespace starrocks::parquet {
 
 class LevelDecoder {
 public:
-    LevelDecoder() = default;
+    LevelDecoder(int64_t* const timer) : _timer(timer) {}
     ~LevelDecoder() = default;
 
     // Decode will try to decode data in slice, only some of the input slice will used.
@@ -102,6 +103,7 @@ private:
 
     // Try to decode n levels into levels;
     size_t _decode_batch(size_t n, level_t* levels) {
+        SCOPED_RAW_TIMER(_timer);
         if (_encoding == tparquet::Encoding::RLE) {
             // NOTE(zc): Because RLE can only record elements that are multiples of 8,
             // it must be ensured that the incoming parameters cannot exceed the boundary.
@@ -121,6 +123,8 @@ private:
     uint32_t _num_levels = 0;
     RleDecoder<level_t> _rle_decoder;
     BitReader _bit_packed_decoder;
+
+    int64_t* const _timer;
 
     // used for level decoding batch then batch
     size_t _levels_parsed = 0;
