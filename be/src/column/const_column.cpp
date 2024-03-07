@@ -27,10 +27,6 @@ ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(std::move(data), 0) {}
 
 ConstColumn::ConstColumn(ColumnPtr data, size_t size) : _data(std::move(data)), _size(size) {
     DCHECK(!_data->is_constant());
-    if (_data->is_nullable() && size > 0 && !_data->is_null(0)) {
-        _data = down_cast<NullableColumn*>(_data.get())->data_column();
-    }
-    DCHECK(_data->is_nullable() ? _size == 0 || _data->is_null(0) : true);
     if (_data->size() > 1) {
         _data->resize(1);
     }
