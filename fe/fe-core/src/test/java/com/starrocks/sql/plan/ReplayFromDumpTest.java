@@ -768,4 +768,31 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  group by: 1: TIME"));
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testNestedViewWithCTE() throws Exception {
+
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("624:Project\n" +
+                "  |  <slot 7363> : 7363: count\n" +
+                "  |  limit: 100\n" +
+                "  |  \n" +
+                "  623:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7363: count)\n" +
+                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2133: case\n" +
+                "  |  limit: 100"));
+    }
+
+    @Test
+    public void testMvOnView() throws Exception {
+        String dumpInfo = getDumpInfoFromFile("query_dump/mv_on_view");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_LEAF_ACC_CUBE_SHADOW_VIEW_fb70da80"));
+    }
+>>>>>>> 0e7b513013 ([BugFix] fix bugs of query dump for view and add support of query dump for mv on view (#42132))
 }

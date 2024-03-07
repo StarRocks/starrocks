@@ -47,6 +47,10 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> 0e7b513013 ([BugFix] fix bugs of query dump for view and add support of query dump for mv on view (#42132))
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -89,10 +93,12 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRangeDesc;
@@ -105,7 +111,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.BackendCoreStat;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -156,7 +165,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
-                (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database if exists " + dbName + ";", ctx);
+                (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database if exists `" + dbName + "`;", ctx);
         try {
             GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         } catch (MetaNotFoundException e) {
@@ -166,7 +175,7 @@ public class StarRocksAssert {
         }
 
         CreateDbStmt createDbStmt =
-                (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database " + dbName + ";", ctx);
+                (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database `" + dbName + "`;", ctx);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         return this;
     }
@@ -431,15 +440,82 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        if (statementBase instanceof CreateTableStmt) {
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            if (!(statementBase instanceof CreateTableStmt)) {
+                return this;
+            }
             CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
             createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+<<<<<<< HEAD
             return this.withTable(sql);
         } else if (statementBase instanceof CreateMaterializedViewStatement) {
             return this.withMaterializedView(sql, true, false);
         } else {
             throw new AnalysisException("Sql is not supported in withSingleReplicaTable:" + sql);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+        } catch (Exception e) {
+            LOG.warn("create table failed, sql:{}", sql, e);
+            throw e;
+        }
+        return this;
+    }
+
+    public StarRocksAssert withSingleReplicaAsyncMv(String sql) throws Exception {
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            if (!(statementBase instanceof CreateMaterializedViewStatement)) {
+                return this;
+            }
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) statementBase;
+            withAsyncMv(createMaterializedViewStatement, true, true);
+        } catch (Exception e) {
+            LOG.warn("create mv failed, sql:{}", sql, e);
+            throw e;
+        }
+        return this;
+    }
+
+    public void withAsyncMv(
+            CreateMaterializedViewStatement createMaterializedViewStatement,
+            boolean isOnlySingleReplica,
+            boolean isRefresh) throws Exception {
+        if (isOnlySingleReplica) {
+            createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+        }
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
+        if (isRefresh) {
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                    if (stmt instanceof InsertStmt) {
+                        InsertStmt insertStmt = (InsertStmt) stmt;
+                        TableName tableName = insertStmt.getTableName();
+                        Database testDb = GlobalStateMgr.getCurrentState().getDb(stmt.getTableName().getDb());
+                        OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                        for (Partition partition : tbl.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                long version = partition.getVisibleVersion() + 1;
+                                partition.setVisibleVersion(version, System.currentTimeMillis());
+                                MaterializedIndex baseIndex = partition.getBaseIndex();
+                                List<Tablet> tablets = baseIndex.getTablets();
+                                for (Tablet tablet : tablets) {
+                                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                                    for (Replica replica : replicas) {
+                                        replica.updateVersionInfo(version, -1, version);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            String refreshSql = String.format("refresh materialized view `%s`.`%s` with sync mode;",
+                    createMaterializedViewStatement.getTableName().getDb(),
+                    createMaterializedViewStatement.getTableName().getTbl());
+            ctx.executeSql(refreshSql);
+>>>>>>> 0e7b513013 ([BugFix] fix bugs of query dump for view and add support of query dump for mv on view (#42132))
         }
     }
 
@@ -698,7 +774,7 @@ public class StarRocksAssert {
             taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
             taskRunProperties.put(TaskRun.FORCE, "true");
 
-            Task task = TaskBuilder.rebuildMvTask(mv, "test", taskRunProperties);
+            Task task = TaskBuilder.rebuildMvTask(mv, mvName.getDb(), taskRunProperties);
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
             taskRun.executeTaskRun();
