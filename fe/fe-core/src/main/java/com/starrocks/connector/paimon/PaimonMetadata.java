@@ -47,7 +47,7 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.OutOfRangeException;
 import org.apache.paimon.table.source.ReadBuilder;
@@ -123,7 +123,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             return partitionNames;
         }
 
-        AbstractFileStoreTable dataTable = (AbstractFileStoreTable) paimonTable;
+        FileStoreTable dataTable = (FileStoreTable) paimonTable;
         RowDataConverter converter = new RowDataConverter(dataTable.schema().logicalPartitionType());
 
         ReadBuilder readBuilder = paimonTable.newReadBuilder();
@@ -323,7 +323,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     private Map<String, Long> fetchChangedPartitionWithVersion(PaimonTable paimonTable, long mvSnapshotId) {
         Map<String, Long> partitionToSnapshotId = new HashMap<>();
-        FileMonitorTable fileMonitorTable = new FileMonitorTable((AbstractFileStoreTable) paimonTable.getNativeTable());
+        FileMonitorTable fileMonitorTable = new FileMonitorTable((FileStoreTable) paimonTable.getNativeTable());
         Long latestId = fileMonitorTable.snapshotManager().latestSnapshotId();
         long latestSnapshotId = latestId == null ? Long.MIN_VALUE : latestId;
         LOG.debug("Paimon table {} latest snapshotId {}, currentId {}",
@@ -371,7 +371,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 public void accept(InternalRow row) {
                     try {
                         FileMonitorTable.FileChange fileChange = FileMonitorTable.toFileChange(row);
-                        RowDataConverter converter = new RowDataConverter(((AbstractFileStoreTable) paimonTable.getNativeTable()).
+                        RowDataConverter converter = new RowDataConverter(((FileStoreTable) paimonTable.getNativeTable()).
                                 schema().logicalPartitionType());
                         List<String> partitionValues = converter.convert(fileChange.partition(),
                                 paimonTable.getPartitionColumnNames());
@@ -398,7 +398,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public List<com.starrocks.connector.PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         PaimonTable paimonTable = (PaimonTable) table;
-        FileMonitorTable fileMonitorTable = new FileMonitorTable((AbstractFileStoreTable) paimonTable.getNativeTable());
+        FileMonitorTable fileMonitorTable = new FileMonitorTable((FileStoreTable) paimonTable.getNativeTable());
         Long latestSnapshotId = fileMonitorTable.snapshotManager().latestSnapshotId();
         long latestId = latestSnapshotId == null ? Long.MIN_VALUE : latestSnapshotId;
         return partitionNames.stream().map(
