@@ -127,10 +127,10 @@ public:
         ChunkPtr chunk = std::make_shared<Chunk>();
         for (size_t i = 0; i < ctxs.size(); ++i) {
             auto ctx = ctxs[i];
-            DCHECK(ctx->root()->is_slotref());
+            CHECK(ctx->root()->is_slotref());
             auto ref = ctx->root()->get_column_ref();
             auto col = ColumnHelper::create_column(ctx->root()->type(), nullable[i]);
-            DCHECK(col->accept_mutable(&filler).ok());
+            CHECK(col->accept_mutable(&filler).ok());
             chunk->append_column(std::move(col), ref->slot_id());
         }
         return chunk;
