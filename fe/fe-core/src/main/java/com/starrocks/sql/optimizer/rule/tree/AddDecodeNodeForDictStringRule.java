@@ -478,16 +478,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     newOlapScan.setOutputColumns(newOutputColumns);
                     newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
                     newOlapScan.setNeedOutputChunkByBucket(scanOperator.needOutputChunkByBucket());
-<<<<<<< HEAD
-
-                    OptExpression result = new OptExpression(newOlapScan);
-                    result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
-                            context.stringColumnIdToDictColumnIds));
-                    result.setStatistics(optExpression.getStatistics());
-                    return visitProjectionAfter(result, context);
-=======
-                    newOlapScan.setWithoutColocateRequirement(scanOperator.isWithoutColocateRequirement());
-
                     OptExpression.Builder builder = OptExpression.builder()
                             .setOp(newOlapScan)
                             .setInputs(Lists.newArrayList())
@@ -496,7 +486,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             .setStatistics(optExpression.getStatistics())
                             .setCost(optExpression.getCost());
                     return visitProjectionAfter(builder.build(), context);
->>>>>>> e1b193c064 ([Enhancement] adaptive choose execute nodes base on the volume of processed data (#42147))
                 }
             }
             return visitProjectionAfter(optExpression, context);
@@ -998,17 +987,12 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 Maps.newHashMap(context.stringFunctions));
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
-<<<<<<< HEAD
-        result.setLogicalProperty(
-                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictToStrings()));
-=======
         OptExpression.Builder builder = OptExpression.builder()
                 .setOp(decodeOperator)
                 .setInputs(Lists.newArrayList(childExpr))
                 .setStatistics(childExpr.get(0).getStatistics())
                 .setCost(childExpr.get(0).getCost())
-                .setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
->>>>>>> e1b193c064 ([Enhancement] adaptive choose execute nodes base on the volume of processed data (#42147))
+                .setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictToStrings()));
         context.clear();
         return builder.build();
     }

@@ -197,9 +197,6 @@ public class SetStmtAnalyzer {
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
-<<<<<<< HEAD
-            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
-=======
             checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L,
                     null);
         }
@@ -223,7 +220,6 @@ public class SetStmtAnalyzer {
                 throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
                         "supported list is %s", rewriteModeName, supportedList));
             }
->>>>>>> e1b193c064 ([Enhancement] adaptive choose execute nodes base on the volume of processed data (#42147))
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {

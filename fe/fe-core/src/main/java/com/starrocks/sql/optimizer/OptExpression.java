@@ -61,6 +61,9 @@ public class OptExpression {
 
     private Boolean isShortCircuit = false;
 
+    private OptExpression() {
+    }
+
     public OptExpression(Operator op) {
         this.op = op;
         this.inputs = Lists.newArrayList();
@@ -251,8 +254,6 @@ public class OptExpression {
         }
         return sb.toString();
     }
-<<<<<<< HEAD
-=======
 
     public static Builder builder() {
         return new Builder();
@@ -305,5 +306,4 @@ public class OptExpression {
             return tmp;
         }
     }
->>>>>>> e1b193c064 ([Enhancement] adaptive choose execute nodes base on the volume of processed data (#42147))
 }

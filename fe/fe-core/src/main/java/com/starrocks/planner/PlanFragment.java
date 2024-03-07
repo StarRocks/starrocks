@@ -524,13 +524,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public String getVerboseExplain() {
         StringBuilder str = new StringBuilder();
         Preconditions.checkState(dataPartition != null);
-<<<<<<< HEAD
         StringBuilder outputBuilder = new StringBuilder();
-=======
         if (FeConstants.showFragmentCost) {
             str.append("  Fragment Cost: ").append(fragmentCost).append("\n");
         }
->>>>>>> e1b193c064 ([Enhancement] adaptive choose execute nodes base on the volume of processed data (#42147))
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
             outputBuilder.append(outputExprs.stream().map(Expr::toSql)
