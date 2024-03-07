@@ -536,6 +536,10 @@ public class SharedDataStorageVolumeMgrTest {
     @Test
     public void testReplayBindDbToStorageVolume() throws DdlException, AlreadyExistsException {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        sdsvm.replayBindDbToStorageVolume(null, 2L);
+        Assert.assertTrue(sdsvm.dbToStorageVolume.isEmpty());
+        Assert.assertTrue(sdsvm.storageVolumeToDbs.isEmpty());
+
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
         Map<String, String> storageParams = new HashMap<>();
@@ -551,6 +555,10 @@ public class SharedDataStorageVolumeMgrTest {
     @Test
     public void testReplayBindTableToStorageVolume() throws DdlException, AlreadyExistsException {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        sdsvm.replayBindTableToStorageVolume(null, 2L);
+        Assert.assertTrue(sdsvm.tableToStorageVolume.isEmpty());
+        Assert.assertTrue(sdsvm.storageVolumeToTables.isEmpty());
+
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
         Map<String, String> storageParams = new HashMap<>();
@@ -898,5 +906,7 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertTrue(svm1.storageVolumeToTables.isEmpty());
         Assert.assertTrue(svm1.dbToStorageVolume.isEmpty());
         Assert.assertTrue(svm1.tableToStorageVolume.isEmpty());
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfDb(1L));
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfTable(1L));
     }
 }
