@@ -65,19 +65,23 @@ public class DeriveStatsTask extends OptimizerTask {
         // choose best statistics
         Statistics groupExpressionStatistics = expressionContext.getStatistics();
         if (needUpdateGroupStatistics(currentStatistics, groupExpressionStatistics)) {
-            if (currentStatistics != null && isMaterializedView(groupExpression)) {
+            if (currentStatistics != null
+                    && isMaterializedView(groupExpression)
+                    && !groupExpressionStatistics.isTableRowCountMayInaccurate()) {
                 // use statistics of materialized view because it is more accurate
                 Statistics.Builder newBuilder = Statistics.buildFrom(currentStatistics);
-                newBuilder.setOutputRowCount(groupExpressionStatistics.getOutputRowCount());
+                if (!groupExpressionStatistics.isTableRowCountMayInaccurate()) {
+                    newBuilder.setOutputRowCount(groupExpressionStatistics.getOutputRowCount());
+                    newBuilder.setTableRowCountMayInaccurate(groupExpressionStatistics.isTableRowCountMayInaccurate());
+                }
                 Map<ColumnRefOperator, ColumnStatistic> newColumnStatisticMap = groupExpressionStatistics.getColumnStatistics();
                 // update ColumnStatistics, exclude shadow columns of mv
                 for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : currentStatistics.getColumnStatistics().entrySet()) {
                     ColumnStatistic columnStatistic = newColumnStatisticMap.get(entry.getKey());
-                    if (columnStatistic != null) {
+                    if (columnStatistic != null && !columnStatistic.isUnknown()) {
                         newBuilder.addColumnStatistic(entry.getKey(), columnStatistic);
                     }
                 }
-                newBuilder.setTableRowCountMayInaccurate(groupExpressionStatistics.isTableRowCountMayInaccurate());
                 groupExpression.getGroup().setStatistics(newBuilder.build());
             } else {
                 groupExpression.getGroup().setStatistics(groupExpressionStatistics);
