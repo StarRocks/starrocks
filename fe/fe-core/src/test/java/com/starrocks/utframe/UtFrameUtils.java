@@ -614,6 +614,9 @@ public class UtFrameUtils {
 
     private static void testView(ConnectContext connectContext, String originStmt, StatementBase statementBase)
             throws Exception {
+        if (!FeConstants.unitTestView) {
+            return;
+        }
         if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
                 !statementBase.isExplain()) {
             String viewName = "view" + INDEX.getAndIncrement();
