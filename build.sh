@@ -565,7 +565,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
     fi
 
-    if [ "${AVX2KI}" == "ON"  ]; then
+    if [ "${USE_AVX2KI}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/avx2ki
         cp ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ${STARROCKS_OUTPUT}/be/lib/avx2ki/libavx2neon.so.2.0.0
     fi
