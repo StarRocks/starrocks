@@ -47,6 +47,7 @@ public:
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         _update_mem_tracker = std::make_unique<MemTracker>();
         config::primary_key_batch_get_index_memory_limit = GetParam();
+        config::enable_pk_size_tiered_compaction_strategy = false;
     }
 
     void TearDown() override {
@@ -56,6 +57,7 @@ public:
                 tablet.reset();
             }
         }
+        config::enable_pk_size_tiered_compaction_strategy = true;
     }
 
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys, bool add_v3 = false) {
