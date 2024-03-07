@@ -876,4 +876,24 @@ public class ScalarType extends Type implements Cloneable {
                 return toSql();
         }
     }
+
+    @Override
+    protected String toTypeString(int depth) {
+        StringBuilder stringBuilder = new StringBuilder();
+        switch (type) {
+            case DECIMALV2:
+                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
+                break;
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                stringBuilder.append(type.toString().toLowerCase()).append("(").append(precision).append(", ")
+                        .append(scale).append(")");
+                break;
+            default:
+                stringBuilder.append(type.toString().toLowerCase());
+                break;
+        }
+        return stringBuilder.toString();
+    }
 }
