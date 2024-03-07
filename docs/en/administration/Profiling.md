@@ -129,7 +129,7 @@ In addition to sparse indexes, StarRocks also provides bloomfilter indexes, whic
 
 ## Bitmpa Index
 
-StarRocks adopts Bitmap Indexing technology to support bitmap indexes that can be applied to all columns of the Duplicate Key table and the key column of the Aggregate table and Unique Key table. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
+StarRocks supports bitmap indexes that can be applied to all columns of the Duplicate Key table and the key column of the Aggregate table and Unique Key table. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
 
 ## Materialized view (rollup)
 
