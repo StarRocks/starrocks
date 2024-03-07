@@ -64,6 +64,10 @@ std::string FPE::trim_zeros(const std::string& str, size_t num_flag_pos) {
         --end;
     }
 
+    if (str[start] == '.') {
+        --start;
+    }
+
     if (start > end) {
         return "0";
     }
@@ -119,15 +123,6 @@ Status FPE::decrypt(std::string_view num_str, std::string_view key, char* buffer
         }
     }
 
-    int num_str_length = num_str.length();
-    std::string fixed_num_str;
-    if (num_str_length < MIN_LENGTH) {
-        fixed_num_str.resize(MIN_LENGTH);
-        int padding_pos = MIN_LENGTH - num_str_length;
-        std::fill(fixed_num_str.begin(), fixed_num_str.begin() + padding_pos, '0');
-        strings::memcpy_inlined(fixed_num_str.data() + padding_pos, num_str.data(), num_str.size());
-    }
-
     struct ff1_ctx* ctx = nullptr;
     DeferOp op([&] {
         if (ctx != nullptr) ff1_ctx_destroy(ctx);
@@ -137,8 +132,7 @@ Status FPE::decrypt(std::string_view num_str, std::string_view key, char* buffer
     if (res != 0) {
         return Status::RuntimeError("ff1_ctx_create failed");
     }
-    res = ff1_decrypt(ctx, buffer, fixed_num_str.empty() ? std::string(num_str).c_str() : fixed_num_str.c_str(),
-                      nullptr, 0);
+    res = ff1_decrypt(ctx, buffer, std::string(num_str).c_str(), nullptr, 0);
     if (res != 0) {
         return Status::RuntimeError("ff1_decrypt failed");
     }
@@ -169,7 +163,7 @@ Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::str
 
     if (dot_pos != std::string_view::npos) {
         int_part = num_str.substr(num_flag_pos, dot_pos - num_flag_pos);
-        dec_part = num_str.substr(dot_pos + num_flag_pos + 1);
+        dec_part = num_str.substr(dot_pos + 1);
     } else {
         int_part = num_str.substr(num_flag_pos);
     }
@@ -179,27 +173,30 @@ Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::str
     int_part_size = int_part_size > FPE::MIN_LENGTH ? int_part_size : FPE::MIN_LENGTH;
     result_len += int_part_size;
 
+    // include dec_part
     if (dec_part.empty()) {
         result.resize(result_len);
         value = std::move(result);
 
         return Status::OK();
     } else {
-        std::string_view dec_with_dot_part = num_str.substr(dot_pos);
-        StringParser::ParseResult parse_result;
-        double dec_part_num = StringParser::string_to_float<double>(dec_with_dot_part.data(),
-                                                                    dec_with_dot_part.length(), &parse_result);
-        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-            return Status::InternalError("Fail to cast to int from string");
-        }
+        std::size_t first_not_zero = dec_part.find_first_not_of('0');
+        // dec_part all '0'
+        if (first_not_zero == std::string::npos) {
+            result.resize(result_len);
+            value = std::move(result);
 
-        dec_part_num = dec_part_num * EXPANDED;
-        auto dec_int_part = static_cast<long long>(dec_part_num);
+            return Status::OK();
+        }
 
         result[result_len] = '.';
         ++result_len;
 
-        auto dec_int_part_str = std::to_string(dec_int_part);
+        std::string dec_int_part_str;
+
+        dec_int_part_str = dec_part.substr(first_not_zero);
+        dec_int_part_str.resize(FPE::EXPANDED_LENGTH - first_not_zero, '0');
+
         RETURN_IF_ERROR(encrypt(dec_int_part_str, key, result.data() + result_len, DEFAULT_RADIX));
         auto dec_int_part_size =
                 dec_int_part_str.length() > FPE::MIN_LENGTH ? dec_int_part_str.length() : FPE::MIN_LENGTH;
