@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Resource;
