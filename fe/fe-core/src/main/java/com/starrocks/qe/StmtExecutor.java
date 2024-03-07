@@ -144,6 +144,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
+import com.starrocks.sql.ast.MergeStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -1830,7 +1831,9 @@ public class StmtExecutor {
             label = "update_" + label;
         } else if (stmt instanceof DeleteStmt) {
             label = "delete_" + label;
-        } else {
+        } else if (stmt instanceof MergeStmt) {
+            label = "merge_" + label;
+        }else {
             throw unsupportedException(
                     "Unsupported dml statement " + parsedStmt.getClass().getSimpleName());
         }

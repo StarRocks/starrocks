@@ -33,6 +33,8 @@ import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.aws.AwsProperties;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
@@ -53,9 +55,10 @@ public class IcebergTableSink extends DataSink {
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
-    private final int updateMode;// 0-insert, 1-update, 2-delete
+    private final int updateMode;// 0-insert, 1-update, 2-delete, 3-merge
+    private final List<Integer> outputSlots;
 
-    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink, int updateMode) {
+    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink, int updateMode, List<Integer> outputSlots) {
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
         this.location = nativeTable.location();
@@ -93,10 +96,15 @@ public class IcebergTableSink extends DataSink {
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
         this.updateMode = updateMode;
+        this.outputSlots = outputSlots;
+    }
+
+    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink, int updateMode) {
+        this(icebergTable, desc, isStaticPartitionSink, updateMode, new ArrayList<>());
     }
 
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink) {
-        this(icebergTable, desc, isStaticPartitionSink, 0);
+        this(icebergTable, desc, isStaticPartitionSink, 0, new ArrayList<>());
     }
 
     @Override
@@ -118,6 +126,7 @@ public class IcebergTableSink extends DataSink {
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         tIcebergTableSink.setUpdate_mode(updateMode);
+        tIcebergTableSink.setOutput_slots(outputSlots);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tIcebergTableSink.setCompression_type(compression);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();

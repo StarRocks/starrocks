@@ -92,6 +92,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -372,6 +373,13 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitDeleteStatement(DeleteStmt node, ConnectContext context) {
         DeleteAnalyzer.analyze(node, context);
+        return null;
+    }
+
+
+    @Override
+    public Void visitMergeStatement(MergeStmt node, ConnectContext context) {
+        MergeAnalyzer.analyze(node, context);
         return null;
     }
 

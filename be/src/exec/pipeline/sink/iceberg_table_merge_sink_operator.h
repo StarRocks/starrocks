@@ -38,7 +38,7 @@ public:
                              const std::vector<ExprContext*>& output_expr_ctxs,
                              const vector<ExprContext*>& partition_output_expr, bool is_static_partition_insert,
                              std::atomic<int32_t>& num_sinkers,
-                             int32_t _update_mode)
+                             int32_t _update_mode,std::vector<int> output_slot_ids)
             : Operator(factory, id, "iceberg_table_sink", plan_node_id, false, driver_sequence),
               _location(std::move(location)),
               _iceberg_table_data_location(_location + "/data/"),
@@ -52,7 +52,8 @@ public:
               _partition_expr(partition_output_expr),
               _is_static_partition_insert(is_static_partition_insert),
               _num_sinkers(num_sinkers),
-              _update_mode(_update_mode) {}// 0-insert, 1-update, 2-delete
+              _update_mode(_update_mode),// 0-insert, 1-update, 2-delete
+              _output_slot_ids(output_slot_ids) {}
 
 
     ~IcebergTableMergeSinkOperator() override = default;
@@ -77,6 +78,7 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+    Status push_insert_chunk(RuntimeState* state, const ChunkPtr& chunk);
     Status push_delete_chunk(RuntimeState* state, const ChunkPtr& chunk);
 
     static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
@@ -107,6 +109,7 @@ private:
     bool _is_static_partition_insert = false;
     std::atomic<int32_t>& _num_sinkers;
     int32_t _update_mode;
+    std::vector<int> _output_slot_ids;
 };
 
 class IcebergTableMergeSinkOperatorFactory final : public OperatorFactory {
@@ -123,7 +126,7 @@ public:
         return std::make_shared<IcebergTableMergeSinkOperator>(
                 this, _id, _plan_node_id, driver_sequence, _location, _file_format, _compression_codec, _cloud_conf,
                 _iceberg_table, _fragment_ctx, _parquet_file_schema,_pos_del_file_schema, _output_expr_ctxs, _partition_expr_ctxs,
-                is_static_partition_insert, _num_sinkers, _update_mode);
+                is_static_partition_insert, _num_sinkers, _update_mode, _output_slot_ids);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -151,6 +154,7 @@ private:
     bool is_static_partition_insert = false;
     std::atomic<int32_t> _num_sinkers = 0;
     int32_t _update_mode;
+    std::vector<int> _output_slot_ids;
 };
 
 } // namespace pipeline

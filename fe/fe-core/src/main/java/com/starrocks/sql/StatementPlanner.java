@@ -32,6 +32,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.MergeStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -105,6 +106,8 @@ public class StatementPlanner {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
+            } else if (stmt instanceof MergeStmt) {
+                return new MergePlanner().plan((MergeStmt) stmt, session);
             }
         } finally {
             if (needWholePhaseLock) {

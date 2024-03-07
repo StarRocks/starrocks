@@ -101,6 +101,7 @@ Status RollingAsyncParquetWriter::close_current_writer(RuntimeState* state) {
 
 Status RollingAsyncParquetWriter::close(RuntimeState* state) {
     if (_writer != nullptr) {
+        LOG(WARNING) << "parquet_writer close  ----- " ;
         auto st = close_current_writer(state);
         if (!st.ok()) {
             return st;

@@ -207,6 +207,25 @@ public class IcebergApiConverter {
         }
     }
 
+//    public static TIcebergSchema getTIcebergSchema(Schema schema, boolean isUpdate) {
+//        if (isUpdate) {
+//            TIcebergSchema tIcebergSchema = getTIcebergSchema(schema);
+//            List<TIcebergSchemaField> fields = tIcebergSchema.getFields();
+//            TIcebergSchemaField filePath = new TIcebergSchemaField();
+//            filePath.setField_id(fields.size() + 1);
+//            filePath.setName("file_path");
+//            TIcebergSchemaField pos = new TIcebergSchemaField();
+//            pos.setField_id(fields.size() + 2);
+//            pos.setName("pos");
+//            fields.add(filePath);
+//            fields.add(pos);
+//            tIcebergSchema.setFields(fields);
+//            return tIcebergSchema;
+//        } else {
+//            return getTIcebergSchema(schema);
+//        }
+//    }
+
     public static TIcebergSchema getTIcebergSchema(Schema schema) {
         Types.StructType rootType = schema.asStruct();
         TIcebergSchema tIcebergSchema = new TIcebergSchema();
@@ -222,6 +241,7 @@ public class IcebergApiConverter {
         pos.setName("pos");
         fields.add(filePath);
         fields.add(pos);
+
         tIcebergSchema.setFields(fields);
         return tIcebergSchema;
     }

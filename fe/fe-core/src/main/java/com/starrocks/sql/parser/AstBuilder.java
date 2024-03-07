@@ -253,6 +253,11 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.MapExpr;
+import com.starrocks.sql.ast.MergeCase;
+import com.starrocks.sql.ast.MergeDelete;
+import com.starrocks.sql.ast.MergeInsert;
+import com.starrocks.sql.ast.MergeStmt;
+import com.starrocks.sql.ast.MergeUpdate;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -3464,6 +3469,35 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> clusters =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitMerge(com.starrocks.sql.parser.StarRocksParser.MergeContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        List<Relation> usingRelations = context.using != null ? visit(context.using.relation(), Relation.class) : null;
+        visit(context.mergeCase(), MergeCase.class);
+        return new MergeStmt(new TableRelation(targetTableName),
+                usingRelations.get(0),
+                (Expr) visit(context.expression()),
+                visit(context.mergeCase(), MergeCase.class),
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitMergeInsert(com.starrocks.sql.parser.StarRocksParser.MergeInsertContext context) {
+        return new MergeInsert((Expr) visitIfPresent(context.condition), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitMergeUpdate(com.starrocks.sql.parser.StarRocksParser.MergeUpdateContext context) {
+        return new MergeUpdate((Expr) visitIfPresent(context.condition), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitMergeDelete(com.starrocks.sql.parser.StarRocksParser.MergeDeleteContext context) {
+        visitIfPresent(context.condition);
+        return new MergeDelete((Expr) visitIfPresent(context.condition), createPos(context));
     }
 
     @Override

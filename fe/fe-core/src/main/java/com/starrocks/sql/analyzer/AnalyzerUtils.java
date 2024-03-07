@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MergeStmt;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
@@ -300,6 +301,12 @@ public class AnalyzerUtils {
             getDB(node.getTableName());
             //If support DML operations through query results in the future,
             //need to add the corresponding `visit(node.getQueryStatement())`
+            return null;
+        }
+
+        @Override
+        public Void visitMergeStatement(MergeStmt node, Void context) {
+            getDB(node.getTableName());
             return null;
         }
 

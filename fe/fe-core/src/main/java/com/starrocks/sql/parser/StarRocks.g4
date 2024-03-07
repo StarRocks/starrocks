@@ -102,6 +102,7 @@ statement
     | insertStatement
     | updateStatement
     | deleteStatement
+    | mergeStatement
 
     // Routine Statement
     | createRoutineLoadStatement
@@ -1044,6 +1045,10 @@ updateStatement
 
 deleteStatement
     : explainDesc? withClause? DELETE setVarHint* FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    ;
+
+mergeStatement
+    : explainDesc? withClause? MERGE INTO qualifiedName USING using=relations ON expression mergeCase+  #merge
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -2364,6 +2369,18 @@ frameBound
     | UNBOUNDED boundType=FOLLOWING                 #unboundedFrame
     | CURRENT ROW                                   #currentRowBound
     | expression boundType=(PRECEDING | FOLLOWING)  #boundedFrame
+    ;
+
+mergeCase
+    : WHEN MATCHED (AND condition=expression)? THEN
+        UPDATE SET targets+=identifier EQ values+=expression
+          (',' targets+=identifier EQ values+=expression)*                  #mergeUpdate
+    | WHEN MATCHED (AND condition=expression)? THEN UPDATE SET ASTERISK_SYMBOL #mergeUpdate
+    | WHEN MATCHED (AND condition=expression)? THEN DELETE                  #mergeDelete
+    | WHEN NOT MATCHED (AND condition=expression)? THEN INSERT ASTERISK_SYMBOL #mergeInsert
+    | WHEN NOT MATCHED (AND condition=expression)? THEN
+        INSERT ('(' targets+=identifier (',' targets+=identifier)* ')')?
+        VALUES '(' values+=expression (',' values+=expression)* ')'         #mergeInsert
     ;
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------

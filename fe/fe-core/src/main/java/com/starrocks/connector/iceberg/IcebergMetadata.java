@@ -375,7 +375,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             scan = scan.includeColumnStats();
         }
 
-        if (icebergPredicate.op() != Expression.Operation.TRUE) {// && !isMergeOps(icebergTable)
+        if (icebergPredicate.op() != Expression.Operation.TRUE) {
             scan = scan.filter(icebergPredicate);
         }
 
@@ -459,11 +459,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         splitTasks.put(key, icebergScanTasks);
         scannedTables.add(key);
-    }
-
-    private boolean isMergeOps(IcebergTable icebergTable) {
-        Set<String> columnNames = icebergTable.getFullSchema().stream().map(Column::getName).collect(Collectors.toSet());
-        return Sets.difference(Sets.newHashSet(columnNames), Sets.newHashSet("file_path","pos")).size()==0;
     }
 
     @Override

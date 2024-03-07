@@ -252,8 +252,6 @@ public class UpdateAnalyzer {
 
             assignColumnList.add(new Column("file_path", Type.VARCHAR, true));
             assignColumnList.add(new Column("pos", Type.BIGINT, true));
-            //selectList.addItem(new SelectListItem(new StringLiteral("file_path"), "file_path"));
-            //selectList.addItem(new SelectListItem(posSlot, "pos"));
         }
 
         Relation relation = new TableRelation(tableName);

@@ -231,6 +231,7 @@ struct TIcebergTableSink {
     5: optional bool is_static_partition_sink
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     7: optional i32 update_mode
+    8: optional list<i32> output_slots
 }
 
 struct THiveTableSink {

@@ -327,6 +327,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitMergeStatement(MergeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- Routine Statement ---------------------------------------------------
 
     public R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {
@@ -874,6 +878,21 @@ public abstract class AstVisitor<R, C> {
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- MergeCase --------------------------------------------------------
+
+    public R visitMergeCase(MergeCase node, C context) {
+        return visitNode(node, context);
+    }
+    public R visitMergeInsert(MergeInsert node, C context) {
+        return visitNode(node, context);
+    }
+    public R visitMergeDelete(MergeDelete node, C context) {
+        return visitNode(node, context);
+    }
+    public R visitMergeUpdate(MergeUpdate node, C context) {
+        return visitNode(node, context);
     }
 
     // ------------------------------------------- Alter Clause --------------------------------------------------------
