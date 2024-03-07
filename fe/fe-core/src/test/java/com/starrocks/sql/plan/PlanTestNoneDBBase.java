@@ -95,6 +95,7 @@ public class PlanTestNoneDBBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
+        FeConstants.showFragmentCost = false;
     }
 
     @Before

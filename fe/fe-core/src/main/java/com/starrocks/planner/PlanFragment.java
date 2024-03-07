@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
@@ -148,6 +149,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected boolean assignScanRangesPerDriverSeq = false;
     protected boolean withLocalShuffle = false;
 
+    protected double fragmentCost;
+
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
 
@@ -200,6 +203,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (PlanNode child : node.getChildren()) {
             setFragmentInPlanTree(child);
         }
+    }
+
+    public double getFragmentCost() {
+        return fragmentCost;
+    }
+
+    public void setFragmentCost(double fragmentCost) {
+        this.fragmentCost = fragmentCost;
     }
 
     public boolean canUsePipeline() {
@@ -513,7 +524,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public String getVerboseExplain() {
         StringBuilder str = new StringBuilder();
         Preconditions.checkState(dataPartition != null);
+<<<<<<< HEAD
         StringBuilder outputBuilder = new StringBuilder();
+=======
+        if (FeConstants.showFragmentCost) {
+            str.append("  Fragment Cost: ").append(fragmentCost).append("\n");
+        }
+>>>>>>> e1b193c064 ([Enhancement] adaptive choose execute nodes base on the volume of processed data (#42147))
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
             outputBuilder.append(outputExprs.stream().map(Expr::toSql)

@@ -47,6 +47,7 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.inputAt(0).getOp();
 
             if (topN.getSortPhase().isFinal() && !topN.isSplit() && topN.getLimit() == Operator.DEFAULT_LIMIT) {
+<<<<<<< HEAD
                 OptExpression child = OptExpression.create(new PhysicalTopNOperator(
                         topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
                         topN.getPartitionLimit(), SortPhase.PARTIAL, topN.getTopNType(), false, false, null, null
@@ -61,8 +62,29 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
                         Lists.newArrayList(child));
                 newOpt.setLogicalProperty(optExpr.getLogicalProperty());
                 newOpt.setStatistics(optExpr.getStatistics());
+=======
+                OptExpression.Builder partialSortOptBuilder = OptExpression.builder()
+                        .setOp(new PhysicalTopNOperator(topN.getOrderSpec(), topN.getLimit(), topN.getOffset(),
+                                topN.getPartitionByColumns(), topN.getPartitionLimit(), SortPhase.PARTIAL,
+                                topN.getTopNType(), false, topN.isEnforced(), null, null))
+                        .setInputs(optExpr.inputAt(0).getInputs())
+                        .setLogicalProperty(optExpr.inputAt(0).getLogicalProperty())
+                        .setStatistics(optExpr.getStatistics())
+                        .setCost(optExpr.getCost());
 
-                return visit(newOpt, null);
+                OptExpression.Builder newOptBuilder = OptExpression.builder()
+                        .setOp(new PhysicalTopNOperator(
+                                        topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
+                                        topN.getPartitionLimit(), SortPhase.FINAL, topN.getTopNType(), true,
+                                        topN.isEnforced(), null,
+                                        topN.getProjection()))
+                        .setInputs(Lists.newArrayList(partialSortOptBuilder.build()))
+                        .setLogicalProperty(optExpr.getLogicalProperty())
+                        .setStatistics(optExpr.getStatistics())
+                        .setCost(optExpr.getCost());
+>>>>>>> e1b193c064 ([Enhancement] adaptive choose execute nodes base on the volume of processed data (#42147))
+
+                return visit(newOptBuilder.build(), null);
             } else {
                 return visit(optExpr, null);
             }
