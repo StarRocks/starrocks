@@ -30,6 +30,25 @@ Status FileMetaData::init(tparquet::FileMetaData& t_metadata, bool case_sensitiv
     } else {
         _writer_version = ApplicationVersion("unknown 0.0.0");
     }
+    for (size_t i = 0; i < _t_metadata.row_groups.size(); ++i) {
+        auto& row_group = _t_metadata.row_groups[i];
+
+        auto* path = new tparquet::ColumnChunk();
+        path->__set_file_path("");
+        path->file_offset = 0;
+        path->meta_data.data_page_offset = 0;
+        path->meta_data.type = tparquet::Type::BYTE_ARRAY;
+        path->meta_data.codec = tparquet::CompressionCodec::UNCOMPRESSED;
+        row_group.columns.emplace_back(*path);
+
+        auto* pos = new tparquet::ColumnChunk();
+        pos->__set_file_path("");
+        pos->file_offset = 0;
+        pos->meta_data.data_page_offset = 0;
+        pos->meta_data.type = tparquet::Type::INT64;
+        pos->meta_data.codec = tparquet::CompressionCodec::UNCOMPRESSED;
+        row_group.columns.emplace_back(*pos);
+    }
     return Status::OK();
 }
 

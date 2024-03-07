@@ -31,6 +31,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -53,6 +54,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class DeleteAnalyzer {
@@ -192,6 +194,33 @@ public class DeleteAnalyzer {
             String msg = String.format("The data of '%s' cannot be deleted because it is a materialized view," +
                     "and the data of materialized view must be consistent with the base table.", tableName.getTbl());
             throw new SemanticException(msg, tableName.getPos());
+        }
+
+        if (table instanceof IcebergTable) {
+            analyzeNonPrimaryKey(deleteStatement);
+            SelectList selectList = new SelectList();
+            for (Column col : table.getBaseSchema()) {
+                selectList.addItem(new SelectListItem(new SlotRef(tableName, col.getName()), col.getName()));
+            }
+//            session.getGlobalStateMgr().getMetadataMgr().getMergeRowIdColumn();
+            //todo add rowId
+            selectList.addItem(new SelectListItem(new SlotRef(tableName, "file_path"), "file_path"));
+            selectList.addItem(new SelectListItem(new SlotRef(tableName, "pos"), "pos"));
+            SelectRelation selectRelation =
+                    new SelectRelation(selectList, new TableRelation(tableName), deleteStatement.getWherePredicate(), null, null);
+            QueryStatement queryStatement = new QueryStatement(selectRelation);
+            queryStatement.setIsExplain(deleteStatement.isExplain(), deleteStatement.getExplainLevel());
+            new QueryAnalyzer(session).analyze(queryStatement);
+            deleteStatement.setQueryStatement(queryStatement);
+            Column filePath = new Column("file_path", Type.STRING, true);
+            Column pos = new Column("pos", Type.BIGINT, true);
+            table.getFullSchema().add(filePath);
+            table.getNameToColumn().put("file_path",filePath);
+            table.getFullSchema().add(pos);
+            table.getNameToColumn().put("pos",pos);
+//            table.setNewFullSchema(Arrays.asList(filePath,pos));
+            deleteStatement.setTable(table);
+            return;
         }
 
         if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {

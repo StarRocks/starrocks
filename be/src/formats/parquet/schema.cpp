@@ -353,12 +353,31 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
     if (!is_group(root_schema)) {
         return Status::InvalidArgument("Root Schema is not group");
     }
-    _fields.resize(root_schema->num_children);
+
+    std::vector<tparquet::SchemaElement> new_schemas;
+    new_schemas.assign(t_schemas.begin(), t_schemas.end());
+    auto* file_path = new tparquet::SchemaElement();
+    file_path->__set_name("file_path");
+    file_path->__set_type(tparquet::Type::BYTE_ARRAY);
+    file_path->__set_type_length(0);
+    file_path->__set_num_children(0);
+    file_path->__set_field_id(root_schema->num_children+1);
+    new_schemas.push_back(*file_path);
+    auto* pos = new tparquet::SchemaElement();
+    pos->__set_name("pos");
+    pos->__set_type(tparquet::Type::INT64);
+    pos->__set_type_length(0);
+    pos->__set_num_children(0);
+    pos->__set_field_id(root_schema->num_children+2);
+    new_schemas.push_back(*pos);
+
+    _fields.resize(root_schema->num_children+2);
+
     // skip root SchemaElement
     // next_pos is the index in t_schemas, t_schemas is a flatten structure
     size_t next_pos = 1;
-    for (size_t i = 0; i < root_schema->num_children; ++i) {
-        RETURN_IF_ERROR(node_to_field(t_schemas, next_pos, LevelInfo(), &_fields[i], &next_pos));
+    for (size_t i = 0; i < root_schema->num_children+2; ++i) {
+        RETURN_IF_ERROR(node_to_field(new_schemas, next_pos, LevelInfo(), &_fields[i], &next_pos));
         if (!case_sensitive) {
             _fields[i].name = boost::algorithm::to_lower_copy(_fields[i].name);
         }
@@ -371,8 +390,8 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
     }
     _case_sensitive = case_sensitive;
 
-    if (next_pos != t_schemas.size()) {
-        return Status::InvalidArgument(strings::Substitute("Remaining $0 unparsed field", t_schemas.size() - next_pos));
+    if (next_pos != new_schemas.size()) {
+        return Status::InvalidArgument(strings::Substitute("Remaining $0 unparsed field", new_schemas.size() - next_pos));
     }
 
     return Status::OK();

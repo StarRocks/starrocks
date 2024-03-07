@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -56,12 +57,14 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.ReplacePartitions;
+import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
@@ -372,7 +375,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             scan = scan.includeColumnStats();
         }
 
-        if (icebergPredicate.op() != Expression.Operation.TRUE) {
+        if (icebergPredicate.op() != Expression.Operation.TRUE && !isMergeOps(icebergTable)) {
             scan = scan.filter(icebergPredicate);
         }
 
@@ -456,6 +459,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         splitTasks.put(key, icebergScanTasks);
         scannedTables.add(key);
+    }
+
+    private boolean isMergeOps(IcebergTable icebergTable) {
+        Set<String> columnNames = icebergTable.getFullSchema().stream().map(Column::getName).collect(Collectors.toSet());
+        return Sets.difference(Sets.newHashSet(columnNames), Sets.newHashSet("file_path","pos")).size()==0;
     }
 
     @Override
@@ -587,10 +595,40 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergTable table = (IcebergTable) getTable(dbName, tableName);
         org.apache.iceberg.Table nativeTbl = table.getNativeTable();
         Transaction transaction = nativeTbl.newTransaction();
-        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite);
+//        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite);
+        RowDelta rowDelta = transaction.newRowDelta();
 
         PartitionSpec partitionSpec = nativeTbl.spec();
         for (TIcebergDataFile dataFile : dataFiles) {
+            LOG.warn("position delete is {}", dataFile.is_pos_delete);
+            if (dataFile.is_pos_delete == true) {
+                Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile);
+                FileMetadata.Builder deleteBuilder = FileMetadata.deleteFileBuilder(partitionSpec)
+                        .withPath(dataFile.path)
+                        .withMetrics(metrics)
+                        .ofPositionDeletes()
+                        .withRecordCount(dataFile.record_count)
+                        .withFileSizeInBytes(dataFile.file_size_in_bytes)
+                        .withSplitOffsets(dataFile.split_offsets)
+                        .withFormat(dataFile.format);
+
+                LOG.warn("datafile path={}", dataFile.path);
+                LOG.warn("datafile record_count", dataFile.record_count);
+                LOG.warn("receive position delete commit info");
+
+
+                if (partitionSpec.isPartitioned()) {
+                    String relativePartitionLocation = getIcebergRelativePartitionPath(
+                            nativeTbl.location(), dataFile.partition_path);
+
+                    PartitionData partitionData = partitionDataFromPath(
+                            relativePartitionLocation, partitionSpec);
+                    deleteBuilder.withPartition(partitionData);
+                }
+
+                rowDelta.addDeletes(deleteBuilder.build());
+                continue;
+            }
             Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile);
             DataFiles.Builder builder =
                     DataFiles.builder(partitionSpec)
@@ -609,11 +647,13 @@ public class IcebergMetadata implements ConnectorMetadata {
                         relativePartitionLocation, partitionSpec);
                 builder.withPartition(partitionData);
             }
-            batchWrite.addFile(builder.build());
+//            batchWrite.addFile(builder.build());
+            rowDelta.addRows(builder.build());
         }
 
         try {
-            batchWrite.commit();
+//            batchWrite.commit();
+            rowDelta.commit();
             transaction.commitTransaction();
         } catch (Exception e) {
             List<String> toDeleteFiles = dataFiles.stream()

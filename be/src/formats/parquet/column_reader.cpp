@@ -113,6 +113,24 @@ public:
     }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+        if (_field->name == "file_path"){
+            int64_t idx = range.begin();
+            const std::string& name = _opts.file->filename();
+            const char* ptr = name.c_str();
+            while ( idx < range.end() ) {
+                dst->append_datum(Datum(Slice(ptr)));
+                idx++;
+            }
+            return Status::OK();
+        } else if (_field->name == "pos"){
+            int64_t idx = range.begin();
+            while ( idx < range.end() ) {
+                dst->append_datum(Datum(idx));
+                idx++;
+            }
+            return Status::OK();
+        }
+
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
         ColumnContentType content_type =
                 _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;

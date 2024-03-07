@@ -37,6 +37,7 @@
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/pipeline/sink/hive_table_sink_operator.h"
 #include "exec/pipeline/sink/iceberg_table_sink_operator.h"
+#include "exec/pipeline/sink/iceberg_table_merge_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/pipeline/sink/table_function_table_sink_operator.h"
@@ -955,9 +956,18 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
         size_t desired_iceberg_sink_dop = request.pipeline_sink_dop();
         size_t source_operator_dop = source_operator->degree_of_parallelism();
-        OpFactoryPtr iceberg_table_sink_op = std::make_shared<IcebergTableSinkOperatorFactory>(
+
+        OpFactoryPtr iceberg_table_sink_op = nullptr;
+        if (thrift_sink.iceberg_table_sink.is_merge_ops){
+
+            iceberg_table_sink_op = std::make_shared<IcebergTableMergeSinkOperatorFactory>(
+                    context->next_operator_id(), fragment_ctx, iceberg_table_sink->get_output_expr(), iceberg_table_desc,
+                    thrift_sink.iceberg_table_sink, partition_expr_ctxs);
+        }else {
+            iceberg_table_sink_op = std::make_shared<IcebergTableSinkOperatorFactory>(
                 context->next_operator_id(), fragment_ctx, iceberg_table_sink->get_output_expr(), iceberg_table_desc,
                 thrift_sink.iceberg_table_sink, partition_expr_ctxs);
+        }
 
         if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
             if (desired_iceberg_sink_dop != source_operator_dop) {

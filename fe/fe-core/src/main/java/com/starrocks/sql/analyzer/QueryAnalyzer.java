@@ -34,6 +34,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
@@ -55,6 +56,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -383,6 +385,21 @@ public class QueryAnalyzer {
                             column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
+                }
+                if(table instanceof IcebergTable
+                        && session.getExecutor().getParsedStmt() instanceof DeleteStmt){
+                    Column filePath = new Column("file_path", Type.STRING,true);
+                    Field fileField = new Field("file_path", filePath.getType(), tableName, new SlotRef(tableName, filePath.getName(), filePath.getName()), true,
+                            filePath.isAllowNull());
+                    columns.put(fileField, filePath);
+                    fields.add(fileField);
+
+                    Column pos = new Column("pos", Type.BIGINT,true);
+                    Field posField = new Field("pos", pos.getType(), tableName, new SlotRef(tableName, pos.getName(), pos.getName()), true,
+                            pos.isAllowNull());
+                    columns.put(posField, pos);
+                    fields.add(posField);
+//                    metadataMgr.getOptionalMetadata(table.getCatalogName()).get().getMergeRowIdColumnHandle()
                 }
             }
 

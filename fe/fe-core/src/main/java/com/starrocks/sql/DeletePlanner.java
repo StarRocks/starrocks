@@ -19,14 +19,18 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -40,6 +44,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class DeletePlanner {
@@ -79,7 +84,7 @@ public class DeletePlanner {
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-            OlapTable table = (OlapTable) deleteStatement.getTable();
+            Table table = deleteStatement.getTable();
             for (Column column : table.getBaseSchema()) {
                 if (column.isKey()) {
                     SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
@@ -98,12 +103,23 @@ public class DeletePlanner {
             slotDescriptor.setIsNullable(false);
             olapTuple.computeMemLayout();
 
-            List<Long> partitionIds = Lists.newArrayList();
-            for (Partition partition : table.getPartitions()) {
-                partitionIds.add(partition.getId());
+            DataSink dataSink;
+            if (table instanceof OlapTable){
+                List<Long> partitionIds = Lists.newArrayList();
+                for (Partition partition : table.getPartitions()) {
+                    partitionIds.add(partition.getId());
+                }
+                dataSink = new OlapTableSink((OlapTable) table, olapTuple, partitionIds, ((OlapTable) table).writeQuorum(),
+                        ((OlapTable) table).enableReplicatedStorage(), false, false);
+            }else if (table instanceof IcebergTable) {
+//                Column filePath = new Column("file_path", Type.STRING, true);
+//                Column pos = new Column("pos", Type.BIGINT, true);
+//                table.setNewFullSchema(Arrays.asList(filePath,pos));
+                descriptorTable.getTupleDescs().stream().forEach(t -> t.setTable(table));
+                dataSink = new IcebergTableSink((IcebergTable) table,olapTuple,false, true);
+            }else {
+                throw new SemanticException("Unknown table type " + table.getType());
             }
-            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage(), false, false);
             execPlan.getFragments().get(0).setSink(dataSink);
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
@@ -112,9 +128,15 @@ public class DeletePlanner {
                 } else {
                     sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
                 }
-                sinkFragment.setHasOlapTableSink();
+
+                if (table instanceof OlapTable) {
+                    sinkFragment.setHasOlapTableSink();
+                    sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                } else if (table.isIcebergTable()) {
+                    sinkFragment.setHasIcebergTableSink();
+                }
+
                 sinkFragment.setForceSetTableSinkDop();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
                 sinkFragment.disableRuntimeAdaptiveDop();
             } else {
                 execPlan.getFragments().get(0).setPipelineDop(1);
@@ -127,4 +149,5 @@ public class DeletePlanner {
             }
         }
     }
+
 }

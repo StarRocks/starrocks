@@ -73,9 +73,9 @@ public class MetaUtils {
             throw new SemanticException("Catalog %s is not found", catalogName);
         }
 
-        if (catalog.getType().equalsIgnoreCase("iceberg")) {
-            throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
-        }
+//        if (catalog.getType().equalsIgnoreCase("iceberg")) {
+//            throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
+//        }
     }
 
     public static Database getDatabase(long dbId) {

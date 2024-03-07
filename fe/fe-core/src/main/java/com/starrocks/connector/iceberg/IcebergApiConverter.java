@@ -214,6 +214,14 @@ public class IcebergApiConverter {
         for (Types.NestedField nestedField : rootType.fields()) {
             fields.add(getTIcebergSchemaField(nestedField));
         }
+        TIcebergSchemaField filePath = new TIcebergSchemaField();
+        filePath.setField_id(fields.size()+1);
+        filePath.setName("file_path");
+        TIcebergSchemaField pos = new TIcebergSchemaField();
+        pos.setField_id(fields.size()+2);
+        pos.setName("pos");
+        fields.add(filePath);
+        fields.add(pos);
         tIcebergSchema.setFields(fields);
         return tIcebergSchema;
     }

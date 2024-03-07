@@ -545,6 +545,7 @@ struct TIcebergDataFile {
     5: optional string partition_path;
     6: optional list<i64> split_offsets;
     7: optional TIcebergColumnStats column_stats;
+    8: optional bool is_pos_delete;
 }
 
 struct THiveFileInfo {

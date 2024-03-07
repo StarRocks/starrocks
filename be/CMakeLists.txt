@@ -16,6 +16,7 @@
 # under the License.
 
 cmake_minimum_required(VERSION 3.11.1)
+set(CMAKE_CXX_STANDARD 17)
 
 # set CMAKE_C_COMPILER, this must set before project command
 if (DEFINED ENV{CC} AND DEFINED ENV{CXX})
