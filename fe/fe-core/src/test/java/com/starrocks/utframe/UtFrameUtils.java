@@ -724,7 +724,8 @@ public class UtFrameUtils {
             starRocksAssert.withSingleReplicaTable(entry.getValue());
         }
         // create view
-        for (String normalizedViewName : replayDumpInfo.getViewList()) {
+        for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
+            String normalizedViewName = entry.getKey();
             String[] nameParts = normalizedViewName.split("\\.");
             String dbName = nameParts[0];
             if (!starRocksAssert.databaseExist(dbName)) {

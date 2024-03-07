@@ -57,7 +57,6 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, String> createTableStmtMap = new LinkedHashMap<>();
     // viewName->createViewStmt
     private final Map<String, String> createViewStmtMap = new LinkedHashMap<>();
-    private final List<String> viewList = Lists.newArrayList();
 
     private final List<String> createResourceStmtList = new ArrayList<>();
 
@@ -260,13 +259,7 @@ public class QueryDumpInfo implements DumpInfo {
         createTableStmtMap.put(tableName, createTableStmt);
     }
 
-    public List<String> getViewList() {
-        return viewList;
-    }
-
     public void addViewCreateStmt(String viewName, String createViewStmt) {
-        // because view may be nested, so use viewList to keep the sequence
-        viewList.add(viewName);
         createViewStmtMap.put(viewName, createViewStmt);
     }
 
