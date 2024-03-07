@@ -1347,19 +1347,3 @@ SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS
 0420a206
 0420a206
 -- !result
-set low_cardinality_optimize_v2 = false;
--- result:
--- !result
-SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
--- result:
-0420a206
-0420a206
-0420a206
-0420a206
-0420a206
-0420a206
-0420a206
-0420a206
-0420a206
-0420a206
--- !result

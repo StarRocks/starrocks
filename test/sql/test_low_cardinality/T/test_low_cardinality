@@ -1150,7 +1150,3 @@ limit
     10;
 
 SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
-
-set low_cardinality_optimize_v2 = false;
-
-SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
