@@ -72,8 +72,9 @@ public class DeriveStatsTask extends OptimizerTask {
                 Map<ColumnRefOperator, ColumnStatistic> newColumnStatisticMap = groupExpressionStatistics.getColumnStatistics();
                 // update ColumnStatistics, exclude shadow columns of mv
                 for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : currentStatistics.getColumnStatistics().entrySet()) {
-                    if (newColumnStatisticMap.containsKey(entry.getKey())) {
-                        newBuilder.addColumnStatistic(entry.getKey(), newColumnStatisticMap.get(entry.getKey()));
+                    ColumnStatistic columnStatistic = newColumnStatisticMap.get(entry.getKey());
+                    if (columnStatistic != null) {
+                        newBuilder.addColumnStatistic(entry.getKey(), columnStatistic);
                     }
                 }
                 newBuilder.setTableRowCountMayInaccurate(groupExpressionStatistics.isTableRowCountMayInaccurate());
