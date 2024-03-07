@@ -115,7 +115,7 @@ public class MaterializedViewRewriter {
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
     public static final int UNION_REWRITE_EAGER_MODE_1 = 1;
-    public static final int UNION_REWRITE_EAGER_MODE_2 = 1;
+    public static final int UNION_REWRITE_EAGER_MODE_2 = 2;
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -1508,11 +1508,10 @@ public class MaterializedViewRewriter {
         return Utils.compoundAnd(candidates);
     }
 
-    private boolean isPullUpQueryPredicate(RewriteContext rewriteContext,
-                                           ScalarOperator predicate,
+    private boolean isPullUpQueryPredicate(ScalarOperator predicate,
                                            Set<ColumnRefOperator> mvPredicateUsedColRefs,
                                            ColumnRefSet queryOnPredicateUsedColRefs,
-                                           int unionRewriteMode) {
+                                           ColumnRefSet queryOutputColumnRefs) {
         return predicate.getColumnRefs().stream()
                 .filter(col -> {
                     //  pull-up extra predicates should not contain any non-(inner/cross) join on-predicates
@@ -1550,9 +1549,7 @@ public class MaterializedViewRewriter {
                     // If you want to use this feature, you can use it by the setting:
                     //      set query_debug_options = "{'enableMVEagerUnionAllRewrite':true}";
                     // use union-all rewrite eagerly if union-all rewrite can be used.
-                    ColumnRefSet queryOutputColumnRefs = rewriteContext.getQueryExpression().getOutputColumns();
-                    if (unionRewriteMode == UNION_REWRITE_EAGER_MODE_2  && queryOutputColumnRefs != null
-                            && queryOutputColumnRefs.contains(col)) {
+                    if (queryOutputColumnRefs != null && queryOutputColumnRefs.contains(col)) {
                         return true;
                     }
                     return false;
@@ -1594,11 +1591,13 @@ public class MaterializedViewRewriter {
         ColumnRefSet queryOnPredicateUsedColRefs = Optional.ofNullable(Utils.compoundAnd(queryOnPredicates))
                 .map(x -> x.getUsedColumns())
                 .orElse(new ColumnRefSet());
-        Set<ScalarOperator> queryExtraPredicates = queryPredicates.stream()
-                .filter(pred -> isPullUpQueryPredicate(rewriteContext, pred, mvPredicateUsedColRefs,
-                        queryOnPredicateUsedColRefs, unionRewriteMode))
-                .collect(Collectors.toSet());
 
+        ColumnRefSet queryOutputColumnRefs = unionRewriteMode == UNION_REWRITE_EAGER_MODE_2 ?
+                rewriteContext.getQueryExpression().getOutputColumns() : null;
+        Set<ScalarOperator> queryExtraPredicates = queryPredicates.stream()
+                .filter(pred -> isPullUpQueryPredicate(pred, mvPredicateUsedColRefs,
+                        queryOnPredicateUsedColRefs, queryOutputColumnRefs))
+                .collect(Collectors.toSet());
         if (queryExtraPredicates.isEmpty()) {
             return null;
         }
@@ -2128,9 +2127,8 @@ public class MaterializedViewRewriter {
         Operator op = result.getOp();
         if (op instanceof LogicalSetOperator) {
             LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
-            OptExpression filterOpt = OptExpression.create(filter, result);
             // TODO: Refactor this so can use PUSH_DOWN_PREDICATE rule set after mv rewrite rule.
-            return PushDownPredicateSetRule.process(filterOpt, null).get(0);
+            return PushDownPredicateSetRule.doProcess(filter, result, false).get(0);
         } else {
             // If op is aggregate operator, use setPredicate directly.
             ScalarOperator origPredicate = op.getPredicate();
