@@ -328,7 +328,8 @@ public class Optimizer {
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
-        if (mvRewriteStrategy.enableRBOViewBasedRewrite) {
+        // if (mvRewriteStrategy.enableRBOViewBasedRewrite) {
+        if (false) {
             // try view based mv rewrite first, then try normal mv rewrite rules
             viewBasedMvRuleRewrite(tree, rootTaskContext);
         }
