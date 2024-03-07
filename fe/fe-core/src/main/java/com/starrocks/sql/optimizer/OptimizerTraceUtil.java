@@ -19,6 +19,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.DebugRelationTracer;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.rule.Rule;
 import org.slf4j.helpers.MessageFormatter;
 
@@ -117,5 +118,14 @@ public class OptimizerTraceUtil {
             sb.append("\n");
             return sb.toString();
         });
+    }
+
+    public static boolean isTraceEnabled() {
+        ConnectContext context = ConnectContext.get();
+        if (context == null) {
+            return false;
+        }
+        QueryDebugOptions debugOptions = context.getSessionVariable().getQueryDebugOptions();
+        return debugOptions.isEnableQueryTraceLog();
     }
 }

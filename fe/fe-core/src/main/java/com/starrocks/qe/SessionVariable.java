@@ -1568,10 +1568,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboMaterializedViewRewriteRelatedMVsLimit = 64;
 
-    @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    @VarAttr(name = QUERY_EXCLUDING_MV_NAMES)
     private String queryExcludingMVNames = "";
 
-    @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
+    @VarAttr(name = QUERY_INCLUDING_MV_NAMES)
     private String queryIncludingMVNames = "";
 
     @VarAttr(name = ANALYZE_FOR_MV)
