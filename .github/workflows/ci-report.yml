@@ -35,7 +35,7 @@ jobs:
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
     steps:
       - run: |
-          sleep 30
+          sleep 10
 
       - name: Download workflow artifact - PR
         uses: dawidd6/action-download-artifact@v2
@@ -222,7 +222,7 @@ jobs:
           bucket_prefix=`echo ${REPO%/*} | tr '[:upper:]' '[:lower:]'`
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -231,10 +231,17 @@ jobs:
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/DEBUG/pr/UT-Report/${PR_NUMBER}
-          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/be_ut_coverage.xml | grep "Object Number is" | awk '{print $NF}')
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/Release/pr/UT-Report/${PR_NUMBER}
+          be_ut_res_path=${oss_path}/flag/be_ut_res
+          size=$(ossutil64 --config-file ~/.ossutilconfig ls ${be_ut_res_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
+            ossutil64 --config-file ~/.ossutilconfig cp ${be_ut_res_path} . >/dev/null
+            res=`cat be_ut_res`
+            if [[ "$res" != "0" ]]; then
+              echo "::error::BE UT failed!"
+              exit 1
+            fi
             cd be
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/be_ut_coverage.xml . -f 1>/dev/null
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/base_version.txt . -f 1>/dev/null
@@ -251,7 +258,7 @@ jobs:
 
       - name: Merge BE Total Coverage
         id: merge
-        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0'
+        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           
@@ -270,7 +277,7 @@ jobs:
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: always() && steps.download-ut-xml.outputs.size != '0'
+        if: always() && steps.download-ut-xml.outputs.size != '0' && steps.download-ut-xml.outcome == 'success'
         env:
           be_path: ${{ github.workspace }}/be
           merge_outcome: ${{ steps.merge.outcome }}
@@ -324,11 +331,12 @@ jobs:
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+          else
+            cp /var/local/env/sqltester_empty_coverage.xml .
           fi
 
       - name: Prepare Tools
         id: prepare-tools
-        if: steps.download-SQL-Tester-xml.outputs.size != '0'
         run: |
           mkdir -p .actions/nose-report-action
           cd .actions/nose-report-action

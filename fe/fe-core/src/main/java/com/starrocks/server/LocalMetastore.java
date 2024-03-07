@@ -50,12 +50,15 @@ import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
@@ -103,7 +106,6 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
@@ -146,6 +148,7 @@ import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -200,6 +203,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -215,7 +219,6 @@ import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -224,7 +227,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -257,7 +259,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -286,8 +287,6 @@ public class LocalMetastore implements ConnectorMetadata {
     private final ConcurrentHashMap<String, Database> fullNameToDb = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> tableIdToIncrementId = new ConcurrentHashMap<>();
 
-    private Cluster defaultCluster;
-
     private final GlobalStateMgr stateMgr;
     private final CatalogRecycleBin recycleBin;
     private ColocateTableIndex colocateTableIndex;
@@ -304,6 +303,19 @@ public class LocalMetastore implements ConnectorMetadata {
         this.stateMgr = globalStateMgr;
         this.recycleBin = recycleBin;
         this.colocateTableIndex = colocateTableIndex;
+
+        // put built-in database into local metastore
+        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
+        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
+        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
+
+        SysDb starRocksDb = new SysDb();
+        Preconditions.checkState(starRocksDb.getId() < NEXT_ID_INIT_VALUE,
+                "starrocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+        idToDb.put(starRocksDb.getId(), starRocksDb);
+        fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
     }
 
     boolean tryLock(boolean mustLock) {
@@ -361,51 +373,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 } // end for partitions
             } // end for tables
         } // end for dbs
-    }
-
-    public long loadDb(DataInputStream dis, long checksum) throws IOException {
-        int dbCount = dis.readInt();
-        long newChecksum = checksum ^ dbCount;
-        for (long i = 0; i < dbCount; ++i) {
-            Database db = new Database();
-            db.readFields(dis);
-            newChecksum ^= db.getId();
-            idToDb.put(db.getId(), db);
-            fullNameToDb.put(db.getFullName(), db);
-            stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().forEach(tbl -> {
-                try {
-                    tbl.onReload();
-                } catch (Throwable e) {
-                    LOG.error("reload table failed: {}", tbl, e);
-                }
-            });
-        }
-        LOG.info("finished replay databases from image");
-        return newChecksum;
-    }
-
-    public long saveDb(DataOutputStream dos, long checksum) throws IOException {
-        // Don't write system db meta
-        Map<Long, Database> idToDbNormal = idToDb.entrySet().stream()
-                .filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        int dbCount = idToDbNormal.size();
-
-        checksum ^= dbCount;
-        dos.writeInt(dbCount);
-        for (Map.Entry<Long, Database> entry : idToDbNormal.entrySet()) {
-            Database db = entry.getValue();
-            checksum ^= entry.getKey();
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                db.write(dos);
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
-            }
-        }
-        return checksum;
     }
 
     @Override
@@ -490,7 +457,6 @@ public class LocalMetastore implements ConnectorMetadata {
             unlock();
         }
 
-        List<Runnable> runnableList;
         // 2. drop tables in db
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
@@ -508,7 +474,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // save table names for recycling
             Set<String> tableNames = new HashSet<>(db.getTableNamesViewWithLock());
-            runnableList = unprotectDropDb(db, isForceDrop, false);
+            unprotectDropDb(db, isForceDrop, false);
             if (!isForceDrop) {
                 recycleBin.recycleDatabase(db, tableNames);
             } else {
@@ -537,26 +503,24 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
-
-        for (Runnable runnable : runnableList) {
-            runnable.run();
-        }
     }
 
     @NotNull
-    public List<Runnable> unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
-        List<Runnable> runnableList = new ArrayList<>();
+    public void unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
         for (Table table : db.getTables()) {
-            Runnable runnable = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
-            if (runnable != null) {
-                runnableList.add(runnable);
+            db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
+            if (isForeDrop) {
+                // Normally we should delete table after releasing the database lock, to
+                // avoid occupying the database lock for too long. However, at this point
+                // we are in the process of dropping the database, which means that the
+                // database should no longer be in use, and occupying the database lock
+                // should have no effect.
+                table.delete(db.getId(), isReplay);
             }
         }
-        return runnableList;
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
-        List<Runnable> runnableList;
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
@@ -564,7 +528,7 @@ public class LocalMetastore implements ConnectorMetadata {
             locker.lockDatabase(db, LockType.WRITE);
             try {
                 Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
-                runnableList = unprotectDropDb(db, isForceDrop, true);
+                unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
@@ -581,10 +545,6 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
             unlock();
-        }
-
-        for (Runnable runnable : runnableList) {
-            runnable.run();
         }
     }
 
@@ -877,6 +837,11 @@ public class LocalMetastore implements ConnectorMetadata {
             throw e;
         }
         return true;
+    }
+
+    @Override
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        createTable(stmt.getCreateTableStmt());
     }
 
     @Override
@@ -2305,10 +2270,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             if (!db.registerTableUnlocked(table)) {
                 if (!isSetIfNotExists) {
-                    if (table instanceof OlapTable) {
-                        OlapTable olapTable = (OlapTable) table;
-                        olapTable.onErase(false);
-                    }
+                    table.delete(db.getId(), false);
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
                             "table already exists");
                 } else {
@@ -2619,28 +2581,30 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
-        Runnable runnable;
+        Table table;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            runnable = db.unprotectDropTable(tableId, isForceDrop, true);
+            table = db.unprotectDropTable(tableId, isForceDrop, true);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
-        if (runnable != null) {
-            runnable.run();
+        if (table != null && isForceDrop) {
+            table.delete(db.getId(), true);
         }
     }
 
     public void replayEraseTable(long tableId) {
-        recycleBin.replayEraseTable(tableId);
+        recycleBin.replayEraseTable(Collections.singletonList(tableId));
     }
 
     public void replayEraseMultiTables(MultiEraseTableInfo multiEraseTableInfo) {
         List<Long> tableIds = multiEraseTableInfo.getTableIds();
-        for (Long tableId : tableIds) {
-            recycleBin.replayEraseTable(tableId);
-        }
+        recycleBin.replayEraseTable(tableIds);
+    }
+
+    public void replayDisableTableRecovery(DisableTableRecoveryInfo disableTableRecoveryInfo) {
+        recycleBin.replayDisableTableRecovery(disableTableRecoveryInfo.getTableIds());
     }
 
     public void replayRecoverTable(RecoverInfo info) {
@@ -3274,17 +3238,19 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,
                 shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
 
-        // validate optHints
-        Map<String, String> optHints = null;
-        QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
-        if (queryRelation instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) queryRelation;
-            optHints = selectRelation.getSelectList().getOptHints();
-            if (optHints != null && !optHints.isEmpty()) {
-                SessionVariable sessionVariable = VariableMgr.newSessionVariable();
-                for (String key : optHints.keySet()) {
-                    VariableMgr.setSystemVariable(sessionVariable,
-                            new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+        // validate hint
+        Map<String, String> optHints = Maps.newHashMap();
+        if (stmt.isExistQueryScopeHint()) {
+            SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+            for (HintNode hintNode : stmt.getAllQueryScopeHints()) {
+                if (hintNode instanceof SetVarHint) {
+                    for (Map.Entry<String, String> entry : hintNode.getValue().entrySet()) {
+                        VariableMgr.setSystemVariable(sessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                        optHints.put(entry.getKey(), entry.getValue());
+                    }
+                } else if (hintNode instanceof UserVariableHint) {
+                    throw new DdlException("unsupported user variable hint in Materialized view for now.");
                 }
             }
         }
@@ -3341,8 +3307,7 @@ public class LocalMetastore implements ConnectorMetadata {
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
     }
 
-    private long getRandomStart(IntervalLiteral interval,
-                                long randomizeStart) throws DdlException {
+    private long getRandomStart(IntervalLiteral interval, long randomizeStart) throws DdlException {
         if (interval == null || randomizeStart == -1) {
             return 0;
         }
@@ -3525,6 +3490,17 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
                         materializedView.isCloudNativeMaterializedView());
             }
+
+            // enable_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+                TableProperty.MVQueryRewriteSwitch value = TableProperty.analyzeQueryRewriteSwitch(str);
+                materializedView.getTableProperty().setMvQueryRewriteSwitch(value);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, str);
+                properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+            }
+
             // lake storage info
             if (materializedView.isCloudNativeMaterializedView()) {
                 String volume = "";
@@ -3768,17 +3744,21 @@ public class LocalMetastore implements ConnectorMetadata {
      * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
      */
-    public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
+    public void cancelAlter(CancelAlterTableStmt stmt, String reason) throws DdlException {
         if (stmt.getAlterType() == ShowAlterStmt.AlterType.ROLLUP) {
-            stateMgr.getRollupHandler().cancel(stmt);
+            stateMgr.getRollupHandler().cancel(stmt, reason);
         } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN
                 || stmt.getAlterType() == ShowAlterStmt.AlterType.OPTIMIZE) {
-            stateMgr.getSchemaChangeHandler().cancel(stmt);
+            stateMgr.getSchemaChangeHandler().cancel(stmt, reason);
         } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
             stateMgr.getRollupHandler().cancelMV(stmt);
         } else {
             throw new DdlException("Cancel " + stmt.getAlterType() + " does not implement yet");
         }
+    }
+
+    public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
+        cancelAlter(stmt, "user cancelled");
     }
 
     // entry of rename table operation
@@ -4683,125 +4663,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void replayCreateCluster(Cluster cluster) {
-        tryLock(true);
-        try {
-            unprotectCreateCluster(cluster);
-        } finally {
-            unlock();
-        }
-    }
-
-    private void unprotectCreateCluster(Cluster cluster) {
-        // This is only used for initDefaultCluster and in that case the backendIdList is empty.
-        // So ASSERT the cluster's backend list size.
-        Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default cluster");
-
-        defaultCluster = cluster;
-
-        // create info schema db
-        final InfoSchemaDb infoDb = new InfoSchemaDb();
-        unprotectCreateDb(infoDb);
-        final SysDb sysDb = new SysDb();
-        unprotectCreateDb(sysDb);
-
-        // only need to create default cluster once.
-        stateMgr.setIsDefaultClusterCreated(true);
-    }
-
-    public Cluster getCluster() {
-        return defaultCluster;
-    }
-
-    public long loadCluster(DataInputStream dis, long checksum) throws IOException {
-        int clusterCount = dis.readInt();
-        checksum ^= clusterCount;
-        for (long i = 0; i < clusterCount; ++i) {
-            final Cluster cluster = Cluster.read(dis);
-            checksum ^= cluster.getId();
-
-            Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default_cluster");
-
-            String dbName = InfoSchemaDb.DATABASE_NAME;
-            InfoSchemaDb db;
-            // Use real GlobalStateMgr instance to avoid InfoSchemaDb id continuously increment
-            // when checkpoint thread load image.
-            if (getFullNameToDb().containsKey(dbName)) {
-                db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dbName);
-            } else {
-                db = new InfoSchemaDb();
-            }
-            String errMsg = "InfoSchemaDb id shouldn't larger than 10000, please restart your FE server";
-            // Every time we construct the InfoSchemaDb, which id will increment.
-            // When InfoSchemaDb id larger than 10000 and put it to idToDb,
-            // which may be overwrite the normal db meta in idToDb,
-            // so we ensure InfoSchemaDb id less than 10000.
-            Preconditions.checkState(db.getId() < NEXT_ID_INIT_VALUE, errMsg);
-            idToDb.put(db.getId(), db);
-            fullNameToDb.put(db.getFullName(), db);
-
-            if (getFullNameToDb().containsKey(SysDb.DATABASE_NAME)) {
-                LOG.warn("Since the the database of mysql already exists, " +
-                        "the system will not automatically create the database of starrocks for system.");
-            } else {
-                SysDb starRocksDb = new SysDb();
-                Preconditions.checkState(starRocksDb.getId() < NEXT_ID_INIT_VALUE, errMsg);
-                idToDb.put(starRocksDb.getId(), starRocksDb);
-                fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-            }
-            defaultCluster = cluster;
-        }
-        LOG.info("finished replay cluster from image");
-        return checksum;
-    }
-
-    // TODO [meta-format-change] deprecated
-    public void initDefaultCluster() {
-        final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
-        for (Backend backend : defaultClusterBackends) {
-            backendList.add(backend.getId());
-        }
-
-        final long id = getNextId();
-        final Cluster cluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, id);
-
-        // make sure one host hold only one backend.
-        Set<String> beHost = Sets.newHashSet();
-        for (Backend be : defaultClusterBackends) {
-            if (beHost.contains(be.getHost())) {
-                // we can not handle this situation automatically.
-                LOG.error("found more than one backends in same host: {}", be.getHost());
-                System.exit(-1);
-            } else {
-                beHost.add(be.getHost());
-            }
-        }
-
-        // we create default_cluster to meet the need for ease of use, because
-        // most users hava no multi tenant needs.
-        unprotectCreateCluster(cluster);
-
-        // no matter default_cluster is created or not,
-        // mark isDefaultClusterCreated as true
-        stateMgr.setIsDefaultClusterCreated(true);
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateCluster(cluster);
-    }
-
-    //TODO [meta-format-change] deprecated
-    public long saveCluster(DataOutputStream dos, long checksum) throws IOException {
-        final int clusterCount = 1;
-        checksum ^= clusterCount;
-        dos.writeInt(clusterCount);
-        Cluster cluster = defaultCluster;
-        long clusterId = defaultCluster.getId();
-        if (clusterId >= NEXT_ID_INIT_VALUE) {
-            checksum ^= clusterId;
-            cluster.write(dos);
-        }
-        return checksum;
-    }
-
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
             final Backend backend = stateMgr.getNodeMgr().getClusterInfo().getBackend(id);
@@ -5438,24 +5299,6 @@ public class LocalMetastore implements ConnectorMetadata {
         return newPartitions;
     }
 
-    public long saveAutoIncrementId(DataOutputStream dos, long checksum) throws IOException {
-        AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
-        info.write(dos);
-        return checksum;
-    }
-
-    public long loadAutoIncrementId(DataInputStream dis, long checksum) throws IOException {
-        AutoIncrementInfo info = new AutoIncrementInfo(null);
-        info.read(dis);
-        for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
-            Long tableId = entry.getKey();
-            Long id = entry.getValue();
-
-            tableIdToIncrementId.put(tableId, id);
-        }
-        return checksum;
-    }
-
     public void replayDeleteAutoIncrementId(AutoIncrementInfo info) throws IOException {
         for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
             Long tableId = entry.getKey();
@@ -5502,14 +5345,13 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
-        if (!isReplay) {
+        Long id = tableIdToIncrementId.remove(tableId);
+        if (!isReplay && id != null) {
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(tableId, 0L);
             AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
             GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
         }
-
-        tableIdToIncrementId.remove(tableId);
     }
 
     public ConcurrentHashMap<Long, Long> tableIdToIncrementId() {
@@ -5578,24 +5420,6 @@ public class LocalMetastore implements ConnectorMetadata {
             });
         }
 
-        // put built-in database into local metastore
-        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
-        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
-        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
-
-        if (getFullNameToDb().containsKey(SysDb.DATABASE_NAME)) {
-            LOG.warn("Since the the database of starrocks already exists, " +
-                    "the system will not automatically create the database of starrocks for system.");
-        } else {
-            SysDb starRocksDb = new SysDb();
-            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                    "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-            idToDb.put(starRocksDb.getId(), starRocksDb);
-            fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-        }
-
         AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
         for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
             Long tableId = entry.getKey();
@@ -5606,11 +5430,5 @@ public class LocalMetastore implements ConnectorMetadata {
 
         recreateTabletInvertIndex();
         GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
-
-        /*
-         * defaultCluster has no meaning, it is only for compatibility with
-         * old versions of the code (defaultCluster is required for 3.0 fallback)
-         */
-        defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, NEXT_ID_INIT_VALUE);
     }
 }

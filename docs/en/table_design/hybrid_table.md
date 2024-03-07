@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Hybrid row-column storage
+# [Preview] Hybrid row-column storage
 
 As an OLAP database, StarRocks originally stores data in the columnar storage, which can enhance the performance of complex queries, such as aggregate queries. Since v3.2.3, StarRocks also supports storing data in the hybrid row-column storage where data is stored in both row-by-row and column-by-column fashions. This hybrid row-column storage is well suited for various scenario such as primary key-based high-concurrency, low-latency point queries and partial column updates, while delivering efficient analytical capabilities comparable to columnar storage. Additionally, hybrid row-column storage supports [prepared statements](../sql-reference/sql-statements/prepared_statement.md), which enhances query performance and security.
 
@@ -11,13 +11,19 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 | **Storage format**         | **Storage method**                                           | **Scenarios**                                                |
 | -------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | Hybrid row-column storage | Data is stored in both row-by-row and column-by-column fashions. Simply put, a table that uses hybrid row-column storage contains an additional, hidden binary-type column `__row`. When data is written to the table, all values from the value columns of a row are encoded and written to the `__row` column (as shown below). As the data is stored in both row-by-row and column-by-column fashions, additional storage costs are incurred. ![img](../assets/table_design/hybrid_table.png) | <ul><li>Suitable for scenarios such as primary key-based point queries and partial column updates, because this storage method can help greatly reduce random IO and read-write amplification in these scenarios.</li><ul><li>Point queries, which are primary key-based simple queries that scan and return small amounts of data.</li><li>Queries against most or all of the fields from tables that consist of a small number of fields.</li><li>Partial column updates.</li><li>Prepared statements can be run on tables that use hybrid row-column storage, which can enhance query performance by saving the overhead of parsing SQL statements, and also prevent SQL injection attacks.</li></ul><li>Also suitable for complex data analysis.</li></ul>|
-| Column-oriented            | Data is stored in a column-by-column fashion ![img](../assets/table_design/hybrid_table.png) | <ul><li>Complex or ad-hoc queries on massive data. </li><li>Tables (such as wide tables) consist of many fields. Queries involve only a few columns. </li></ul>|
+| Column-oriented            | Data is stored in a column-by-column fashion ![img](../assets/table_design/columnar_table.png) | <ul><li>Complex or ad-hoc queries on massive data. </li><li>Tables (such as wide tables) consist of many fields. Queries involve only a few columns. </li></ul>|
 
 ## Basic usages  
 
 ### Create a table that uses hybrid row-column storage
 
-Specify `"STORE_TYPE" = "column_with_row"` in the `PROPERTIES` at table creation.
+1. Enable the FE configuration item `enable_experimental_rowstore`.
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
+   ```
+
+2. Specify `"STORE_TYPE" = "column_with_row"` in the `PROPERTIES` at table creation.
 
 :::note
 

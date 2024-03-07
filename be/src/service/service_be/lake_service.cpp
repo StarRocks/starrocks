@@ -450,6 +450,29 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
     latch.wait();
 }
 
+namespace drop_table_helper {
+static bthread::Mutex g_mutex;
+static std::unordered_set<std::string> g_paths;
+
+// Returns true if the container already contains a |path|, false otherwise.
+bool dedup_path(const std::string& path) {
+    if (path.empty()) {
+        return false;
+    }
+    std::lock_guard l(g_mutex);
+    return !(g_paths.insert(path).second);
+}
+
+void remove_path(const std::string& path) {
+    if (path.empty()) {
+        return;
+    }
+    std::lock_guard l(g_mutex);
+    g_paths.erase(path);
+}
+
+}; // namespace drop_table_helper
+
 void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
                                  const ::starrocks::lake::DropTableRequest* request,
                                  ::starrocks::lake::DropTableResponse* response, ::google::protobuf::Closure* done) {
@@ -466,21 +489,44 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         cntl->SetFailed("no thread pool to run task");
         return;
     }
+
+    response->mutable_status()->set_status_code(0);
+
+    if (drop_table_helper::dedup_path(request->path())) {
+        TEST_SYNC_POINT("LakeService::drop_table:duplicate_path_id");
+        LOG(INFO) << "Rejected drop table request because the previous task has not yet finished. tablet_id="
+                  << request->tablet_id() << " path=" << request->path();
+        response->mutable_status()->set_status_code(TStatusCode::ALREADY_EXIST);
+        response->mutable_status()->add_error_msgs("Previous delete task for the same path has not yet finished");
+        return;
+    }
+
+    DeferOp defer([&]() { drop_table_helper::remove_path(request->path()); });
+
+    LOG(INFO) << "Received drop table request. tablet_id=" << request->tablet_id() << " path=" << request->path()
+              << " queued_tasks=" << thread_pool->num_queued_tasks();
+
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
+        TEST_SYNC_POINT("LakeService::drop_table:task_run");
         DeferOp defer([&] { latch.count_down(); });
         auto location = _tablet_mgr->tablet_root_location(request->tablet_id());
         auto st = fs::remove_all(location);
         if (!st.ok() && !st.is_not_found()) {
-            LOG(ERROR) << "Fail to remove " << location << ": " << st;
-            cntl->SetFailed("Fail to remove " + location);
+            LOG(ERROR) << "Fail to remove " << location << ": " << st << ". tablet_id=" << request->tablet_id()
+                       << " path=" << request->path();
+            st.to_protobuf(response->mutable_status());
+        } else {
+            LOG(INFO) << "Removed " << location << ". tablet_id=" << request->tablet_id() << " path=" << request->path()
+                      << " is_not_found=" << st.is_not_found();
         }
     };
 
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit drop table task: " << st;
-        cntl->SetFailed(std::string(st.message()));
+        LOG(WARNING) << "Fail to submit drop table task: " << st << " tablet_id=" << request->tablet_id()
+                     << " path=" << request->path();
+        st.to_protobuf(response->mutable_status());
         latch.count_down();
     }
 

@@ -42,6 +42,12 @@ public class FeConstants {
     public static final String DPP_VERSION = "3_2_0";
     // bloom filter false positive probability
     public static final double DEFAULT_BLOOM_FILTER_FPP = 0.05;
+
+    // NGRAM Bloom filter's default gram number
+    public static final int DEFAULT_GRAM_NUM = 2;
+
+    public static final Boolean NGRAM_CASE_SENSITIVE = true;
+
     // general model
     @Deprecated
     // for rollback compatible

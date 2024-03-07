@@ -111,8 +111,13 @@ public class IcebergConnector implements Connector {
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
-            boolean enableMetadataCache = Boolean.parseBoolean(
-                    properties.getOrDefault("enable_iceberg_metadata_cache", "true"));
+            boolean enableMetadataCache;
+            if (properties.containsKey("enable_iceberg_metadata_cache")) {
+                enableMetadataCache = Boolean.parseBoolean(properties.get("enable_iceberg_metadata_cache"));
+            } else {
+                enableMetadataCache = getNativeCatalogType() == IcebergCatalogType.GLUE_CATALOG;
+            }
+
             if (enableMetadataCache && !isResourceMappingCatalog(catalogName)) {
                 long ttl = Long.parseLong(properties.getOrDefault("iceberg_meta_cache_ttl_sec", "1800"));
                 nativeCatalog = new CachingIcebergCatalog(nativeCatalog, ttl, buildBackgroundJobPlanningExecutor());

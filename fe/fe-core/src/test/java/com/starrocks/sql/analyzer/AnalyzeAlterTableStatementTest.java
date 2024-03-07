@@ -90,12 +90,30 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test
-    public void testCreateIndex() {
+    public void testCreateIndex() throws Exception {
         String sql = "CREATE INDEX index1 ON `test`.`t0` (`col1`) USING BITMAP COMMENT 'balabala'";
         analyzeSuccess(sql);
 
         sql = "alter table t0 add index index1 (v2)";
         analyzeSuccess(sql);
+
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.bitmapTable\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ") AGGREGATE KEY (k1, k2)\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        // create bitmap index on v1
+        sql = "CREATE INDEX index1 ON `test`.`bitmapTable` (`v1`) USING BITMAP COMMENT 'balabala'";
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, sql);
+        stmtExecutor.execute();
+        Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
+        connectContext.getState().getErrorMessage()
+                .contains(
+                        "BITMAP index only used in columns of " +
+                                "DUP_KEYS/PRIMARY_KEYS table or key columns of UNIQUE_KEYS/AGG_KEYS table");
     }
 
     @Test
@@ -171,12 +189,10 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test
     public void testColumnWithRowUpdate() {
-        String sql = "alter table tmcwr add column testcol TIME";
-        analyzeFail(sql, "row store table tmcwr can't do schema change");
+        String sql = "alter table tmcwr add column testcol int";
+        analyzeSuccess(sql);
         sql = "alter table tmcwr drop column name";
-        analyzeFail(sql, "row store table tmcwr can't do schema change");
-        sql = "alter table tmcwr modify column name TIME";
-        analyzeFail(sql, "row store table tmcwr can't do schema change");
+        analyzeSuccess(sql);
     }
 
 }

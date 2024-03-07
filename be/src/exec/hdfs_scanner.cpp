@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
+#include "fs/hdfs/fs_hdfs.h"
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
@@ -107,14 +108,10 @@ Status HdfsScanner::_build_scanner_context() {
 
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-        column.col_idx = _scanner_params.materialize_index_in_chunk[i];
-        column.col_type = slot->type();
-        column.slot_id = slot->id();
-        column.col_name = slot->col_name();
+        column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
         column.decode_needed =
                 slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
                                                     _scanner_params.slots_of_mutli_slot_conjunct.end();
-
         ctx.materialized_columns.emplace_back(std::move(column));
     }
 
@@ -122,11 +119,7 @@ Status HdfsScanner::_build_scanner_context() {
         auto* slot = _scanner_params.partition_slots[i];
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-        column.col_idx = _scanner_params.partition_index_in_chunk[i];
-        column.col_type = slot->type();
-        column.slot_id = slot->id();
-        column.col_name = slot->col_name();
-
+        column.idx_in_chunk = _scanner_params.partition_index_in_chunk[i];
         ctx.partition_columns.emplace_back(std::move(column));
     }
 
@@ -145,7 +138,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_app_stats;
     ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
-
+    ctx.split_context = _scanner_params.split_context;
     return Status::OK();
 }
 
@@ -279,8 +272,8 @@ int64_t HdfsScanner::estimated_mem_usage() const {
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
-    static const char* const kHdfsIOProfileSectionPrefix = "HdfsIO";
     if (_file == nullptr) return;
+    static const char* const kHdfsIOProfileSectionPrefix = "HdfsIOMetrics";
 
     auto res = _file->get_numeric_statistics();
     if (!res.ok()) return;
@@ -289,11 +282,24 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     if (statistics == nullptr || statistics->size() == 0) return;
 
     RuntimeProfile* runtime_profile = profile->runtime_profile;
-    ADD_TIMER(runtime_profile, kHdfsIOProfileSectionPrefix);
+    ADD_COUNTER(profile->runtime_profile, kHdfsIOProfileSectionPrefix, TUnit::NONE);
+
     for (int64_t i = 0, sz = statistics->size(); i < sz; i++) {
         auto&& name = statistics->name(i);
-        auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::UNIT, kHdfsIOProfileSectionPrefix);
-        COUNTER_UPDATE(counter, statistics->value(i));
+        if (name == HdfsReadMetricsKey::kTotalOpenFSTimeNs || name == HdfsReadMetricsKey::kTotalOpenFileTimeNs) {
+            auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::TIME_NS, kHdfsIOProfileSectionPrefix);
+            COUNTER_UPDATE(counter, statistics->value(i));
+        } else if (name == HdfsReadMetricsKey::kTotalBytesRead || name == HdfsReadMetricsKey::kTotalLocalBytesRead ||
+                   name == HdfsReadMetricsKey::kTotalShortCircuitBytesRead ||
+                   name == HdfsReadMetricsKey::kTotalZeroCopyBytesRead) {
+            auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::BYTES, kHdfsIOProfileSectionPrefix);
+            COUNTER_UPDATE(counter, statistics->value(i));
+        } else if (name == HdfsReadMetricsKey::kTotalHedgedReadOps ||
+                   name == HdfsReadMetricsKey::kTotalHedgedReadOpsInCurThread ||
+                   name == HdfsReadMetricsKey::kTotalHedgedReadOpsWin) {
+            auto&& counter = ADD_CHILD_COUNTER(runtime_profile, name, TUnit::UNIT, kHdfsIOProfileSectionPrefix);
+            COUNTER_UPDATE(counter, statistics->value(i));
+        }
     }
 }
 
@@ -333,6 +339,8 @@ void HdfsScanner::update_counter() {
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());
         COUNTER_UPDATE(profile->shared_buffered_shared_io_bytes, _shared_buffered_input_stream->shared_io_bytes());
+        COUNTER_UPDATE(profile->shared_buffered_shared_align_io_bytes,
+                       _shared_buffered_input_stream->shared_align_io_bytes());
         COUNTER_UPDATE(profile->shared_buffered_shared_io_timer, _shared_buffered_input_stream->shared_io_timer());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_count, _shared_buffered_input_stream->direct_io_count());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_bytes, _shared_buffered_input_stream->direct_io_bytes());
@@ -356,11 +364,11 @@ void HdfsScannerContext::update_materialized_columns(const std::unordered_set<st
     std::vector<ColumnInfo> updated_columns;
 
     for (auto& column : materialized_columns) {
-        auto col_name = column.formated_col_name(case_sensitive);
+        auto col_name = column.formatted_name(case_sensitive);
         // if `can_use_any_column`, we can set this column to non-existed column without reading it.
         if (names.find(col_name) == names.end() || can_use_any_column) {
             not_existed_slots.push_back(column.slot_desc);
-            SlotId slot_id = column.slot_id;
+            SlotId slot_id = column.slot_id();
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot[slot_id]) {
                     conjunct_ctxs_of_non_existed_slots.emplace_back(ctx);

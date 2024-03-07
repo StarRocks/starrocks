@@ -302,4 +302,43 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     ASSERT_STREQ(std::to_string(cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());
 }
 
+void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegistry* instance) {
+    ASSERT_TRUE(instance->get_metric(pool_name + "_threadpool_size") != nullptr);
+    ASSERT_TRUE(instance->get_metric(pool_name + "_executed_tasks_total") != nullptr);
+    ASSERT_TRUE(instance->get_metric(pool_name + "_pending_time_ns_total") != nullptr);
+    ASSERT_TRUE(instance->get_metric(pool_name + "_execute_time_ns_total") != nullptr);
+    ASSERT_TRUE(instance->get_metric(pool_name + "_queue_count") != nullptr);
+}
+
+TEST_F(StarRocksMetricsTest, test_metrics_register) {
+    auto instance = StarRocksMetrics::instance()->metrics();
+    ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
+    ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("memtable_flush_io_time_us"));
+    ASSERT_NE(nullptr, instance->get_metric("memtable_flush_memory_bytes_total"));
+    ASSERT_NE(nullptr, instance->get_metric("memtable_flush_disk_bytes_total"));
+    ASSERT_NE(nullptr, instance->get_metric("segment_flush_total"));
+    ASSERT_NE(nullptr, instance->get_metric("segment_flush_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("segment_flush_io_time_us"));
+    ASSERT_NE(nullptr, instance->get_metric("segment_flush_bytes_total"));
+    assert_threadpool_metrics_register("async_delta_writer", instance);
+    assert_threadpool_metrics_register("memtable_flush", instance);
+    assert_threadpool_metrics_register("segment_replicate", instance);
+    assert_threadpool_metrics_register("segment_flush", instance);
+    assert_threadpool_metrics_register("update_apply", instance);
+    assert_threadpool_metrics_register("pk_index_compaction", instance);
+    ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
+    ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_memtable_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_writer_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_wait_replica_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_execute_total"));
+    ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_task_total"));
+    ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_task_execute_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("async_delta_writer_task_pending_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_flush_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("delta_writer_wait_replica_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("memtable_finalize_duration_us"));
+}
+
 } // namespace starrocks

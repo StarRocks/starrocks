@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Canshu']
 ---
 
 # BE 配置项
@@ -176,21 +177,21 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### tablet_rowset_stale_sweep_time_sec
 
-- 含义：失效 rowset 的清理间隔。
+- 含义：失效 rowset 的清理间隔。缩短该间隔可以降低导入时元数据的占用。
 - 单位：秒
 - 默认值：1800
 
 #### snapshot_expire_time_sec
 
-- 含义：快照文件清理的间隔，默认 48 个小时。
+- 含义：快照文件的保留时长，默认 48 个小时。后台会按照配置的清理间隔来定期清理保留时长超过 `snapshot_expire_time_sec` 的快照文件。清理间隔受磁盘空间使用率影响：当磁盘空间使用率小于 60% 时，会按照最大清理间隔 `max_garbage_sweep_interval` 来清理；当磁盘空间大于 80% 时，会按照最小清理间隔 `min_garbage_sweep_interval` 来清理。
 - 单位：秒
 - 默认值：172800
 
 #### trash_file_expire_time_sec
 
-- 含义：回收站清理的间隔，默认 24 个小时。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。
+- 含义：Trash 目录下文件的保留时长，默认 1 天。后台会按照配置的清理间隔来定期清理保留时长超过 `trash_file_expire_time_sec` 的文件内容。清理间隔受磁盘空间使用率影响：当磁盘空间使用率小于 60% 时，会按照最大清理间隔 `max_garbage_sweep_interval` 来清理；当磁盘空间大于 80% 时，会按照最小清理间隔 `min_garbage_sweep_interval` 来清理。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259200 变为 86400。
 - 单位：秒
-- 默认值：86,400
+- 默认值：86400
 
 #### base_compaction_check_interval_seconds
 
@@ -292,8 +293,14 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### enable_size_tiered_compaction_strategy
 
-- 含义：是否开启 Size-tiered Compaction 策略。
+- 含义：是否开启 Size-tiered Compaction 策略 (Primary Key 表除外)。
 - 默认值：true
+
+#### enable_pk_size_tiered_compaction_strategy
+
+- 含义：是否为 Primary Key 表开启 Size-tiered Compaction 策略。
+- 默认值：true
+- 引入版本：v3.2.4, v3.1.10
 
 #### min_compaction_failure_interval_sec
 
@@ -402,13 +409,13 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### storage_flood_stage_usage_percent
 
-- 含义：如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。
+- 含义：BE 存储目录整体磁盘空间使用率的硬上限。如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_percent` 才能使配置生效。
 - 单位：%
 - 默认值：95
 
 #### storage_flood_stage_left_capacity_bytes
 
-- 含义：如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。
+- 含义：BE 存储目录整体磁盘剩余空间的硬限制。如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，会拒绝 Load 和 Restore 作业，默认 100GB。配置该参数时，需要同步修改 FE 配置 `storage_usage_hard_limit_reserve_bytes` 才能使配置生效。
 - 单位：字节
 - 默认值：107374182400
 
@@ -496,11 +503,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。
 - 默认值：-1
 
-#### internal_service_async_thread_num
-
-- 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
-- 默认值：10
-
 #### lake_enable_vertical_compaction_fill_data_cache
 
 - 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
@@ -509,8 +511,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### lake_pk_compaction_max_input_rowsets
 
-- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。
-- 默认值：5
+- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。从 v3.2.4 和 v3.1.10 版本开始，该参数默认值从 `5` 变更为 `1000`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
+- 默认值：1000
 - 引入版本：v3.1.8、v3.2.3
 
 #### compact_threads
@@ -523,6 +525,13 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：存算分离集群下主键表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
 - 默认值：0.5
+
+#### lake_compaction_stream_buffer_size_bytes
+
+- 含义：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
+- 单位：字节
+- 默认值：1048576
+- 引入版本：v3.2.3
 
 #### create_tablet_worker_count
 
@@ -550,6 +559,19 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：磁盘进行垃圾清理的最小间隔。自 3.0 版本起，该参数由静态变为动态。
 - 单位：秒
 - 默认值：180
+
+#### starlet_use_star_cache
+
+- 含义：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。
+- 默认值：true
+- 引入版本：3.1
+
+#### starlet_cache_evict_high_water
+
+- 含义：在存算分离模式下启用 file data cache，如果当前剩余磁盘容量百分比低于此配置项中指定的值，StarRocks 将触发缓存淘汰。默认值表示 file data cache 默认最多使用 80% 磁盘容量。
+- 默认值：0.2
+- 引入版本：3.0
+
 
 ## 配置 BE 静态参数
 
@@ -864,7 +886,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### routine_load_thread_pool_size
 
-- 含义：单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数`max_routine_load_task_num_per_be` 控制。
+- 含义：单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。
+- 默认值：10
+
+#### internal_service_async_thread_num
+
+- 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。
 - 默认值：10
 
 #### brpc_max_body_size
@@ -957,3 +984,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
 - 单位：N/A
 - 默认值：0
+
+#### starlet_star_cache_disk_size_percent
+
+- 含义：存算分离模式下，block data cache 最多可使用的磁盘容量百分比。
+- 默认值：80
+- 引入版本：3.1

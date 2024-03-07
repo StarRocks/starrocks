@@ -43,6 +43,12 @@ public class TableFunctionTableTest {
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
         properties.put("auto_detect_sample_files", "10");
+        properties.put("csv.column_separator", ",");
+        properties.put("csv.row_delimiter", "\n");
+        properties.put("csv.enclose", "\\");
+        properties.put("csv.escape", "'");
+        properties.put("csv.skip_header", "2");
+        properties.put("csv.trim_space", "true");
         return properties;
     }
 
@@ -139,6 +145,12 @@ public class TableFunctionTableTest {
             Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
                     Deencapsulation.getField(table, "columnsFromPath"));
             Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
+            Assert.assertEquals("\n", table.getCsvRowDelimiter());
+            Assert.assertEquals(",", table.getCsvColumnSeparator());
+            Assert.assertEquals('\\', table.getCsvEnclose());
+            Assert.assertEquals('\'', table.getCsvEscape());
+            Assert.assertEquals(2, table.getCsvSkipHeader());
+            Assert.assertEquals(true, table.getCsvTrimSpace());
         });
 
         // abnormal case.

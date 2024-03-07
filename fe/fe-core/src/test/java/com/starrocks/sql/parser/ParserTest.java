@@ -39,6 +39,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.atn.PredictionMode;
 import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -67,6 +68,15 @@ class ParserTest {
             assertContains(e.getMessage(), "Getting syntax error. Detail message: " +
                     "Statement exceeds maximum length limit");
         }
+    }
+
+    @Test
+    void test() {
+        String sql = "@`a` = 1";
+        SessionVariable sessionVariable = new SessionVariable();
+        List<Expr> exprs = SqlParser.parseSqlToExprs(sql, sessionVariable);
+        System.out.println();
+
     }
 
     @Test
@@ -412,6 +422,42 @@ class ParserTest {
         List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
         String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
         assertEquals("SELECT 100 % 2", newSql);
+    }
+
+    @Test
+    void testComplexExpr() {
+        String exprString = " not X1 + 1  >  X2 and not X3 + 2 > X4 and not X5 + 3 > X6  and not X7 + 1 = X8 " +
+                "and not X9 + X10 < X11 + X12 ";
+        StringBuilder builder = new StringBuilder();
+        builder.append(exprString);
+        for (int i = 0; i < 500; i++) {
+            builder.append("or");
+            builder.append(exprString);
+        }
+
+        AstBuilder astBuilder = new AstBuilder(SqlModeHelper.MODE_DEFAULT);
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(builder.toString())));
+        lexer.setSqlMode(SqlModeHelper.MODE_DEFAULT);
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+        long start = System.currentTimeMillis();
+        StarRocksParser.ExpressionContext context1 = parser.expression();
+        Expr expr1 = (Expr) astBuilder.visit(context1);
+        long end = System.currentTimeMillis();
+        long timeOfLL = end - start;
+
+        parser.getTokenStream().seek(0);
+        parser.reset();
+        parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+        start = System.currentTimeMillis();
+        StarRocksParser.ExpressionContext context2 = parser.expression();
+        Expr expr2 = (Expr) astBuilder.visit(context2);
+        end = System.currentTimeMillis();
+        long timeOfSLL = end - start;
+
+        Assert.assertEquals(expr1, expr2);
+        Assert.assertTrue(timeOfLL > timeOfSLL);
     }
 
     private static Stream<Arguments> keyWordSqls() {

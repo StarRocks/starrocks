@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -180,6 +181,13 @@ public:
 
     bool ends_with(const Slice& x) const {
         return ((size >= x.size) && memequal(data + (size - x.size), x.size, x.data, x.size));
+    }
+
+    Slice tolower(std::string& buf) {
+        // copy this slice into buf
+        buf.assign(get_data(), get_size());
+        std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
+        return Slice(buf.data(), buf.size());
     }
 
     /// @brief Comparator struct, useful for ordered collections (like STL maps).

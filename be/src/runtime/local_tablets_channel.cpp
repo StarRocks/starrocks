@@ -48,6 +48,7 @@
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -87,6 +88,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
         _senders[params.sender_id()].has_incremental_open = true;
     } else {
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+        _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }
 
     RETURN_IF_ERROR(_open_all_writers(params));
@@ -126,6 +128,8 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                     PTabletWriterAddBatchResult* response) {
+    MonotonicStopWatch watch;
+    watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     auto t0 = std::chrono::steady_clock::now();
     int64_t wait_memtable_flush_time_us = 0;
@@ -276,6 +280,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+    auto wait_writer_ts = watch.elapsed_time();
 
     // Abort tablets which primary replica already failed
     if (response->status().status_code() != TStatusCode::OK) {
@@ -320,6 +325,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             }
         }
     }
+    auto wait_replica_ts = watch.elapsed_time();
 
     {
         std::lock_guard lock(_senders[request.sender_id()].lock);
@@ -368,7 +374,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
         LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
-    } else if (request.eos() && request.wait_all_sender_close()) {
+    } else if (request.wait_all_sender_close()) {
+        _num_initial_senders.fetch_sub(1);
         std::string msg = fmt::format("LocalTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
         auto remain = request.timeout_ms();
         remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
@@ -397,6 +404,12 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             response->mutable_status()->add_error_msgs(std::string(_status.message()));
         }
     }
+    auto wait_writer_us = wait_writer_ts / 1000 - wait_memtable_flush_time_us;
+    auto wait_replica_us = (wait_replica_ts - wait_writer_ts) / 1000;
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
+            wait_memtable_flush_time_us);
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_us);
+    StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_us);
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {
@@ -548,6 +561,9 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
     // So we need to make sure that all partitions are added to _partition_ids when committing
     int n = _num_remaining_senders.fetch_sub(1);
     DCHECK_GE(n, 1);
+
+    // if sender close means data send finished, we need to decrease _num_initial_senders
+    _num_initial_senders.fetch_sub(1);
 
     VLOG(1) << "LocalTabletsChannel txn_id: " << _txn_id << " close " << partitions_size << " partitions remaining "
             << n - 1 << " senders";
@@ -709,7 +725,7 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
 
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
         Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
-    if (chunk == nullptr && !request.eos()) {
+    if (chunk == nullptr && !request.eos() && !request.wait_all_sender_close()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 

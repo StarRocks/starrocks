@@ -106,8 +106,9 @@ enum TStatusCode {
 
     REMOTE_FILE_NOT_FOUND = 55, // for hive external table
     YIELD = 56,
-
+    
     JIT_COMPILE_ERROR = 57,
-    CAPACITY_LIMIT_EXCEED = 58
+
+    CAPACITY_LIMIT_EXCEED = 58,
 }
 

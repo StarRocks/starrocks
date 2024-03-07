@@ -312,17 +312,15 @@ static void numeric_cast_with_jit(RuntimeState* runtime_state, TExprNode& cast_e
     } else {
         cast_expr.is_nullable = false;
     }
-
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
-
     cast_expr.type = gen_type_desc(cast_expr.child_type);
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
 
     for (auto& d : data) {
         MockVectorizedExpr<FromType> col1(cast_expr, 1, d);
+        expr->_children.clear();
         expr->_children.push_back(&col1);
 
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-
         ExprsTestHelper::verify_result_with_jit(ptr, expr.get(), runtime_state);
     }
 }
@@ -1094,7 +1092,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed1) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
     // non-exist type bitmap.
     *((uint8_t*)(buf.c_str())) = (uint8_t)14;
@@ -1127,7 +1125,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
     bitmap_value.add(1);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     expr_node.type = gen_type_desc(expr_node.child_type);
@@ -1163,7 +1161,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingleFailed) {
     bitmap_value.add(1);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     size_t half_length = buf.size() / 2;
@@ -1200,7 +1198,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
     bitmap_value.add(2);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     expr_node.type = gen_type_desc(expr_node.child_type);
@@ -1238,7 +1236,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSetFailed) {
     bitmap_value.add(2);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     size_t half_length = buf.size() / 2;
@@ -1277,7 +1275,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     expr_node.type = gen_type_desc(expr_node.child_type);
@@ -1318,7 +1316,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMapFailed) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
     size_t half_length = buf.size() / 2;
 

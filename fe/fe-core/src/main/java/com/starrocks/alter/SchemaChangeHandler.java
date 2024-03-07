@@ -43,9 +43,11 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
@@ -1167,6 +1169,8 @@ public class SchemaChangeHandler extends AlterHandler {
             bfFpp = 0;
         }
 
+        BloomFilterIndexUtil.analyseBfWithNgramBf(newSet, bfColumns);
+
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
@@ -2257,6 +2261,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
     @Override
     public void cancel(CancelStmt stmt) throws DdlException {
+        cancel(stmt, "user cancelled");
+    }
+
+    public void cancel(CancelStmt stmt, String reason) throws DdlException {
         CancelAlterTableStmt cancelAlterTableStmt = (CancelAlterTableStmt) stmt;
 
         String dbName = cancelAlterTableStmt.getDbName();
@@ -2300,7 +2308,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // alter job v2's cancel must be called outside the database lock
-        if (!schemaChangeJobV2.cancel("user cancelled")) {
+        if (!schemaChangeJobV2.cancel(reason)) {
             throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState());
         }
     }
@@ -2312,13 +2320,17 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
+        if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
+            throw new SemanticException("GIN does not support replicated mode");
+        }
+
         List<Index> existedIndexes = olapTable.getIndexes();
         IndexDef indexDef = alterClause.getIndexDef();
         Set<String> newColset = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {
             // check the index id only if the index is CompatibleIndex(GIN)
-            // Bitmap index's id is always be -1
+            // Bitmap index/Ngram Bloom filter index's id is always be -1
             if (IndexDef.IndexType.isCompatibleIndex(existedIdx.getIndexType()) &&
                     IndexDef.IndexType.isCompatibleIndex(newIndex.getIndexType()) &&
                     existedIdx.getIndexId() >= newIndex.getIndexId()) {
@@ -2340,9 +2352,14 @@ public class SchemaChangeHandler extends AlterHandler {
         for (String col : indexDef.getColumns()) {
             Column column = olapTable.getColumn(col);
             if (column != null) {
-                indexDef.checkColumn(column, olapTable.getKeysType());
+                // only throw DdlException
+                try {
+                    indexDef.checkColumn(column, olapTable.getKeysType());
+                } catch (Exception e) {
+                    throw new DdlException(e.getMessage());
+                }
             } else {
-                throw new DdlException("BITMAP column does not exist in table. invalid column: " + col);
+                throw new DdlException(indexDef.getIndexName() + " column does not exist in table. invalid column: " + col);
             }
         }
         Preconditions.checkArgument(newIndex.isValidIndex(),

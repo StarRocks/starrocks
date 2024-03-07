@@ -205,7 +205,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (optExpression.getOp().getProjection() != null) {
                 Projection projection = optExpression.getOp().getProjection();
                 context.needEncode = context.needEncode || projection.needApplyStringDict(context.allStringColumnIds);
-                if (context.needEncode) {
+                // When disableDictOptimizeColumns is not empty, we need to disable the columns
+                // that generate them for low cardinality optimization.
+                //
+                // This is because the upper-level nodes require the disabling of these
+                // columns as well as the columns that generate them.
+                // The upper-level node wants to avoid low-cardinality optimization columns
+                // to be executed in Shuffle partition by or Runtime Filter.
+
+                if (context.needEncode || !context.disableDictOptimizeColumns.isEmpty()) {
                     projection.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
                             context.allStringColumnIds);
                 }
@@ -332,7 +340,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             // top N node
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpression.getOp();
             context.needEncode = topN.couldApplyStringDict(context.allStringColumnIds);
-            if (context.needEncode) {
+            if (context.needEncode || !context.disableDictOptimizeColumns.isEmpty()) {
                 topN.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns, context.allStringColumnIds);
             }
 
@@ -467,7 +475,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     newOlapScan.setOutputColumns(newOutputColumns);
                     newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
                     newOlapScan.setNeedOutputChunkByBucket(scanOperator.needOutputChunkByBucket());
-
+                    newOlapScan.setWithoutColocateRequirement(scanOperator.isWithoutColocateRequirement());
                     OptExpression result = new OptExpression(newOlapScan);
                     result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
                             context.stringColumnIdToDictColumnIds));
@@ -747,6 +755,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
             newHashAggregator.setUsePerBucketOptmize(aggOperator.isUsePerBucketOptmize());
+            newHashAggregator.setWithoutColocateRequirement(aggOperator.isWithoutColocateRequirement());
             return newHashAggregator;
         }
 
@@ -814,7 +823,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 return aggExpr;
             }
             context.needEncode = aggOperator.couldApplyStringDict(context.allStringColumnIds);
-            if (context.needEncode) {
+            if (context.needEncode || !context.disableDictOptimizeColumns.isEmpty()) {
                 aggOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
                         context.allStringColumnIds);
             }

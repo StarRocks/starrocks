@@ -10,7 +10,7 @@ HLL is used for [approximate count distinct](../../../using_starrocks/Using_HLL.
 
 HLL enables the development of programmes based on the HyperLogLog algorithm. It is used to store intermediate results of the HyperLogLog calculation process. It can only be used as the value column type of the table. HLL reduces the amount of data through aggregation to speed up the query process. There may be a 1% deviation in the estimated results.
 
-HLL column is generated based on the imported data or data from other columns. When data is imported, the [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) function specifies which column will be used to generated the HLL column. HLL is often used to replace COUNT DISTINCT and quickly calculate unique views (UVs) with rollup.
+HLL column is generated based on the imported data or data from other columns. When data is imported, the [hll_hash](../../sql-functions/scalar-functions/hll_hash.md) function specifies which column will be used to generated the HLL column. HLL is often used to replace COUNT DISTINCT and quickly calculate unique views (UVs) with rollup.
 
 The storage space used by HLL is determined by the distinct values in the hash value. The storage space varies depending on three conditions:
 
@@ -21,7 +21,7 @@ The storage space used by HLL is determined by the distinct values in the hash v
 In actual business scenarios, data volume and data distribution affect the memory usage of queries and the accuracy of the approximate result. You need to consider these two factors:
 
 - Data volume: HLL returns an approximate value. A larger data volume results in a more accurate result. A smaller data volume results in larger deviation.
-- Data distribution：In the case of large data volume and high-cardinality dimension column for GROUP BY，data computation will use more memory. HLL is not recommended in this situation. It is recommended when you perform no-group-by count distinct or GROUP BY on low-cardinality dimension columns.
+- Data distribution: In the case of large data volume and high-cardinality dimension column for GROUP BY, data computation will use more memory. HLL is not recommended in this situation. It is recommended when you perform no-group-by count distinct or GROUP BY on low-cardinality dimension columns.
 - Query granularity: If you query data at a large query granularity, we recommend you use the Aggregate table or materialized view to pre-aggregate data to reduce data volume.
 
 ## Related functions
@@ -32,9 +32,9 @@ In actual business scenarios, data volume and data distribution affect the memor
 
 - HLL_CARDINALITY(hll): This function is used to estimate the cardinality of a single hll column.
 
-- [HLL_HASH(column_name)](../../sql-functions/aggregate-functions/hll_hash.md): This generates HLL column type and is used for inserts or imports. See the instructions for the use of imports.
+- [HLL_HASH(column_name)](../../sql-functions/scalar-functions/hll_hash.md): This generates HLL column type and is used for inserts or imports. See the instructions for the use of imports.
 
-- [HLL_EMPTY](../../sql-functions/aggregate-functions/hll_empty.md): This generates empty HLL column and is used to fill in default values during inserts or imports. See the instructions for the use of imports.
+- [HLL_EMPTY](../../sql-functions/scalar-functions/hll_empty.md): This generates empty HLL column and is used to fill in default values during inserts or imports. See the instructions for the use of imports.
 
 ## Examples
 

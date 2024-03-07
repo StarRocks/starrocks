@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# 行列混存表
+# 【公测中】行列混存表
 
 StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够提高复杂查询（例如聚合查询）的性能。自 3.2.3 开始，StarRocks 还支持行列混存的表存储格式，能够支撑基于主键的高并发、低延时点查，以及数据部分列更新等场景，同时还保留了原有列存的高效分析能力。此外，行列混存表还支持[预准备语句](../sql-reference/sql-statements/prepared_statement.md)，能够提高查询的性能和安全性。
 
@@ -17,7 +17,13 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 
 ### 创建行列混存表
 
-建表时在 `PROPERTIES` 中配置 `"STORE_TYPE" = "column_with_row"`。
+1. 开启 FE 配置项 `enable_experimental_rowstore`。
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
+   ```
+
+2. 建表时在 `PROPERTIES` 中配置 `"STORE_TYPE" = "column_with_row"`。
 
 :::note
 

@@ -38,6 +38,7 @@
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/inverted/index_descriptor.hpp"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
@@ -245,6 +246,10 @@ private:
 
     Status _apply_del_vector();
 
+    Status _init_inverted_index_iterators();
+
+    Status _apply_inverted_index();
+
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
     void _init_column_access_paths();
@@ -321,6 +326,9 @@ private:
 
     bool _inited = false;
     bool _has_bitmap_index = false;
+    bool _has_inverted_index = false;
+
+    std::vector<InvertedIndexIterator*> _inverted_index_iterators;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
@@ -406,14 +414,17 @@ Status SegmentIterator::_init() {
     _init_column_access_paths();
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
+
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_del_vector());
+    // Support prefilter for now
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    RETURN_IF_ERROR(_apply_inverted_index());
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
@@ -1809,6 +1820,74 @@ Status SegmentIterator::_apply_del_vector() {
     return Status::OK();
 }
 
+Status SegmentIterator::_init_inverted_index_iterators() {
+    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    _inverted_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
+    std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+
+    for (auto& field : _schema.fields()) {
+        cid_2_ucid[field->id()] = field->uid();
+    }
+    for (const auto& pair : _opts.predicates) {
+        ColumnId cid = pair.first;
+        ColumnUID ucid = cid_2_ucid[cid];
+
+        if (_inverted_index_iterators[cid] == nullptr) {
+            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts));
+            _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
+        }
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_apply_inverted_index() {
+    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    RETURN_IF(_scan_range.empty(), Status::OK());
+
+    RETURN_IF_ERROR(_init_inverted_index_iterators());
+    RETURN_IF(!_has_inverted_index, Status::OK());
+    SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_ns);
+
+    roaring::Roaring row_bitmap = range2roaring(_scan_range);
+    size_t input_rows = row_bitmap.cardinality();
+    std::vector<const ColumnPredicate*> erased_preds;
+
+    std::unordered_map<ColumnId, ColumnId> cid_2_fid;
+    for (int i = 0; i < _schema.num_fields(); i++) {
+        cid_2_fid.emplace(_schema.field(i)->id(), i);
+    }
+
+    for (auto& [cid, pred_list] : _opts.predicates) {
+        InvertedIndexIterator* inverted_iter = _inverted_index_iterators[cid];
+        if (inverted_iter == nullptr) {
+            continue;
+        }
+        const auto& it = cid_2_fid.find(cid);
+        RETURN_IF(it == cid_2_fid.end(),
+                  Status::InternalError(strings::Substitute("No fid can be mapped by cid $0", cid)));
+        std::string column_name(_schema.field(it->second)->name());
+        for (const ColumnPredicate* pred : pred_list) {
+            Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
+            if (res.ok()) {
+                erased_preds.emplace_back(pred);
+            }
+        }
+    }
+    DCHECK_LE(row_bitmap.cardinality(), _scan_range.span_size());
+    _scan_range = roaring2range(row_bitmap);
+
+    // ---------------------------------------------------------
+    // Erase predicates that hit inverted index.
+    // ---------------------------------------------------------
+    for (const ColumnPredicate* pred : erased_preds) {
+        PredicateList& pred_list = _opts.predicates[pred->column_id()];
+        pred_list.erase(std::find(pred_list.begin(), pred_list.end(), pred));
+    }
+
+    _opts.stats->rows_gin_filtered += input_rows - _scan_range.span_size();
+    return Status::OK();
+}
+
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF(_opts.predicates.empty(), Status::OK());
@@ -1930,6 +2009,12 @@ void SegmentIterator::close() {
 
     for (auto* iter : _bitmap_index_iterators) {
         delete iter;
+    }
+
+    for (auto* iter : _inverted_index_iterators) {
+        if (iter != nullptr) {
+            delete iter;
+        }
     }
 }
 

@@ -138,6 +138,15 @@ IOStatEntry* IOProfiler::get_context() {
     return current_io_stat;
 }
 
+IOProfiler::IOStat IOProfiler::get_context_io() {
+    if (current_io_stat != nullptr) {
+        return IOStat{current_io_stat->read_ops,  current_io_stat->read_bytes,  0,
+                      current_io_stat->write_ops, current_io_stat->write_bytes, 0};
+    } else {
+        return IOStat{0, 0, 0, 0, 0, 0};
+    }
+}
+
 void IOProfiler::set_context(IOStatEntry* entry) {
     current_io_stat = entry;
 }
@@ -159,7 +168,7 @@ void IOProfiler::_add_context_write(int64_t bytes) {
 }
 
 // Thread local IO statistics which accumulates all IO since the thread is started
-thread_local IOProfiler::IOStat tls_io_stat{0, 0, 0, 0, 0, 0};
+thread_local IOProfiler::IOStat tls_io_stat{0, 0, 0, 0, 0, 0, 0, 0};
 
 void IOProfiler::take_tls_io_snapshot(IOStat* snapshot) {
     snapshot->read_ops = tls_io_stat.read_ops;
@@ -168,13 +177,15 @@ void IOProfiler::take_tls_io_snapshot(IOStat* snapshot) {
     snapshot->write_ops = tls_io_stat.write_ops;
     snapshot->write_bytes = tls_io_stat.write_bytes;
     snapshot->write_time_ns = tls_io_stat.write_time_ns;
+    snapshot->sync_ops = tls_io_stat.sync_ops;
+    snapshot->sync_time_ns = tls_io_stat.sync_time_ns;
 }
 
 IOProfiler::IOStat IOProfiler::calculate_scoped_tls_io(const IOStat& snapshot) {
-    IOStat io_stat{
-            tls_io_stat.read_ops - snapshot.read_ops,         tls_io_stat.read_bytes - snapshot.read_bytes,
-            tls_io_stat.read_time_ns - snapshot.read_time_ns, tls_io_stat.write_ops - snapshot.write_ops,
-            tls_io_stat.write_bytes - snapshot.write_bytes,   tls_io_stat.write_time_ns - snapshot.write_time_ns};
+    IOStat io_stat{tls_io_stat.read_ops - snapshot.read_ops,         tls_io_stat.read_bytes - snapshot.read_bytes,
+                   tls_io_stat.read_time_ns - snapshot.read_time_ns, tls_io_stat.write_ops - snapshot.write_ops,
+                   tls_io_stat.write_bytes - snapshot.write_bytes,   tls_io_stat.write_time_ns - snapshot.write_time_ns,
+                   tls_io_stat.sync_ops - snapshot.sync_ops,         tls_io_stat.sync_time_ns - snapshot.sync_time_ns};
     return io_stat;
 }
 
@@ -188,6 +199,11 @@ void IOProfiler::_add_tls_write(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.write_ops += 1;
     tls_io_stat.write_bytes += bytes;
     tls_io_stat.write_time_ns += latency_ns;
+}
+
+void IOProfiler::_add_tls_sync(int64_t latency_ns) {
+    tls_io_stat.sync_ops += 1;
+    tls_io_stat.sync_time_ns += latency_ns;
 }
 
 const char* IOProfiler::tag_to_string(uint32_t tag) {

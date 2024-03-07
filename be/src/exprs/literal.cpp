@@ -169,7 +169,10 @@ bool VectorizedLiteral::is_compilable() const {
     return IRHelper::support_jit(_type.type);
 }
 
-// guarantee _type.type is right
+std::string VectorizedLiteral::jit_func_name_impl() const {
+    return "{" + type().debug_string() + "[" + _value->debug_string() + "]}";
+}
+
 StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
     bool only_null = _value->only_null();
     LLVMDatum datum(jit_ctx->builder, only_null);

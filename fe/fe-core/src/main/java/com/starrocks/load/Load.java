@@ -44,6 +44,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -74,6 +75,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -86,6 +88,7 @@ import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -256,6 +259,12 @@ public class Load {
             shadowColumnDescs.add(importColumnDesc);
         }
         return shadowColumnDescs;
+    }
+
+    public static boolean checDictQueryExpr(Expr checkExpr) {
+        List<DictQueryExpr> result = Lists.newArrayList();
+        checkExpr.collect(DictQueryExpr.class, result);
+        return result.size() != 0;
     }
 
     public static boolean tableSupportOpColumn(Table tbl) {
@@ -590,6 +599,24 @@ public class Load {
         for (Column column : tbl.getFullSchema()) {
             if (column.getDefineExpr() != null) {
                 mvDefineExpr.put(column.getName(), column.getDefineExpr());
+            }
+        }
+
+
+        if (dbName != null && !dbName.isEmpty()) {
+            for (Entry<String, Expr> entry : exprsByName.entrySet()) {
+                if (entry.getValue() != null && checDictQueryExpr(entry.getValue())) {
+                    if (ConnectContext.get() == null) {
+                        ConnectContext context = new ConnectContext();
+                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                        context.setCurrentUserIdentity(UserIdentity.ROOT);
+                        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+                        context.setQualifiedUser(UserIdentity.ROOT.getUser());
+                        context.setThreadLocalInfo();
+                    }
+                    ConnectContext.get().setDatabase(dbName);
+                    break;
+                }
             }
         }
 
@@ -1202,6 +1229,42 @@ public class Load {
         dos.writeInt(deleteJobSize);
 
         return checksum;
+    }
+    public static class CSVOptions {
+        public String columnSeparator = "\t";
+        public String rowDelimiter = "\n";
+    }
+
+    public static TFileFormatType getFormatType(String fileFormat, String path) {
+        if (fileFormat != null) {
+            if (fileFormat.toLowerCase().equals("parquet")) {
+                return TFileFormatType.FORMAT_PARQUET;
+            } else if (fileFormat.toLowerCase().equals("orc")) {
+                return TFileFormatType.FORMAT_ORC;
+            } else if (fileFormat.toLowerCase().equals("json")) {
+                return TFileFormatType.FORMAT_JSON;
+            }
+            // Attention: The compression type of csv format is from the suffix of filename.
+        }
+
+        String lowerCasePath = path.toLowerCase();
+        if (lowerCasePath.endsWith(".parquet") || lowerCasePath.endsWith(".parq")) {
+            return TFileFormatType.FORMAT_PARQUET;
+        } else if (lowerCasePath.endsWith(".orc")) {
+            return TFileFormatType.FORMAT_ORC;
+        } else if (lowerCasePath.endsWith(".gz")) {
+            return TFileFormatType.FORMAT_CSV_GZ;
+        } else if (lowerCasePath.endsWith(".bz2")) {
+            return TFileFormatType.FORMAT_CSV_BZ2;
+        } else if (lowerCasePath.endsWith(".lz4")) {
+            return TFileFormatType.FORMAT_CSV_LZ4_FRAME;
+        } else if (lowerCasePath.endsWith(".deflate")) {
+            return TFileFormatType.FORMAT_CSV_DEFLATE;
+        } else if (lowerCasePath.endsWith(".zst")) {
+            return TFileFormatType.FORMAT_CSV_ZSTD;
+        } else {
+            return TFileFormatType.FORMAT_CSV_PLAIN;
+        }
     }
 
 }

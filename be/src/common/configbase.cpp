@@ -22,96 +22,39 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <list>
-#include <map>
 #include <regex>
+#include <set>
 #include <string>
 
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
 #undef __IN_CONFIGBASE_CPP__
 
+#include <fmt/format.h>
+
 #include "common/status.h"
-#include "gutil/strings/substitute.h"
 
 namespace starrocks::config {
 
-std::map<std::string, Register::Field>* Register::_s_field_map = nullptr;
-std::map<std::string, std::string>* full_conf_map = nullptr;
-
-Properties props;
-
-// Because changes to the std::string type are not atomic,
-// we introduce a lock to protect mutable string type config item.
-std::mutex mstring_conf_lock;
-
-std::mutex* get_mstring_conf_lock() {
-    return &mstring_conf_lock;
-}
-
-// trim string
-std::string& trim(std::string& s) {
-    // rtrim
-    s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
-    // ltrim
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
-    return s;
-}
-
-// Split string by '='.
-void splitkv(const std::string& s, std::string& k, std::string& v) {
-    const char sep = '=';
-    size_t start = 0;
-    size_t end = 0;
-    if ((end = s.find(sep, start)) != std::string::npos) {
-        k = s.substr(start, end - start);
-        v = s.substr(end + 1);
-    } else {
-        k = s;
-        v = "";
-    }
-}
-
 // Replace env variables.
-bool replaceenv(std::string& s) {
+Status replaceenv(std::string& s) {
     std::size_t pos = 0;
     std::size_t start = 0;
     while ((start = s.find("${", pos)) != std::string::npos) {
         std::size_t end = s.find('}', start + 2);
         if (end == std::string::npos) {
-            return false;
+            return Status::InvalidArgument(s);
         }
         std::string envkey = s.substr(start + 2, end - start - 2);
         const char* envval = std::getenv(envkey.c_str());
         if (envval == nullptr) {
-            return false;
+            return Status::InvalidArgument(fmt::format("Non-existent environment variable: {}", envkey));
         }
         s.erase(start, end - start + 1);
         s.insert(start, envval);
         pos = start + strlen(envval);
     }
-    return true;
-}
-
-bool strtox(const std::string& valstr, bool& retval);
-bool strtox(const std::string& valstr, int16_t& retval);
-bool strtox(const std::string& valstr, int32_t& retval);
-bool strtox(const std::string& valstr, int64_t& retval);
-bool strtox(const std::string& valstr, double& retval);
-bool strtox(const std::string& valstr, std::string& retval);
-
-template <typename T>
-bool strtox(const std::string& valstr, std::vector<T>& retval) {
-    std::stringstream ss(valstr);
-    std::string item;
-    T t;
-    while (std::getline(ss, item, ',')) {
-        if (!strtox(trim(item), t)) {
-            return false;
-        }
-        retval.push_back(t);
-    }
-    return true;
+    return Status::OK();
 }
 
 bool strtox(const std::string& valstr, bool& retval) {
@@ -177,32 +120,24 @@ bool strtox(const std::string& valstr, std::string& retval) {
     return true;
 }
 
-// Load conf file.
-bool Properties::load(const char* filename) {
-    // If 'filename' is null, use the empty props.
-    if (filename == nullptr) {
-        return true;
-    }
+bool strtox(const std::string& valstr, MutableString& retval) {
+    retval = valstr;
+    return true;
+}
 
-    // Open the conf file
-    std::ifstream input(filename);
-    if (!input.is_open()) {
-        std::cerr << "config::load() failed to open the file:" << filename << std::endl;
-        return false;
-    }
-
-    // load properties
+inline bool parse_key_value_pairs(std::istream& input) {
     std::string line;
     std::string key;
     std::string value;
     std::regex doris_start("^doris_");
     line.reserve(512);
+    std::set<Field*> assigned_fields;
     while (input) {
         // Read one line at a time.
         std::getline(input, line);
 
         // Remove left and right spaces.
-        trim(line);
+        StripWhiteSpace(&line);
 
         // Ignore comments.
         if (line.empty() || line[0] == '#') {
@@ -210,190 +145,108 @@ bool Properties::load(const char* filename) {
         }
 
         // Read key and value.
-        splitkv(line, key, value);
-        trim(key);
-        trim(value);
+        std::pair<std::string, std::string> kv = strings::Split(line, strings::delimiter::Limit("=", 1));
+        StripWhiteSpace(&kv.first);
 
         // compatible with doris_config
-        key = std::regex_replace(key, doris_start, "");
+        kv.first = std::regex_replace(kv.first, doris_start, "");
 
-        if (key.compare("webserver_port") == 0) {
-            // Avoid overwriting the existing config.
-            if (file_conf_map.find("be_http_port") != file_conf_map.end()) {
-                continue;
-            }
-
-            key = "be_http_port";
+        auto op_field = Field::get(kv.first);
+        if (!op_field.has_value()) {
+            std::cerr << fmt::format("Ignored unknown config: {}\n", kv.first);
+            continue;
         }
-
-        // Insert into 'file_conf_map'.
-        file_conf_map[key] = value;
+        auto field = op_field.value();
+        if (assigned_fields.count(field) > 0) {
+            std::cerr << fmt::format("Duplicate assignment to config '{}', previous assignmet will be ignored\n",
+                                     field->name());
+        }
+        assigned_fields.insert(field);
+        if (bool r = field->set_value(kv.second); !r) {
+            std::cerr << fmt::format("Invalid value of config '{}': '{}'\n", kv.first, kv.second);
+            return false;
+        }
     }
-
-    // Close the conf file.
-    input.close();
-
     return true;
 }
 
-template <typename T>
-bool Properties::get(const char* key, const char* defstr, T& retval) const {
-    const auto& it = file_conf_map.find(std::string(key));
-    std::string valstr = it != file_conf_map.end() ? it->second : std::string(defstr);
-    trim(valstr);
-    if (!replaceenv(valstr)) {
+std::optional<Field*> Field::get(const std::string& name_or_alias) {
+    auto ret = std::optional<Field*>();
+    auto it = fields().find(name_or_alias);
+    if (it != fields().end()) {
+        ret.emplace(it->second);
+    }
+    return ret;
+}
+
+bool Field::set_value(std::string value) {
+    if (auto st = replaceenv(value); !st.ok()) {
         return false;
     }
-    return strtox(valstr, retval);
+    StripWhiteSpace(&value);
+    return parse_value(value);
 }
-
-template <typename T>
-bool update(const std::string& value, T& retval) {
-    std::string valstr(value);
-    trim(valstr);
-    if (!replaceenv(valstr)) {
-        return false;
-    }
-    return strtox(valstr, retval);
-}
-
-template <typename T>
-std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
-    size_t last = v.size() - 1;
-    for (size_t i = 0; i < v.size(); ++i) {
-        out << v[i];
-        if (i != last) {
-            out << ", ";
-        }
-    }
-    return out;
-}
-
-#define SET_FIELD(FIELD, TYPE, FILL_CONFMAP)                                                       \
-    if (strcmp((FIELD).type, #TYPE) == 0) {                                                        \
-        if (!props.get((FIELD).name, (FIELD).defval, *reinterpret_cast<TYPE*>((FIELD).storage))) { \
-            std::cerr << "config field error: " << (FIELD).name << std::endl;                      \
-            return false;                                                                          \
-        }                                                                                          \
-        if (FILL_CONFMAP) {                                                                        \
-            std::ostringstream oss;                                                                \
-            oss << (*reinterpret_cast<TYPE*>((FIELD).storage));                                    \
-            (*full_conf_map)[(FIELD).name] = oss.str();                                            \
-        }                                                                                          \
-        continue;                                                                                  \
-    }
 
 // Init conf fields.
-bool init(const char* filename, bool fillconfmap) {
-    // Load properties file.
-    if (!props.load(filename)) {
-        return false;
+bool init(const char* filename) {
+    std::ifstream input;
+    if (filename != nullptr) {
+        input.open(filename);
+        if (input.fail()) {
+            std::cerr << "Fail to open " << filename << std::endl;
+            return false;
+        }
     }
-    // Fill 'full_conf_map'.
-    if (fillconfmap && full_conf_map == nullptr) {
-        full_conf_map = new std::map<std::string, std::string>();
-    }
+    return init(input);
+}
 
-    // Set conf fields.
-    for (const auto& it : *Register::_s_field_map) {
-        SET_FIELD(it.second, bool, fillconfmap);
-        SET_FIELD(it.second, int16_t, fillconfmap);
-        SET_FIELD(it.second, int32_t, fillconfmap);
-        SET_FIELD(it.second, int64_t, fillconfmap);
-        SET_FIELD(it.second, double, fillconfmap);
-        SET_FIELD(it.second, std::string, fillconfmap);
-        SET_FIELD(it.second, std::vector<bool>, fillconfmap);
-        SET_FIELD(it.second, std::vector<int16_t>, fillconfmap);
-        SET_FIELD(it.second, std::vector<int32_t>, fillconfmap);
-        SET_FIELD(it.second, std::vector<int64_t>, fillconfmap);
-        SET_FIELD(it.second, std::vector<double>, fillconfmap);
-        SET_FIELD(it.second, std::vector<std::string>, fillconfmap);
+inline bool init_from_default_values() {
+    for (const auto& [name, field] : Field::fields()) {
+        if (!field->set_value(field->defval())) {
+            std::cerr << fmt::format("Invalid default value of config '{}': '{}'\n", name, field->defval());
+            return false;
+        }
     }
-
     return true;
 }
 
-#define UPDATE_FIELD(FIELD, VALUE, TYPE)                                                                    \
-    if (strcmp((FIELD).type, #TYPE) == 0) {                                                                 \
-        if (!update((VALUE), *reinterpret_cast<TYPE*>((FIELD).storage))) {                                  \
-            return Status::InvalidArgument(strings::Substitute("convert '$0' as $1 failed", VALUE, #TYPE)); \
-        }                                                                                                   \
-        if (full_conf_map != nullptr) {                                                                     \
-            std::ostringstream oss;                                                                         \
-            oss << (*reinterpret_cast<TYPE*>((FIELD).storage));                                             \
-            (*full_conf_map)[(FIELD).name] = oss.str();                                                     \
-        }                                                                                                   \
-        return Status::OK();                                                                                \
+bool init(std::istream& input) {
+    if (!init_from_default_values()) {
+        return false;
     }
 
-Status set_config(const std::string& field, const std::string& value) {
-    auto it = Register::_s_field_map->find(field);
-    if (it == Register::_s_field_map->end()) {
-        return Status::NotFound(strings::Substitute("'$0' is not found", field));
-    }
-
-    if (!it->second.valmutable) {
-        return Status::NotSupported(strings::Substitute("'$0' is not support to modify", field));
-    }
-
-    UPDATE_FIELD(it->second, value, bool);
-    UPDATE_FIELD(it->second, value, int16_t);
-    UPDATE_FIELD(it->second, value, int32_t);
-    UPDATE_FIELD(it->second, value, int64_t);
-    UPDATE_FIELD(it->second, value, double);
-    {
-        std::lock_guard lock(mstring_conf_lock);
-        UPDATE_FIELD(it->second, value, std::string);
-    }
-
-    // The other types are not thread safe to change dynamically.
-    return Status::NotSupported(
-            strings::Substitute("'$0' is type of '$1' which is not support to modify", field, it->second.type));
+    return parse_key_value_pairs(input);
 }
 
-std::string Register::Field::value() const {
-    if (strcmp(type, "bool") == 0) {
-        return std::to_string(*reinterpret_cast<bool*>(storage));
+Status set_config(const std::string& field, const std::string& value) {
+    auto it = Field::fields().find(field);
+    if (it == Field::fields().end()) {
+        return Status::NotFound(fmt::format("'{}' is not found", field));
     }
-    if (strcmp(type, "int16_t") == 0) {
-        return std::to_string(*reinterpret_cast<int16_t*>(storage));
+    if (!it->second->valmutable()) {
+        return Status::NotSupported(fmt::format("'{}' is immutable", field));
     }
-    if (strcmp(type, "int32_t") == 0) {
-        return std::to_string(*reinterpret_cast<int32_t*>(storage));
+    if (!it->second->set_value(value)) {
+        return Status::InvalidArgument(fmt::format("Invalid value of config '{}': '{}'", field, value));
     }
-    if (strcmp(type, "int64_t") == 0) {
-        return std::to_string(*reinterpret_cast<int64_t*>(storage));
-    }
-    if (strcmp(type, "double") == 0) {
-        return std::to_string(*reinterpret_cast<double*>(storage));
-    }
-    if (strcmp(type, "std::string") == 0) {
-        if (valmutable) {
-            std::lock_guard lock(mstring_conf_lock);
-            return *reinterpret_cast<std::string*>(storage);
-        } else {
-            return *reinterpret_cast<std::string*>(storage);
-        }
-    }
-    if (strcmp(type, "std::vector<std::string>") == 0) {
-        std::stringstream ss;
-        ss << *reinterpret_cast<std::vector<std::string>*>(storage);
-        return ss.str();
-    }
-    return strings::Substitute("unsupported config type: $0", type);
+    return Status::OK();
 }
 
 std::vector<ConfigInfo> list_configs() {
     std::vector<ConfigInfo> infos;
-    for (const auto& [name, field] : *Register::_s_field_map) {
+    for (const auto& [name, field] : Field::fields()) {
         auto& info = infos.emplace_back();
-        info.name = field.name;
-        info.value = field.value();
-        info.type = field.type;
-        info.defval = field.defval;
-        info.valmutable = field.valmutable;
+        info.name = field->name();
+        info.value = field->value();
+        info.type = field->type();
+        info.defval = field->defval();
+        info.valmutable = field->valmutable();
     }
     return infos;
+}
+
+void TEST_clear_configs() {
+    Field::clear_fields();
 }
 
 } // namespace starrocks::config

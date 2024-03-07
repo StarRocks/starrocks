@@ -67,6 +67,25 @@ private:
     StarRocksMetrics::instance()->metrics()->register_hook(                                               \
             #name, [&]() { StarRocksMetrics::instance()->name.set_value(func()); });
 
+#define METRICS_DEFINE_THREAD_POOL(threadpool_name)                                             \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_threadpool_size, MetricUnit::NOUNIT);            \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_executed_tasks_total, MetricUnit::NOUNIT);       \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_pending_time_ns_total, MetricUnit::NANOSECONDS); \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_execute_time_ns_total, MetricUnit::NANOSECONDS); \
+    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_queue_count, MetricUnit::NOUNIT)
+
+#define REGISTER_THREAD_POOL_METRICS(name, threadpool)                                                           \
+    do {                                                                                                         \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_threadpool_size, [this]() { return threadpool->max_threads(); })  \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_executed_tasks_total,                                             \
+                                        [this]() { return threadpool->total_executed_tasks(); })                 \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_pending_time_ns_total,                                            \
+                                        [this]() { return threadpool->total_pending_time_ns(); })                \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_execute_time_ns_total,                                            \
+                                        [this]() { return threadpool->total_execute_time_ns(); })                \
+        REGISTER_GAUGE_STARROCKS_METRIC(name##_queue_count, [this]() { return threadpool->num_queued_tasks(); }) \
+    } while (false)
+
 class StarRocksMetrics {
 public:
     // query execution
@@ -176,10 +195,45 @@ public:
     METRIC_DEFINE_INT_COUNTER(load_rows_total, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(load_bytes_total, MetricUnit::BYTES);
 
+    // Metrics for LoadChannel
+    // The number that LoadChannel#add_chunks is accessed
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_total, MetricUnit::OPERATIONS);
+    // Accumulated time that LoadChannel#add_chunks costs. The time can be divided into
+    // waiting memtable, waiting async delta writer, waiting replicas, and others.
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that waiting memtable costs in LoadChannel#add_chunks
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_memtable_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that waiting async delta writer costs in LoadChannel#add_chunks
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_writer_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that waiting replicas costs in LoadChannel#add_chunks
+    METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_wait_replica_duration_us, MetricUnit::MICROSECONDS);
+
+    // Metrics for async delta writer
+    // The number of AsyncDeltaWriter::_execute is accessed. Each execution may run multiple tasks
+    METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);
+    // The number of task that executed
+    METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_total, MetricUnit::OPERATIONS);
+    // Accumulated time that task execution costs
+    METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_execute_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that task pends in the queue
+    METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_pending_duration_us, MetricUnit::MICROSECONDS);
+
+    // Metrics for delta writer
+    // Accumulated time that delta writer waits for memtable flush. It's part of
+    // async_delta_writer_task_execute_duration_us
+    METRIC_DEFINE_INT_COUNTER(delta_writer_wait_flush_duration_us, MetricUnit::MICROSECONDS);
+    // Accumulated time that delta writer waits for secondary replicas sync. It's part of
+    // async_delta_writer_task_execute_duration_us
+    METRIC_DEFINE_INT_COUNTER(delta_writer_wait_replica_duration_us, MetricUnit::MICROSECONDS);
+
     METRIC_DEFINE_INT_COUNTER(memtable_flush_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(memtable_finalize_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_io_time_us, MetricUnit::MICROSECONDS);
-    METRIC_DEFINE_INT_COUNTER(memtable_flush_bytes_total, MetricUnit::BYTES);
+    // total memory size of memtables
+    METRIC_DEFINE_INT_COUNTER(memtable_flush_memory_bytes_total, MetricUnit::BYTES);
+    // total disk size of memtables which is smaller than memtable_flush_memory_bytes_total because of compression
+    METRIC_DEFINE_INT_COUNTER(memtable_flush_disk_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(segment_flush_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(segment_flush_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(segment_flush_io_time_us, MetricUnit::MICROSECONDS);
@@ -275,14 +329,14 @@ public:
     METRIC_DEFINE_UINT_GAUGE(brpc_endpoint_stub_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(tablet_writer_count, MetricUnit::NOUNIT);
 
-    // queue task count of thread pool
-    METRIC_DEFINE_UINT_GAUGE(publish_version_queue_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(async_delta_writer_queue_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(memtable_flush_queue_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(segment_replicate_queue_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(segment_flush_queue_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(update_apply_queue_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_UINT_GAUGE(pk_index_compaction_queue_count, MetricUnit::NOUNIT);
+    // thread pool metrics
+    METRICS_DEFINE_THREAD_POOL(publish_version);
+    METRICS_DEFINE_THREAD_POOL(async_delta_writer);
+    METRICS_DEFINE_THREAD_POOL(memtable_flush);
+    METRICS_DEFINE_THREAD_POOL(segment_replicate);
+    METRICS_DEFINE_THREAD_POOL(segment_flush);
+    METRICS_DEFINE_THREAD_POOL(update_apply);
+    METRICS_DEFINE_THREAD_POOL(pk_index_compaction);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 

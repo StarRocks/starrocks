@@ -101,11 +101,11 @@ select * from agg_test;
 -- !result
 alter table agg_test order by (k2,v1);
 -- result:
-E: (1064, 'Unexpected exception: The sort columns of AGGREGATE KEY table must be same with key columns')
+E: (1064, 'The sort columns of AGGREGATE KEY table must be same with key columns')
 -- !result
 alter table agg_test order by (k2);
 -- result:
-E: (1064, 'Unexpected exception: The sort columns of AGGREGATE KEY table must be same with key columns')
+E: (1064, 'The sort columns of AGGREGATE KEY table must be same with key columns')
 -- !result
 alter table agg_test order by (k1,k2);
 -- result:

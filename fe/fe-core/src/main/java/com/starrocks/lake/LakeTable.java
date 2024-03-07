@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
-import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
@@ -64,8 +63,7 @@ public class LakeTable extends OlapTable {
 
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
                      DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
-        super(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(), indexes, TableType.CLOUD_NATIVE);
+        super(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes, TableType.CLOUD_NATIVE);
     }
 
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
@@ -118,14 +116,23 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    public Runnable delete(boolean replay) {
-        onErase(replay);
-        return replay ? null : new DeleteLakeTableTask(this);
+    public boolean isDeleteRetryable() {
+        return true;
+    }
+
+    @Override
+    public boolean delete(long dbId, boolean replay) {
+        return LakeTableHelper.deleteTable(dbId, this, replay);
+    }
+
+    @Override
+    public boolean deleteFromRecycleBin(long dbId, boolean replay) {
+        return LakeTableHelper.deleteTableFromRecycleBin(dbId, this, replay);
     }
 
     @Override
     public AlterJobV2Builder alterTable() {
-        return new LakeTableAlterJobV2Builder(this);
+        return LakeTableHelper.alterTable(this);
     }
 
     @Override

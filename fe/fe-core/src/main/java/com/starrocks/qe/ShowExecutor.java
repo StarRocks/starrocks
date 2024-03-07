@@ -620,6 +620,7 @@ public class ShowExecutor {
             mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
             // task run status
             mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
+            mvStatus.setQueryRewriteStatus(mvTable.getQueryRewriteStatus());
             rowSets.add(mvStatus);
         }
 
@@ -1071,7 +1072,7 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.isSharedDataMode()) {
+        } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
@@ -2144,7 +2145,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), snapshotInfos);
     }
 
-    private void handleShowBackup() {
+    private void handleShowBackup() throws AnalysisException {
         ShowBackupStmt showStmt = (ShowBackupStmt) stmt;
         Database filterDb = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
         List<List<String>> infos = Lists.newArrayList();
@@ -2190,7 +2191,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
-    private void handleShowRestore() {
+    private void handleShowRestore() throws AnalysisException {
         ShowRestoreStmt showStmt = (ShowRestoreStmt) stmt;
         Database filterDb = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
         List<List<String>> infos = Lists.newArrayList();

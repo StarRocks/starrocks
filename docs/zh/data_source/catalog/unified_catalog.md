@@ -10,7 +10,7 @@ Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Un
 - 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据进行加工建模，并导入至 StarRocks。
 - 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
-为保证正常访问融合数据源内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问融合数据源内的数据，StarRocks 集群必须能够访问融合数据源的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 

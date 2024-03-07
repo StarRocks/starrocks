@@ -348,7 +348,13 @@ public:
     * @paramType: [ArrayBinaryColumn, BinaryColumn]
     * @return: MapColumn map<string,string>
     */
+    DEFINE_VECTORIZED_FN(str_to_map_v1);
 
+    /**
+    * @param: [string, delimiter, map_delimiter]
+    * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
     DEFINE_VECTORIZED_FN(str_to_map);
 
     /**
