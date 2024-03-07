@@ -136,15 +136,16 @@ public class BestMvSelector {
             if (ret != 0) {
                 return ret;
             }
-            // compare by row number
-            ret = Double.compare(context1.getMvStatistics().getOutputRowCount(),
-                    context2.getMvStatistics().getOutputRowCount());
+
+            // larger is better
+            ret = Integer.compare(context2.sortScore, context1.sortScore);
             if (ret != 0) {
                 return ret;
             }
 
-            // larger is better
-            ret = Integer.compare(context2.sortScore, context1.sortScore);
+            // compare by row number
+            ret = Double.compare(context1.getMvStatistics().getOutputRowCount(),
+                    context2.getMvStatistics().getOutputRowCount());
             if (ret != 0) {
                 return ret;
             }
@@ -178,9 +179,9 @@ public class BestMvSelector {
     }
 
     private int calcSortScore(MaterializedView mv, Set<String> equivalenceColumns, Set<String> nonEquivalenceColumns) {
-        List<Column> schema = mv.getBaseSchema();
+        List<Column> keyColumns = mv.getKeyColumnsByIndexId(mv.getBaseIndexId());
         int score = 0;
-        for (Column col : schema) {
+        for (Column col : keyColumns) {
             String columName = col.getName().toLowerCase();
             if (equivalenceColumns.contains(columName)) {
                 score++;
