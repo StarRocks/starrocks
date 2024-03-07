@@ -26,6 +26,7 @@ class FPE {
 public:
     FPE() = delete;
 
+    static std::string trim_leading_zeros(const std::string& str, size_t num_flag_pos);
     static std::string trim_zeros(const std::string& str, size_t num_flag_pos);
     static Status encrypt(std::string_view num_str, std::string_view key, char* buffer, int radix);
     static Status encrypt_num(std::string_view num_str, std::string_view key, std::string& value);
