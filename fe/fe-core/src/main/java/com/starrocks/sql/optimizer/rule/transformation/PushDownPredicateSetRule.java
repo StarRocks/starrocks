@@ -28,12 +28,17 @@ import java.util.List;
 import java.util.Map;
 
 public class PushDownPredicateSetRule {
-    static List<OptExpression> process(OptExpression input, OptimizerContext context) {
+    public static List<OptExpression> process(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator filterOperator = (LogicalFilterOperator) input.getOp();
 
         OptExpression setOptExpression = input.getInputs().get(0);
         LogicalSetOperator setOperator = (LogicalSetOperator) setOptExpression.getOp();
 
+        ScalarOperator filterPredicate = filterOperator.getPredicate();
+        if (setOperator.getProjection() != null) {
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(setOperator.getProjection().getColumnRefMap());
+            filterPredicate = rewriter.rewrite(filterOperator.getPredicate());
+        }
         for (int setChildIdx = 0; setChildIdx < setOptExpression.getInputs().size(); ++setChildIdx) {
             Map<ColumnRefOperator, ScalarOperator> operatorMap = new HashMap<>();
 
@@ -48,7 +53,7 @@ public class PushDownPredicateSetRule {
             }
 
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(operatorMap);
-            ScalarOperator rewriteExpr = rewriter.rewrite(filterOperator.getPredicate());
+            ScalarOperator rewriteExpr = rewriter.rewrite(filterPredicate);
 
             OptExpression filterOpExpression =
                     OptExpression.create(new LogicalFilterOperator(rewriteExpr), setOptExpression.inputAt(setChildIdx));

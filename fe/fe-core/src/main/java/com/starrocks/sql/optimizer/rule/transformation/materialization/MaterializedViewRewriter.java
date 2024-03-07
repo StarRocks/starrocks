@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -80,6 +81,7 @@ import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateSetRule;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -112,6 +114,8 @@ public class MaterializedViewRewriter {
     protected final OptimizerContext optimizerContext;
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
+    public static final int UNION_REWRITE_EAGER_MODE_1 = 1;
+    public static final int UNION_REWRITE_EAGER_MODE_2 = 1;
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -1547,7 +1551,7 @@ public class MaterializedViewRewriter {
                     //      set query_debug_options = "{'enableMVEagerUnionAllRewrite':true}";
                     // use union-all rewrite eagerly if union-all rewrite can be used.
                     ColumnRefSet queryOutputColumnRefs = rewriteContext.getQueryExpression().getOutputColumns();
-                    if (unionRewriteMode ==  2 && queryOutputColumnRefs != null
+                    if (unionRewriteMode == UNION_REWRITE_EAGER_MODE_2  && queryOutputColumnRefs != null
                             && queryOutputColumnRefs.contains(col)) {
                         return true;
                     }
@@ -1568,7 +1572,7 @@ public class MaterializedViewRewriter {
         }
         SessionVariable sessionVariable = optimizerContext.getSessionVariable();
         int unionRewriteMode = sessionVariable.getMaterializedViewUnionRewriteMode();
-        if (unionRewriteMode != 1 && unionRewriteMode != 2) {
+        if (unionRewriteMode != UNION_REWRITE_EAGER_MODE_1 && unionRewriteMode != UNION_REWRITE_EAGER_MODE_2) {
             return null;
         }
 
@@ -2121,12 +2125,20 @@ public class MaterializedViewRewriter {
 
     protected OptExpression addUnionAllExtraPredicate(OptExpression result,
                                                       ScalarOperator extraPredicate) {
-        Operator unionOp = result.getOp();
-        Preconditions.checkState(unionOp.getProjection() != null);
-        // TODO: Union's predicates cannot be extended to exec in the be, we can support it later.
-        Preconditions.checkState(unionOp.getPredicate() == null);
-        LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
-        return OptExpression.create(filter, result);
+        Operator op = result.getOp();
+        if (op instanceof LogicalSetOperator) {
+            LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
+            OptExpression filterOpt = OptExpression.create(filter, result);
+            // TODO: Refactor this so can use PUSH_DOWN_PREDICATE rule set after mv rewrite rule.
+            return PushDownPredicateSetRule.process(filterOpt, null).get(0);
+        } else {
+            // If op is aggregate operator, use setPredicate directly.
+            ScalarOperator origPredicate = op.getPredicate();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(op.getProjection().getColumnRefMap());
+            ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
+            op.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
+            return result;
+        }
     }
 
     protected EquationRewriter buildEquationRewriter(
