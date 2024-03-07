@@ -54,8 +54,10 @@ import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Formatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -549,6 +551,47 @@ public class RuntimeProfile {
     // or null if this map contains no mapping for the key.
     public String getInfoString(String key) {
         return infoStrings.get(key);
+    }
+
+    // Serializes profile to thrift. Not threadsafe.
+    public TRuntimeProfileTree toThrift() {
+        TRuntimeProfileTree profileTree = new TRuntimeProfileTree();
+        profileTree.setNodes(new ArrayList<>());
+        toThrift(profileTree.nodes);
+        return profileTree;
+    }
+
+    // Flatten the tree of runtime profiles by in-order traversal. Not threadsafe.
+    private void toThrift(List<TRuntimeProfileNode> nodes) {
+        TRuntimeProfileNode node = new TRuntimeProfileNode();
+        nodes.add(node);
+
+        node.setName(name);
+        node.setNum_children(childMap.size());
+        node.setIndent(true);
+
+        for (Map.Entry<String, Pair<Counter, String>> entry : counterMap.entrySet()) {
+            Counter counter = entry.getValue().first;
+            TCounter tCounter = new TCounter();
+            tCounter.setName(entry.getKey());
+            tCounter.setValue(counter.getValue());
+            tCounter.setType(counter.getType());
+            tCounter.setStrategy(counter.getStrategy());
+            node.addToCounters(tCounter);
+        }
+
+        for (Map.Entry<String, Set<String>> entry : childCounterMap.entrySet()) {
+            node.putToChild_counters_map(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+
+        for (Map.Entry<String, String> entry : infoStrings.entrySet()) {
+            node.putToInfo_strings(entry.getKey(), entry.getValue());
+            node.addToInfo_strings_display_order(entry.getKey());
+        }
+
+        for (RuntimeProfile child : childMap.values()) {
+            child.toThrift(nodes);
+        }
     }
 
     // Merge all the isomorphic sub profiles and the caller must know for sure

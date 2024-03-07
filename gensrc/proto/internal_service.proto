@@ -651,7 +651,6 @@ service PInternalService {
     rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
 
     rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
-
     rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
     rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
 

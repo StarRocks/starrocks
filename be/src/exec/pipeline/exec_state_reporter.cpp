@@ -80,8 +80,10 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
 
-            load_channel_profile->to_thrift(&params.load_channel_profile);
-            params.__isset.load_channel_profile = true;
+            if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                load_channel_profile->to_thrift(&params.load_channel_profile);
+                params.__isset.load_channel_profile = true;
+            }
         }
 
         if (!runtime_state->output_files().empty()) {

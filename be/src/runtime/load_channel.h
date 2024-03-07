@@ -119,12 +119,12 @@ public:
 
     Span get_span() { return _span; }
 
+    void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
+
 private:
     void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
-
-    void _report_profile(PTabletWriterAddBatchResult* result);
 
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;
@@ -160,7 +160,7 @@ private:
     bool _enable_profile{false};
     int64_t _big_query_profile_threshold_ns{-1};
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
-    std::atomic<int64_t> _last_report_time_ns{-1};
+    std::atomic<int64_t> _last_report_time_ns{0};
     std::atomic<bool> _final_report{false};
 
     RuntimeProfile::Counter* _index_num = nullptr;

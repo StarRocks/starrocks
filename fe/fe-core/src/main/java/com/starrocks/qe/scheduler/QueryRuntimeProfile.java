@@ -578,7 +578,7 @@ public class QueryRuntimeProfile {
 
         RuntimeProfile mergedChannelProfile =
                 RuntimeProfile.mergeIsomorphicProfiles(channelProfiles, Sets.newHashSet("Address"));
-        if (mergedChannelProfile == null ) {
+        if (mergedChannelProfile == null) {
             if (LOG.isDebugEnabled()) {
                 StringBuilder builder = new StringBuilder();
                 originProfile.prettyPrint(builder, "");

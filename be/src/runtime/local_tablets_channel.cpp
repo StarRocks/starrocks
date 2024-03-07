@@ -145,6 +145,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     MonotonicStopWatch watch;
     watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    auto t0 = std::chrono::steady_clock::now();
+    int64_t wait_memtable_flush_time_us = 0;
 
     if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -235,7 +237,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     std::unordered_map<int64_t, std::vector<int64_t>> node_id_to_abort_tablets;
     context->set_node_id_to_abort_tablets(&node_id_to_abort_tablets);
 
-    int64_t wait_memtable_flush_time_ns = 0;
     int32_t total_row_num = 0;
     for (int i = 0; i < channel_size; ++i) {
         size_t from = channel_row_idx_start_points[i];
@@ -251,14 +252,15 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
         // back pressure OlapTableSink since there are too many memtables need to flush
         while (delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
-            if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
+            auto t1 = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 > request.timeout_ms()) {
                 LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                           << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
                           << "ms still has queueing num " << delta_writer->get_flush_stats().queueing_memtable_num;
                 break;
             }
             bthread_usleep(10000); // 10ms
-            wait_memtable_flush_time_ns += 10000000;
+            wait_memtable_flush_time_us += 10000;
         }
 
         AsyncDeltaWriterRequest req;
@@ -317,7 +319,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     i++;
                     // only sleep in bthread
                     bthread_usleep(10000); // 10ms
-                    if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
+                    auto t1 = std::chrono::steady_clock::now();
+                    if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 >
+                        request.timeout_ms()) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                                   << " wait tablet " << tablet_id << " secondary replica finish timeout "
                                   << request.timeout_ms() << "ms still in state " << state;
@@ -328,7 +332,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     if (i % 6000 == 0) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                                   << " wait tablet " << tablet_id << " secondary replica finish already "
-                                  << watch.elapsed_time() / 1000000 << "ms still in state " << state;
+                                  << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000
+                                  << "ms still in state " << state;
                     }
                 } while (true);
             }
@@ -388,7 +393,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         _num_initial_senders.fetch_sub(1);
         std::string msg = fmt::format("LocalTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
         auto remain = request.timeout_ms();
-        remain -= watch.elapsed_time() / 1000000;
+        remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
 
         // unlock write lock so that incremental open can aquire read lock
         lk.unlock();
@@ -401,9 +406,10 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         last_execution_time_us = response->execution_time_us();
     }
     auto t1 = std::chrono::steady_clock::now();
-    response->set_execution_time_us(last_execution_time_us + watch.elapsed_time() / 1000);
+    response->set_execution_time_us(last_execution_time_us +
+                                    std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
-    response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_ns / 1000);
+    response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
     // reset error message if it already set by other replica
     {
@@ -416,14 +422,14 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
     auto wait_replica_ns = finish_wait_replica_ts - finish_wait_writer_ts;
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_memtable_duration_us.increment(
-            wait_memtable_flush_time_ns / 1000);
+            wait_memtable_flush_time_us);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
 
     COUNTER_UPDATE(_add_chunk_counter, 1);
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
     COUNTER_UPDATE(_add_row_num, total_row_num);
-    COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_ns);
+    COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_us * 1000);
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
     COUNTER_UPDATE(_wait_replica_timer, wait_replica_ns);
 
@@ -954,8 +960,8 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
 }
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                          MemTracker* mem_tracker, RuntimeProfile* profile) {
-    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, profile);
+                                                          MemTracker* mem_tracker, RuntimeProfile* parent_profile) {
+    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile);
 }
 
 } // namespace starrocks

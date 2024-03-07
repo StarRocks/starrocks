@@ -132,8 +132,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
         if (it == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
             if (is_lake_tablet) {
-                // TODO add profile for lake
-                channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get());
+                channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
             }
@@ -178,7 +177,7 @@ void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTablet
     } else {
         _add_chunk(nullptr, request, response);
     }
-    _report_profile(response);
+    report_profile(response, config::pipeline_print_profile);
 }
 
 void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWriterAddBatchResult* response) {
@@ -215,7 +214,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     }
     StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
     StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
-    _report_profile(response);
+    report_profile(response, config::pipeline_print_profile);
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -333,7 +332,7 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
     return Status::OK();
 }
 
-void LoadChannel::_report_profile(PTabletWriterAddBatchResult* result) {
+void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print_profile) {
     // report profile if enable profile or the query has run for a long time
     if (!_enable_profile) {
         if (_big_query_profile_threshold_ns <= 0) {
@@ -354,7 +353,7 @@ void LoadChannel::_report_profile(PTabletWriterAddBatchResult* result) {
         should_report = _final_report.compare_exchange_strong(old, true);
     } else {
         // runtime profile report
-        bool time_to_report = now - last_report_tims_ns > _runtime_profile_report_interval_ns;
+        bool time_to_report = now - last_report_tims_ns >= _runtime_profile_report_interval_ns;
         should_report = time_to_report && _last_report_time_ns.compare_exchange_strong(last_report_tims_ns, now);
     }
     if (!should_report) {
@@ -363,7 +362,7 @@ void LoadChannel::_report_profile(PTabletWriterAddBatchResult* result) {
 
     COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
 
-    if (config::pipeline_print_profile) {
+    if (print_profile) {
         std::stringstream ss;
         _root_profile->pretty_print(&ss);
         LOG(INFO) << ss.str();
