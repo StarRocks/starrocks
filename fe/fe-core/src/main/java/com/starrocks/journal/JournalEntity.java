@@ -1069,6 +1069,10 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_AUTH_UPGRADE_V2:
+                // for compatibility reason, just ignore the auth upgrade log
+                isRead = true;
+                break;
             case OperationType.OP_MV_JOB_STATE:
                 data = MVMaintenanceJob.read(in);
                 isRead = true;
