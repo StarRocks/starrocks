@@ -902,7 +902,8 @@ TEST_P(FpeFf1EncryptTestFixture, fpe_ff1_encryptTest) {
 
 INSTANTIATE_TEST_SUITE_P(
         FpeFf1EncryptTest, FpeFf1EncryptTestFixture,
-        ::testing::Values(std::make_tuple("1123123", "abcdefghijk12345abcdefghijk12345", 10, "0459571"),
+        ::testing::Values(std::make_tuple("0", "abcdefghijk12345abcdefghijk12345", 10, "608824"),
+                          std::make_tuple("1123123", "abcdefghijk12345abcdefghijk12345", 10, "0459571"),
                           std::make_tuple("23423274521", "abcdefghijk12345abcdefghijk12345", 10, "17651024676"),
                           std::make_tuple("469823423432", "abcdefghijk12345", 10, "539696457650")));
 
@@ -930,7 +931,8 @@ TEST_P(FpeFf1DecryptTestFixture, fpe_ff1_decryptTest) {
 
 INSTANTIATE_TEST_SUITE_P(
         FpeFf1DecryptTest, FpeFf1DecryptTestFixture,
-        ::testing::Values(std::make_tuple("0459571", "abcdefghijk12345abcdefghijk12345", 10, "1123123"),
+        ::testing::Values(std::make_tuple("608824", "abcdefghijk12345abcdefghijk12345", 10, "000000"),
+                          std::make_tuple("0459571", "abcdefghijk12345abcdefghijk12345", 10, "1123123"),
                           std::make_tuple("17651024676", "abcdefghijk12345abcdefghijk12345", 10, "23423274521"),
                           std::make_tuple("539696457650", "abcdefghijk12345", 10, "469823423432")));
 
@@ -957,6 +959,9 @@ TEST_P(FpeFf1NumEncryptTestFixture, fpe_ff1_encrypt_numTest) {
 INSTANTIATE_TEST_SUITE_P(
         FpeFf1NumEncryptTest, FpeFf1NumEncryptTestFixture,
         ::testing::Values(
+                std::make_tuple("-1000", "abcdefghijk12345abcdefghijk12345", "-1520384"),
+                std::make_tuple("0", "abcdefghijk12345abcdefghijk12345", "1608824"),
+                std::make_tuple("0.00", "abcdefghijk12345abcdefghijk12345", "1608824"),
                 std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
                 std::make_tuple("-82695393.42", "abcdefghijk12345abcdefghijk12345", "-115815106.800956527124541"),
                 std::make_tuple("-47724403.07", "abcdefghijk12345abcdefghijk12345", "-181831555.57492613140701"),
@@ -987,6 +992,8 @@ TEST_P(FpeFf1NumDecryptTestFixture, fpe_ff1_decrypt_numTest) {
 INSTANTIATE_TEST_SUITE_P(
         FpeFf1NumDecryptTest, FpeFf1NumDecryptTestFixture,
         ::testing::Values(
+                std::make_tuple("-1520384", "abcdefghijk12345abcdefghijk12345", "-1000"),
+                std::make_tuple("1608824", "abcdefghijk12345abcdefghijk12345", "0"),
                 std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
                 std::make_tuple("-115815106.800956527124541", "abcdefghijk12345abcdefghijk12345", "-82695393.42"),
                 std::make_tuple("-181831555.57492613140701", "abcdefghijk12345abcdefghijk12345", "-47724403.07"),

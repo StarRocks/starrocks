@@ -41,6 +41,10 @@ std::string FPE::trim_leading_zeros(const std::string& str, size_t num_flag_pos)
         ++start;
     }
 
+    if (start > end) {
+        return "0";
+    }
+
     return num_flag_pos == 0 ? str.substr(start) : str.substr(start).insert(0, 1, '-');
 }
 
@@ -54,13 +58,14 @@ std::string FPE::trim_zeros(const std::string& str, size_t num_flag_pos) {
     while (end >= start && str[end] == '0') {
         --end;
     }
-    if (start > end) {
-        return "0";
-    }
 
     // when 100.00 -> 100. remove .
     if (str[end] == '.') {
         --end;
+    }
+
+    if (start > end) {
+        return "0";
     }
 
     return num_flag_pos == 0 ? str.substr(start, end - start + 1)
@@ -166,7 +171,7 @@ Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::str
 
     if (dec_part.empty()) {
         result.resize(result_len);
-        value = result;
+        value = std::move(result);
 
         return Status::OK();
     } else {
@@ -194,7 +199,7 @@ Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::str
         ++result_len;
 
         result.resize(result_len);
-        value = result;
+        value = std::move(result);
 
         return Status::OK();
     }
@@ -231,7 +236,7 @@ Status FPE::decrypt_num(std::string_view num_str, std::string_view key, std::str
 
     if (dec_part.empty()) {
         result.resize(result_len);
-        value = trim_leading_zeros(result, num_flag_pos);
+        value = std::move(trim_leading_zeros(result, num_flag_pos));
 
         return Status::OK();
     } else {
@@ -250,7 +255,7 @@ Status FPE::decrypt_num(std::string_view num_str, std::string_view key, std::str
         result_len += dec_part_len;
 
         result.resize(result_len);
-        value = trim_zeros(result, num_flag_pos);
+        value = std::move(trim_zeros(result, num_flag_pos));
 
         return Status::OK();
     }
