@@ -158,15 +158,6 @@ Status DataStreamRecvr::NonPipelineSenderQueue::get_chunk(Chunk** chunk, const i
 
     if (closure != nullptr) {
         COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - queue_enter_time);
-        // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
-        // the execution thread will hold done and will not return, block brpc from sending packets,
-        // and the execution thread will call run() to let brpc continue to send packets,
-        // and there will be memory release
-#ifndef BE_TEST
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
-        DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-#endif
-
         closure->Run();
     }
 
@@ -451,11 +442,6 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
     DeferOp defer_op([&]() {
         auto* closure = item.closure;
         if (closure != nullptr) {
-#ifndef BE_TEST
-            MemTracker* prev_tracker =
-                    tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
-            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-#endif
             COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
             closure->Run();
             chunk_queue_state.blocked_closure_num--;

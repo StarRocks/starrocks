@@ -75,21 +75,15 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
     return Status::OK();
 }
 
-OrdinalIndexReader::OrdinalIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
-}
+OrdinalIndexReader::OrdinalIndexReader() {}
 
-OrdinalIndexReader::~OrdinalIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), mem_usage());
-}
+OrdinalIndexReader::~OrdinalIndexReader() {}
 
 StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const OrdinalIndexPB& meta,
                                         ordinal_t num_values) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta, num_values);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
-                                     mem_usage() - sizeof(OrdinalIndexReader))
         } else {
             _reset();
         }

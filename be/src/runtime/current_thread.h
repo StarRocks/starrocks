@@ -62,19 +62,20 @@ private:
         MemCacheManager(MemCacheManager&&) = delete;
 
         void consume(int64_t size) {
-            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
             if (_cache_size >= BATCH_SIZE) {
                 commit(false);
             }
+            if (_cache_size >= BATCH_SIZE || _cache_size <= -BATCH_SIZE || _reserved_bytes != 0) {
+                CHECK(false);
+            }
         }
 
         bool try_mem_consume(int64_t size) {
             MemTracker* cur_tracker = _loader();
             int64_t prev_reserved = _reserved_bytes;
-            size = _consume_from_reserved(size);
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -89,8 +90,14 @@ private:
                     _allocated_cache_size -= size;
                     _try_consume_mem_size = size;
                     tls_exceed_mem_tracker = limit_tracker;
+                    if (_cache_size >= BATCH_SIZE || _cache_size <= -BATCH_SIZE || _reserved_bytes != 0) {
+                        CHECK(false);
+                    }
                     return false;
                 }
+            }
+            if (_cache_size >= BATCH_SIZE || _cache_size <= -BATCH_SIZE || _reserved_bytes != 0) {
+                CHECK(false);
             }
             return true;
         }
@@ -116,17 +123,10 @@ private:
             return true;
         }
 
-        bool try_mem_reserve(int64_t reserve_bytes, MemTracker* tracker, int64_t limit) {
-            DCHECK(_reserved_bytes == 0);
-            DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes, tracker, limit)) {
-                _reserved_bytes = reserve_bytes;
-                return true;
-            }
-            return false;
-        }
-
         void release_reserved() {
+            if (_reserved_bytes != 0) {
+                CHECK(false);
+            }
             if (_reserved_bytes) {
                 release(_reserved_bytes);
                 _reserved_bytes = 0;
@@ -138,6 +138,9 @@ private:
             _deallocated_cache_size += size;
             if (_cache_size <= -BATCH_SIZE) {
                 commit(false);
+            }
+            if (_cache_size >= BATCH_SIZE || _cache_size <= -BATCH_SIZE || _reserved_bytes != 0) {
+                CHECK(false);
             }
         }
 
@@ -167,17 +170,6 @@ private:
         int64_t get_consumed_bytes() const { return _total_consumed_bytes; }
 
     private:
-        int64_t _consume_from_reserved(int64_t size) {
-            if (_reserved_bytes > size) {
-                _reserved_bytes -= size;
-                size = 0;
-            } else {
-                size -= _reserved_bytes;
-                _reserved_bytes = 0;
-            }
-            return size;
-        }
-
         const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
         std::function<MemTracker*()> _loader;
@@ -212,8 +204,6 @@ public:
     const starrocks::TUniqueId& fragment_instance_id() { return _fragment_instance_id; }
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
-
-    void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
     const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
 
@@ -265,13 +255,6 @@ public:
     bool try_mem_consume(int64_t size) {
         if (_mem_cache_manager.try_mem_consume(size)) {
             _operator_mem_cache_manager.consume(size);
-            return true;
-        }
-        return false;
-    }
-
-    bool try_mem_reserve(int64_t size, MemTracker* tracker, int64_t limit) {
-        if (_mem_cache_manager.try_mem_reserve(size, tracker, limit)) {
             return true;
         }
         return false;
@@ -337,19 +320,9 @@ inline thread_local CurrentThread tls_thread_status;
 
 class CurrentThreadMemTrackerSetter {
 public:
-    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
-        _old_mem_tracker = tls_thread_status.mem_tracker();
-        _is_same = (_old_mem_tracker == new_mem_tracker);
-        if (!_is_same) {
-            tls_thread_status.set_mem_tracker(new_mem_tracker);
-        }
-    }
+    explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {}
 
-    ~CurrentThreadMemTrackerSetter() {
-        if (!_is_same) {
-            (void)tls_thread_status.set_mem_tracker(_old_mem_tracker);
-        }
-    }
+    ~CurrentThreadMemTrackerSetter() {}
 
     CurrentThreadMemTrackerSetter(const CurrentThreadMemTrackerSetter&) = delete;
     void operator=(const CurrentThreadMemTrackerSetter&) = delete;
@@ -439,10 +412,6 @@ private:
 #define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
     SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)            \
     auto VARNAME_LINENUM(defer) = DeferOp([] { RESET_TRACE_INFO() });
-
-#define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)                \
-    CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg); \
-    auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().set_custom_coredump_msg({}); });
 
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \

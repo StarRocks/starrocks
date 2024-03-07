@@ -31,7 +31,6 @@ bool UnorderedMemTable::is_empty() {
 }
 
 Status UnorderedMemTable::append(ChunkPtr chunk) {
-    _tracker->consume(chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
     _chunks.emplace_back(std::move(chunk));
     return Status::OK();
@@ -40,7 +39,6 @@ Status UnorderedMemTable::append(ChunkPtr chunk) {
 Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunks.empty() || _chunks.back()->num_rows() + size > _runtime_state->chunk_size()) {
         _chunks.emplace_back(src.clone_empty());
-        _tracker->consume(_chunks.back()->memory_usage());
         COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, _chunks.back()->memory_usage());
     }
 
@@ -49,7 +47,6 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
     current->append_selective(src, indexes, from, size);
     mem_usage = current->memory_usage() - mem_usage;
 
-    _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
 
     return Status::OK();
@@ -60,7 +57,6 @@ Status UnorderedMemTable::flush(FlushCallBack callback) {
         RETURN_IF_ERROR(callback(chunk));
     }
     int64_t consumption = _tracker->consumption();
-    _tracker->release(consumption);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
     _chunks.clear();
     return Status::OK();
@@ -100,7 +96,6 @@ Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* index
     _chunk->append_selective(src, indexes, from, size);
     mem_usage = current->memory_usage() - mem_usage;
 
-    _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
 
     return Status::OK();
@@ -113,7 +108,6 @@ Status OrderedMemTable::flush(FlushCallBack callback) {
     }
     _chunk_slice.reset(nullptr);
     int64_t consumption = _tracker->consumption();
-    _tracker->release(consumption);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
     _chunk.reset();
     return Status::OK();

@@ -692,7 +692,6 @@ TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {
     auto manager = StorageEngine::instance()->update_manager();
     // set memory tracker limit
     manager->mem_tracker()->set_limit(1);
-    manager->mem_tracker()->consume(2);
 
     EditVersion version(0, 0);
     index_meta.set_key_size(0);
