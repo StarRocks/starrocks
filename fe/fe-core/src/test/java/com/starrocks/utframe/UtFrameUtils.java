@@ -713,6 +713,9 @@ public class UtFrameUtils {
             }
         });
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateTableStmtMap().entrySet()) {
+            if (entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
+                continue;
+            }
             String dbName = entry.getKey().split("\\.")[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
@@ -722,19 +725,36 @@ public class UtFrameUtils {
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
+            String normalizedViewName = entry.getKey();
+            String[] nameParts = normalizedViewName.split("\\.");
+            String dbName = nameParts[0];
+            if (!starRocksAssert.databaseExist(dbName)) {
+                starRocksAssert.withDatabase(dbName);
+            }
+            String viewName = nameParts[1];
+            starRocksAssert.useDatabase(dbName);
+            String createView = String.format("create view `%s`.`%s` as %s",
+                    dbName, viewName, replayDumpInfo.getCreateViewStmtMap().get(normalizedViewName));
+            starRocksAssert.withView(createView);
+        }
+        // create materialized views
+        for (Map.Entry<String, String> entry : replayDumpInfo.getCreateTableStmtMap().entrySet()) {
+            if (!entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
+                continue;
+            }
             String dbName = entry.getKey().split("\\.")[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
             }
             starRocksAssert.useDatabase(dbName);
-            String createView = "create view " + entry.getKey() + " as " + entry.getValue();
-            starRocksAssert.withView(createView);
+            starRocksAssert.withSingleReplicaAsyncMv(entry.getValue());
         }
         // mock be num
         backendId = 10002;
         for (int i = 1; i < replayDumpInfo.getBeNum(); ++i) {
             UtFrameUtils.addMockBackend(backendId++);
         }
+
         // mock be core stat
         for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
             BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
