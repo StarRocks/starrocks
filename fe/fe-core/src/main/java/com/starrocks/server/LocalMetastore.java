@@ -2048,7 +2048,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         for (Tablet tablet : index.getTablets()) {
             List<Long> nodeIdsOfReplicas = new ArrayList<>();
-            if (RunMode.isSharedNothingMode()) {
+            if (table.isCloudNativeTableOrMaterializedView()) {
                 try {
                     Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                     long nodeId = ((LakeTablet) tablet).
