@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <atomic>
 #include <iostream>
 
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"
@@ -39,19 +41,31 @@
 #define STARROCKS_VALLOC(size) je_valloc(size)
 
 #ifndef BE_TEST
-#define MEMORY_CONSUME_SIZE(size)                                  \
-    do {                                                           \
-        starrocks::CurrentThread::mem_consume_without_cache(size); \
+#define MEMORY_CONSUME_SIZE(size)                                      \
+    do {                                                               \
+        if (LIKELY(starrocks::tls_is_thread_status_init)) {            \
+            starrocks::tls_thread_status.mem_consume(size);            \
+        } else {                                                       \
+            starrocks::CurrentThread::mem_consume_without_cache(size); \
+        }                                                              \
     } while (0)
-#define MEMORY_RELEASE_SIZE(size)                                  \
-    do {                                                           \
-        starrocks::CurrentThread::mem_release_without_cache(size); \
+#define MEMORY_RELEASE_SIZE(size)                                      \
+    do {                                                               \
+        if (LIKELY(starrocks::tls_is_thread_status_init)) {            \
+            starrocks::tls_thread_status.mem_release(size);            \
+        } else {                                                       \
+            starrocks::CurrentThread::mem_release_without_cache(size); \
+        }                                                              \
     } while (0)
 #define MEMORY_CONSUME_PTR(ptr) MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr))
 #define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(STARROCKS_MALLOC_SIZE(ptr))
-#define TRY_MEM_CONSUME(size, err_ret)                                                               \
-    do {                                                                                             \
-        RETURN_IF_UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size), err_ret); \
+#define TRY_MEM_CONSUME(size, err_ret)                                                                   \
+    do {                                                                                                 \
+        if (LIKELY(starrocks::tls_is_thread_status_init)) {                                              \
+            RETURN_IF_UNLIKELY(!starrocks::tls_thread_status.try_mem_consume(size), err_ret);            \
+        } else {                                                                                         \
+            RETURN_IF_UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size), err_ret); \
+        }                                                                                                \
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
     starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
@@ -65,6 +79,37 @@ std::atomic<int64_t> g_mem_usage(0);
 #define TRY_MEM_CONSUME(size, err_ret) g_mem_usage.fetch_add(size)
 #define SET_EXCEED_MEM_TRACKER() (void)0
 #define IS_BAD_ALLOC_CATCHED() false
+#endif
+
+const size_t large_memory_alloc_report_threshold = 1073741824;
+inline thread_local bool skip_report = false;
+inline void report_large_memory_alloc(size_t size) {
+    if (size > large_memory_alloc_report_threshold && !skip_report) {
+        skip_report = true; // to avoid recursive output log
+        try {
+            auto qid = starrocks::CurrentThread::current().query_id();
+            auto fid = starrocks::CurrentThread::current().fragment_instance_id();
+            LOG(WARNING) << "large memory alloc, query_id:" << print_id(qid) << " instance: " << print_id(fid)
+                         << " acquire:" << size << " bytes, stack:\n"
+                         << starrocks::get_stack_trace();
+        } catch (...) {
+            // do nothing
+        }
+        skip_report = false;
+    }
+}
+#define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) report_large_memory_alloc(size)
+
+DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
+
+#ifdef FIU_ENABLE
+#define FAIL_POINT_INJECT_MEM_ALLOC_ERROR(retVal)                                       \
+    FAIL_POINT_TRIGGER_EXECUTE(mem_alloc_error, {                                       \
+        LOG(INFO) << "inject mem alloc error, stack: " << starrocks::get_stack_trace(); \
+        return retVal;                                                                  \
+    });
+#else
+#define FAIL_POINT_INJECT_MEM_ALLOC_ERROR(retVal) (void)0
 #endif
 
 extern "C" {
@@ -110,6 +155,7 @@ void my_free(void* p) __THROW {
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     // If new_size is zero, the behavior is implementation defined
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
@@ -120,6 +166,7 @@ void* my_realloc(void* p, size_t size) __THROW {
 
     if (IS_BAD_ALLOC_CATCHED()) {
         size_t check_size = STARROCKS_NALLOX(size, 0);
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         if (size >= old_size) {
             TRY_MEM_CONSUME(size - old_size, nullptr);
             void* ptr = STARROCKS_REALLOC(p, size);
