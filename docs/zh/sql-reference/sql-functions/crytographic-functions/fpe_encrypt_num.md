@@ -21,7 +21,7 @@ fpe_encrypt_num(str, key);
 
 ## 参数说明
 
-`str`: 要加密的字符串，支持的数据类型为 VARCHAR。
+`str`: 加密以字符串格式表示decimal类型的数据，例如 "-123.456"，支持的数据类型为 VARCHAR。
 
 `key`: 用于加密 `str` 的 key 字符串，长度限制为16、24或者32，支持的数据类型为 VARCHAR。
 

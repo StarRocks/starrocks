@@ -24,7 +24,7 @@ fpe_encrypt_num(str, key);
 
 ## Parameters
 
-`str`: The string to encrypt. It must be of the VARCHAR type.
+`str`: The string is decimal in string format to encrypt, like "-123.456". It must be of the VARCHAR type.
 
 `key`: The key string used to encrypt str, with a length limit of 16, 24, or 32,. It must be of the VARCHAR type.
 
