@@ -261,7 +261,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 MaterializedIndex rollupIndex = entry.getValue();
 
                 TTabletSchema tabletSchema = SchemaInfo.builder()
-                        .setId(rollupIndexId)
+                        .setId(rollupIndexId) // For newly created materialized, schema id equals to index id
                         .setVersion(rollupSchemaVersion)
                         .setKeysType(rollupKeysType)
                         .setShortKeyColumnCount(rollupShortKeyColumnCount)

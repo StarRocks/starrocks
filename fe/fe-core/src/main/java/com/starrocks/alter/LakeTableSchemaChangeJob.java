@@ -337,7 +337,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     }
 
                     TTabletSchema tabletSchema = SchemaInfo.builder()
-                            .setId(shadowIdxId)
+                            .setId(shadowIdxId) // For newly create materialized index, schema id equals to index id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
                             .setSortKeyUniqueIds(copiedSortKeyIdxes)
@@ -374,6 +374,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                                 .setCompressionType(table.getCompressionType())
                                 .setCreateSchemaFile(createSchemaFile)
+                                .setTabletSchema(tabletSchema)
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;

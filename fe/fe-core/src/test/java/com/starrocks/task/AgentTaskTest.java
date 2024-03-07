@@ -135,6 +135,7 @@ public class AgentTaskTest {
                 .setStorageMedium(TStorageMedium.SSD)
                 .setTabletType(TTabletType.TABLET_TYPE_DISK)
                 .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
                 .build();
 
         // drop

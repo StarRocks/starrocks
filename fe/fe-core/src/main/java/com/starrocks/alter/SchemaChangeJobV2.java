@@ -314,7 +314,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
                     List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
                     TTabletSchema tabletSchema = SchemaInfo.builder()
-                            .setId(shadowIdxId)
+                            .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
                             .setVersion(shadowSchemaVersion)
