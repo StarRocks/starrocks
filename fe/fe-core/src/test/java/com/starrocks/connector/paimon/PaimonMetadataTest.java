@@ -47,7 +47,8 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.DataTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
@@ -124,7 +125,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetTable(@Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+    public void testGetTable(@Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         List<DataField> fields = new ArrayList<>();
         fields.add(new DataField(1, "col2", new IntType(true)));
         fields.add(new DataField(2, "col3", new DoubleType(false)));
@@ -155,7 +156,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testTableExists(@Mocked AbstractFileStoreTable paimonNativeTable) {
+    public void testTableExists(@Mocked FileStoreTable paimonNativeTable) {
         new Expectations() {
             {
                 paimonNativeCatalog.tableExists((Identifier) any);
@@ -166,7 +167,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testListPartitionNames(@Mocked AbstractFileStoreTable paimonNativeTable,
+    public void testListPartitionNames(@Mocked FileStoreTable paimonNativeTable,
                                        @Mocked ReadBuilder readBuilder) throws Catalog.TableNotExistException {
 
         RowType partitionRowType = RowType.of(
@@ -199,7 +200,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetRemoteFileInfos(@Mocked AbstractFileStoreTable paimonNativeTable,
+    public void testGetRemoteFileInfos(@Mocked FileStoreTable paimonNativeTable,
                                        @Mocked ReadBuilder readBuilder)
             throws Catalog.TableNotExistException {
         new Expectations() {
@@ -221,7 +222,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testPrunePaimonPartition(@Mocked AbstractFileStoreTable paimonNativeTable,
+    public void testPrunePaimonPartition(@Mocked DataTable paimonNativeTable,
                                          @Mocked ReadBuilder readBuilder) {
         new MockUp<MetadataMgr>() {
             @Mock
