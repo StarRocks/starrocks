@@ -354,11 +354,14 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (context.hasEncoded || needRewrite) {
                 if (needRewrite) {
                     PhysicalTopNOperator newTopN = rewriteTopNOperator(topN, context);
-                    OptExpression result = OptExpression.create(newTopN, newChildExpr);
-                    result.setStatistics(optExpression.getStatistics());
-                    result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
-                            context.stringColumnIdToDictColumnIds));
-                    return visitProjectionAfter(result, context);
+                    OptExpression.Builder builder = OptExpression.builder()
+                            .setOp(newTopN)
+                            .setInputs(Lists.newArrayList(newChildExpr))
+                            .setStatistics(optExpression.getStatistics())
+                            .setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                                    context.stringColumnIdToDictColumnIds))
+                            .setCost(optExpression.getCost());
+                    return visitProjectionAfter(builder.build(), context);
                 } else {
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), 0, context);
                     return visitProjectionAfter(optExpression, context);
@@ -476,11 +479,15 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     newOlapScan.setNeedSortedByKeyPerTablet(scanOperator.needSortedByKeyPerTablet());
                     newOlapScan.setNeedOutputChunkByBucket(scanOperator.needOutputChunkByBucket());
                     newOlapScan.setWithoutColocateRequirement(scanOperator.isWithoutColocateRequirement());
-                    OptExpression result = new OptExpression(newOlapScan);
-                    result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
-                            context.stringColumnIdToDictColumnIds));
-                    result.setStatistics(optExpression.getStatistics());
-                    return visitProjectionAfter(result, context);
+
+                    OptExpression.Builder builder = OptExpression.builder()
+                            .setOp(newOlapScan)
+                            .setInputs(Lists.newArrayList())
+                            .setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                            context.stringColumnIdToDictColumnIds))
+                            .setStatistics(optExpression.getStatistics())
+                            .setCost(optExpression.getCost());
+                    return visitProjectionAfter(builder.build(), context);
                 }
             }
             return visitProjectionAfter(optExpression, context);
@@ -843,11 +850,14 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (context.hasEncoded || needRewrite) {
                 if (needRewrite && unsupportedAggs.isEmpty()) {
                     PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator, context);
-                    OptExpression result = OptExpression.create(newAggOper, newChildExpr);
-                    result.setStatistics(aggExpr.getStatistics());
-                    result.setLogicalProperty(
-                            rewriteLogicProperty(aggExpr.getLogicalProperty(), context.stringColumnIdToDictColumnIds));
-                    return visitProjectionAfter(result, context);
+                    OptExpression.Builder builder = OptExpression.builder()
+                            .setOp(newAggOper)
+                            .setInputs(Lists.newArrayList(newChildExpr))
+                            .setStatistics(aggExpr.getStatistics())
+                            .setCost(aggExpr.getCost())
+                            .setLogicalProperty(rewriteLogicProperty(aggExpr.getLogicalProperty(),
+                                    context.stringColumnIdToDictColumnIds));
+                    return visitProjectionAfter(builder.build(), context);
                 } else {
                     insertDecodeExpr(aggExpr, Collections.singletonList(newChildExpr), 0, context);
                     return visitProjectionAfter(aggExpr, context);
@@ -875,11 +885,14 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 if (exchangeOperator.couldApplyStringDict(context.getEncodedStringCols())) {
                     PhysicalDistributionOperator newExchangeOper = rewriteDistribution(exchangeOperator, context);
 
-                    OptExpression result = OptExpression.create(newExchangeOper, newChildExpr);
-                    result.setStatistics(exchangeExpr.getStatistics());
-                    result.setLogicalProperty(rewriteLogicProperty(exchangeExpr.getLogicalProperty(),
-                            context.stringColumnIdToDictColumnIds));
-                    return visitProjectionAfter(result, context);
+                    OptExpression.Builder builder = OptExpression.builder()
+                            .setOp(newExchangeOper)
+                            .setInputs(Lists.newArrayList(newChildExpr))
+                            .setStatistics(exchangeExpr.getStatistics())
+                            .setCost(exchangeExpr.getCost())
+                            .setLogicalProperty(rewriteLogicProperty(exchangeExpr.getLogicalProperty(),
+                                    context.stringColumnIdToDictColumnIds));
+                    return visitProjectionAfter(builder.build(), context);
                 } else {
                     insertDecodeExpr(exchangeExpr, Collections.singletonList(newChildExpr), 0, context);
                     return visitProjectionAfter(exchangeExpr, context);
@@ -976,14 +989,16 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
                 Maps.newHashMap(context.stringFunctions));
-        OptExpression result = OptExpression.create(decodeOperator, childExpr);
-        result.setStatistics(childExpr.get(0).getStatistics());
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
-        result.setLogicalProperty(
-                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
+        OptExpression.Builder builder = OptExpression.builder()
+                .setOp(decodeOperator)
+                .setInputs(Lists.newArrayList(childExpr))
+                .setStatistics(childExpr.get(0).getStatistics())
+                .setCost(childExpr.get(0).getCost())
+                .setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
         context.clear();
-        return result;
+        return builder.build();
     }
 
     // Check if an expression can be optimized using a dictionary

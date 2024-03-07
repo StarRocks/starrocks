@@ -2870,4 +2870,7 @@ public class Config extends ConfigBase {
     // The longest supported VARCHAR length.
     @ConfField(mutable = true)
     public static int max_varchar_length = 1048576;
+
+    @ConfField(mutable = true)
+    public static int adaptive_choose_instances_threshold = 32;
 }
