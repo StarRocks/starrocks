@@ -76,6 +76,8 @@ public class QueryRuntimeProfile {
      */
     private static final Long MARKED_COUNT_DOWN_VALUE = -1L;
 
+    public static final String LOAD_CHANNEL_PROFILE_NAME = "LoadChannel";
+
     private final JobSpec jobSpec;
 
     private final ConnectContext connectContext;
@@ -140,7 +142,7 @@ public class QueryRuntimeProfile {
         }
 
         if (jobSpec.hasOlapTableSink()) {
-            loadChannelProfile = Optional.of(new RuntimeProfile("LoadChannel"));
+            loadChannelProfile = Optional.of(new RuntimeProfile(LOAD_CHANNEL_PROFILE_NAME));
             queryProfile.addChild(loadChannelProfile.get());
         } else {
             loadChannelProfile = Optional.empty();
