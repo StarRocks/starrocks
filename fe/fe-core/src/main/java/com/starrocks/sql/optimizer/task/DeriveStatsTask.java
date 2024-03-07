@@ -65,7 +65,7 @@ public class DeriveStatsTask extends OptimizerTask {
         // choose best statistics
         Statistics groupExpressionStatistics = expressionContext.getStatistics();
         if (needUpdateGroupStatistics(currentStatistics, groupExpressionStatistics)) {
-            if (isMaterializedView(groupExpression)) {
+            if (currentStatistics != null && isMaterializedView(groupExpression)) {
                 // use statistics of materialized view because it is more accurate
                 Statistics.Builder newBuilder = Statistics.buildFrom(currentStatistics);
                 newBuilder.setOutputRowCount(groupExpressionStatistics.getOutputRowCount());
