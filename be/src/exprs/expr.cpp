@@ -821,9 +821,10 @@ bool Expr::should_compile(RuntimeState* state) const {
 
     if (state->is_adaptive_jit()) {
         auto score = compute_jit_score(state);
-        LOG(INFO) << "JIT score expr: score = " << score.score << " / " << score.num << " = "
-                  << score.score * 1.0 / score.num;
-        if (score.score * 1.0 / score.num < 0.8) {
+        auto valid = (score.score > score.num * IRHelper::jit_score_ratio && score.num > 2);
+        VLOG_QUERY << "JIT score expr: score = " << score.score << " / " << score.num << " = "
+                   << score.score * 1.0 / score.num << " valid = " << valid << "  " << jit_func_name(state);
+        if (!valid) {
             return false;
         }
     }

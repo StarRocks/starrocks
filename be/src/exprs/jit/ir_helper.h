@@ -107,6 +107,8 @@ public:
     static llvm::Value* build_if_else(llvm::Value* condition, llvm::Type* return_type,
                                       const std::function<llvm::Value*()>& then_func,
                                       const std::function<llvm::Value*()>& else_func, llvm::IRBuilder<>* builder);
+
+    static constexpr double jit_score_ratio = 0.88; // whether the expr can be jit
 };
 
 } // namespace starrocks

@@ -84,20 +84,34 @@ public:
         if (!is_compilable(state)) {
             return jit_score;
         }
-        int valid_children = 0;
-        for (auto child : _children) {
-            auto tmp = child->compute_jit_score(state);
-            jit_score.score += tmp.score;
-            jit_score.num += tmp.num;
-            valid_children += tmp.score > 0;
+        int when_valid = 0;
+        int then_valid = 0;
+        for (auto i = 0; i < _children.size(); i++) {
+            auto tmp = _children[i]->compute_jit_score(state);
+            double valid = tmp.score > tmp.num * 0.3;
+            if (i == 0) {
+                when_valid += valid;
+            } else if (i + 1 == _children.size() && _has_else_expr) {
+                then_valid += valid;
+            } else {
+                if ((i + _has_case_expr) % 2 == 0) {
+                    when_valid += valid;
+                } else {
+                    then_valid += valid;
+                }
+            }
+            VLOG_QUERY << i << "-th score: " << tmp.score << " / " << tmp.num << " = "
+                       << tmp.score / (tmp.num ? tmp.num : 1) << " "
+                       << " valid = " << valid << "  " << _children[i]->jit_func_name(state);
         }
-        LOG(INFO) << "JIT score case: " << valid_children << " / " << _children.size() << " = "
-                  << valid_children / _children.size() * 1.0 << " , score = " << jit_score.score << " / "
-                  << jit_score.num << " = " << jit_score.score * 1.0 / jit_score.num;
-        if (valid_children > _children.size() / 2.0 && jit_score.score * 1.0 / jit_score.num > 0.6) {
-            return {1, 1};
+        int expr_num = _children.size() / 2;
+        VLOG_QUERY << "JIT score case: when_score =  " << when_valid << " / " << expr_num << " = "
+                   << when_valid * 1.0 / expr_num << ", then_score = " << then_valid << " / " << expr_num
+                   << " = " << then_valid * 1.0 / expr_num;
+        if (when_valid > expr_num * IRHelper::jit_score_ratio || then_valid > expr_num * IRHelper::jit_score_ratio) {
+            return {expr_num, expr_num};
         }
-        return {0, 1};
+        return {0, expr_num};
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {

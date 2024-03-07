@@ -211,7 +211,7 @@ public:
             jit_score.num += tmp.num;
         }
         jit_score.num++;
-        jit_score.score += is_float_type(Type); // helpful on float type
+        jit_score.score += (is_float_type(Type) || _children[0]->is_constant() || _children[1]->is_constant());
         return jit_score;
     }
 
@@ -306,7 +306,7 @@ public:
             jit_score.num += tmp.num;
         }
         jit_score.num++;
-        jit_score.score += is_float_type(Type); // helpful on float type
+        jit_score.score += (is_float_type(Type) || _children[0]->is_constant() || _children[1]->is_constant());
         return jit_score;
     }
 
