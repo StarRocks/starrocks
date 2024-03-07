@@ -102,7 +102,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::max_compaction_concurrency);
         });
         _config_callback.emplace("flush_thread_num_per_store", [&]() {
-            const size_t dir_cnt = StorageEngine::instance()->get_stores().size();
+            size_t dir_cnt = StorageEngine::instance()->get_stores().size();
+#ifdef USE_STAROS
+            dir_cnt = 1;
+#endif
             (void)StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
                     config::flush_thread_num_per_store * dir_cnt);
             (void)StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
