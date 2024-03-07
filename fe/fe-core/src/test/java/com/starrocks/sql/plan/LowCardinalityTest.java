@@ -1940,4 +1940,12 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  ");
     }
 
+
+    @Test
+    public void testNestedStringFunc() throws Exception {
+        String sql = "SELECT CASE WHEN S_ADDRESS = '' THEN '' ELSE SUBSTR(MD5(S_ADDRESS), 1, 3) END AS value FROM supplier;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "if(DictDecode(10: S_ADDRESS, [<place-holder> = '']), ''," +
+                " substr(md5(DictDecode(10: S_ADDRESS, [<place-holder>])), 1, 3))");
+    }
 }
