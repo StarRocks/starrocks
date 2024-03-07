@@ -14,15 +14,15 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 )
 */
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table;
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table order by k1;
 -- result:
 1	tianjing
 2	guangzhou
 -- !result
-select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table;
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table order by k2;
 -- result:
-tianjing
 guangzhou
+tianjing
 -- !result
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table;
 -- result:
@@ -44,17 +44,17 @@ WITH (
 )
 */
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table;
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k1;
 -- result:
 1	beijing	zhangsan
 2	shanghai	lisi
 -- !result
-select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table;
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k2;
 -- result:
-shanghai
 beijing
+shanghai
 -- !result
-select k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table;
+select k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k1;
 -- result:
 zhangsan
 lisi
@@ -66,7 +66,7 @@ select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_part
 select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table group by k1,k3 having count(1) > 1;
 -- result:
 -- !result
-drop catalog iceberg_sql_test_${uuid0}
+drop catalog iceberg_sql_test_${uuid0};
 -- result:
 []
 -- !result

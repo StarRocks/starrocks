@@ -17,9 +17,9 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 )
 */
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table;
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table order by k1;
 
-select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table;
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table order by k2;
 
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_unpartitioned_table;
 
@@ -39,15 +39,15 @@ WITH (
 )
 */
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table;
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k1;
 
-select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table;
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k2;
 
-select k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table;
+select k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table order by k1;
 
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table;
 
 select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table group by k1,k3 having count(1) > 1;
 
 
-drop catalog iceberg_sql_test_${uuid0}
+drop catalog iceberg_sql_test_${uuid0};
