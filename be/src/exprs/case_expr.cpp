@@ -106,8 +106,8 @@ public:
         }
         int expr_num = _children.size() / 2;
         VLOG_QUERY << "JIT score case: when_score =  " << when_valid << " / " << expr_num << " = "
-                   << when_valid * 1.0 / expr_num << ", then_score = " << then_valid << " / " << expr_num
-                   << " = " << then_valid * 1.0 / expr_num;
+                   << when_valid * 1.0 / expr_num << ", then_score = " << then_valid << " / " << expr_num << " = "
+                   << then_valid * 1.0 / expr_num;
         if (when_valid > expr_num * IRHelper::jit_score_ratio || then_valid > expr_num * IRHelper::jit_score_ratio) {
             return {expr_num, expr_num};
         }
