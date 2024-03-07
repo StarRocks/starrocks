@@ -119,6 +119,15 @@ Status FPE::decrypt(std::string_view num_str, std::string_view key, char* buffer
         }
     }
 
+    int num_str_length = num_str.length();
+    std::string fixed_num_str;
+    if (num_str_length < MIN_LENGTH) {
+        fixed_num_str.resize(MIN_LENGTH);
+        int padding_pos = MIN_LENGTH - num_str_length;
+        std::fill(fixed_num_str.begin(), fixed_num_str.begin() + padding_pos, '0');
+        strings::memcpy_inlined(fixed_num_str.data() + padding_pos, num_str.data(), num_str.size());
+    }
+
     struct ff1_ctx* ctx = nullptr;
     DeferOp op([&] {
         if (ctx != nullptr) ff1_ctx_destroy(ctx);
@@ -128,7 +137,8 @@ Status FPE::decrypt(std::string_view num_str, std::string_view key, char* buffer
     if (res != 0) {
         return Status::RuntimeError("ff1_ctx_create failed");
     }
-    res = ff1_decrypt(ctx, buffer, std::string(num_str).c_str(), nullptr, 0);
+    res = ff1_decrypt(ctx, buffer, fixed_num_str.empty() ? std::string(num_str).c_str() : fixed_num_str.c_str(),
+                      nullptr, 0);
     if (res != 0) {
         return Status::RuntimeError("ff1_decrypt failed");
     }
