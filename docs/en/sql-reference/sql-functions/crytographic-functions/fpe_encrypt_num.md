@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# fpe_encrypt_num
+# fpe_encrypt
 
 ## Description
 
@@ -13,13 +13,13 @@ Encrypts the integer and decimal parts of the string `str` using the Format-Pres
 
 This process ensures the format of each part is preserved during encryption, clearly differentiating between the integer and decimal parts in the final encrypted string.
 
-the reverse function of [fpe_decrypt_num](fpe_decrypt_num.md).
+the reverse function of [fpe_decrypt](fpe_decrypt.md).
 
 
 ## Syntax
 
 ```Haskell
-fpe_encrypt_num(str, key);
+fpe_encrypt(str, key);
 ```
 
 ## Parameters
@@ -37,17 +37,17 @@ This function only accepts 2 parameters; more inputs will result in an error.
 ## Examples
 
 ```Plain Text
-mysql> select fpe_encrypt_num('9237923.347343', 'abcdefghijk12345abcdefghijk12345');
+mysql> select fpe_encrypt('9237923.347343', 'abcdefghijk12345abcdefghijk12345');
 +-----------------------------------------------------------------------+
-| fpe_encrypt_num('9237923.347343', 'abcdefghijk12345abcdefghijk12345') |
+| fpe_encrypt('9237923.347343', 'abcdefghijk12345abcdefghijk12345') |
 +-----------------------------------------------------------------------+
 | 17705785.238108909558021                                              |
 +-----------------------------------------------------------------------+
 1 row in set (0.00 sec)
 
-mysql> select fpe_encrypt_num('9302923.04832', 'abcdefghijk12345abcdefghijk12345');
+mysql> select fpe_encrypt('9302923.04832', 'abcdefghijk12345abcdefghijk12345');
 +----------------------------------------------------------------------+
-| fpe_encrypt_num('9302923.04832', 'abcdefghijk12345abcdefghijk12345') |
+| fpe_encrypt('9302923.04832', 'abcdefghijk12345abcdefghijk12345') |
 +----------------------------------------------------------------------+
 | 14788209.02880443556771                                              |
 +----------------------------------------------------------------------+

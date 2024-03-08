@@ -2,16 +2,16 @@
 displayed_sidebar: "Chinese"
 ---
 
-# fpe_decrypt_num
+# fpe_decrypt
 
 ## 功能
 
-对fpe_encrypt_num加密后字符串 `str` 进行解密，反向函数为 [fpe_encrypt_num](fpe_encrypt_num.md)。
+对fpe_encrypt加密后字符串 `str` 进行解密，反向函数为 [fpe_encrypt](fpe_encrypt.md)。
 
 ## 语法
 
 ```Haskell
-fpe_decrypt_num(str, key);
+fpe_decrypt(str, key);
 ```
 
 ## 参数说明
@@ -32,17 +32,17 @@ fpe_decrypt_num(str, key);
 ## 示例
 
 ```Plain Text
-mysql> select fpe_decrypt_num('17705785.238108909558021', 'abcdefghijk12345abcdefghijk12345');
+mysql> select fpe_decrypt('17705785.238108909558021', 'abcdefghijk12345abcdefghijk12345');
 +---------------------------------------------------------------------------------+
-| fpe_decrypt_num('17705785.238108909558021', 'abcdefghijk12345abcdefghijk12345') |
+| fpe_decrypt('17705785.238108909558021', 'abcdefghijk12345abcdefghijk12345')     |
 +---------------------------------------------------------------------------------+
 | 9237923.347343                                                                  |
 +---------------------------------------------------------------------------------+
 1 row in set (0.00 sec)
 
-mysql> select fpe_decrypt_num('14788209.02880443556771', 'abcdefghijk12345abcdefghijk12345');
+mysql> select fpe_decrypt('14788209.02880443556771', 'abcdefghijk12345abcdefghijk12345');
 +--------------------------------------------------------------------------------+
-| fpe_decrypt_num('14788209.02880443556771', 'abcdefghijk12345abcdefghijk12345') |
+| fpe_decrypt('14788209.02880443556771', 'abcdefghijk12345abcdefghijk12345')     |
 +--------------------------------------------------------------------------------+
 | 9302923.04832                                                                  |
 +--------------------------------------------------------------------------------+

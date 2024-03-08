@@ -961,7 +961,9 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(
                 std::make_tuple("-1000", "abcdefghijk12345abcdefghijk12345", "-1520384"),
                 std::make_tuple("0", "abcdefghijk12345abcdefghijk12345", "1608824"),
-                std::make_tuple("0.00", "abcdefghijk12345abcdefghijk12345", "1608824.6088241"),
+                std::make_tuple("0.00", "abcdefghijk12345abcdefghijk12345", "1608824"),
+                std::make_tuple("0.58", "abcdefghijk12345abcdefghijk12345", "1608824.472366138329091"),
+                std::make_tuple("1.58", "abcdefghijk12345abcdefghijk12345", "1478093.472366138329091"),
                 std::make_tuple("-99487619.18", "abcdefghijk12345abcdefghijk12345", "-184654474.236569653822321"),
                 std::make_tuple("-82695393.42", "abcdefghijk12345abcdefghijk12345", "-115815106.800956527124541"),
                 std::make_tuple("-47724403.07", "abcdefghijk12345abcdefghijk12345", "-181831555.57492613140701"),
@@ -994,6 +996,8 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(
                 std::make_tuple("-1520384", "abcdefghijk12345abcdefghijk12345", "-1000"),
                 std::make_tuple("1608824", "abcdefghijk12345abcdefghijk12345", "0"),
+                std::make_tuple("1608824.472366138329091", "abcdefghijk12345abcdefghijk12345", "0.58"),
+                std::make_tuple("1478093.472366138329091", "abcdefghijk12345abcdefghijk12345", "1.58"),
                 std::make_tuple("-184654474.236569653822321", "abcdefghijk12345abcdefghijk12345", "-99487619.18"),
                 std::make_tuple("-115815106.800956527124541", "abcdefghijk12345abcdefghijk12345", "-82695393.42"),
                 std::make_tuple("-181831555.57492613140701", "abcdefghijk12345abcdefghijk12345", "-47724403.07"),

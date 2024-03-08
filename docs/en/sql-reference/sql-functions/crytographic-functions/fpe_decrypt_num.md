@@ -2,17 +2,17 @@
 displayed_sidebar: "English"
 ---
 
-# fpe_decrypt_num
+# fpe_decrypt
 
 ## Description
 
-Decrypts strings encrypted by `fpe_encrypt_num`, the reverse function of [fpe_encrypt_num](fpe_encrypt_num.md).
+Decrypts strings encrypted by `fpe_encrypt`, the reverse function of [fpe_encrypt](fpe_encrypt.md).
 
 
 ## Syntax
 
 ```Haskell
-fpe_decrypt_num(str, key);
+fpe_decrypt(str, key);
 ```
 
 ## Parameters
@@ -30,17 +30,17 @@ This function only accepts 2 parameters; providing more will result in an error.
 ## Examples
 
 ```Plain Text
-mysql> select fpe_decrypt_num('17705785.238108909558021', 'abcdefghijk12345abcdefghijk12345');
+mysql> select fpe_decrypt('17705785.238108909558021', 'abcdefghijk12345abcdefghijk12345');
 +---------------------------------------------------------------------------------+
-| fpe_decrypt_num('17705785.238108909558021', 'abcdefghijk12345abcdefghijk12345') |
+| fpe_decrypt('17705785.238108909558021', 'abcdefghijk12345abcdefghijk12345') |
 +---------------------------------------------------------------------------------+
 | 9237923.347343                                                                  |
 +---------------------------------------------------------------------------------+
 1 row in set (0.00 sec)
 
-mysql> select fpe_decrypt_num('14788209.02880443556771', 'abcdefghijk12345abcdefghijk12345');
+mysql> select fpe_decrypt('14788209.02880443556771', 'abcdefghijk12345abcdefghijk12345');
 +--------------------------------------------------------------------------------+
-| fpe_decrypt_num('14788209.02880443556771', 'abcdefghijk12345abcdefghijk12345') |
+| fpe_decrypt('14788209.02880443556771', 'abcdefghijk12345abcdefghijk12345') |
 +--------------------------------------------------------------------------------+
 | 9302923.04832                                                                  |
 +--------------------------------------------------------------------------------+

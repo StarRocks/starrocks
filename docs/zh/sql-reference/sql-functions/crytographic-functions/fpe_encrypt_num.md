@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# fpe_encrypt_num
+# fpe_encrypt
 
 ## 功能
 
@@ -11,17 +11,17 @@ displayed_sidebar: "Chinese"
 2. 将 str 的小数部分乘以 100000000000000 后，使用 fpe_ff1_encrypt 进行加密，并在加密结果的末尾添加一个填位符号“1”。
 通过上述步骤，我们可以确保每个部分的格式在加密过程中得到保留，并在最终生成的加密字符串中清楚地区分整数部分和小数部分。
 
-反向函数为 [fpe_decrypt_num](fpe_decrypt_num.md)。
+反向函数为 [fpe_decrypt](fpe_decrypt.md)。
 
 ## 语法
 
 ```Haskell
-fpe_encrypt_num(str, key);
+fpe_encrypt(str, key);
 ```
 
 ## 参数说明
 
-`str`: 加密以字符串格式表示decimal类型的数据，例如 "-123.456"，支持的数据类型为 VARCHAR。
+`str`: 加密以字符串格式表示decimal类型数据，例如 "-123.456"，支持的数据类型为 VARCHAR。
 
 `key`: 用于加密 `str` 的 key 字符串，长度限制为16、24或者32，支持的数据类型为 VARCHAR。
 
@@ -37,17 +37,17 @@ fpe_encrypt_num(str, key);
 ## 示例
 
 ```Plain Text
-mysql> select fpe_encrypt_num('9237923.347343', 'abcdefghijk12345abcdefghijk12345');
+mysql> select fpe_encrypt('9237923.347343', 'abcdefghijk12345abcdefghijk12345');
 +-----------------------------------------------------------------------+
-| fpe_encrypt_num('9237923.347343', 'abcdefghijk12345abcdefghijk12345') |
+| fpe_encrypt('9237923.347343', 'abcdefghijk12345abcdefghijk12345')     |
 +-----------------------------------------------------------------------+
 | 17705785.238108909558021                                              |
 +-----------------------------------------------------------------------+
 1 row in set (0.00 sec)
 
-mysql> select fpe_encrypt_num('9302923.04832', 'abcdefghijk12345abcdefghijk12345');
+mysql> select fpe_encrypt('9302923.04832', 'abcdefghijk12345abcdefghijk12345');
 +----------------------------------------------------------------------+
-| fpe_encrypt_num('9302923.04832', 'abcdefghijk12345abcdefghijk12345') |
+| fpe_encrypt('9302923.04832', 'abcdefghijk12345abcdefghijk12345')     |
 +----------------------------------------------------------------------+
 | 14788209.02880443556771                                              |
 +----------------------------------------------------------------------+

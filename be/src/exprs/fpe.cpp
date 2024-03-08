@@ -243,7 +243,7 @@ Status FPE::decrypt_num(std::string_view num_str, std::string_view key, std::str
 
     if (dec_part.empty()) {
         result.resize(result_len);
-        value = std::move(trim_leading_zeros(result, num_flag_pos));
+        value = trim_leading_zeros(result, num_flag_pos);
 
         return Status::OK();
     } else {
@@ -262,7 +262,7 @@ Status FPE::decrypt_num(std::string_view num_str, std::string_view key, std::str
         result_len += dec_part_len;
 
         result.resize(result_len);
-        value = std::move(trim_zeros(result, num_flag_pos));
+        value = trim_zeros(result, num_flag_pos);
 
         return Status::OK();
     }
