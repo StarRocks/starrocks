@@ -273,17 +273,18 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     return Status::OK();
 }
 
-void MetaFileBuilder::_finalize_sstable() {
-    if (_sstable != nullptr) {
-        _tablet_meta->mutable_pindex_sstable_meta()->mutable_sstables()->Add(std::move(*_sstable));
-    }
+void MetaFileBuilder::add_sstable(PersistentIndexSstablePB& sstable) {
+    _tablet_meta->mutable_pindex_sstable_meta()->mutable_sstables()->Add(std::move(sstable));
+}
+
+PersistentIndexSstableMetaPB MetaFileBuilder::get_sstable_meta() {
+    return _tablet_meta->pindex_sstable_meta();
 }
 
 Status MetaFileBuilder::finalize(int64_t txn_id) {
     auto version = _tablet_meta->version();
     // finalize delvec
     RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
-    _finalize_sstable();
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     _update_mgr->update_primary_index_data_version(_tablet, version);
     _fill_delvec_cache();

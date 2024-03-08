@@ -101,7 +101,7 @@ private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
     std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
     std::shared_ptr<PersistentIndexSstableMetaPB> _sstable_meta;
-    PersistentIndexSstablePB* _sstable{nullptr};
+    std::unique_ptr<PersistentIndexSstablePB> _sstable{nullptr};
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     int64_t _txn_id{0};

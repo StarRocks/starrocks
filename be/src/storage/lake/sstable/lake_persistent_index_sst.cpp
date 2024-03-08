@@ -37,17 +37,20 @@ Status LakePersistentIndexSstable::build_sstable(
     TRACE_COUNTER_SCOPE_LATENCY_US("build_sstable");
     sstable::Options options;
     sstable::TableBuilder builder(options, wf);
-    auto start_ts = butil::gettimeofday_us();
     for (const auto& pair : memtable) {
         auto index_value_info_pb = std::make_unique<IndexValueInfoPB>();
+        auto start_ts = butil::gettimeofday_us();
         to_protobuf(pair.second, index_value_info_pb.get());
+        auto end_ts = butil::gettimeofday_us();
+        TRACE_COUNTER_INCREMENT("to_pb", end_ts - start_ts);
+        start_ts = butil::gettimeofday_us();
         builder.Add(Slice(pair.first), Slice(index_value_info_pb->SerializeAsString()));
+        end_ts = butil::gettimeofday_us();
+        TRACE_COUNTER_INCREMENT("to_pb_add", end_ts - start_ts);
     }
-    auto end_ts = butil::gettimeofday_us();
-    TRACE_COUNTER_INCREMENT("to_pb_add", end_ts - start_ts);
-    start_ts = butil::gettimeofday_us();
+    auto start_ts = butil::gettimeofday_us();
     RETURN_IF_ERROR(builder.Finish());
-    end_ts = butil::gettimeofday_us();
+    auto end_ts = butil::gettimeofday_us();
     TRACE_COUNTER_INCREMENT("builder_finish", end_ts - start_ts);
     *filesz = builder.FileSize();
     return Status::OK();

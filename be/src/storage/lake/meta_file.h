@@ -56,7 +56,9 @@ public:
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
 
-    void set_sstable(std::shared_ptr<PersistentIndexSstablePB> sstable) { _sstable = sstable; }
+    void add_sstable(PersistentIndexSstablePB& sstable);
+
+    PersistentIndexSstableMetaPB get_sstable_meta();
 
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
@@ -66,8 +68,6 @@ private:
     Status _finalize_delvec(int64_t version, int64_t txn_id);
     // fill delvec cache, for better reading latency
     void _fill_delvec_cache();
-
-    void _finalize_sstable();
 
 private:
     Tablet _tablet;

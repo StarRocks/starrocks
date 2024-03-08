@@ -37,7 +37,7 @@ LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tabl
           _sstable_meta(std::make_unique<PersistentIndexSstableMetaPB>(sstable_meta)),
           _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_id) {
-    _sstable = _sstable_meta->add_sstables();
+    _sstable = std::make_unique<PersistentIndexSstablePB>();
     _memtable = std::make_unique<PersistentIndexMemtable>(tablet_mgr, tablet_id);
 }
 
@@ -214,10 +214,10 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version) {
 
 void LakePersistentIndex::commit(MetaFileBuilder* builder) {
     if (_sstable->sstables_size() > 0) {
-        auto sstable = std::make_shared<PersistentIndexSstablePB>(*_sstable);
-        builder->set_sstable(std::move(sstable));
-        _sstable = _sstable_meta->add_sstables();
+        builder->add_sstable(*_sstable);
+        _sstable.reset(new PersistentIndexSstablePB());
     }
+    _sstable_meta.reset(new PersistentIndexSstableMetaPB(builder->get_sstable_meta()));
 }
 
 bool LakePersistentIndex::is_memtable_full() {
