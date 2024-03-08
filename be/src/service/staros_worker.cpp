@@ -370,6 +370,13 @@ void init_staros_worker() {
     FLAGS_fslib_s3client_max_connections = config::object_storage_max_connection;
     FLAGS_fslib_s3client_max_items = config::starlet_s3_client_max_cache_capacity;
     FLAGS_fslib_s3client_max_instance_per_item = config::starlet_s3_client_num_instances_per_cache;
+<<<<<<< HEAD
+=======
+    FLAGS_fslib_s3client_nonread_max_retries = config::starlet_fslib_s3client_nonread_max_retries;
+    FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
+    FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
+    fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+>>>>>>> bccc9e08e0 ([Feature] add delete_files_max_key_in_batch config for starlet (#42266))
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
