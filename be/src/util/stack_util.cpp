@@ -357,6 +357,6 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
 #else
     __real___cxa_throw(thrown_exception, info, dest);
 #endif
-} // namespace starrocks
+}
 
 } // namespace starrocks
