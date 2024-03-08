@@ -573,13 +573,13 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {
-
         List<LoadJob> loadJobList = Lists.newArrayList();
-        if (dbId != -1 && !dbIdToLabelToLoadJobs.containsKey(dbId)) {
-            return loadJobList;
-        }
         readLock();
         try {
+            if (dbId != -1 && !dbIdToLabelToLoadJobs.containsKey(dbId)) {
+                return loadJobList;
+            }
+
             for (Map<String, List<LoadJob>> dbJobs : dbIdToLabelToLoadJobs.values()) {
                 Map<String, List<LoadJob>> labelToLoadJobs = dbId == -1 ? dbJobs : dbIdToLabelToLoadJobs.get(dbId);
 
