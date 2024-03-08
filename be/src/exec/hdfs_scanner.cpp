@@ -84,7 +84,6 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
 
     RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params.mor_params));
     Status status = do_init(runtime_state, scanner_params);
-    RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
 
     return status;
 }
@@ -180,6 +179,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     }
     RETURN_IF_ERROR(_build_scanner_context());
     RETURN_IF_ERROR(do_open(runtime_state));
+    RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
     _opened = true;
     VLOG_FILE << "open file success: " << _scanner_params.path;
     return Status::OK();
