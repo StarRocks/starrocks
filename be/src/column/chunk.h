@@ -116,9 +116,15 @@ public:
     void update_column(ColumnPtr column, SlotId slot_id);
     void update_column_by_index(ColumnPtr column, size_t idx);
 
+<<<<<<< HEAD
     Status update_rows(const Chunk& src, const uint32_t* indexes);
 
     void append_tuple_column(const ColumnPtr& column, TupleId tuple_id);
+=======
+    void append_or_update_column(ColumnPtr column, SlotId slot_id);
+
+    void update_rows(const Chunk& src, const uint32_t* indexes);
+>>>>>>> c7f5207d76 ([Refactor] refactor hdfs scanner apppend_or_update column (#42248))
 
     void append_default();
 
