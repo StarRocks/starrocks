@@ -571,9 +571,9 @@ void ThreadPool::dispatch_thread() {
         task.runnable.reset();
         MonoTime finish_time = MonoTime::Now();
 
-        _total_executed_tasks << 1;
-        _total_pending_time_ns << start_time.GetDeltaSince(task.submit_time).ToNanoseconds();
-        _total_execute_time_ns << finish_time.GetDeltaSince(start_time).ToNanoseconds();
+        _total_executed_tasks.fetch_add(1);
+        _total_pending_time_ns.fetch_add(start_time.GetDeltaSince(task.submit_time).ToNanoseconds());
+        _total_execute_time_ns.fetch_add(finish_time.GetDeltaSince(start_time).ToNanoseconds());
 
         l.lock();
         _last_active_timestamp = MonoTime::Now();
