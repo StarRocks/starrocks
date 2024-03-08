@@ -43,4 +43,16 @@ public class LogUtilTest {
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(new ConnectContext(), null);
         Assert.assertFalse(QueryDetailQueue.getQueryDetailsAfterTime(0L).isEmpty());
     }
+
+    @Test
+    public void testGetUnwoundExceptionMessage() {
+        String output = null;
+        try {
+            System.out.println("hello");
+            throw new RuntimeException("hello");
+        } catch (Throwable e) {
+            output = LogUtil.getUnwoundExceptionMessage(e);
+        }
+        System.out.println(output);
+    }
 }
