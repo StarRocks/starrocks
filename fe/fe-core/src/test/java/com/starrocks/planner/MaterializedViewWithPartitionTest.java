@@ -144,7 +144,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
     // mv's partition columns is the same with the base table, mv table has no partition filter.
     @Test
     public void testPartitionPrune_SingleTable3() throws Exception {
-        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
 
         String partial_mv_6 = "create materialized view partial_mv_6" +
                 " partition by c3" +
@@ -191,12 +192,14 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=6/6");
 
         starRocksAssert.dropMaterializedView("partial_mv_6");
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
     }
 
     // MV has multi tables and partition columns.
     @Test
     public void testPartitionPrune_MultiTables1() throws Exception {
-        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
 
         // test partition prune
         String partial_mv_6 = "create materialized view partial_mv_6" +
@@ -287,6 +290,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=1/5");
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
         starRocksAssert.dropMaterializedView("partial_mv_6");
     }
 
@@ -294,7 +298,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
     @Test
     public void testPartitionPrune_MultiTables2() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         // test partition prune
         String partial_mv_6 = "create materialized view partial_mv_6" +
                 " distributed by hash(c1) as" +
@@ -375,6 +379,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=1/5");
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
         starRocksAssert.dropMaterializedView("partial_mv_6");
     }
 
