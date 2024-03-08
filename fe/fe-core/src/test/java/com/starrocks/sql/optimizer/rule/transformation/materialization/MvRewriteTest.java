@@ -2021,6 +2021,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
+        starRocksAssert.dropMaterializedView("mv_insert");
     }
 
     /**
