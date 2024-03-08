@@ -37,11 +37,8 @@ package com.starrocks.load.loadv2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/load/loadv2/LoadManagerTest.java
 import com.starrocks.common.FeMetaVersion;
-=======
 import com.starrocks.common.MetaNotFoundException;
->>>>>>> e78e1940d5 ([BugFix] Fix show load npe (#42031)):fe/fe-core/src/test/java/com/starrocks/load/loadv2/LoadMgrTest.java
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -321,45 +318,6 @@ public class LoadMgrTest {
         Config.label_keep_max_second = origLabelKeepMaxSecond;
         Config.label_keep_max_num = origLabelKeepMaxNum;
     }
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/load/loadv2/LoadManagerTest.java
-=======
-
-    @Test
-    public void testLoadJsonImage(@Mocked GlobalStateMgr globalStateMgr,
-                                  @Injectable Database db) throws Exception {
-        new Expectations() {
-            {
-                globalStateMgr.getDb(anyLong);
-                result = db;
-            }
-        };
-
-        LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
-        LoadJob loadJob1 = new InsertLoadJob("job0", 0L, 1L, System.currentTimeMillis(), "", "");
-        loadJob1.id = 1L;
-        loadManager.replayCreateLoadJob(loadJob1);
-
-        LoadJob loadJob2 = new BrokerLoadJob(1L, "job1", null, null, null);
-        loadJob2.id = 2L;
-        loadManager.replayCreateLoadJob(loadJob2);
-
-        LoadJob loadJob3 = new SparkLoadJob(2L, "job3", null, null);
-        loadJob3.id = 3L;
-        loadManager.replayCreateLoadJob(loadJob3);
-
-        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-
-        loadManager.saveLoadJobsV2JsonFormat(image.getDataOutputStream());
-
-        LoadMgr loadManager2 = new LoadMgr(new LoadJobScheduler());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
-        loadManager2.loadLoadJobsV2JsonFormat(reader);
-        reader.close();
-
-        Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadManager2, "idToLoadJob");
-
-        Assert.assertEquals(3, idToLoadJob.size());
-    }
 
     @Test
     public void testGetLoadJobsByDb(@Mocked GlobalStateMgr globalStateMgr) throws MetaNotFoundException {
@@ -369,5 +327,4 @@ public class LoadMgrTest {
         Assert.assertTrue(loadMgr.getLoadJobsByDb(2L, "job1", true).isEmpty());
         Assert.assertEquals(1, loadMgr.getLoadJobsByDb(1L, "job1", true).size());
     }
->>>>>>> e78e1940d5 ([BugFix] Fix show load npe (#42031)):fe/fe-core/src/test/java/com/starrocks/load/loadv2/LoadMgrTest.java
 }

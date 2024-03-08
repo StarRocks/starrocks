@@ -567,23 +567,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {
         List<LoadJob> loadJobList = Lists.newArrayList();
-<<<<<<< HEAD
-        if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
-            return loadJobList;
-        }
         readLock();
         try {
-            Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
-=======
-        readLock();
-        try {
-            if (dbId != -1 && !dbIdToLabelToLoadJobs.containsKey(dbId)) {
+            if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
                 return loadJobList;
             }
-
-            for (Map<String, List<LoadJob>> dbJobs : dbIdToLabelToLoadJobs.values()) {
-                Map<String, List<LoadJob>> labelToLoadJobs = dbId == -1 ? dbJobs : dbIdToLabelToLoadJobs.get(dbId);
->>>>>>> e78e1940d5 ([BugFix] Fix show load npe (#42031))
+            Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
 
             if (Strings.isNullOrEmpty(labelValue)) {
                 loadJobList.addAll(labelToLoadJobs.values()
