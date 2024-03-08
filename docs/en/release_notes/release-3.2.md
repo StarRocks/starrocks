@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
-## 3.2.4 en
+## 3.2.4
 
 Release date: March 7, 2024
 
