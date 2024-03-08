@@ -1106,7 +1106,7 @@ Status OlapTableSink::open_wait() {
                 }
             });
 
-            if (index_channel->has_intolerable_failure()) {
+            if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                 LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
                 return err_st;
             }
@@ -1463,7 +1463,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                         }
                         ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                     });
-                    if (index_channel->has_intolerable_failure()) {
+                    if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                         status = err_st;
                         index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                     }
