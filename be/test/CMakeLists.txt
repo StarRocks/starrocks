@@ -141,6 +141,7 @@ set(EXEC_FILES
         ./exprs/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
+        ./formats/csv/csv_file_writer_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp

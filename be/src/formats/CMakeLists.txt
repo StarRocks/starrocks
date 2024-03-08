@@ -20,6 +20,7 @@ add_library(Formats STATIC
         csv/boolean_converter.cpp
         csv/converter.cpp
         csv/csv_reader.cpp
+        csv/csv_file_writer.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp
