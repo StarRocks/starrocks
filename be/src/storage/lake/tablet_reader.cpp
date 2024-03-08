@@ -162,6 +162,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load rowset serially if sumbit_func failed
+                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                             << ", try to load rowset serially, rowset_id: " << rowset->id();
                 ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
                 iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
             } else {

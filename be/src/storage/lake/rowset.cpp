@@ -271,9 +271,9 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
         index++;
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([&]() {
-                auto result = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
-                                                        fill_metadata_cache, _tablet_schema);
+            auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
+                auto result = _tablet_mgr->load_segment(segment_info, seg_id, lake_io_opts, fill_metadata_cache,
+                                                        _tablet_schema);
                 return std::make_pair(std::move(result), seg_name);
             });
 
@@ -281,12 +281,15 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
             if (auto st = ExecEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load segment serially
-                auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
+                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                             << ", try to load segment serially, seg_id: " << seg_id;
+                auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id, &footer_size_hint, lake_io_opts,
                                                             fill_metadata_cache, _tablet_schema);
                 if (auto status = check_status(segment_or, seg_name); !status.ok()) {
                     return status;
                 }
             }
+            seg_id++;
             segment_futures.push_back(task->get_future());
         } else {
             auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
