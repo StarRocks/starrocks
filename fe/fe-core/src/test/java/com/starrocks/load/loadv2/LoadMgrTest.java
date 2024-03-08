@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -58,7 +59,7 @@ import java.io.FileOutputStream;
 import java.util.List;
 import java.util.Map;
 
-public class LoadManagerTest {
+public class LoadMgrTest {
     private LoadMgr loadManager;
     private final String fieldName = "idToLoadJob";
 
@@ -348,5 +349,14 @@ public class LoadManagerTest {
         Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadManager2, "idToLoadJob");
 
         Assert.assertEquals(3, idToLoadJob.size());
+    }
+
+    @Test
+    public void testGetLoadJobsByDb(@Mocked GlobalStateMgr globalStateMgr) throws MetaNotFoundException {
+        LoadMgr loadMgr = new LoadMgr(new LoadJobScheduler());
+        LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job1);
+        Assert.assertTrue(loadMgr.getLoadJobsByDb(2L, "job1", true).isEmpty());
+        Assert.assertEquals(1, loadMgr.getLoadJobsByDb(1L, "job1", true).size());
     }
 }
