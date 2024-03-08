@@ -408,4 +408,104 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
 INSTANTIATE_TEST_SUITE_P(LakeReplicationTxnManagerTest, LakeReplicationTxnManagerTest,
                          testing::Values(TKeysType::type::AGG_KEYS, TKeysType::type::PRIMARY_KEYS));
 
+class LakeReplicationTxnManagerStaticFunctionTest : public testing::Test {
+public:
+    LakeReplicationTxnManagerStaticFunctionTest() = default;
+    ~LakeReplicationTxnManagerStaticFunctionTest() override = default;
+    void SetUp() override {}
+    void TearDown() override {}
+};
+
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_delete_predicate_pb) {
+    DeletePredicatePB delete_predicate;
+
+    delete_predicate.add_sub_predicates()->assign("k0");
+    Status status = lake::ReplicationTxnManager::convert_delete_predicate_pb(&delete_predicate);
+    EXPECT_TRUE(!status.ok()) << status;
+
+    delete_predicate.Clear();
+    delete_predicate.add_sub_predicates()->assign("k1=1");
+    delete_predicate.add_sub_predicates()->assign("k2!=1");
+    delete_predicate.add_sub_predicates()->assign("k3>>3");
+    delete_predicate.add_sub_predicates()->assign("k4<<3");
+    delete_predicate.add_sub_predicates()->assign("k5<=5");
+    delete_predicate.add_sub_predicates()->assign("k6>=5");
+    delete_predicate.add_sub_predicates()->assign("k7=7");
+    delete_predicate.add_sub_predicates()->assign("k8!=7");
+    delete_predicate.add_sub_predicates()->assign("k9=a");
+    delete_predicate.add_sub_predicates()->assign("k10!=a");
+    delete_predicate.add_sub_predicates()->assign("k11=a");
+    delete_predicate.add_sub_predicates()->assign("k12!=a");
+
+    delete_predicate.add_sub_predicates()->assign("k13 IS NULL");
+    delete_predicate.add_sub_predicates()->assign("k14 IS NOT NULL");
+
+    delete_predicate.add_sub_predicates()->assign("k15*=1");
+
+    status = lake::ReplicationTxnManager::convert_delete_predicate_pb(&delete_predicate);
+    EXPECT_TRUE(status.ok()) << status;
+    EXPECT_EQ(12, delete_predicate.binary_predicates_size());
+    EXPECT_EQ(2, delete_predicate.is_null_predicates_size());
+    EXPECT_EQ(1, delete_predicate.in_predicates_size());
+
+    EXPECT_EQ("k1", delete_predicate.binary_predicates(0).column_name());
+    EXPECT_EQ("=", delete_predicate.binary_predicates(0).op());
+    EXPECT_EQ("1", delete_predicate.binary_predicates(0).value());
+
+    EXPECT_EQ("k2", delete_predicate.binary_predicates(1).column_name());
+    EXPECT_EQ("!=", delete_predicate.binary_predicates(1).op());
+    EXPECT_EQ("1", delete_predicate.binary_predicates(1).value());
+
+    EXPECT_EQ("k3", delete_predicate.binary_predicates(2).column_name());
+    EXPECT_EQ(">", delete_predicate.binary_predicates(2).op());
+    EXPECT_EQ("3", delete_predicate.binary_predicates(2).value());
+
+    EXPECT_EQ("k4", delete_predicate.binary_predicates(3).column_name());
+    EXPECT_EQ("<", delete_predicate.binary_predicates(3).op());
+    EXPECT_EQ("3", delete_predicate.binary_predicates(3).value());
+
+    EXPECT_EQ("k5", delete_predicate.binary_predicates(4).column_name());
+    EXPECT_EQ("<=", delete_predicate.binary_predicates(4).op());
+    EXPECT_EQ("5", delete_predicate.binary_predicates(4).value());
+
+    EXPECT_EQ("k6", delete_predicate.binary_predicates(5).column_name());
+    EXPECT_EQ(">=", delete_predicate.binary_predicates(5).op());
+    EXPECT_EQ("5", delete_predicate.binary_predicates(5).value());
+
+    EXPECT_EQ("k7", delete_predicate.binary_predicates(6).column_name());
+    EXPECT_EQ("=", delete_predicate.binary_predicates(6).op());
+    EXPECT_EQ("7", delete_predicate.binary_predicates(6).value());
+
+    EXPECT_EQ("k8", delete_predicate.binary_predicates(7).column_name());
+    EXPECT_EQ("!=", delete_predicate.binary_predicates(7).op());
+    EXPECT_EQ("7", delete_predicate.binary_predicates(7).value());
+
+    EXPECT_EQ("k9", delete_predicate.binary_predicates(8).column_name());
+    EXPECT_EQ("=", delete_predicate.binary_predicates(8).op());
+    EXPECT_EQ("a", delete_predicate.binary_predicates(8).value());
+
+    EXPECT_EQ("k10", delete_predicate.binary_predicates(9).column_name());
+    EXPECT_EQ("!=", delete_predicate.binary_predicates(9).op());
+    EXPECT_EQ("a", delete_predicate.binary_predicates(9).value());
+
+    EXPECT_EQ("k11", delete_predicate.binary_predicates(10).column_name());
+    EXPECT_EQ("=", delete_predicate.binary_predicates(10).op());
+    EXPECT_EQ("a", delete_predicate.binary_predicates(10).value());
+
+    EXPECT_EQ("k12", delete_predicate.binary_predicates(11).column_name());
+    EXPECT_EQ("!=", delete_predicate.binary_predicates(11).op());
+    EXPECT_EQ("a", delete_predicate.binary_predicates(11).value());
+
+    EXPECT_EQ("k13", delete_predicate.is_null_predicates(0).column_name());
+    EXPECT_FALSE(delete_predicate.is_null_predicates(0).is_not_null());
+
+    EXPECT_EQ("k14", delete_predicate.is_null_predicates(1).column_name());
+    EXPECT_TRUE(delete_predicate.is_null_predicates(1).is_not_null());
+
+    EXPECT_EQ("k15", delete_predicate.in_predicates(0).column_name());
+    EXPECT_FALSE(delete_predicate.in_predicates(0).is_not_in());
+    EXPECT_EQ(1, delete_predicate.in_predicates(0).values_size());
+    EXPECT_EQ("1", delete_predicate.in_predicates(0).values(0));
+}
+
 } // namespace starrocks

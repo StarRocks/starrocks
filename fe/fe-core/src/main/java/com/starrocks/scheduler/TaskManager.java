@@ -526,7 +526,11 @@ public class TaskManager implements MemoryTrackable {
         SubmitResult submitResult;
         try {
             createTask(task, false);
-            submitResult = executeTask(taskName);
+            if (task.getType() == Constants.TaskType.MANUAL) {
+                submitResult = executeTask(taskName);
+            } else {
+                submitResult = new SubmitResult(null, SUBMITTED);
+            }
         } catch (DdlException ex) {
             if (ex.getMessage().contains("Failed to get task lock")) {
                 submitResult = new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);

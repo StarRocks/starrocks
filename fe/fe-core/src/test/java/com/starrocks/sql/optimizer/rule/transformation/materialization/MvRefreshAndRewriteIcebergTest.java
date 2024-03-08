@@ -38,6 +38,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
     }
 
     @Test
@@ -1523,7 +1524,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " where t1.d in ('2023-08-01')\n" +
                     " group by t1.a, t2.b, t1.d;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertContains(plan, "test_mv1");
         }
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");

@@ -40,6 +40,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -49,14 +50,18 @@ import com.starrocks.utframe.TestWithFeService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.FixMethodOrder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class SchemaChangeHandlerTest extends TestWithFeService {
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandlerTest.class);
@@ -64,6 +69,12 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
     @Override
     protected void runBeforeAll() throws Exception {
+        // set some parameters to speedup test
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
         //create database db1
         createDatabase("test");
 
@@ -89,6 +100,13 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
 
         createTable(createDupTblStmtStr);
+
+        String createDup2TblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup2 (\n" + "timestamp DATETIME,\n"
+                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+
+        createTable(createDup2TblStmtStr);
 
         String createDupTbl2StmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup2 (\n" + "timestamp DATETIME,\n"
                 + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
@@ -235,7 +253,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("sc_dup");
+        OlapTable tbl = (OlapTable) db.getTable("sc_dup2");
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
@@ -247,7 +265,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             locker.unLockDatabase(db, LockType.READ);
         }
 
-        String addRollUpStmtStr = "alter table test.sc_dup add rollup dup_rollup(type, op_id);";
+        String addRollUpStmtStr = "alter table test.sc_dup2 add rollup dup_rollup(type, op_id);";
         AlterTableStmt addRollUpStmt = (AlterTableStmt) parseAndAnalyzeStmt(addRollUpStmtStr);
         GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addRollUpStmt);
         Map<Long, AlterJobV2> materializedViewAlterJobs = GlobalStateMgr.getCurrentState().getRollupHandler()
@@ -259,10 +277,21 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
 
         //process agg drop value column with rollup schema change
-        String dropRollUpValColStmtStr = "alter table test.sc_dup drop column op_id";
+        String dropRollUpValColStmtStr = "alter table test.sc_dup2 drop column op_id";
         AlterTableStmt dropRollUpValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropRollUpValColStmtStr);
         GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropRollUpValColStmt);
         waitAlterJobDone(materializedViewAlterJobs);
+
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            Assertions.assertEquals(5, tbl.getBaseSchema().size());
+            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            Assertions.assertEquals(baseIndexName, tbl.getName());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            Assertions.assertNotNull(indexMeta);
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
     }
 
     @Test
@@ -336,7 +365,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertNotNull(tbl);
             System.out.println(tbl.getName());
             Assertions.assertEquals("StarRocks", tbl.getEngine());
-            Assertions.assertEquals(5, tbl.getBaseSchema().size());
+            Assertions.assertEquals(6, tbl.getBaseSchema().size());
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -353,7 +382,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         locker.lockDatabase(db, LockType.READ);
         try {
-            Assertions.assertEquals(6, tbl.getBaseSchema().size());
+            Assertions.assertEquals(7, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
@@ -371,7 +400,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Assertions.assertEquals(jobSize, alterJobs.size());
         locker.lockDatabase(db, LockType.READ);
         try {
-            Assertions.assertEquals(5, tbl.getBaseSchema().size());
+            Assertions.assertEquals(6, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());

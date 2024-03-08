@@ -91,9 +91,10 @@ public class HeartbeatMgr extends FrontendDaemon {
                 Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
     }
 
-    public void setLeader(String token, long epoch) {
+    public void setLeader(int clusterId, String token, long epoch) {
         TMasterInfo tMasterInfo = new TMasterInfo(new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port),
                 epoch);
+        tMasterInfo.setCluster_id(clusterId);
         tMasterInfo.setToken(token);
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();

@@ -820,6 +820,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         this.foreignKeyConstraints = foreignKeyConstraints;
     }
 
+    /**
+     * Get foreign key constraints of this table. Caller should not change the returned list.
+     */
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
     }

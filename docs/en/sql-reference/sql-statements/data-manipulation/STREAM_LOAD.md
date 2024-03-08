@@ -388,7 +388,7 @@ curl --location-trusted -u <username>:<password> \
 >
 > - The `hll_empty` function is used to fill the specified default value into `col2` of `table7`.
 
-For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) and [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md).
+For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/scalar-functions/hll_hash.md) and [hll_empty](../../sql-functions/scalar-functions/hll_empty.md).
 
 #### Load data into tables containing BITMAP-type columns
 

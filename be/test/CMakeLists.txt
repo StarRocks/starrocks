@@ -22,6 +22,9 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./connector_sink/hive_chunk_sink_test.cpp
+        ./connector_sink/iceberg_chunk_sink_test.cpp
+        ./connector_sink/file_chunk_sink_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
@@ -157,7 +160,7 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
-        ./formats/orc/orc_chunk_writer_test.cpp
+        ./formats/orc/orc_file_writer_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/utils_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
@@ -170,6 +173,7 @@ set(EXEC_FILES
         ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./formats/parquet/column_converter_test.cpp
+        ./formats/parquet/parquet_file_writer_test.cpp
         ./formats/parquet/parquet_footer_test.cpp
         ./formats/parquet/parquet_cli_reader.h
         ./formats/parquet/parquet_cli_reader_test.cpp
