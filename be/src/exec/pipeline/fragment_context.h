@@ -228,7 +228,7 @@ private:
     size_t _expired_log_count = 0;
 
     std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
-    
+
     RuntimeProfile::Counter* _jit_counter = nullptr;
     RuntimeProfile::Counter* _jit_timer = nullptr;
 };
