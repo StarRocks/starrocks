@@ -99,7 +99,7 @@ public class DeriveStatsTask extends OptimizerTask {
             groupExpression.getGroup().setMvStatistics(mv.getId(), groupExpressionStatistics);
             if (mv.getRelatedMaterializedViews() != null) {
                 List<Long> relatedMvIds =
-                        mv.getRelatedMaterializedViews().stream().map( mvid -> mvid.getId()).collect(Collectors.toList());
+                        mv.getRelatedMaterializedViews().stream().map(mvid -> mvid.getId()).collect(Collectors.toList());
                 groupExpression.getGroup().setRelatedMvs(mv.getId(), relatedMvIds);
             }
         }
