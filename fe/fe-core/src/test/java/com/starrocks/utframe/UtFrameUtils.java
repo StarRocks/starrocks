@@ -716,10 +716,14 @@ public class UtFrameUtils {
             if (entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
                 continue;
             }
-            String dbName = entry.getKey().split("\\.")[0];
+            String[] nameParts = entry.getKey().split("\\.");
+            String dbName = nameParts[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
             }
+            String tableName = nameParts[1];
+            String dropTable = String.format("drop table if exists `%s`.`%s`;", dbName, tableName);
+            connectContext.executeSql(dropTable);
             starRocksAssert.useDatabase(dbName);
             starRocksAssert.withSingleReplicaTable(entry.getValue());
         }
@@ -733,6 +737,8 @@ public class UtFrameUtils {
             }
             String viewName = nameParts[1];
             starRocksAssert.useDatabase(dbName);
+            String dropView = String.format("drop view if exists `%s`.`%s`;", dbName, viewName);
+            connectContext.executeSql(dropView);
             String createView = String.format("create view `%s`.`%s` as %s",
                     dbName, viewName, replayDumpInfo.getCreateViewStmtMap().get(normalizedViewName));
             starRocksAssert.withView(createView);
@@ -742,10 +748,14 @@ public class UtFrameUtils {
             if (!entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
                 continue;
             }
-            String dbName = entry.getKey().split("\\.")[0];
+            String[] nameParts = entry.getKey().split("\\.");
+            String dbName = nameParts[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
             }
+            String mvName = nameParts[1];
+            String dropMv = String.format("drop materialized view if exists `%s`.`%s`;", dbName, mvName);
+            connectContext.executeSql(dropMv);
             starRocksAssert.useDatabase(dbName);
             starRocksAssert.withSingleReplicaAsyncMv(entry.getValue());
         }

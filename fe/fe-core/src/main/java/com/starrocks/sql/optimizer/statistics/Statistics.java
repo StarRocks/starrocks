@@ -142,7 +142,11 @@ public class Statistics {
     }
 
     public static Builder buildFrom(Statistics other) {
-        return new Builder(other.getOutputRowCount(), other.columnStatistics, other.tableRowCountMayInaccurate);
+        return new Builder(
+                other.getOutputRowCount(),
+                other.columnStatistics,
+                other.tableRowCountMayInaccurate,
+                other.shadowColumns);
     }
 
     public static Builder builder() {
@@ -162,11 +166,16 @@ public class Statistics {
         }
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
-                        boolean tableRowCountMayInaccurate) {
+                        boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns) {
             this.outputRowCount = outputRowCount;
             this.columnStatistics = new HashMap<>(columnStatistics);
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
-            this.shadowColumns = Lists.newArrayList();
+            this.shadowColumns = shadowColumns;
+        }
+
+        private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+                        boolean tableRowCountMayInaccurate) {
+            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList());
         }
 
         public Builder setOutputRowCount(double outputRowCount) {
@@ -183,9 +192,17 @@ public class Statistics {
             return this;
         }
 
+        public double getOutputRowCount() {
+            return outputRowCount;
+        }
+
         public Builder setTableRowCountMayInaccurate(boolean tableRowCountMayInaccurate) {
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
             return this;
+        }
+
+        public boolean getTableRowCountMayInaccurate() {
+            return tableRowCountMayInaccurate;
         }
 
         public Builder addColumnStatistic(ColumnRefOperator column, ColumnStatistic statistic) {

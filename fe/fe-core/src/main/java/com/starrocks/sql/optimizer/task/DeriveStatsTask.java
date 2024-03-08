@@ -25,7 +25,9 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * DeriveStatsTask derives any stats needed for costing a GroupExpression.
@@ -83,6 +85,7 @@ public class DeriveStatsTask extends OptimizerTask {
                     }
                 }
                 groupExpression.getGroup().setStatistics(newBuilder.build());
+                groupExpression.getGroup().setIsStatisticsAdjustedByMv(true);
             } else {
                 groupExpression.getGroup().setStatistics(groupExpressionStatistics);
             }
@@ -94,6 +97,11 @@ public class DeriveStatsTask extends OptimizerTask {
             LogicalOlapScanOperator scan = groupExpression.getOp().cast();
             MaterializedView mv = (MaterializedView) scan.getTable();
             groupExpression.getGroup().setMvStatistics(mv.getId(), groupExpressionStatistics);
+            if (mv.getRelatedMaterializedViews() != null) {
+                List<Long> relatedMvIds =
+                        mv.getRelatedMaterializedViews().stream().map( mvid -> mvid.getId()).collect(Collectors.toList());
+                groupExpression.getGroup().setRelatedMvs(mv.getId(), relatedMvIds);
+            }
         }
 
         groupExpression.setStatsDerived();
@@ -109,7 +117,14 @@ public class DeriveStatsTask extends OptimizerTask {
         if (currentStatistics == null) {
             return true;
         }
+        // if the group expression is mv, use it to update group statistics because it is more accurate
+        if (isMaterializedView(groupExpression)) {
+            return true;
+        }
 
+        if (groupExpression.getGroup().isStatisticsAdjustedByMv()) {
+            return false;
+        }
         return newStatistics.getComputeSize() < currentStatistics.getComputeSize();
     }
 }
