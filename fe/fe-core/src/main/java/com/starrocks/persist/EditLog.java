@@ -1145,6 +1145,9 @@ public class EditLog {
                     globalStateMgr.getAuthorizationMgr().replayDropRole(info);
                     break;
                 }
+                case OperationType.OP_AUTH_UPGRADE_V2:
+                    // for compatibility reason, just ignore the auth upgrade log
+                    break;
                 case OperationTypeEPack.OP_CREATE_MASKING_POLICY:
                 case OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY: {
                     CreatePolicyLog policy = (CreatePolicyLog) journal.getData();

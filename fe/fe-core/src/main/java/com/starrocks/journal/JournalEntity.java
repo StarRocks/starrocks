@@ -1106,6 +1106,10 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_AUTH_UPGRADE_V2:
+                // for compatibility reason, just ignore the auth upgrade log
+                isRead = true;
+                break;
             case OperationTypeEPack.OP_CREATE_MASKING_POLICY:
             case OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY:
                 data = CreatePolicyLog.read(in);
