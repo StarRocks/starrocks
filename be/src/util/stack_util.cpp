@@ -351,11 +351,14 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
         }
     }
     // call the real __cxa_throw():
-#ifdef __clang__
+
+#if defined(ADDRESS_SANITIZER)
+    __interceptor___cxa_throw(thrown_exception, info, dest);
+#elif defined(__clang__)
     __real___cxa_throw(thrown_exception, info, dest);
 #elif defined(__GNUC__)
-    __real___cxa_throw(thrown_exception, info, dest);
+__real___cxa_throw(thrown_exception, info, dest);
 #endif
-}
+} // namespace starrocks
 
 } // namespace starrocks
