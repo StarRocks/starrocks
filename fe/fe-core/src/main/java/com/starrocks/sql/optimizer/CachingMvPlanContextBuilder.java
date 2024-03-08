@@ -17,16 +17,14 @@ package com.starrocks.sql.optimizer;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,7 +33,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 public class CachingMvPlanContextBuilder {
 
@@ -43,8 +40,8 @@ public class CachingMvPlanContextBuilder {
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
     private Cache<MaterializedView, List<MvPlanContext>> mvPlanContextCache = buildCache();
 
-    // store the ast of mv's define query to mv plan context
-    private Map<AstKey, Set<MaterializedView>> astToMvPlanContextMap = Maps.newConcurrentMap();
+    // store the ast of mv's define query to mvs
+    private Map<AstKey, Set<MaterializedView>> astToMvsMap = Maps.newConcurrentMap();
 
     public static class AstKey {
         private final String sql;
@@ -141,10 +138,26 @@ public class CachingMvPlanContextBuilder {
         }
     }
 
+    public void invalidateAstFromCache(MaterializedView mv) {
+        ParseNode parseNode = mv.getDefineQueryParseNode();
+        if (parseNode == null) {
+            return;
+        }
+        AstKey astKey = new AstKey(parseNode);
+        if (!astToMvsMap.containsKey(astKey)) {
+            return;
+        }
+        astToMvsMap.get(astKey).remove(mv);
+        LOG.info("Remove mv {} from ast cache", mv.getName());
+    }
+
     /**
      * This method is used to put mv into ast cache, this will be only called in the first time.
      */
     public void putAstIfAbsent(MaterializedView mv) {
+        if (mv == null || !mv.isEnableRewrite()) {
+            return;
+        }
         // initialize define query parse node each time
         mv.initDefineQueryParseNode();
 
@@ -153,51 +166,35 @@ public class CachingMvPlanContextBuilder {
         if (parseNode == null) {
             return;
         }
-        astToMvPlanContextMap.computeIfAbsent(new AstKey(parseNode), ignored -> Sets.newHashSet())
+        astToMvsMap.computeIfAbsent(new AstKey(parseNode), ignored -> Sets.newHashSet())
                 .add(mv);
         LOG.info("Add mv {} input ast cache", mv.getName());
     }
 
-    public void invalidateAstFromCache(MaterializedView mv) {
-        ParseNode parseNode = mv.getDefineQueryParseNode();
+    /**
+     * @param parseNode: ast to query.
+     * @return: null if parseNode is null or astToMvsMap doesn't contain this ast, otherwise return the mvs
+     */
+    public Set<MaterializedView> getMvsByAst(ParseNode parseNode) {
         if (parseNode == null) {
-            return;
+            return null;
         }
-        AstKey astKey = new AstKey(parseNode);
-        if (!astToMvPlanContextMap.containsKey(astKey)) {
-            return;
-        }
-        astToMvPlanContextMap.get(astKey).remove(mv);
-        LOG.info("Remove mv {} from ast cache", mv.getName());
+        return astToMvsMap.get(new AstKey(parseNode));
     }
 
-    public Set<MaterializedView> getMaterializedViewsByAst(OptExpression input, ParseNode ast) {
-        AstKey key = new AstKey(ast);
-        Set<MaterializedView> mvs = astToMvPlanContextMap.get(key);
-        if (mvs == null) {
-            // for debug use.
-            ConnectContext connectContext = ConnectContext.get();
-            if (connectContext != null && connectContext.getSessionVariable().getQueryDebugOptions()
-                    .isEnableQueryTraceLog()) {
-                try {
-                    Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
-                    int maxLevel = connectContext.getSessionVariable().getNestedMvRewriteMaxLevel();
-                    Set<MaterializedView> relatedMvs = MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
-                    LOG.warn("Query Key: {}", key);
-                    for (Map.Entry<AstKey, Set<MaterializedView>> e : astToMvPlanContextMap.entrySet()) {
-                        AstKey cacheKey = e.getKey();
-                        Set<MaterializedView> cacheMvs = e.getValue();
-                        if (Sets.intersection(cacheMvs, relatedMvs).isEmpty()) {
-                            continue;
-                        }
-                        LOG.warn("Cached Key: {}", cacheKey);
-                    }
-                } catch (Exception ignored) {
-                    // do nothing
-                }
+    /**
+     * Get associated asts of related mvs for debug usage to find the difference between the asts of related mvs and real ast.
+     */
+    public List<AstKey> getAstsOfRelatedMvs(Set<MaterializedView> relatedMvs) {
+        List<AstKey> keys = Lists.newArrayList();
+        for (Map.Entry<CachingMvPlanContextBuilder.AstKey, Set<MaterializedView>> e : this.astToMvsMap.entrySet()) {
+            CachingMvPlanContextBuilder.AstKey cacheKey = e.getKey();
+            Set<MaterializedView> cacheMvs = e.getValue();
+            if (Sets.intersection(cacheMvs, relatedMvs).isEmpty()) {
+                continue;
             }
-            return Sets.newHashSet();
+            keys.add(cacheKey);
         }
-        return mvs;
+        return keys;
     }
 }

@@ -28,19 +28,8 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
     @BeforeClass
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
-
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);
-
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
-        starRocksAssert.useTable("depts");
-        starRocksAssert.useTable("depts_null");
-        starRocksAssert.useTable("locations");
-        starRocksAssert.useTable("emps");
-        starRocksAssert.useTable("emps_null");
-        starRocksAssert.useTable("emps_bigint");
-        starRocksAssert.useTable("emps_no_constraint");
-        starRocksAssert.useTable("dependents");
-
         starRocksAssert.withTable("create table user_tags (" +
                 " time date, " +
                 " user_id int, " +

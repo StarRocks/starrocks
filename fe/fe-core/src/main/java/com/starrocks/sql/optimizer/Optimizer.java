@@ -160,12 +160,15 @@ public class Optimizer {
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
+        // prepare for optimizer
+        prepare(connectContext, columnRefFactory);
 
-        prepare(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
-
-        // try text based mv rewrite first
+        // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
         logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
                 .transform(logicOperatorTree, context).get(0);
+
+        // prepare for mv rewrite
+        prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
         OptExpression result = optimizerConfig.isRuleBased() ?
                 optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
@@ -290,11 +293,7 @@ public class Optimizer {
         memo.copyIn(memo.getRootGroup(), logicalTreeWithView);
     }
 
-    private void prepare(
-            ConnectContext connectContext,
-            OptExpression logicOperatorTree,
-            ColumnRefFactory columnRefFactory,
-            ColumnRefSet requiredColumns) {
+    private void prepare(ConnectContext connectContext, ColumnRefFactory columnRefFactory) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
             memo = new Memo();
@@ -303,7 +302,10 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
         context.setQueryTables(queryTables);
         context.setUpdateTableId(updateTableId);
+    }
 
+    private void prepareMvRewrite(ConnectContext connectContext, OptExpression logicOperatorTree,
+                                  ColumnRefFactory columnRefFactory, ColumnRefSet requiredColumns) {
         // prepare related mvs if needed and initialize mv rewrite strategy
         new MvRewritePreprocessor(connectContext, columnRefFactory, context, requiredColumns)
                 .prepare(logicOperatorTree, mvRewriteStrategy);

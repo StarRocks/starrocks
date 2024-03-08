@@ -510,7 +510,7 @@ public class MvRewritePreprocessor {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
             return Pair.create(false, "MV is not active");
         }
-        if (!mv.getTableProperty().getMvQueryRewriteSwitch().isEnable()) {
+        if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();
             logMVPrepare(connectContext, mv, message);

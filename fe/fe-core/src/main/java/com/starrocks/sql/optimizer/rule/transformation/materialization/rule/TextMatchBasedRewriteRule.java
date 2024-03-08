@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.api.client.util.Lists;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
@@ -24,6 +25,8 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -55,6 +58,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.MvRewritePreprocessor.isMVValidToRewriteQuery;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter.REWRITE_SUCCESS;
 
@@ -146,6 +150,43 @@ public class TextMatchBasedRewriteRule extends Rule {
         return true;
     }
 
+    /**
+     * Get materialized views by ast.
+     * @param input: the input of mv rewrite
+     * @param ast
+     * @return
+     */
+    public Set<MaterializedView> getMaterializedViewsByAst(OptExpression input, ParseNode ast) {
+        CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
+        Set<MaterializedView> mvs = instance.getMvsByAst(ast);
+        if (mvs != null) {
+            return mvs;
+        }
+
+        // for debug use.
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext != null && connectContext.getSessionVariable().getQueryDebugOptions()
+                .isEnableQueryTraceLog()) {
+            try {
+                Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
+                int maxLevel = connectContext.getSessionVariable().getNestedMvRewriteMaxLevel();
+                Set<MaterializedView> relatedMvs = MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
+                String mvNames = Joiner.on(",").join(relatedMvs.stream()
+                        .map(mv -> mv.getName()).collect(Collectors.toList()));
+                LOG.warn("Related MVs: {}", mvNames);
+                CachingMvPlanContextBuilder.AstKey astKey = new CachingMvPlanContextBuilder.AstKey(ast);
+                LOG.warn("Query Key: {}", astKey);
+                List<CachingMvPlanContextBuilder.AstKey> candidates = instance.getAstsOfRelatedMvs(relatedMvs);
+                for (CachingMvPlanContextBuilder.AstKey cacheKey : candidates) {
+                    LOG.warn("Cached Key: {}", cacheKey);
+                }
+            } catch (Exception ignored) {
+                LOG.warn("Get related mvs failed: {}", DebugUtil.getStackTrace(ignored));
+            }
+        }
+        return Sets.newHashSet();
+    }
+
     private OptExpression rewriteByTextMatch(OptExpression input,
                                              OptimizerContext context,
                                              ParseNode queryAst) {
@@ -155,13 +196,18 @@ public class TextMatchBasedRewriteRule extends Rule {
 
         try {
             ParseNode normalizedAst = normalizeAst(queryAst);
-            Set<MaterializedView> candidateMvs = CachingMvPlanContextBuilder.getInstance()
-                    .getMaterializedViewsByAst(input, normalizedAst);
+            Set<MaterializedView> candidateMvs = getMaterializedViewsByAst(input, normalizedAst);
             logMVRewrite(context, this, "matched mvs: {}",
                     candidateMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList()));
+            if (candidateMvs.isEmpty()) {
+                return null;
+            }
             int mvRelatedCount = 0;
+            Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
             for (MaterializedView mv : candidateMvs) {
-                if (!mv.isActive()) {
+                Pair<Boolean, String> status = isMVValidToRewriteQuery(connectContext, mv, false, queryTables);
+                if (!status.first) {
+                    logMVRewrite(context, this, "MV {} cannot be used for rewrite, {}", mv.getName(), status.second);
                     continue;
                 }
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
