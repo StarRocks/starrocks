@@ -30,6 +30,14 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
+
+    @Test
+    public void test() throws Exception {
+        String sql = "select 1 as a, count(if(t1a = 'a', t1a, null)), count(distinct if(t1a = 'a', t1b, null)) " +
+                "from (select * from t0 left join test_all_type on v1 = t1c) t group by a";
+        String plan = getVerboseExplain(sql);
+        System.out.println(plan);
+    }
     @Test
     public void testIsNullPredicatePushdownClear() throws Exception {
         {

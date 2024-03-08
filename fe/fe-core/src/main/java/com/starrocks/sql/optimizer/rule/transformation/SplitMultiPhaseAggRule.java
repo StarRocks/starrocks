@@ -104,9 +104,6 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         if (aggOp.getGroupingKeys().isEmpty()) {
             return implementDistinctWithoutGroupByAgg(context.getColumnRefFactory(),
                     input, aggOp, distinctCols.get());
-        } else if (isGroupByAllConstant(input, aggOp)) {
-            return implementDistinctWithConstantGroupByAgg(context.getColumnRefFactory(),
-                    input, aggOp, distinctCols.get(), aggOp.getGroupingKeys());
         } else {
             return implementDistinctWithGroupByAgg(context.getColumnRefFactory(), input, aggOp);
         }
@@ -159,80 +156,6 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         LogicalAggregationOperator global = builder.withOperator(oldAgg)
                 .setType(AggType.GLOBAL)
                 .setGroupingKeys(Lists.newArrayList())
-                .setAggregations(createNormalAgg(AggType.GLOBAL, reRewriteAggregate))
-                .setSplit()
-                .build();
-
-        OptExpression globalOptExpression = OptExpression.create(global, distinctLocalExpression);
-        return Lists.newArrayList(globalOptExpression);
-    }
-
-    private List<OptExpression> implementDistinctWithConstantGroupByAgg(
-            ColumnRefFactory columnRefFactory,
-            OptExpression input,
-            LogicalAggregationOperator oldAgg,
-            List<ColumnRefOperator> distinctAggColumns,
-            List<ColumnRefOperator> groupByColumns) {
-        List<ColumnRefOperator> partitionColumns = distinctAggColumns;
-
-        LogicalAggregationOperator local = createDistinctAggForFirstPhase(
-                columnRefFactory,
-                Lists.newArrayList(), oldAgg.getAggregations(), AggType.LOCAL);
-        local.setPartitionByColumns(partitionColumns);
-        OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
-
-        LogicalAggregationOperator distinctGlobal = createDistinctAggForFirstPhase(
-                columnRefFactory, Lists.newArrayList(), oldAgg.getAggregations(), AggType.DISTINCT_GLOBAL);
-        distinctGlobal.setPartitionByColumns(partitionColumns);
-
-        // build projection for DISTINCT_GLOBAL aggregate node
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
-        distinctGlobal.getGroupingKeys().forEach(k -> columnRefMap.put(k, k));
-        distinctGlobal.getAggregations().keySet().forEach(key -> columnRefMap.put(key, key));
-
-        Projection childProjection = input.getInputs().get(0).getOp().getProjection();
-        if (childProjection != null) {
-            childProjection.getColumnRefMap().entrySet().stream()
-                    .filter(entry -> groupByColumns.contains(entry.getKey())).forEach(entry -> columnRefMap.put(
-                            entry.getKey(), entry.getValue()));
-        }
-
-        LogicalAggregationOperator distinctGlobalWithProjection = new LogicalAggregationOperator.Builder()
-                .withOperator(distinctGlobal)
-                .setProjection(new Projection(columnRefMap))
-                .build();
-
-        OptExpression distinctGlobalExpression = OptExpression.create(distinctGlobalWithProjection, localOptExpression);
-
-        LogicalAggregationOperator distinctLocal = new LogicalAggregationOperator.Builder()
-                .withOperator(oldAgg)
-                .setType(AggType.DISTINCT_LOCAL)
-                .setAggregations(createDistinctAggForSecondPhase(AggType.DISTINCT_LOCAL, oldAgg.getAggregations()))
-                .setGroupingKeys(groupByColumns)
-                .setPartitionByColumns(partitionColumns)
-                .setPredicate(null)
-                .setLimit(Operator.DEFAULT_LIMIT)
-                .setProjection(null)
-                .build();
-        OptExpression distinctLocalExpression = OptExpression.create(distinctLocal, distinctGlobalExpression);
-
-        // in DISTINCT_LOCAL phase, may rewrite the aggregate function, we use the rewrite function in GLOBAL phase
-        Map<ColumnRefOperator, CallOperator> reRewriteAggregate = Maps.newHashMap(oldAgg.getAggregations());
-        Map<ColumnRefOperator, CallOperator> countDistinctMap = oldAgg.getAggregations().entrySet().stream().
-                filter(entry -> entry.getValue().isDistinct() &&
-                        entry.getValue().getFnName().equalsIgnoreCase(FunctionSet.COUNT)).
-                collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        if (!countDistinctMap.isEmpty()) {
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : countDistinctMap.entrySet()) {
-                reRewriteAggregate.put(entry.getKey(), distinctLocal.getAggregations().get(entry.getKey()));
-            }
-        }
-
-        LogicalAggregationOperator.Builder builder = new LogicalAggregationOperator.Builder();
-        LogicalAggregationOperator global = builder.withOperator(oldAgg)
-                .setType(AggType.GLOBAL)
-                .setGroupingKeys(groupByColumns)
-                .setPartitionByColumns(Lists.newArrayList())
                 .setAggregations(createNormalAgg(AggType.GLOBAL, reRewriteAggregate))
                 .setSplit()
                 .build();
