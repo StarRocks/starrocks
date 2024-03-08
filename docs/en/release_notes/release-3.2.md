@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## 3.2.4
 
-Release date: March 7, 2024
+Release date: March 8, 2024
 
 ### New Features
 
