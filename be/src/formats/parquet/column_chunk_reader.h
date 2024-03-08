@@ -53,7 +53,12 @@ public:
 
     Status skip_page();
 
-    Status skip_values(size_t num) { return _cur_decoder->skip(num); }
+    Status skip_values(size_t num) {
+        if (num == 0) {
+            return Status::OK();
+        }
+        return _cur_decoder->skip(num);
+    }
 
     Status next_page();
 
@@ -63,25 +68,8 @@ public:
 
     uint32_t num_values() const { return _num_values; }
 
-    // Try to decode n definition levels into 'levels'
-    // return number of decoded levels.
-    // If the returned value is less than input n, this means current page don't have
-    // enough levels.
-    // User should call next_page() to get more levels
-    size_t decode_def_levels(size_t n, level_t* levels) {
-        SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-        DCHECK_GT(_max_def_level, 0);
-        return _def_level_decoder.decode_batch(n, levels);
-    }
-
     LevelDecoder& def_level_decoder() { return _def_level_decoder; }
     LevelDecoder& rep_level_decoder() { return _rep_level_decoder; }
-
-    size_t decode_rep_levels(size_t n, level_t* levels) {
-        SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-        DCHECK_GT(_max_rep_level, 0);
-        return _rep_level_decoder.decode_batch(n, levels);
-    }
 
     Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
