@@ -469,6 +469,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+    public static final String MATERIALIZED_VIEW_UNION_REWRITE_MODE = "materialized_view_union_rewrite_mode";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
 
@@ -1511,6 +1512,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
     private boolean enableMaterializedViewUnionRewrite = true;
+
+    /**
+     * <= 0: default mode, only try to union all rewrite by logical plan tree after partition compensate
+     * 1: eager mode v1, try to pull up query's filter after union when query's output matches mv's define query
+     *  which will increase union rewrite's ability.
+     * 2: eager mode v2, try to pull up query's filter after union as much as possible.
+     */
+    @VarAttr(name = MATERIALIZED_VIEW_UNION_REWRITE_MODE)
+    private int materializedViewUnionRewriteMode = 0;
 
     /**
      * Whether to compensate partition predicates in mv rewrite, see
@@ -2958,6 +2968,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewUnionRewrite(boolean enableMaterializedViewUnionRewrite) {
         this.enableMaterializedViewUnionRewrite = enableMaterializedViewUnionRewrite;
+    }
+
+    public int getMaterializedViewUnionRewriteMode() {
+        return materializedViewUnionRewriteMode;
+    }
+
+    public void setMaterializedViewUnionRewriteMode(int materializedViewUnionRewriteMode) {
+        this.materializedViewUnionRewriteMode = materializedViewUnionRewriteMode;
     }
 
     public boolean isEnableSyncMaterializedViewRewrite() {
