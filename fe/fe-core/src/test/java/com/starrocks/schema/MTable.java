@@ -128,7 +128,7 @@ public class MTable {
     }
 
     public String getCreateTableSql() {
-        String  sql = String.format("CREATE TABLE `%s` (\n" +
+        String sql = String.format("CREATE TABLE IF NOT EXISTS `%s` (\n" +
                         " %s" +
                         "\n" +
                         ") ENGINE=OLAP\n",

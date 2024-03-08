@@ -157,6 +157,8 @@ public class OlapScanNode extends ScanNode {
     private boolean isFinalized = false;
     private boolean isSortedByKeyPerTablet = false;
     private boolean isOutputChunkByBucket = false;
+    // only used in bucket agg
+    private boolean withoutColocateRequirement = false;
     private boolean outputAscHint = true;
     private boolean sortKeyAscHint = true;
     private Optional<Boolean> partitionKeyAscHint = Optional.empty();
@@ -201,6 +203,14 @@ public class OlapScanNode extends ScanNode {
 
     public void setIsOutputChunkByBucket(boolean isOutputChunkByBucket) {
         this.isOutputChunkByBucket = isOutputChunkByBucket;
+    }
+
+    public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
+        this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public boolean getWithoutColocateRequirement() {
+        return this.withoutColocateRequirement;
     }
 
     public void disablePhysicalPropertyOptimize() {
@@ -416,7 +426,11 @@ public class OlapScanNode extends ScanNode {
             internalRange.setPartition_id(partition.getId());
             internalRange.setRow_count(selectedTablet.getRowCount(0));
             if (isOutputChunkByBucket) {
-                internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                if (withoutColocateRequirement) {
+                    internalRange.setBucket_sequence((int)tabletId);
+                } else {
+                    internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                }
             }
 
             List<Replica> replicas = allQueryableReplicas;

@@ -61,6 +61,7 @@ public class SelectStmtTest {
     @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        FeConstants.showFragmentCost = false;
         String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createBaseAllStmtStr = "create table db1.baseall(k1 int) distributed by hash(k1) "
@@ -165,7 +166,7 @@ public class SelectStmtTest {
                         "nullable_tuples:[false], conjuncts:[TExpr(nodes:[TExprNode(node_type:BINARY_PRED, " +
                         "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BOOLEAN))]), " +
                         "opcode:EQ, num_children:2, output_scale:-1, vector_opcode:INVALID_OPCODE, child_type:INT, " +
-                        "has_nullable_child:true, is_nullable:true, is_monotonic:false)";
+                        "has_nullable_child:true, is_nullable:true, is_monotonic:false,";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift, thrift.contains(expectString));
     }
@@ -587,9 +588,13 @@ public class SelectStmtTest {
             String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
                     "str_to_map('age=18&sex=1&gender=1','&','=')['sex'] AS sex;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assert.assertTrue(plan, plan.contains("str_to_map[([4: split, ARRAY<VARCHAR>, true], '='); " +
-                    "args: INVALID_TYPE,VARCHAR; result: MAP<VARCHAR,VARCHAR>; " +
-                    "args nullable: true; result nullable: true]"));
+            Assert.assertTrue(plan, plan.contains("2 <-> 4: str_to_map['age']\n" +
+                    "  |  3 <-> 4: str_to_map['sex']\n" +
+                    "  |  common expressions:\n" +
+                    "  |  4 <-> str_to_map[('age=18&sex=1&gender=1', '&', '='); " +
+                    "args: VARCHAR,VARCHAR,VARCHAR; " +
+                    "result: MAP<VARCHAR,VARCHAR>; args " +
+                    "nullable: false; result nullable: true]"));
         } catch (Exception e) {
             Assert.fail("Should not throw an exception");
         }

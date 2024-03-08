@@ -39,24 +39,14 @@ package com.starrocks.persist;
  * StorageInfo is easier to serialize to a Json String than class Storage
  */
 public class StorageInfo {
-    private int clusterID;
     private long imageJournalId;
 
     public StorageInfo() {
-        this(-1, 0);
+        this(0);
     }
 
-    public StorageInfo(int clusterID, long imageJournalId) {
-        this.clusterID = clusterID;
+    public StorageInfo(long imageJournalId) {
         this.imageJournalId = imageJournalId;
-    }
-
-    public int getClusterID() {
-        return clusterID;
-    }
-
-    public void setClusterID(int clusterID) {
-        this.clusterID = clusterID;
     }
 
     public long getImageJournalId() {

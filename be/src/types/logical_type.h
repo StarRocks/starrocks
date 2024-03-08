@@ -118,12 +118,6 @@ inline bool is_integer_type(LogicalType type) {
            type == TYPE_LARGEINT;
 }
 
-inline LogicalType promote_integer_types(LogicalType type1, LogicalType type2) {
-    DCHECK(is_integer_type(type1) && is_integer_type(type2));
-    if (type1 > type2) return type1;
-    return type2;
-}
-
 inline bool is_float_type(LogicalType type) {
     return type == TYPE_FLOAT || type == TYPE_DOUBLE;
 }

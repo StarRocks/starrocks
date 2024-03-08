@@ -185,11 +185,13 @@ add_library(Storage STATIC
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/compaction_task_context.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/primary_key_compaction_policy.cpp
     lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp

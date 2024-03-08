@@ -31,6 +31,8 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 
+import java.util.List;
+
 /**
  * Resolve the expression(eg: partition column expression) through join/sub-query/view/set operator fo find the slot ref
  * which it comes from.
@@ -142,9 +144,12 @@ public class SlotRefResolver {
             if (tableName != null && !node.getResolveTableName().equals(tableName)) {
                 return null;
             }
-            slot = (SlotRef) slot.clone();
-            slot.setTblName(null); //clear table name here, not check it inside
-            return node.getQueryStatement().getQueryRelation().accept(this, slot);
+            List<Field> fields = node.getRelationFields().resolveFields(slot);
+            if (fields.isEmpty()) {
+                return null;
+            }
+            return fields.get(0).getOriginExpression().accept(EXPR_SHUTTLE,
+                    node.getQueryStatement().getQueryRelation());
         }
 
         @Override

@@ -230,7 +230,9 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout)
+                                long createTimestamp, long estimateScanRows,
+                                int estimateFileNum, long estimateFileSize,
+                                TLoadJobType type, long timeout)
             throws UserException {
 
         // get db id
@@ -239,10 +241,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
 
-        LoadJob loadJob;
+        InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-            loadJob =
-                    new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, type, timeout);
+            loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
+            loadJob.setEstimateScanRow(estimateScanRows);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
@@ -564,13 +567,13 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {
-
         List<LoadJob> loadJobList = Lists.newArrayList();
-        if (dbId != -1 && !dbIdToLabelToLoadJobs.containsKey(dbId)) {
-            return loadJobList;
-        }
         readLock();
         try {
+            if (dbId != -1 && !dbIdToLabelToLoadJobs.containsKey(dbId)) {
+                return loadJobList;
+            }
+
             for (Map<String, List<LoadJob>> dbJobs : dbIdToLabelToLoadJobs.values()) {
                 Map<String, List<LoadJob>> labelToLoadJobs = dbId == -1 ? dbJobs : dbIdToLabelToLoadJobs.get(dbId);
 

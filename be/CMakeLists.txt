@@ -213,7 +213,7 @@ set_target_properties(gtest PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/l
 add_library(gmock STATIC IMPORTED)
 set_target_properties(gmock PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgmock.a)
 
-add_library(snappy STATIC IMPORTED)
+add_library(snappy STATIC IMPORTED GLOBAL)
 set_target_properties(snappy PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsnappy.a)
 
 set(CURL_INCLUDE_DIR "${THIRDPARTY_DIR}/include" CACHE PATH "curl include path")
@@ -473,6 +473,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(CURL::libcurl ALIAS curl)
     add_library(rocksdb::rocksdb ALIAS rocksdb)
     add_library(starcache::starcache ALIAS starcache)
+    add_library(Snappy::snappy ALIAS snappy)
 
     set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
     find_package(absl CONFIG REQUIRED)
@@ -806,6 +807,7 @@ set(STARROCKS_LINK_LIBS
     Common
     Column
     Connector
+    ConnectorSink
     Exec
     Exprs
     FileSystem
@@ -1057,6 +1059,7 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
+add_subdirectory(${SRC_DIR}/connector_sink)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)

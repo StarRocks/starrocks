@@ -62,7 +62,7 @@ StarRocks 优化了 `information_schema` 中表 `tables`、表 `tables_config` �
 | JOB_ID               | 导入作业的 ID，由 StarRocks 自动生成。                       |
 | LABEL                | 导入作业的标签。                                             |
 | DATABASE_NAME        | 目标 StarRocks 表所在的数据库的名称。                        |
-| STATE                | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业已创建。</li><li>`QUEUEING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`PREPARED`：事务已提交。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](../loading/Loading_intro.md#异步导入)。 |
+| STATE                | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业已创建。</li><li>`QUEUEING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`PREPARED`：事务已提交。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](../loading/loading_introduction/loading_concepts.md#异步导入)。 |
 | PROGRESS             | 导入作业 ETL 阶段和 LOADING 阶段的进度。                     |
 | TYPE                 | 导入作业的类型。如果是 Broker Load 导入，则返回 `BROKER`。如果是 INSERT 导入，则返回 `INSERT`。 |
 | PRIORITY             | 导入作业的优先级。取值范围：`HIGHEST`、`HIGH`、`NORMAL`、`LOW`、`LOWEST`。 |

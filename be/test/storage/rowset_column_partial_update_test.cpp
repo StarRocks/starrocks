@@ -47,6 +47,7 @@ public:
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         _update_mem_tracker = std::make_unique<MemTracker>();
         config::primary_key_batch_get_index_memory_limit = GetParam();
+        config::enable_pk_size_tiered_compaction_strategy = false;
     }
 
     void TearDown() override {
@@ -56,6 +57,7 @@ public:
                 tablet.reset();
             }
         }
+        config::enable_pk_size_tiered_compaction_strategy = true;
     }
 
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys, bool add_v3 = false) {
@@ -200,9 +202,21 @@ protected:
 
 static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
     TabletReaderParams params;
-    if (!reader.prepare().ok()) {
-        LOG(ERROR) << "reader prepare failed";
-        return nullptr;
+    int retry_cnt = 1;
+    while (true) {
+        // retry 3 times, in case version not ready
+        if (!reader.prepare().ok()) {
+            LOG(ERROR) << "reader prepare failed, retry cnt: " << retry_cnt;
+            if (retry_cnt < 3) {
+                retry_cnt++;
+            } else {
+                // fail
+                return nullptr;
+            }
+        } else {
+            // success
+            break;
+        }
     }
     std::vector<ChunkIteratorPtr> seg_iters;
     if (!reader.get_segment_iterators(params, &seg_iters).ok()) {

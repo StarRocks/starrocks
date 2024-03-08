@@ -167,4 +167,41 @@ StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value*
     return Status::NotSupported("JIT cast type not supported.");
 }
 
+llvm::Value* IRHelper::build_if_else(llvm::Value* condition, llvm::Type* return_type,
+                                     const std::function<llvm::Value*()>& then_func,
+                                     const std::function<llvm::Value*()>& else_func, llvm::IRBuilder<>* builder) {
+    auto* head = builder->GetInsertBlock();
+    DCHECK_NE(head, nullptr);
+
+    // Create blocks for the then, else and merge cases.
+    llvm::BasicBlock* then_bb = llvm::BasicBlock::Create(head->getContext(), "then", head->getParent());
+    llvm::BasicBlock* else_bb = llvm::BasicBlock::Create(head->getContext(), "else", head->getParent());
+    llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(head->getContext(), "merge", head->getParent());
+
+    builder->CreateCondBr(condition, then_bb, else_bb);
+
+    // Emit the then block.
+    builder->SetInsertPoint(then_bb);
+    auto then_value = then_func();
+    builder->CreateBr(merge_bb);
+
+    // refresh then_bb for phi (could have changed due to code generation of then_value).
+    then_bb = builder->GetInsertBlock();
+
+    // Emit the else block.
+    builder->SetInsertPoint(else_bb);
+    auto else_value = else_func();
+    builder->CreateBr(merge_bb);
+
+    // refresh else_bb for phi (could have changed due to code generation of else_value).
+    else_bb = builder->GetInsertBlock();
+
+    // Emit the merge block.
+    builder->SetInsertPoint(merge_bb);
+    llvm::PHINode* result_value = builder->CreatePHI(return_type, 2, "res_value");
+    result_value->addIncoming(then_value, then_bb);
+    result_value->addIncoming(else_value, else_bb);
+    return result_value;
+}
+
 } // namespace starrocks

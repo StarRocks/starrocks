@@ -217,4 +217,7 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Failed to evaluate user variable hint ''{0}'', because {1}")
     String invalidUserVariableHint(String a0, String a1);
+
+    @BaseMessage("No selected database for cancel BACKUP/RESTORE")
+    String nullIdentifierCancelBackupRestore();
 }
