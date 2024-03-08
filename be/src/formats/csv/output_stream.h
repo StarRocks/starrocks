@@ -16,6 +16,7 @@
 
 #include <ryu/ryu.h>
 
+#include "fmt/compile.h"
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
