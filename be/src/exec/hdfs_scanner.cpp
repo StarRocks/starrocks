@@ -386,27 +386,17 @@ void HdfsScannerContext::update_materialized_columns(const std::unordered_set<st
     materialized_columns.swap(updated_columns);
 }
 
-void HdfsScannerContext::update_not_existed_columns_of_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.empty() || row_count <= 0) return;
-
+void HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (not_existed_slots.empty() || row_count < 0) return;
     ChunkPtr& ck = (*chunk);
-    for (auto* slot_desc : not_existed_slots) {
-        ck->get_column_by_slot_id(slot_desc->id())->append_default(row_count);
-    }
-}
-
-void HdfsScannerContext::append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.size() == 0) return;
-
-    ChunkPtr& ck = (*chunk);
-    ck->set_num_rows(row_count);
     for (auto* slot_desc : not_existed_slots) {
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         if (row_count > 0) {
             col->append_default(row_count);
         }
-        ck->append_column(std::move(col), slot_desc->id());
+        ck->append_or_update_column(std::move(col), slot_desc->id());
     }
+    ck->set_num_rows(row_count);
 }
 
 Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {
@@ -432,7 +422,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
-    append_not_existed_columns_to_chunk(&chunk, 1);
+    append_or_update_not_existed_columns_to_chunk(&chunk, 1);
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
@@ -442,11 +432,8 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 }
 
 void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0 || row_count <= 0) return;
-
+    if (partition_columns.size() == 0 || row_count < 0) return;
     ChunkPtr& ck = (*chunk);
-    ck->set_num_rows(row_count);
-
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
         DCHECK(partition_values[i]->is_constant());
@@ -462,13 +449,9 @@ void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* ch
             }
             chunk_part_column->assign(row_count, 0);
         }
-
-        if (ck->is_slot_exist(slot_desc->id())) {
-            ck->update_column(std::move(chunk_part_column), slot_desc->id());
-        } else {
-            ck->append_column(std::move(chunk_part_column), slot_desc->id());
-        }
+        ck->append_or_update_column(std::move(chunk_part_column), slot_desc->id());
     }
+    ck->set_num_rows(row_count);
 }
 
 bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const {
