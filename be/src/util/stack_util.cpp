@@ -354,10 +354,8 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
 
 #if defined(ADDRESS_SANITIZER)
     __interceptor___cxa_throw(thrown_exception, info, dest);
-#elif defined(__clang__)
+#else
     __real___cxa_throw(thrown_exception, info, dest);
-#elif defined(__GNUC__)
-__real___cxa_throw(thrown_exception, info, dest);
 #endif
 } // namespace starrocks
 
