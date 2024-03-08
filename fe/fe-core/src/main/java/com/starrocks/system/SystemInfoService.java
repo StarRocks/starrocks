@@ -764,27 +764,12 @@ public class SystemInfoService {
     }
 
     public void updateBackendReportVersion(long backendId, long newReportVersion, long dbId) {
-<<<<<<< HEAD
         AtomicLong atomicLong = null;
         if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
                 updateReportVersionIncrementally(atomicLong, newReportVersion);
-                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
-=======
-        ComputeNode node = getBackendOrComputeNode(backendId);
-        // only backend need to report version
-        if (node instanceof Backend) {
-            AtomicLong atomicLong;
-            if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-                if (db != null) {
-                    updateReportVersionIncrementally(atomicLong, newReportVersion);
-                    LOG.info("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
-                } else {
-                    LOG.warn("failed to update backend report version, db {} does not exist", dbId);
-                }
->>>>>>> 805e22152a ([BugFix] Fixe bug where tablet was not deleted from meta when removing disk path from be.conf (#41755))
+                LOG.info("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
             } else {
                 LOG.warn("failed to update backend report version, db {} does not exist", dbId);
             }
