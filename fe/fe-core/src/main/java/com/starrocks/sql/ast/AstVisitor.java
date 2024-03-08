@@ -98,13 +98,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-
-    // ---------------------------------------- Warehouse Statement ----------------------------------------------------
-
-    public R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {

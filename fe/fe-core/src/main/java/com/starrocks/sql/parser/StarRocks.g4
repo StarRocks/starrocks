@@ -31,8 +31,14 @@ statement
     : queryStatement
 
     // Warehouse Statement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | suspendWarehouseStatement
+    | resumeWarehouseStatement
+    | setWarehouseStatement
     | showWarehousesStatement
     | showClustersStatement
+    | showNodesStatement
 
     // Database Statement
     | useDatabaseStatement
@@ -327,6 +333,43 @@ statement
 
     // Unsupported Statement
     | unsupportedStatement
+    ;
+
+
+// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
+
+createWarehouseStatement
+    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
+    comment? properties?
+    ;
+
+dropWarehouseStatement
+    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
+    ;
+
+suspendWarehouseStatement
+    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+resumeWarehouseStatement
+    : RESUME WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+setWarehouseStatement
+    : SET SESSION? WAREHOUSE EQ? identifierOrString
+    ;
+
+showWarehousesStatement
+    : SHOW WAREHOUSES (LIKE pattern=string)?
+    ;
+
+showClustersStatement
+    : SHOW CLUSTERS FROM WAREHOUSE identifier
+    ;
+
+showNodesStatement
+    : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
+    | SHOW NODES FROM WAREHOUSE identifier
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -757,39 +800,6 @@ alterCatalogStatement
     : ALTER CATALOG catalogName=identifierOrString modifyPropertiesClause
     ;
 
-// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
-
-createWarehouseStatement
-    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
-    properties?
-    ;
-
-showWarehousesStatement
-    : SHOW WAREHOUSES ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-dropWarehouseStatement
-    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
-    ;
-
-alterWarehouseStatement
-    : ALTER WAREHOUSE identifier ADD CLUSTER
-    | ALTER WAREHOUSE identifier REMOVE CLUSTER
-    | ALTER WAREHOUSE identifier SET propertyList
-    ;
-
-showClustersStatement
-    : SHOW CLUSTERS FROM WAREHOUSE identifier
-    ;
-
-suspendWarehouseStatement
-    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
-    ;
-
-resumeWarehouseStatement
-    : RESUME WAREHOUSE (IF EXISTS)? identifier
-    ;
-
 // ---------------------------------------- Storage Volume Statement ---------------------------------------------------
 
 createStorageVolumeStatement
@@ -950,11 +960,11 @@ modifyFrontendHostClause
   ;
 
 addBackendClause
-   : ADD BACKEND string (',' string)*
+   : ADD BACKEND string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
    ;
 
 dropBackendClause
-   : DROP BACKEND string (',' string)* FORCE?
+   : DROP BACKEND string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)? FORCE?
    ;
 
 decommissionBackendClause
@@ -967,11 +977,11 @@ modifyBackendClause
    ;
 
 addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)*
+   : ADD COMPUTE NODE string (',' string)* (INTO WAREHOUSE warehouseName=identifierOrString)?
    ;
 
 dropComputeNodeClause
-   : DROP COMPUTE NODE string (',' string)*
+   : DROP COMPUTE NODE string (',' string)* (FROM WAREHOUSE warehouseName=identifierOrString)?
    ;
 
 modifyBrokerClause
