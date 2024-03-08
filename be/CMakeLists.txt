@@ -807,6 +807,7 @@ set(STARROCKS_LINK_LIBS
     Common
     Column
     Connector
+    ConnectorSink
     Exec
     Exprs
     FileSystem
@@ -1058,6 +1059,7 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
+add_subdirectory(${SRC_DIR}/connector_sink)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)

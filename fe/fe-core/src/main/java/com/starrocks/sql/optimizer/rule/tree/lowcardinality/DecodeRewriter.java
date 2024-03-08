@@ -164,7 +164,6 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 .map(c -> inputStringRefs.contains(c) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
                 .collect(Collectors.toList());
 
-        // @todo: refactor it, SingleDistinctFunctionPos depend on the map's order
         Map<ColumnRefOperator, CallOperator> aggregations = Maps.newLinkedHashMap();
         for (ColumnRefOperator aggRef : aggregate.getAggregations().keySet()) {
             CallOperator aggFn = aggregate.getAggregations().get(aggRef);

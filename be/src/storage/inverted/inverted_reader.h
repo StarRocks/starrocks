@@ -47,7 +47,7 @@ public:
 
     virtual InvertedIndexReaderType get_inverted_index_reader_type() = 0;
 
-    bool indexExists(const std::string& index_file_path) { return fs::path_exist(index_file_path); }
+    bool index_exists(const std::string& index_file_path) { return fs::path_exist(index_file_path); }
 
     std::string get_index_path() { return _index_path; }
 

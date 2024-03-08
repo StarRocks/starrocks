@@ -2230,7 +2230,7 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatchedString2Double) {
     EXPECT_FALSE(column->has_null());
 }
 
-TEST_F(OrcChunkReaderTest, get_file_schema) {
+TEST_F(OrcChunkReaderTest, GetFileSchema) {
     const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
             {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
              {{"col_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
@@ -2357,6 +2357,37 @@ TEST_F(OrcChunkReaderTest, TestReadTimeColumn) {
         EXPECT_EQ("[4, NULL]", result->debug_row(1));
         EXPECT_EQ("[2, 7384]", result->debug_row(2));
         EXPECT_EQ("[3, 11045]", result->debug_row(3));
+    }
+}
+
+TEST_F(OrcChunkReaderTest, DatetimeMicrosecond) {
+    SlotDesc slot_descs[] = {
+            {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"col_datetime", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
+            {""},
+    };
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/timestamp.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        EXPECT_OK(reader.init(std::move(input_stream)));
+
+        EXPECT_OK(reader.read_next());
+        ChunkPtr ckptr = reader.create_chunk();
+        EXPECT_TRUE(ckptr != nullptr);
+        EXPECT_OK(reader.fill_chunk(&ckptr));
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        EXPECT_TRUE(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+        EXPECT_EQ("[1, 2006-01-02 07:04:05]", result->debug_row(0));
+        EXPECT_EQ("[2, 2006-01-02 07:04:05.900000]", result->debug_row(1));
+        EXPECT_EQ("[3, 2006-01-02 07:04:05.999999]", result->debug_row(2));
+        EXPECT_EQ("[4, 2006-01-02 07:04:05.999999]", result->debug_row(3));
     }
 }
 

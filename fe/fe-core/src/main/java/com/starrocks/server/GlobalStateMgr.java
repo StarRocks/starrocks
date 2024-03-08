@@ -1198,7 +1198,7 @@ public class GlobalStateMgr {
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
 
         // heartbeat mgr
-        heartbeatMgr.setLeader(nodeMgr.getToken(), epoch);
+        heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
         heartbeatMgr.start();
         // New load scheduler
         pendingLoadTaskScheduler.start();

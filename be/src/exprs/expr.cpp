@@ -840,10 +840,11 @@ bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
     return support;
 }
 
-bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) const {
+bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
+                              const NgramBloomFilterReaderOptions& reader_options) const {
     bool no_need_to_filt = true;
     for (auto& child : _children) {
-        if (!child->ngram_bloom_filter(context, bf, gram_num)) {
+        if (!child->ngram_bloom_filter(context, bf, reader_options)) {
             return false;
         }
     }

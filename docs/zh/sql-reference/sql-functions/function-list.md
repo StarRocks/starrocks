@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 函数列表
 
-StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时使用。除了常见的函数分类，StarRocks 也支持 ARRAY、JSON、MAP、STRUCT 等半结构化函数，支持 [Lambda 高阶函数](Lambda_expression.md)。如果以上函数都不符合您的需求，您还可以自行编写 [Java UDF](JAVA_UDF.md) 来满足业务需求。
+StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时使用。除了常见的函数分类，StarRocks 也支持 ARRAY、JSON、MAP、STRUCT 等半结构化函数，支持 [Lambda 高阶函数](Lambda_expression.md)。如果以上函数都不符合您的需求，您还可以自行编写 [Java UDF](JAVA_UDF.md) 来满足业务需求。StarRocks 还提供 [Hive Bitmap UDF](../../integrations/hive_bitmap_udf.md) 功能，您可以在 Hive 里计算生成 Bitmap 后，再导入 StarRocks；将 StarRocks 里生成的 Bitmap，导出到 Hive，方便其它系统使用。
 
 您可以按照以下分类来查找目标函数。
 
@@ -181,8 +181,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [group_concat](./string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](./aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
 |  [grouping_id](./aggregate-functions/grouping_id.md)| 用于区分相同分组标准的分组统计结果。 |
-|  [hll_empty](./aggregate-functions/hll_empty.md)| 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。 |
-|  [hll_hash](./aggregate-functions/hll_hash.md)| 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。 |
 |  [hll_raw_agg](./aggregate-functions/hll_raw_agg.md)| 用于聚合 HLL 类型的字段，返回 HLL 类型。 |
 |  [hll_union](./aggregate-functions/hll_union.md)| 返回一组 HLL 值的并集。 |
 |  [hll_union_agg](./aggregate-functions/hll_union_agg.md)| 将多个 HLL 类型数据合并成一个 HLL。 |
@@ -259,7 +257,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 |  [all_match](./array-functions/all_match.md)| 判断数组中的所有元素是否都匹配谓词中指定的条件。 |
 |  [any_match](./array-functions/any_match.md)| 判断数组中是否有元素匹配谓词中指定的条件。 |
-|  [array_agg](./array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。 |
+|  [array_agg](./array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组（多行转一行）。 |
 |  [array_append](./array-functions/array_append.md)| 在数组末尾添加一个新的元素。 |
 |  [array_avg](./array-functions/array_avg.md)| 求取一个 ARRAY 中的所有数据的平均数。 |
 |  [array_concat](./array-functions/array_concat.md)| 将多个数组拼接成一个数组。 |
@@ -440,7 +438,10 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
+|  [percentile_approx](./aggregate-functions/percentile_approx.md)| 返回第 p 个百分位点的近似值。 |
 |  [percentile_approx_raw](./percentile-functions/percentile_approx_raw.md)| 计算给定参数 x 的百分位数。 |
+|  [percentile_cont](./aggregate-functions/percentile_cont.md)| 计算精确百分位数。 |
+|  [percentile_disc](./aggregate-functions/percentile_disc.md)| 计算百分位数。 |
 |  [percentile_empty](./percentile-functions/percentile_empty.md)| 构造一个 percentile 类型的数值，主要用于 INSERT 或 Stream Load 导入时填充默认值。 |
 |  [percentile_hash](./percentile-functions/percentile_hash.md)| 将 double 类型数值构造成 percentile 类型数值。 |
 |  [percentile_union](./percentile-functions/percentile_union.md)| 用于对分组结果进行聚合。 |
@@ -450,6 +451,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 | [hll_cardinality](./scalar-functions/hll_cardinality.md) |  用于计算 HLL 类型值的基数。  |
+| [hll_empty](./scalar-functions/hll_empty.md)| 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。 |
+| [hll_hash](./scalar-functions/hll_hash.md)| 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。 |
 
 ## 工具函数
 

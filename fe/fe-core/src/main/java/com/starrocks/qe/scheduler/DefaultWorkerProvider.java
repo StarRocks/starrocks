@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SimpleScheduler;
@@ -215,9 +216,34 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return new ArrayList<>(selectedWorkerIds);
     }
 
+    /**
+     * if usedComputeNode turns on or no backend, we add all compute nodes to the result.
+     * if perferComputeNode turns on, we just return computeNode set
+     * else add backend set and return
+     * @return
+     */
+    @Override
+    public List<Long> getAllAvailableNodes() {
+        List<Long> nodeIds = Lists.newArrayList();
+        if (usedComputeNode || availableID2Backend.isEmpty()) {
+            nodeIds.addAll(availableID2ComputeNode.keySet());
+        }
+
+        if (preferComputeNode) {
+            return nodeIds;
+        }
+        nodeIds.addAll(availableID2Backend.keySet());
+        return nodeIds;
+    }
+
     @Override
     public boolean isPreferComputeNode() {
         return preferComputeNode;
+    }
+
+    @Override
+    public void selectWorkerUnchecked(Long workerId) {
+        selectedWorkerIds.add(workerId);
     }
 
     @Override
@@ -234,9 +260,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return chooseComputeNode ? computeNodesToString() : backendsToString();
     }
 
-    private void selectWorkerUnchecked(Long workerId) {
-        selectedWorkerIds.add(workerId);
-    }
+
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(
