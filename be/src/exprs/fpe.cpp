@@ -36,42 +36,33 @@ std::string FPE::current_key;
 std::string FPE::trim_leading_zeros(const std::string& str, size_t num_flag_pos) {
     int start = num_flag_pos;
     int end = str.length() - 1;
-
     while (start <= end && str[start] == '0') {
         ++start;
     }
-
     if (start > end) {
         return "0";
     }
-
     return num_flag_pos == 0 ? str.substr(start) : str.substr(start).insert(0, 1, '-');
 }
 
 std::string FPE::trim_zeros(const std::string& str, size_t num_flag_pos) {
     int start = num_flag_pos;
     int end = str.length() - 1;
-
     while (start <= end && str[start] == '0') {
         ++start;
     }
     while (end >= start && str[end] == '0') {
         --end;
     }
-
-    // when 100.00 -> 100. remove .
     if (str[end] == '.') {
         --end;
     }
-
     if (str[start] == '.') {
         --start;
     }
-
     if (start > end) {
         return "0";
     }
-
     return num_flag_pos == 0 ? str.substr(start, end - start + 1)
                              : str.substr(start, end - start + 1).insert(0, 1, '-');
 }
@@ -85,7 +76,6 @@ Status FPE::encrypt(std::string_view num_str, std::string_view key, char* buffer
             fpe_key[i] = static_cast<uint8_t>(key[i]);
         }
     }
-
     int num_str_length = num_str.length();
     std::string fixed_num_str;
     if (num_str_length < MIN_LENGTH) {
@@ -99,7 +89,6 @@ Status FPE::encrypt(std::string_view num_str, std::string_view key, char* buffer
     DeferOp op([&] {
         if (ctx != nullptr) ff1_ctx_destroy(ctx);
     });
-
     int res = ff1_ctx_create(&ctx, fpe_key.data(), fpe_key_length, TWEAK, sizeof(TWEAK), 0, SIZE_MAX, radix);
     if (res != 0) {
         return Status::RuntimeError("ff1_ctx_create failed");
@@ -109,7 +98,6 @@ Status FPE::encrypt(std::string_view num_str, std::string_view key, char* buffer
     if (res != 0) {
         return Status::RuntimeError("ff1_encrypt failed");
     }
-
     return Status::OK();
 }
 
@@ -122,12 +110,10 @@ Status FPE::decrypt(std::string_view num_str, std::string_view key, char* buffer
             fpe_key[i] = static_cast<uint8_t>(key[i]);
         }
     }
-
     struct ff1_ctx* ctx = nullptr;
     DeferOp op([&] {
         if (ctx != nullptr) ff1_ctx_destroy(ctx);
     });
-
     int res = ff1_ctx_create(&ctx, fpe_key.data(), fpe_key_length, TWEAK, sizeof(TWEAK), 0, SIZE_MAX, radix);
     if (res != 0) {
         return Status::RuntimeError("ff1_ctx_create failed");
@@ -136,18 +122,15 @@ Status FPE::decrypt(std::string_view num_str, std::string_view key, char* buffer
     if (res != 0) {
         return Status::RuntimeError("ff1_decrypt failed");
     }
-
     return Status::OK();
 }
 
 Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::string& value) {
     std::string result;
     result.resize(100);
-
     size_t result_len = 0;
     size_t num_flag_pos = 0;
     std::string num_flag;
-
     if (num_str[0] == '-') {
         result[0] = '-';
         result_len = 1;
@@ -160,7 +143,6 @@ Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::str
     size_t dot_pos = num_str.find('.');
     std::string_view int_part;
     std::string_view dec_part;
-
     if (dot_pos != std::string_view::npos) {
         int_part = num_str.substr(num_flag_pos, dot_pos - num_flag_pos);
         dec_part = num_str.substr(dot_pos + 1);
@@ -173,19 +155,15 @@ Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::str
     int_part_size = int_part_size > FPE::MIN_LENGTH ? int_part_size : FPE::MIN_LENGTH;
     result_len += int_part_size;
 
-    // include dec_part
     if (dec_part.empty()) {
         result.resize(result_len);
         value = std::move(result);
-
         return Status::OK();
     } else {
         std::size_t first_not_zero = dec_part.find_first_not_of('0');
-        // dec_part all '0'
         if (first_not_zero == std::string::npos) {
             result.resize(result_len);
             value = std::move(result);
-
             return Status::OK();
         }
 
@@ -193,21 +171,16 @@ Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::str
         ++result_len;
 
         std::string dec_int_part_str;
-
         dec_int_part_str = dec_part.substr(first_not_zero);
         dec_int_part_str.resize(FPE::EXPANDED_LENGTH - first_not_zero, '0');
-
         RETURN_IF_ERROR(encrypt(dec_int_part_str, key, result.data() + result_len, DEFAULT_RADIX));
         auto dec_int_part_size =
                 dec_int_part_str.length() > FPE::MIN_LENGTH ? dec_int_part_str.length() : FPE::MIN_LENGTH;
         result_len += dec_int_part_size;
-
         result[result_len] = FIXED_NUM;
         ++result_len;
-
         result.resize(result_len);
         value = std::move(result);
-
         return Status::OK();
     }
 }
@@ -215,10 +188,8 @@ Status FPE::encrypt_num(std::string_view num_str, std::string_view key, std::str
 Status FPE::decrypt_num(std::string_view num_str, std::string_view key, std::string& value) {
     std::string result;
     result.resize(100);
-
     size_t result_len = 0;
     size_t num_flag_pos = 0;
-
     std::string num_flag;
     if (num_str[0] == '-') {
         result[0] = '-';
@@ -229,7 +200,6 @@ Status FPE::decrypt_num(std::string_view num_str, std::string_view key, std::str
     size_t dot_pos = num_str.find('.');
     std::string_view int_part;
     std::string_view dec_part;
-
     // Remove the added FIXED_NUM
     if (dot_pos != std::string_view::npos) {
         int_part = num_str.substr(num_flag_pos + 1, dot_pos - num_flag_pos - 1);
@@ -244,26 +214,20 @@ Status FPE::decrypt_num(std::string_view num_str, std::string_view key, std::str
     if (dec_part.empty()) {
         result.resize(result_len);
         value = trim_leading_zeros(result, num_flag_pos);
-
         return Status::OK();
     } else {
         result[result_len] = '.';
         result_len++;
-
         auto dec_part_len = dec_part.size();
         RETURN_IF_ERROR(decrypt(dec_part, key, result.data() + result_len, DEFAULT_RADIX));
-
         int expanded_length = EXPANDED_LENGTH - dec_part_len;
         if (expanded_length > 0) {
             result.insert(result_len, expanded_length, '0');
             result_len += expanded_length;
         }
-
         result_len += dec_part_len;
-
         result.resize(result_len);
         value = trim_zeros(result, num_flag_pos);
-
         return Status::OK();
     }
 }
