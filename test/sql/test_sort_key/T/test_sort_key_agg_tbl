@@ -127,4 +127,4 @@ function: wait_alter_table_finish()
 show create table agg_test;
 select * from agg_test;
 drop table agg_test;
-drop database sort_key_test_agg;
+drop database sort_key_test_agg_with_rollup;

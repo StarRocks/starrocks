@@ -85,4 +85,4 @@ function: wait_alter_table_finish()
 show create table dup_test;
 select * from dup_test;
 
-drop database test_sort_key_dup_tbl_with_rollup;
+drop database sort_key_dup_tbl_with_rollup;

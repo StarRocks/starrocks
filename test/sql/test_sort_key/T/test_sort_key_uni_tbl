@@ -84,8 +84,8 @@ drop database sort_key_test_uni;
 
 -- name: test_sort_key_uni_tbl_with_rollup;
 
-create database test_sort_key_uni_tbl_with_rollup;
-use test_sort_key_uni_tbl_with_rollup;
+create database sort_key_uni_tbl_with_rollup;
+use sort_key_uni_tbl_with_rollup;
 
 
 CREATE TABLE `uni_test` (
@@ -111,7 +111,7 @@ select * from uni_test;
 insert into uni_test values (1,2,2,10,9),(2,3,2,9,7),(2,1,2,8,8);
 select * from uni_test;
 
-function: manual_compact("test_sort_key_uni_tbl_with_rollup", "uni_test")
+function: manual_compact("sort_key_uni_tbl_with_rollup", "uni_test")
 select * from uni_test;
 
 alter table uni_test add rollup r1 (k1,k2,v3,v1);
@@ -128,4 +128,4 @@ show create table uni_test;
 select * from uni_test;
 drop table uni_test;
 
-drop database test_sort_key_uni_tbl_with_rollup;
+drop database sort_key_uni_tbl_with_rollup;

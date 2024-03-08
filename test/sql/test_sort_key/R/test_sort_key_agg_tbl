@@ -80,11 +80,11 @@ insert into agg_test values (1,2,2,10,9),(2,3,2,9,7),(2,1,2,8,8);
 select * from agg_test;
 -- result:
 2	1	2	8	8
-3	1	2	8	8
 1	2	2	10	9
+2	3	2	9	7
+3	1	2	8	8
 2	2	2	9	7
 1	3	2	10	9
-2	3	2	9	7
 -- !result
 function: manual_compact("sort_key_test_agg", "agg_test")
 -- result:
@@ -335,7 +335,6 @@ select * from agg_test;
 drop table agg_test;
 -- result:
 -- !result
-drop database sort_key_test_agg;
+drop database sort_key_test_agg_with_rollup;
 -- result:
-E: (1064, "Can't drop database 'sort_key_test_agg'; database doesn't exist")
 -- !result
