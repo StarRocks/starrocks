@@ -46,7 +46,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -319,10 +318,9 @@ public abstract class JoinOrder {
         Map<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
         if (!onPredicates.isEmpty()) {
-            Iterator<ScalarOperator> iter = onPredicates.iterator();
-
-            while (iter.hasNext()) {
-                ColumnRefSet useColumns = iter.next().getUsedColumns();
+            for (int i = 0; i < onPredicates.size(); i++) {
+                ScalarOperator predicate = onPredicates.get(i);
+                ColumnRefSet useColumns = predicate.getUsedColumns();
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
                     if (!useColumns.contains(entry.getKey())) {
                         continue;
@@ -337,11 +335,23 @@ public abstract class JoinOrder {
                     ColumnRefSet valueUseColumns = entry.getValue().getUsedColumns();
                     if (leftExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
                         leftExpression.put(entry.getKey(), entry.getValue());
+                        continue;
                     } else if (rightExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
                         rightExpression.put(entry.getKey(), entry.getValue());
+                        continue;
+                    }
+
+                    ColumnRefSet allChildColumns = new ColumnRefSet();
+                    allChildColumns.union(leftExprInfo.expr.getOutputColumns());
+                    allChildColumns.union(rightExprInfo.expr.getOutputColumns());
+                    if (allChildColumns.containsAll(valueUseColumns)) {
+                        // depend on two children, must rewrite to origin expression
+                        ReplaceColumnRefRewriter rewriter =
+                                new ReplaceColumnRefRewriter(Map.of(entry.getKey(), entry.getValue()));
+                        predicate = rewriter.rewrite(predicate);
+                        onPredicates.set(i, predicate);
                     } else {
-                        // remove can't bind predicate
-                        iter.remove();
+                        return Optional.empty();
                     }
                 }
             }
