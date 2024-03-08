@@ -518,6 +518,7 @@ Status MemTable::_sort_column_inc(bool by_sort_key) {
 
     for (auto sort_key_idx : sort_key_idxes) {
         columns.push_back(_chunk->get_column_by_index(sort_key_idx));
+
     }
 
     auto sort_descs = SortDescs::asc_null_first(sort_key_idxes.size());
