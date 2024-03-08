@@ -99,7 +99,7 @@ std::future<FileWriter::CommitResult> CSVFileWriter::commit() {
     auto task = [output_stream = _output_stream, p = promise, rollback = _rollback_action, row_counter = _num_rows,
                  location = _location] {
         FileWriter::CommitResult result{
-                .io_status = Status::OK(), .format = ORC, .location = location, .rollback_action = rollback};
+                .io_status = Status::OK(), .format = CSV, .location = location, .rollback_action = rollback};
 
         if (auto st = output_stream->finalize(); !st.ok()) {
             result.io_status.update(st);
