@@ -2205,7 +2205,9 @@ ImmutableIndex::~ImmutableIndex() {
     if (_file != nullptr) {
         std::string full(_file->filename());
         if (is_suffix(full, kFlushFileSuffix) && !is_suffix(full, kMajorCompactionFileSuffix)) {
-            FileSystem::Default()->delete_file(full);
+            if (auto st = FileSystem::Default()->delete_file(full); !st.ok()) {
+                LOG(WARNING) << "Failed to delete file: " << full << ", status:" << st.to_string();
+            }
             _file.reset();
         }
     }
@@ -3625,27 +3627,30 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     return Status::OK();
 }
 
-void PersistentIndex::_get_indexes_stat(const std::vector<ImmutableIndex*>& immu_indexes,
+void PersistentIndex::_get_indexes_stat(const std::vector<std::shared_ptr<ImmutableIndex>>& immu_indexes,
                                         std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat) {
-    std::for_each(immu_indexes.begin(), immu_indexes.end(), [&usage_and_size_stat](const ImmutableIndex* immu_index) {
-        for (const auto& [key_size, shard_info] : immu_index->_shard_info_by_length) {
-            auto [shard_offset, shard_size] = shard_info;
-            const auto size = std::accumulate(std::next(immu_index->_shards.begin(), shard_offset),
-                                              std::next(immu_index->_shards.begin(), shard_offset + shard_size), 0L,
-                                              [](size_t s, const auto& e) { return s + e.size; });
-            const auto usage = std::accumulate(std::next(immu_index->_shards.begin(), shard_offset),
-                                               std::next(immu_index->_shards.begin(), shard_offset + shard_size), 0L,
-                                               [](size_t s, const auto& e) { return s + e.data_size; });
+    std::for_each(immu_indexes.begin(), immu_indexes.end(),
+                  [&usage_and_size_stat](const std::shared_ptr<ImmutableIndex> immu_index) {
+                      for (const auto& [key_size, shard_info] : immu_index->_shard_info_by_length) {
+                          auto [shard_offset, shard_size] = shard_info;
+                          const auto size =
+                                  std::accumulate(std::next(immu_index->_shards.begin(), shard_offset),
+                                                  std::next(immu_index->_shards.begin(), shard_offset + shard_size), 0L,
+                                                  [](size_t s, const auto& e) { return s + e.size; });
+                          const auto usage =
+                                  std::accumulate(std::next(immu_index->_shards.begin(), shard_offset),
+                                                  std::next(immu_index->_shards.begin(), shard_offset + shard_size), 0L,
+                                                  [](size_t s, const auto& e) { return s + e.data_size; });
 
-            auto iter = usage_and_size_stat.find(key_size);
-            if (iter == usage_and_size_stat.end()) {
-                usage_and_size_stat.insert({key_size, {usage, size}});
-            } else {
-                iter->second.first += usage;
-                iter->second.second += size;
-            }
-        }
-    });
+                          auto iter = usage_and_size_stat.find(key_size);
+                          if (iter == usage_and_size_stat.end()) {
+                              usage_and_size_stat.insert({key_size, {usage, size}});
+                          } else {
+                              iter->second.first += usage;
+                              iter->second.second += size;
+                          }
+                      }
+                  });
 }
 
 Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
@@ -4594,8 +4599,8 @@ static void generate_all_key_size(size_t key_size, std::vector<size_t>& key_size
     }
 }
 
-Status PersistentIndex::_merge_multiple_immutable_index(ImmutableIndexWriter* writer,
-                                                        std::vector<ImmutableIndex*>& immu_indexes) {
+Status PersistentIndex::_merge_multiple_immutable_index(
+        ImmutableIndexWriter* writer, const std::vector<std::shared_ptr<ImmutableIndex>>& immu_indexes) {
     std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
     _get_indexes_stat(immu_indexes, usage_and_size_stat);
     std::vector<size_t> key_size_list;
@@ -4682,8 +4687,6 @@ Status PersistentIndex::merge_flushed_l1(uint64_t id, int64_t start_idx, int64_t
         std::lock_guard lg(_lock);
         if (_cancel_merge_compaction_task_id.find(id) != _cancel_merge_compaction_task_id.end() ||
             _l1_vec.size() < end_idx) {
-            LOG(INFO) << "cancel merge tmp l1 task, task_id:" << id << ", end_idx:" << end_idx << " vs "
-                      << _l1_vec.size();
             return Status::Cancelled("cancel merge compaction task");
         }
     }
@@ -4694,20 +4697,14 @@ Status PersistentIndex::merge_flushed_l1(uint64_t id, int64_t start_idx, int64_t
     RETURN_IF_ERROR(writer->init(idx_file_path, _version, false));
     LOG(INFO) << strings::Substitute("run merge tmp l1 task, path: $0, start_idx: $1, end_idx: $2", _path, start_idx,
                                      end_idx);
-    std::vector<ImmutableIndex*> merge_indexes;
-    for (auto& index : immu_indexes) {
-        merge_indexes.emplace_back(index.get());
-    }
-    RETURN_IF_ERROR(_merge_multiple_immutable_index(writer.get(), merge_indexes));
+    RETURN_IF_ERROR(_merge_multiple_immutable_index(writer.get(), immu_indexes));
 
-    LOG(INFO) << "finish write " << idx_file_path;
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(idx_file_path));
     auto l1_st = ImmutableIndex::load(std::move(l1_rfile), load_bf_or_not());
     if (!l1_st.ok()) {
         return l1_st.status();
     }
-    LOG(INFO) << "load immutable index:" << idx_file_path << " success";
 
     std::vector<std::shared_ptr<ImmutableIndex>> new_l1_vec;
     std::vector<int> new_l1_merged_num;
@@ -4762,84 +4759,7 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
                                                           new_l2_version.minor_number(), MergeSuffix);
     RETURN_IF_ERROR(writer->init(idx_file_path, new_l2_version, true));
 
-    std::vector<ImmutableIndex*> merge_indexes;
-    for (auto& l2 : l2_vec) {
-        merge_indexes.emplace_back(l2.get());
-    }
-    /*
-    std::map<uint32_t, std::pair<int64_t, int64_t>> usage_and_size_stat;
-    _get_l2_stat(l2_vec, usage_and_size_stat);
-    std::vector<size_t> key_size_list;
-    generate_all_key_size(_key_size, key_size_list);
-    for (const size_t key_size : key_size_list) {
-        size_t total_usage = 0;
-        size_t total_size = 0;
-        auto iter = usage_and_size_stat.find(key_size);
-        if (iter != usage_and_size_stat.end()) {
-            // we use the average usage and size as total usage and size, to avoid disk waste
-            // They are may smaller than real size, but we can increase page count later, so it's ok
-            total_usage = iter->second.first / l2_versions.size();
-            total_size = iter->second.second / l2_versions.size();
-        }
-
-        const auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage(total_usage);
-        const auto nbucket = MutableIndex::estimate_nbucket(key_size, total_usage, nshard, npage_hint);
-        const auto estimate_size_per_shard = total_size / nshard;
-
-        std::vector<std::vector<std::vector<KVRef>>> l2_kvs_by_shard;
-        std::vector<int32_t> finished_l2_idx(l2_vec.size(), -1);
-        std::vector<std::pair<size_t, size_t>> l2_shard_info(l2_vec.size(), std::make_pair<size_t, size_t>(0, 0));
-        size_t index_num = 0;
-        for (int l2_idx = 0; l2_idx < l2_vec.size(); l2_idx++) {
-            auto iter = l2_vec[l2_idx]->_shard_info_by_length.find(key_size);
-            if (iter != l2_vec[l2_idx]->_shard_info_by_length.end()) {
-                l2_shard_info[l2_idx] = iter->second;
-                index_num += (iter->second.second / nshard) + 1;
-            }
-            std::vector<std::vector<KVRef>> elem(nshard);
-            l2_kvs_by_shard.emplace_back(elem);
-        }
-        // use index_shards to store shard info when read from l2
-        std::vector<std::unique_ptr<ImmutableIndexShard>> index_shards(index_num);
-        uint32_t shard_bits = log2(nshard);
-
-        for (size_t shard_idx = 0; shard_idx < nshard; shard_idx++) {
-            size_t index_shard_idx = 0;
-            for (int l2_idx = 0; l2_idx < l2_vec.size(); l2_idx++) {
-                if (l2_shard_info[l2_idx].second == 0) {
-                    continue;
-                }
-                int32_t shard_idx_start = shard_idx * l2_shard_info[l2_idx].second / nshard;
-                int32_t shard_idx_end = (shard_idx + 1) * l2_shard_info[l2_idx].second / nshard;
-                do {
-                    //get kv for l2
-                    if (finished_l2_idx[l2_idx] < shard_idx_start) {
-                        RETURN_IF_ERROR(l2_vec[l2_idx]->_get_kvs_for_shard(
-                                l2_kvs_by_shard[l2_idx], l2_shard_info[l2_idx].first + shard_idx_start, shard_bits,
-                                &index_shards[index_shard_idx]));
-                        finished_l2_idx[l2_idx] = shard_idx_start;
-                    }
-                    index_shard_idx++;
-                    shard_idx_start++;
-                } while (shard_idx_start < shard_idx_end);
-            }
-
-            //merge_shard_kvs
-            std::vector<KVRef> kvs;
-            std::vector<std::vector<KVRef>> l2_kvs(l2_vec.size());
-            for (int l2_idx = 0; l2_idx < l2_vec.size(); l2_idx++) {
-                l2_kvs[l2_idx].swap(l2_kvs_by_shard[l2_idx][shard_idx]);
-            }
-            // empty l0 kvs
-            std::vector<KVRef> empty_l0_kvs;
-            RETURN_IF_ERROR(merge_shard_kvs(key_size, empty_l0_kvs, l2_kvs, estimate_size_per_shard, kvs));
-            // write shard
-            RETURN_IF_ERROR(writer->write_shard(key_size, npage_hint, nbucket, kvs));
-        }
-    }
-    RETURN_IF_ERROR(writer->finish());
-*/
-    RETURN_IF_ERROR(_merge_multiple_immutable_index(writer.get(), merge_indexes));
+    RETURN_IF_ERROR(_merge_multiple_immutable_index(writer.get(), l2_vec));
     _write_amp_score.store(0.0);
     std::stringstream debug_str;
     major_compaction_debug_str(l2_versions, l2_vec, new_l2_version, writer, debug_str);

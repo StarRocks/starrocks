@@ -163,6 +163,8 @@ struct EditVersionWithMerge {
 };
 
 struct MergeCandidate {
+    MergeCandidate(int32_t idx, int32_t num) : start_idx(idx), merge_num(num) {}
+
     int32_t start_idx;
     int32_t merge_num;
 
@@ -855,7 +857,7 @@ private:
 
     uint64_t _l1_l2_file_size() const;
 
-    void _get_indexes_stat(const std::vector<ImmutableIndex*>& immu_indexes,
+    void _get_indexes_stat(const std::vector<std::shared_ptr<ImmutableIndex>>& immu_indexes,
                            std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat);
 
     StatusOr<EditVersion> _major_compaction_impl(const std::vector<EditVersion>& l2_versions,
@@ -878,7 +880,8 @@ private:
         _error_msg = msg;
     }
 
-    Status _merge_multiple_immutable_index(ImmutableIndexWriter* writer, std::vector<ImmutableIndex*>& immu_indexes);
+    Status _merge_multiple_immutable_index(ImmutableIndexWriter* writer,
+                                           const std::vector<std::shared_ptr<ImmutableIndex>>& immu_indexes);
 
     MergeCandidate _get_merge_candidate();
 
