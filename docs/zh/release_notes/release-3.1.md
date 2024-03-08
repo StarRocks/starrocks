@@ -23,7 +23,7 @@ displayed_sidebar: "Chinese"
 
 ### 功能优化
 
-- 支持通过 `s3_compatible_fs_list` 配置 S3 兼容的对象存储 Schema（使用 AWS SDK），支持通过 `fallback_to_hadoop_fs_list` 配置需要使用 HDFS 的 Schema（使用厂商提供的 JAR 包）。[#41612](https://github.com/StarRocks/starrocks/pull/41612)
+- 支持通过 `s3_compatible_fs_list` 参数设置可以使用 AWS SDK 接入的 S3 兼容对象存储。同时支持通过 `fallback_to_hadoop_fs_list` 参数配置需要通过 HDFS 的 Schema 接入的非 S3 兼容对象存储（该方法需要使用厂商提供的 JAR 包）。[#41612](https://github.com/StarRocks/starrocks/pull/41612)
 - 优化 Trino 语法兼容性，支持 Trino 的 `current_catalog`、`current_schema`、`to_char`、`from_hex`、`to_date`、`to_timestamp` 以及 `index` 函数的语法转换。[#41505](https://github.com/StarRocks/starrocks/pull/41505) [#41270](https://github.com/StarRocks/starrocks/pull/41270) [#40838](https://github.com/StarRocks/starrocks/pull/40838)
 - 为缓解由于候选物化视图太多而导致查询在 Plan 阶段耗时过高的问题，引入了一个新的会话变量 `cbo_materialized_view_rewrite_related_mvs_limit`，用于控制查询在 Plan 阶段最多拥有的候选物化视图个数，默认是 64 个。[#39829](https://github.com/StarRocks/starrocks/pull/39829)
 - 聚合表中 BITMAP 类型的列支持指定聚合类型为 `replace_if_not_null`，从而支持部分列更新。[#42102](https://github.com/StarRocks/starrocks/pull/42102)
