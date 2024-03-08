@@ -809,12 +809,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
 
                     long currentBackendReportVersion =
-<<<<<<< HEAD
                             GlobalStateMgr.getCurrentSystemInfo().getBackendReportVersion(backendId);
-                    if (backendReportVersion < currentBackendReportVersion) {
-                        continue;
-=======
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId);
                     DiskInfo diskInfo = hashToDiskInfo.get(replica.getPathHash());
 
                     // Only check reportVersion when the disk is online,
@@ -831,7 +826,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
                         LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
                                 tableId, backendId, replica.getPathHash());
->>>>>>> 805e22152a ([BugFix] Fixe bug where tablet was not deleted from meta when removing disk path from be.conf (#41755))
                     }
 
                     ReplicaState state = replica.getState();
