@@ -33,7 +33,7 @@
 #if defined(__aarch64__)
 #include "arm_acle.h"
 #ifdef USE_AVX2KI
-#include "avx2ki.h" 
+#include "avx2ki.h"
 #endif
 #endif
 namespace starrocks {

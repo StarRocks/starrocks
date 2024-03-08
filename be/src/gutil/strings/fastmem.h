@@ -121,7 +121,7 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
         }
     }
     else {
-#if defined (__AVX2__) || defined(USE_AVX2KI)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
         if (size <= 256) {
             if (size <= 32) {
                 __builtin_memcpy(dst, src, 8);
@@ -145,14 +145,14 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
         } else {
             static constexpr size_t KB = 1024;
             if (size >= 512 * KB && size <= 2048 * KB) {
-                #ifdef __AVX2__
+#ifdef __AVX2__
                 // erms(enhanced repeat movsv/stosb) version works well in this region.
-                    asm volatile("rep movsb" : "=D"(dst), "=S"(src), "=c"(size) : "0"(dst), "1"(src), "2"(size) : "memory");
-                #elif defined(USE_AVX2KI)
-                    goto common;
-                #endif
+                asm volatile("rep movsb" : "=D"(dst), "=S"(src), "=c"(size) : "0"(dst), "1"(src), "2"(size) : "memory");
+#elif defined(USE_AVX2KI)
+                goto common;
+#endif
             } else {
-                common:
+            common:
                 size_t padding = (32 - (reinterpret_cast<size_t>(dst) & 31)) & 31;
 
                 if (padding > 0) {
