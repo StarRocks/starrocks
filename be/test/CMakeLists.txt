@@ -22,6 +22,9 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./connector_sink/hive_chunk_sink_test.cpp
+        ./connector_sink/iceberg_chunk_sink_test.cpp
+        ./connector_sink/file_chunk_sink_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
