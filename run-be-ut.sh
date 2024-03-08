@@ -38,6 +38,7 @@ Usage: $0 <options>
      --with-gcov                    enable to build with gcov
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     --without-group                don't run cases of the group
      --module                       module to run uts
      --enable-shared-data           enable to build with shared-data feature support
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
@@ -81,6 +82,7 @@ OPTS=$(getopt \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
+  -l 'without-group:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -o 'j:' \
@@ -99,6 +101,7 @@ CLEAN=0
 DRY_RUN=0
 TEST_NAME=*
 TEST_MODULE=".*"
+WITHOUT_GROUP=
 HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
@@ -114,6 +117,7 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+        --without-group) WITHOUT_GROUP=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
@@ -250,6 +254,14 @@ export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:
 
 if [ $WITH_AWS = "OFF" ]; then
     append_negative_case "*S3*"
+fi
+
+if [ -n "$WITHOUT_GROUP" ]; then
+    without_groups=$WITHOUT_GROUP
+    without_group_array=("${without_groups//|/ }")
+    for element in ${without_group_array[*]}; do
+        append_negative_case "*.${element}_*"
+    done
 fi
 
 # prepare util test_data
