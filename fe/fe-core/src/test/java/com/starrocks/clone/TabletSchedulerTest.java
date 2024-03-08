@@ -17,6 +17,7 @@ package com.starrocks.clone;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
@@ -394,7 +395,7 @@ public class TabletSchedulerTest {
                 .setKeysType(DUP_KEYS)
                 .setShortKeyColumnCount((short) 1)
                 .setStorageType(TStorageType.COLUMN)
-                .addColumns(new ArrayList<>())
+                .addColumn(new Column())
                 .build().toTabletSchema();
 
         CreateReplicaTask createReplicaTask = CreateReplicaTask.builder()
