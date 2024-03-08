@@ -465,8 +465,44 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // important to add columns before evaluation
     // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
     size_t chunk_size = (*chunk)->num_rows();
+<<<<<<< HEAD
     _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
     _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
+=======
+    _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
+
+    RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
+    return status;
+}
+
+Status JniScanner::fill_empty_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list) {
+    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    long chunk_meta;
+    RETURN_IF_ERROR(_get_next_chunk(env, &chunk_meta));
+    reset_chunk_meta(chunk_meta);
+    Status status = _fill_chunk(env, chunk, slot_desc_list);
+    RETURN_IF_ERROR(_release_off_heap_table(env));
+
+    return status;
+}
+
+Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    // fill chunk with all wanted column exclude partition columns
+    Status status = fill_empty_chunk(chunk, _scanner_params.materialize_slots);
+    size_t chunk_size = (*chunk)->num_rows();
+    if (!_scanner_params.materialize_slots.empty()) {
+        // when the chunk has partition column and non partition column
+        // fill_empty_chunk will only fill partition column for HiveJniScanner
+        // In this situation, Chunk.num_rows() is not reliable  temporally
+        auto slot_desc = _scanner_params.materialize_slots[0];
+        ColumnPtr& first_non_partition_column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        chunk_size = first_non_partition_column->size();
+    }
+
+    _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
+    // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
+>>>>>>> c7f5207d76 ([Refactor] refactor hdfs scanner apppend_or_update column (#42248))
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
     return status;
 }
