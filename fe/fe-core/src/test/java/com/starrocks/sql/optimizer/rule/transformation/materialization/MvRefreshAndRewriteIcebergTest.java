@@ -34,6 +34,11 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+<<<<<<< HEAD
+=======
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
+>>>>>>> 4bf9887b6d ([BugFix] Fix union all rewrite bugs in pulling up predicates and add materialized_view_union_rewrite_mode param (#42229))
     }
 
     @Test
