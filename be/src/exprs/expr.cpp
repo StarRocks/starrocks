@@ -783,7 +783,6 @@ Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeStat
         return Status::OK();
     }
     DCHECK(JITEngine::get_instance()->support_jit());
-    // TODO: if reject jit due to the score, we should skip this on expressions in such jit group?
     if ((*expr)->should_compile(state)) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.

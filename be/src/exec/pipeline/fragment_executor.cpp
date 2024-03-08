@@ -285,6 +285,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     }
     runtime_state->set_desc_tbl(desc_tbl);
     RETURN_IF_ERROR(_query_ctx->init_spill_manager(query_options));
+    _fragment_ctx->init_jit_profile();
     return Status::OK();
 }
 
