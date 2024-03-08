@@ -21,7 +21,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -350,6 +349,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
 
     @Test
     public void testUnionAllRewriteWithExtraPredicates() {
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         starRocksAssert.withTable(new MTable("mt1", "k1",
                         ImmutableList.of(
                                 "k1 INT",
@@ -399,10 +399,10 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     {
                         List<Pair<String, String>> sqls = ImmutableList.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
-                                        "1:OlapScanNode\n" +
-                                                "     TABLE: mt1\n" +
+                                        "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 10: k2 LIKE 'a%'"),
+                                                "     PREDICATES: 10: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
                                         "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
@@ -411,6 +411,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
+                            System.out.println(query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
@@ -422,28 +423,26 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
                     }
                     {
+<<<<<<< HEAD
                         List<Pair<String, String>> sqls = ImmutableList.of(
+=======
+                        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
+                        List<Pair<String, String>> sqls = List.of(
+>>>>>>> 4bf9887b6d ([BugFix] Fix union all rewrite bugs in pulling up predicates and add materialized_view_union_rewrite_mode param (#42229))
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
-                                        "1:OlapScanNode\n" +
-                                                "     TABLE: mt1\n" +
+                                        "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 > 1, (9: k1 >= 3) OR (9: k1 IS NULL), 10: k2 LIKE 'a%'"),
-                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
-                                        "1:OlapScanNode\n" +
-                                                "     TABLE: mt1\n" +
-                                                "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 > 1, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)"),
+                                                "     PREDICATES: 1: k1 > 1, 2: k2 LIKE 'a%'\n" +
+                                                "     partitions=3/3"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'",
                                         "1:OlapScanNode\n" +
                                                 "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
                                                 "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)")
                                 );
-                        QueryDebugOptions debugOptions = new QueryDebugOptions();
-                        debugOptions.setEnableMVEagerUnionAllRewrite(true);
-                        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
+                            System.out.println(query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
@@ -452,7 +451,9 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     starRocksAssert.dropMaterializedView("union_mv0");
                 }
         );
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
     }
+
     @Test
     public void testAssertContainsIgnoreColRefs() {
         String p1 = "7:SELECT\n" +
