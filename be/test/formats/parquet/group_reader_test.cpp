@@ -314,10 +314,11 @@ Status GroupReaderTest::_create_filemeta(FileMetaData** file_meta, GroupReaderPa
     return (*file_meta)->init(*t_file_meta, true);
 }
 
-static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tparquet::Type::type par_type,
+static GroupReaderParam::Column _create_group_reader_param_of_column(ObjectPool* pool, int idx,
+                                                                     tparquet::Type::type par_type,
                                                                      LogicalType prim_type) {
     SlotDescriptor* slot =
-            new SlotDescriptor(idx, fmt::format("col{}", idx), TypeDescriptor::from_logical_type(prim_type));
+            pool->add(new SlotDescriptor(idx, fmt::format("col{}", idx), TypeDescriptor::from_logical_type(prim_type)));
     GroupReaderParam::Column c;
     c.idx_in_parquet = idx;
     c.type_in_parquet = par_type;
@@ -328,17 +329,17 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tp
 static HdfsScanStats g_hdfs_scan_stats;
 GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c1 =
-            _create_group_reader_param_of_column(0, tparquet::Type::type::INT32, LogicalType::TYPE_INT);
+            _create_group_reader_param_of_column(&_pool, 0, tparquet::Type::type::INT32, LogicalType::TYPE_INT);
     GroupReaderParam::Column c2 =
-            _create_group_reader_param_of_column(1, tparquet::Type::type::INT64, LogicalType::TYPE_BIGINT);
-    GroupReaderParam::Column c3 =
-            _create_group_reader_param_of_column(2, tparquet::Type::type::BYTE_ARRAY, LogicalType::TYPE_VARCHAR);
+            _create_group_reader_param_of_column(&_pool, 1, tparquet::Type::type::INT64, LogicalType::TYPE_BIGINT);
+    GroupReaderParam::Column c3 = _create_group_reader_param_of_column(&_pool, 2, tparquet::Type::type::BYTE_ARRAY,
+                                                                       LogicalType::TYPE_VARCHAR);
     GroupReaderParam::Column c4 =
-            _create_group_reader_param_of_column(3, tparquet::Type::type::INT96, LogicalType::TYPE_DATETIME);
+            _create_group_reader_param_of_column(&_pool, 3, tparquet::Type::type::INT96, LogicalType::TYPE_DATETIME);
     GroupReaderParam::Column c5 =
-            _create_group_reader_param_of_column(4, tparquet::Type::type::FLOAT, LogicalType::TYPE_FLOAT);
+            _create_group_reader_param_of_column(&_pool, 4, tparquet::Type::type::FLOAT, LogicalType::TYPE_FLOAT);
     GroupReaderParam::Column c6 =
-            _create_group_reader_param_of_column(5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
+            _create_group_reader_param_of_column(&_pool, 5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
 
     auto* param = _pool.add(new GroupReaderParam());
     param->read_cols.emplace_back(c1);
