@@ -627,7 +627,7 @@ TEST_F(CSVFileWriterTest, TestFactory) {
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto fs = std::make_shared<MemoryFileSystem>();
     auto factory = formats::CSVFileWriterFactory(fs, {}, column_names, std::move(column_evaluators));
-    auto maybe_writer = factory.create("/test.orc");
+    auto maybe_writer = factory.create("/test.csv");
     ASSERT_OK(maybe_writer.status());
     auto writer = maybe_writer.value();
     ASSERT_OK(writer->init());
