@@ -21,6 +21,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Date;
 import java.util.Random;
 
 public class DecommissionTest {
@@ -29,36 +30,37 @@ public class DecommissionTest {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.tablet_checker_partition_batch_num = 1;
-        Config.enable_new_publish_mechanism = true;
+        Config.enable_new_publish_mechanism = false;
         Config.drop_backend_after_decommission = false;
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
         Config.alter_scheduler_interval_millisecond = 5000;
         Config.tablet_sched_slot_num_per_path = 32;
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 4);
-        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
-        ColocateTableBalancer.getInstance().setInterval(5000);
-        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(2000);
+        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
+        ColocateTableBalancer.getInstance().setInterval(1000);
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(1000);
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
     @AfterClass
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().runSql(null, "drop database test force");
-        PseudoCluster.getInstance().shutdown(false);
+        PseudoCluster.getInstance().shutdown(true);
     }
 
     @Test
     public void testDecommission() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
         Config.statistic_collect_query_timeout = 3600;
-        int numTable = 10;
+        int numTable = 3;
         final String[] tableNames = new String[numTable];
         final String[] createTableSqls = new String[numTable];
         final String[] insertSqls = new String[numTable];
         for (int i = 0; i < numTable; i++) {
             tableNames[i] = "test_" + i;
-            PseudoCluster.CreateTableSqlBuilder sqlBuilder = PseudoCluster.newCreateTableSqlBuilder().setTableName(tableNames[i]);
+            PseudoCluster.CreateTableSqlBuilder sqlBuilder = PseudoCluster.newCreateTableSqlBuilder().setTableName(tableNames[i])
+                    .setBuckets(2);
             if (i % 2 == 0) {
                 sqlBuilder.setColocateGroup("g1");
             }
@@ -72,12 +74,13 @@ public class DecommissionTest {
         Random rand = new Random(0);
         while (true) {
             int curTabletNum = decommissionBE.getTabletManager().getNumTablet();
-            System.out.printf("#tablets: %d/%d: fullClone: %d wait...\n", curTabletNum, oldTabletNum, Tablet.getTotalFullClone());
+            System.out.printf("%s #tablets: %d/%d: fullClone: %d wait...\n", new Date(), curTabletNum, oldTabletNum,
+                    Tablet.getTotalFullClone());
             if (curTabletNum == 0) {
                 break;
             }
             cluster.runSql("test", insertSqls[rand.nextInt(numTable)]);
-            Thread.sleep(2000);
+            Thread.sleep(1000);
         }
         System.out.println("decommission finished");
     }
