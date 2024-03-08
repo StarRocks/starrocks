@@ -1777,7 +1777,7 @@ void Tablet::remove_all_delta_column_group_cache_unlocked() const {
         StorageEngine::instance()->clear_rowset_delta_column_group_cache(*version_rowset.second);
     }
     for (const auto& inc_version_rowset : _inc_rs_version_map) {
-        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*version_rowset.second);
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*inc_version_rowset.second);
     }
 }
 } // namespace starrocks
