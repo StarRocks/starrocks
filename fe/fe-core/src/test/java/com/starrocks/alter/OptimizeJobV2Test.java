@@ -60,7 +60,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        String stmt = "alter table testTable1 distributed by hash(v1)";
+        String stmt = "alter table testTable7 distributed by hash(v1)";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
     }
 
@@ -71,10 +71,10 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
     @Test
     public void testOptimizeParser() throws Exception {
-        String stmt = "alter table testTable1 distributed by hash(v1)";
+        String stmt = "alter table testTable7 distributed by hash(v1)";
         AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
 
-        stmt = "alter table testTable1 primary key(v1)";
+        stmt = "alter table testTable7 primary key(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -82,10 +82,10 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("not support"));
         }
 
-        stmt = "alter table testTable1 order by (v1)";
+        stmt = "alter table testTable7 order by (v1)";
         alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
 
-        stmt = "alter table testTable1 partition (t1) duplicate key(v1)";
+        stmt = "alter table testTable7 partition (t1) duplicate key(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -93,7 +93,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("not support"));
         }
 
-        stmt = "alter table testTable1 duplicate key(v1)";
+        stmt = "alter table testTable7 duplicate key(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -101,7 +101,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("not support"));
         }
 
-        stmt = "alter table testTable1 partition (t1) distributed by hash(v1)";
+        stmt = "alter table testTable7 partition (t1) distributed by hash(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -110,7 +110,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
 
-        stmt = "alter table testTable1 temporary partition (t1) distributed by hash(v1)";
+        stmt = "alter table testTable7 temporary partition (t1) distributed by hash(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -118,7 +118,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("not support optimize temp partition"));
         }
 
-        stmt = "alter table testTable1 partition (t1) distributed by random";
+        stmt = "alter table testTable7 partition (t1) distributed by random";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -127,7 +127,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("not support"));
         }
 
-        stmt = "alter table testTable1 partition (t1) distributed by hash(v3)";
+        stmt = "alter table testTable7 partition (t1) distributed by hash(v3)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -136,7 +136,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("not support"));
         }
 
-        stmt = "alter table testTable1 distributed by random";
+        stmt = "alter table testTable7 distributed by random";
         UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
     }
 
@@ -144,7 +144,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     public void testOptimizeTable() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -157,8 +157,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
     public void testOptimizeTableFinish() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
-        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
+        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -188,7 +188,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     public void testOptimizeTableFailed() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -233,8 +233,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
     public void testSchemaChangeWhileTabletNotStable() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
-        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
+        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -297,7 +297,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     public void testOptimizeReplay() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
+        OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
