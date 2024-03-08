@@ -201,6 +201,11 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
     RETURN_IF_ERROR(file.save(*metadata));
 
     _metacache->cache_tablet_metadata(filepath, metadata);
+    bool skip_cache_latest_metadata = false;
+    TEST_SYNC_POINT_CALLBACK("TabletManager::skip_cache_latest_metadata", &skip_cache_latest_metadata);
+    if (skip_cache_latest_metadata) {
+        return Status::OK();
+    }
     _metacache->cache_tablet_metadata(tablet_latest_metadata_cache_key(metadata->id()), metadata);
 
     auto t1 = butil::gettimeofday_us();
