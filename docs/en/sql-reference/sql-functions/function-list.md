@@ -4,9 +4,9 @@ displayed_sidebar: "English"
 
 # Function list
 
-StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions.
+StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions. StarRocks also provides [Hive Bitmap UDFs](../../integrations/hive_bitmap_udf.md). You can generate Bitmap data in Hive and then load Bitmap into StarRocks. You can also export the Bitmap data generated in StarRocks to Hive for other systems to use.
 
-You can find a function based on the following categories:
+You can find a built-in function based on the following categories:
 
 - [Function list](#function-list)
   - [Aggregate functions](#aggregate-functions)
@@ -59,7 +59,7 @@ You can find a function based on the following categories:
 - [percentile_cont](./aggregate-functions/percentile_cont.md)
 - [percentile_disc](./aggregate-functions/percentile_disc.md)
 - [retention](./aggregate-functions/retention.md)
-- [stddev，stddev_pop](./aggregate-functions/stddev.md)
+- [stddev, stddev_pop](./aggregate-functions/stddev.md)
 - [stddev_samp](./aggregate-functions/stddev_samp.md)
 - [sum](./aggregate-functions/sum.md)
 - [variance, variance_pop, var_pop](./aggregate-functions/variance.md)
@@ -176,8 +176,8 @@ You can find a function based on the following categories:
 - [add_months](./date-time-functions/add_months.md)
 - [adddate](./date-time-functions/adddate.md)
 - [convert_tz](./date-time-functions/convert_tz.md)
-- [current_date，curdate](./date-time-functions/curdate.md)
-- [current_time，curtime](./date-time-functions/curtime.md)
+- [current_date, curdate](./date-time-functions/curdate.md)
+- [current_time, curtime](./date-time-functions/curtime.md)
 - [current_timestamp](./date-time-functions/current_timestamp.md)
 - [date](./date-time-functions/date.md)
 - [date_add, adddate](./date-time-functions/date_add.md)

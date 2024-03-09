@@ -775,4 +775,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  limit: 100"));
     }
 
+    @Test
+    public void testMvOnView() throws Exception {
+        String dumpInfo = getDumpInfoFromFile("query_dump/mv_on_view");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_LEAF_ACC_CUBE_SHADOW_VIEW_fb70da80"));
+    }
 }

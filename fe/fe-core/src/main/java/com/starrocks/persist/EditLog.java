@@ -1097,6 +1097,10 @@ public class EditLog {
                     globalStateMgr.getAuthorizationMgr().replayDropRole(info);
                     break;
                 }
+                case OperationType.OP_AUTH_UPGRADE_V2: {
+                    // for compatibility reason, just ignore the auth upgrade log
+                    break;
+                }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
                     MaterializedViewMgr.getInstance().replay(job);

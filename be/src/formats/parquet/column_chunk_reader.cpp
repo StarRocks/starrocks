@@ -31,7 +31,9 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _max_rep_level(max_rep_level),
           _type_length(type_length),
           _chunk_metadata(column_chunk),
-          _opts(opts) {}
+          _opts(opts),
+          _def_level_decoder(&opts.stats->level_decode_ns),
+          _rep_level_decoder(&opts.stats->level_decode_ns) {}
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 

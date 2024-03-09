@@ -656,9 +656,9 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
         }
     }
 
-    RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
-
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path));
+
+    RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
 
     return Status::OK();
 }
