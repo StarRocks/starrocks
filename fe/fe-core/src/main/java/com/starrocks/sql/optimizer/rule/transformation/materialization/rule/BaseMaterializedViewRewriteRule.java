@@ -50,6 +50,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.metric.MaterializedViewMetricsEntity.isUpdateMaterializedViewMetrics;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.isAppliedUnionAllRewrite;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
@@ -77,6 +78,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
+        if (isAppliedUnionAllRewrite(input.getOp())) {
+            return false;
+        }
         return !context.getCandidateMvs().isEmpty() && checkOlapScanWithoutTabletOrPartitionHints(input);
     }
 
