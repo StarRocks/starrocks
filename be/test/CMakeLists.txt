@@ -126,6 +126,7 @@ set(EXEC_FILES
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
+        ./exprs/split_part_test.cpp
         ./exprs/string_fn_concat_test.cpp
         ./exprs/string_fn_locate_test.cpp
         ./exprs/string_fn_pad_test.cpp
