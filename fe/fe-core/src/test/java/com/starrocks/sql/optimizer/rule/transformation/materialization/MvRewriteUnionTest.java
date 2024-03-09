@@ -423,12 +423,8 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
                     }
                     {
-<<<<<<< HEAD
-                        List<Pair<String, String>> sqls = ImmutableList.of(
-=======
                         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
-                        List<Pair<String, String>> sqls = List.of(
->>>>>>> 4bf9887b6d ([BugFix] Fix union all rewrite bugs in pulling up predicates and add materialized_view_union_rewrite_mode param (#42229))
+                        List<Pair<String, String>> sqls = ImmutableList.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
                                         "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
