@@ -111,12 +111,9 @@ public class MaterializedViewRewriter {
     protected final OptimizerContext optimizerContext;
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
-<<<<<<< HEAD
     public static final int OP_UNION_ALL_BIT = 1 << 0;
-=======
     public static final int UNION_REWRITE_EAGER_MODE_1 = 1;
     public static final int UNION_REWRITE_EAGER_MODE_2 = 2;
->>>>>>> 4bf9887b6d ([BugFix] Fix union all rewrite bugs in pulling up predicates and add materialized_view_union_rewrite_mode param (#42229))
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -1547,14 +1544,9 @@ public class MaterializedViewRewriter {
         if (mvCompensationToQuery != null) {
             return mvCompensationToQuery;
         }
-<<<<<<< HEAD
-        // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (isAppliedUnionAllRewrite(rewriteContext.getQueryExpression().getOp())) {
-=======
         SessionVariable sessionVariable = optimizerContext.getSessionVariable();
         int unionRewriteMode = sessionVariable.getMaterializedViewUnionRewriteMode();
         if (unionRewriteMode != UNION_REWRITE_EAGER_MODE_1 && unionRewriteMode != UNION_REWRITE_EAGER_MODE_2) {
->>>>>>> 4bf9887b6d ([BugFix] Fix union all rewrite bugs in pulling up predicates and add materialized_view_union_rewrite_mode param (#42229))
             return null;
         }
 
