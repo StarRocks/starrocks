@@ -263,9 +263,6 @@ public class IcebergScanNode extends ScanNode {
             for (DeleteFile deleteFile : task.deletes()) {
                 FileContent content = deleteFile.content();
                 if (content == FileContent.EQUALITY_DELETES) {
-                    if (deleteFile.format() != FileFormat.ORC) {
-                        throw new StarRocksConnectorException("Only support reading equality delete file of orc format");
-                    }
                     List<Integer> taskEqualityFieldIds = deleteFile.equalityFieldIds();
                     if (taskEqualityFieldIds.isEmpty()) {
                         continue;
