@@ -38,6 +38,7 @@ Usage: $0 <options>
      --with-gcov                    enable to build with gcov
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
      --use-staros                   enable to build with staros
      -j                             build parallel
@@ -80,6 +81,7 @@ OPTS=$(getopt \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
+  -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
@@ -97,6 +99,7 @@ CLEAN=0
 DRY_RUN=0
 TEST_NAME=*
 TEST_MODULE=".*"
+EXCLUDING_TEST_SUIT=
 HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
@@ -113,7 +116,12 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+<<<<<<< HEAD
         --use-staros) USE_STAROS=ON; shift ;;
+=======
+        --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
+        --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
+>>>>>>> 89b9699086 ([UT] Add option to run-be-ut.sh to filter cases of specific group (#42344))
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -254,6 +262,14 @@ export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:
 
 if [ $WITH_AWS = "OFF" ]; then
     append_negative_case "*S3*"
+fi
+
+if [ -n "$EXCLUDING_TEST_SUIT" ]; then
+    excluding_test_suit=$EXCLUDING_TEST_SUIT
+    excluding_test_suit_array=("${excluding_test_suit//|/ }")
+    for element in ${excluding_test_suit_array[*]}; do
+        append_negative_case "*.${element}_*"
+    done
 fi
 
 # prepare util test_data
