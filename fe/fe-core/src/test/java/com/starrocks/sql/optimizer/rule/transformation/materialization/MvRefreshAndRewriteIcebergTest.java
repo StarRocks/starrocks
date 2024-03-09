@@ -34,6 +34,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
     }
 
     @Test
