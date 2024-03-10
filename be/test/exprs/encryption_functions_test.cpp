@@ -884,14 +884,12 @@ TEST_P(FpeFf1EncryptTestFixture, fpe_ff1_encryptTest) {
 
     auto str_plain = BinaryColumn::create();
     str_plain->append(str);
-    auto key_plain = BinaryColumn::create();
-    key_plain->append(key);
-
+    ColumnPtr key_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(key, 1);
     ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
 
     Columns columns;
     columns.emplace_back(str_plain);
-    columns.emplace_back(key_plain);
+    columns.emplace_back(key_column);
     columns.emplace_back(radix_column);
 
     ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
@@ -916,12 +914,11 @@ TEST_P(FpeFf1DecryptTestFixture, fpe_ff1_decryptTest) {
 
     auto str_plain = BinaryColumn::create();
     str_plain->append(str);
-    auto key_plain = BinaryColumn::create();
-    key_plain->append(key);
+    ColumnPtr key_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(key, 1);
 
     ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
     columns.emplace_back(str_plain);
-    columns.emplace_back(key_plain);
+    columns.emplace_back(key_column);
     columns.emplace_back(radix_column);
 
     ColumnPtr result = EncryptionFunctions::fpe_ff1_decrypt(ctx.get(), columns).value();
@@ -945,11 +942,10 @@ TEST_P(FpeFf1NumEncryptTestFixture, fpe_ff1_encrypt_numTest) {
 
     auto str_plain = BinaryColumn::create();
     str_plain->append(str);
-    auto key_plain = BinaryColumn::create();
-    key_plain->append(key);
+    ColumnPtr key_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(key, 1);
 
     columns.emplace_back(str_plain);
-    columns.emplace_back(key_plain);
+    columns.emplace_back(key_column);
 
     ColumnPtr result = EncryptionFunctions::fpe_encrypt(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -980,11 +976,10 @@ TEST_P(FpeFf1NumDecryptTestFixture, fpe_ff1_decrypt_numTest) {
 
     auto str_plain = BinaryColumn::create();
     str_plain->append(str);
-    auto key_plain = BinaryColumn::create();
-    key_plain->append(key);
+    ColumnPtr key_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(key, 1);
 
     columns.emplace_back(str_plain);
-    columns.emplace_back(key_plain);
+    columns.emplace_back(key_column);
 
     ColumnPtr result = EncryptionFunctions::fpe_decrypt(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
