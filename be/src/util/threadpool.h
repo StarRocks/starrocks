@@ -248,11 +248,11 @@ public:
 
     int max_threads() const { return _max_threads.load(std::memory_order_acquire); }
 
-    int64_t total_executed_tasks() const { return _total_executed_tasks; }
+    int64_t total_executed_tasks() const { return _total_executed_tasks.load(); }
 
-    int64_t total_pending_time_ns() const { return _total_pending_time_ns; }
+    int64_t total_pending_time_ns() const { return _total_pending_time_ns.load(); }
 
-    int64_t total_execute_time_ns() const { return _total_execute_time_ns; }
+    int64_t total_execute_time_ns() const { return _total_execute_time_ns.load(); }
 
 private:
     friend class ThreadPoolBuilder;
