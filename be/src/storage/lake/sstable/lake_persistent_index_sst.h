@@ -18,6 +18,7 @@
 
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/key_index.h"
+#include "storage/lake/sstable/filter_policy.h"
 #include "storage/lake/sstable/table.h"
 #include "storage/persistent_index.h"
 #include "storage/storage_engine.h"
@@ -57,6 +58,7 @@ public:
 
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
+    std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
     sstable::Table* _table;
 };
 

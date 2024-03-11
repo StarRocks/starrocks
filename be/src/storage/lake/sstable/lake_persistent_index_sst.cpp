@@ -15,6 +15,7 @@
 #include "storage/lake/sstable/lake_persistent_index_sst.h"
 
 #include <butil/time.h> // NOLINT
+
 #include "fs/fs.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/sstable/table_builder.h"
@@ -26,6 +27,8 @@ namespace lake {
 
 Status LakePersistentIndexSstable::init(RandomAccessFile* rf, const int64_t filesz, Cache* cache) {
     sstable::Options options;
+    _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+    options.filter_policy = _filter_policy.get();
     options.block_cache = cache;
     RETURN_IF_ERROR(sstable::Table::Open(options, rf, filesz, &_table));
     _sst.reset(_table);
@@ -36,7 +39,10 @@ Status LakePersistentIndexSstable::build_sstable(
         phmap::btree_map<std::string, std::list<std::pair<int64_t, IndexValue>>, std::less<>>& memtable,
         WritableFile* wf, uint64_t* filesz) {
     TRACE_COUNTER_SCOPE_LATENCY_US("build_sstable");
+    std::unique_ptr<sstable::FilterPolicy> filter_policy;
+    filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
+    options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf);
     for (const auto& pair : memtable) {
         auto index_value_info_pb = std::make_unique<IndexValueInfoPB>();
@@ -60,7 +66,10 @@ Status LakePersistentIndexSstable::build_sstable(
 Status LakePersistentIndexSstable::build_sstable(
         phmap::btree_map<std::string, phmap::btree_map<int64_t, int64_t, std::greater<>>, std::less<>>& map,
         WritableFile* wf, uint64_t* filesz) {
+    std::unique_ptr<sstable::FilterPolicy> filter_policy;
+    filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
+    options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf);
     for (const auto& [k, m] : map) {
         auto index_value_info_pb = std::make_unique<IndexValueInfoPB>();

@@ -14,7 +14,7 @@ namespace sstable {
 
 class FilterPolicy {
 public:
-    virtual ~FilterPolicy();
+    virtual ~FilterPolicy() {}
 
     // Return the name of this policy.  Note that if the filter encoding
     // changes in an incompatible way, the name returned by this method

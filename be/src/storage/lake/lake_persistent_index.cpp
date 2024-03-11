@@ -15,12 +15,14 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include <butil/time.h>
+
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/sstable/filter_policy.h"
 #include "storage/lake/sstable/lake_persistent_index_sst.h"
 #include "storage/primary_key_encoder.h"
 #include "util/trace.h"
@@ -95,6 +97,7 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
             }
             end_ts = butil::gettimeofday_us();
             TRACE_COUNTER_INCREMENT("set_difference", end_ts - start_ts);
+            TRACE_COUNTER_INCREMENT("sst_filesz", _sstable_meta->sstables(i - 1).sstables(j - 1).filesz());
         }
     }
     return Status::OK();

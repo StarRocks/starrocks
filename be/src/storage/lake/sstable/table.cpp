@@ -239,9 +239,10 @@ Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, 
             if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
                 !filter->KeyMayMatch(handle.offset(), k)) {
                 // Not found
+                TRACE_COUNTER_INCREMENT("bloom_filter", 1);
             } else {
                 end_ts = butil::gettimeofday_us();
-                TRACE_COUNTER_INCREMENT("decode and key match", end_ts - start_ts);
+                TRACE_COUNTER_INCREMENT("decode_and_key_match", end_ts - start_ts);
                 start_ts = butil::gettimeofday_us();
                 Iterator* block_iter = BlockReader(this, options, iiter->value());
                 end_ts = butil::gettimeofday_us();
