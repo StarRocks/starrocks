@@ -14,7 +14,7 @@ displayed_sidebar: "Chinese"
 - Storage Volume 支持 HDFS 的参数化配置，包括 Simple 认证方式支持配置 username，Kerberos 认证，NameNode HA，以及 ViewFS。 
 - 新增日期函数 `milliseconds_diff`。[#38171](https://github.com/StarRocks/starrocks/pull/38171)
 - 新增 Session 变量 `catalog`，用于指定当前会话所在的 Catalog。[#41329](https://github.com/StarRocks/starrocks/pull/41329)
-- Hint 中支持设置用户自定义变量。[#40746](https://github.com/StarRocks/starrocks/pull/40746)
+- Hint 中支持设置[用户自定义变量](https://docs.starrocks.io/zh/docs/administration/Query_planning/#%E7%94%A8%E6%88%B7%E8%87%AA%E5%AE%9A%E4%B9%89%E5%8F%98%E9%87%8F-hint)。[#40746](https://github.com/StarRocks/starrocks/pull/40746)
 - Hive Catalog 支持 CREATE TABLE LIKE。[#37685](https://github.com/StarRocks/starrocks/pull/37685) 
 - 新增 `information_schema.partitions_meta` 视图，提供丰富的 PARTITION 元信息。[#39265](https://github.com/StarRocks/starrocks/pull/39265)
 - 新增 `sys.fe_memory_usage` 视图，提供 StarRocks 的内存使用信息。[#40464](https://github.com/StarRocks/starrocks/pull/40464)
