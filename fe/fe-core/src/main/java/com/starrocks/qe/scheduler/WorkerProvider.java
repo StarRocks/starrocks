@@ -80,6 +80,10 @@ public interface WorkerProvider {
 
     List<Long> getSelectedWorkerIds();
 
+    List<Long> getAllAvailableNodes();
+
+    void selectWorkerUnchecked(Long workerId);
+
     default boolean isPreferComputeNode() {
         return false;
     }

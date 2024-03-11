@@ -290,6 +290,16 @@ public class OptExpression {
             return this;
         }
 
+        public Builder setStatistics(Statistics statistics) {
+            optExpression.statistics = statistics;
+            return this;
+        }
+
+        public Builder setCost(double cost) {
+            optExpression.cost = cost;
+            return this;
+        }
+
         public OptExpression build() {
             OptExpression tmp = optExpression;
             optExpression = null;

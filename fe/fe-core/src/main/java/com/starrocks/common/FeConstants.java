@@ -79,6 +79,10 @@ public class FeConstants {
     public static boolean runningUnitTest = false;
     // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
     public static boolean showScanNodeLocalShuffleColumnsInExplain = true;
+
+    // Set this flag false to suppress showing fragment cost, when running FE unit tests.
+    public static boolean showFragmentCost = true;
+
     // set to true when replay from query dump
     public static boolean isReplayFromQueryDump = false;
     // set false to resolve ut

@@ -89,6 +89,7 @@ public class PlanTestNoneDBBase {
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
+        FeConstants.showFragmentCost = false;
     }
 
     @Before
