@@ -406,6 +406,7 @@ public class Replica implements Writable {
         this.lastSuccessVersion = newVersion;
         this.dataSize = newDataSize;
         this.rowCount = newRowCount;
+        this.minReadableVersion = newVersion;
     }
 
     /* last failed version:  LFV
