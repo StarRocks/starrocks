@@ -182,7 +182,7 @@ public class CreateReplicaTask extends AgentTask {
         private long partitionId = INVALID_ID;
         private long indexId = INVALID_ID;
         private long tabletId = INVALID_ID;
-        private long version;
+        private long version = INVALID_ID;
         private TCompressionType compressionType;
         private TStorageMedium storageMedium;
         private boolean enablePersistentIndex;
@@ -387,6 +387,7 @@ public class CreateReplicaTask extends AgentTask {
             Preconditions.checkState(partitionId != INVALID_ID);
             Preconditions.checkState(indexId != INVALID_ID);
             Preconditions.checkState(tabletId != INVALID_ID);
+            Preconditions.checkState(version != INVALID_ID);
             Preconditions.checkState(tabletSchema != null);
 
             return new CreateReplicaTask(this);
