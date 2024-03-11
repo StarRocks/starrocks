@@ -11,7 +11,7 @@ Release date: March 8, 2024
 ### New Features
 
 - Cloud-native Primary Key tables in shared-data clusters support Size-tiered Compaction to reduce the write I/O amplification. [#41034](https://github.com/StarRocks/starrocks/pull/41034)
-- Added the date function `milliseconds_dff`. [#38171](https://github.com/StarRocks/starrocks/pull/38171)
+- Added the date function `milliseconds_diff`. [#38171](https://github.com/StarRocks/starrocks/pull/38171)
 - Added the session variable `catalog`, which specifies the catalog to which the session belongs. [#41329](https://github.com/StarRocks/starrocks/pull/41329)
 - Supports setting user-defined variables in hints. [#40746](https://github.com/StarRocks/starrocks/pull/40746)
 - Supports CREATE TABLE LIKE in Hive catalogs. [#37685](https://github.com/StarRocks/starrocks/pull/37685) 
@@ -27,9 +27,9 @@ Release date: March 8, 2024
 
 ### Improvements
 
-- Shared-data StarRocks clusters with an AWS S3 Storage Volume support partitioning data in uniformly prefixed sub-paths of the bucket, improving the read and write efficiency on data files in S3. [#41627](https://github.com/StarRocks/starrocks/pull/41627)
-- StarRocks supports using the parameter `s3_compatible_fs_list` to specify which S3-compatible object storage can be accessed via AWS SDK, and supports using the parameter `fallback_to_hadoop_fs_list` to specify non-S3-compatible object storages that require access via HDFS Schema (this method necessitates the use of vendor-provided JAR packages). [#41123](https://github.com/StarRocks/starrocks/pull/41123)
-- The compatibility with Trino's SQL statement syntax is optimized to support the syntax conversion from the following functions of Trino: `current_catalog`, `current_schema`, `to_char`, `from_hex`, `to_date`, `to_timestamp`, and `index`. [#41217](https://github.com/StarRocks/starrocks/pull/41217) [#41319](https://github.com/StarRocks/starrocks/pull/41319)[ ](https://github.com/StarRocks/starrocks/pull/40837)[#40803](https://github.com/StarRocks/starrocks/pull/40803)
+- Shared-data StarRocks clusters with an AWS S3 Storage Volume support partitioning data to different paths of an S3 bucket. These paths use a uniform prefix. This improves the read and write efficiency on data files in S3. [#41627](https://github.com/StarRocks/starrocks/pull/41627)
+- StarRocks supports using the parameter `s3_compatible_fs_list` to specify which S3-compatible object storage can be accessed via AWS SDK, and supports using the parameter `fallback_to_hadoop_fs_list` to specify non-S3-compatible object storages that require access via HDFS Schema (this method requires the use of vendor-provided JAR packages). [#41123](https://github.com/StarRocks/starrocks/pull/41123)
+- Optimized compatibility with Trino. Supports syntax conversion from the following Trino functions: current_catalog, current_schema, to_char, from_hex, to_date, to_timestamp, and index. [#41217](https://github.com/StarRocks/starrocks/pull/41217) [#41319](https://github.com/StarRocks/starrocks/pull/41319) [#40803](https://github.com/StarRocks/starrocks/pull/40803)
 - Optimized the query rewrite logic of materialized views. StarRocks can rewrite queries with materialized views created upon logical views. [#42173](https://github.com/StarRocks/starrocks/pull/42173)
 - Improved the efficiency of converting the STRING type to the DATETIME type by 35% to 40%. [#41464](https://github.com/StarRocks/starrocks/pull/41464)
 - The `agg_type` of BITMAP-type columns in an Aggregate table can be set to `replace_if_not_null` in order to support updates only to a few columns of the table. [#42034](https://github.com/StarRocks/starrocks/pull/42034)
