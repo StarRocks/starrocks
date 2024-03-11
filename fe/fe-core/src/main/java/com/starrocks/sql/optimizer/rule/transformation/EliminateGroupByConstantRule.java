@@ -44,7 +44,7 @@ public class EliminateGroupByConstantRule extends TransformationRule {
         LogicalAggregationOperator aggOp = input.getOp().cast();
         LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOp.getColumnRefMap();
-        if (aggOp.getGroupingKeys().isEmpty()) {
+        if (aggOp.getGroupingKeys().isEmpty() || aggOp.getAggregations().isEmpty()) {
             return false;
         }
 
