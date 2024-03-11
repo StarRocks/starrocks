@@ -17,22 +17,22 @@
 #include <utility>
 
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "common/statusor.h"
+#include "exec/write_combined_txn_log.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 
 TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
-                                   OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
+                                   OlapTablePartitionParam* partition_params, std::vector<IndexChannel*> channels,
                                    std::unordered_map<int64_t, NodeChannel*> node_channels,
                                    std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
                                    TWriteQuorumType::type write_quorum_type, int num_repicas)
         : _load_id(std::move(std::move(load_id))),
           _txn_id(txn_id),
           _index_id_to_tablet_be_map(std::move(index_id_to_tablet_be_map)),
-          _vectorized_partition(vectorized_partition),
+          _partition_params(partition_params),
           _channels(std::move(channels)),
           _node_channels(std::move(node_channels)),
           _output_expr_ctxs(std::move(output_expr_ctxs)),
@@ -139,7 +139,7 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
 Status TabletSinkSender::try_open(RuntimeState* state) {
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
-    RETURN_IF_ERROR(_vectorized_partition->open(state));
+    RETURN_IF_ERROR(_partition_params->open(state));
     for_each_index_channel([](NodeChannel* ch) { ch->try_open(); });
     return Status::OK();
 }
@@ -280,7 +280,8 @@ bool TabletSinkSender::is_close_done() {
     return _close_done;
 }
 
-Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile) {
+Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
+                                    bool write_txn_log) {
     Status status = std::move(close_status);
     if (status.ok()) {
         // BE id -> add_batch method counter
@@ -310,6 +311,19 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                 }
             }
         }
+        if (status.ok() && write_txn_log) {
+            auto merge_txn_log = [this](NodeChannel* channel) {
+                for (auto& log : channel->txn_logs()) {
+                    _txn_log_map[log.partition_id()].add_txn_logs()->Swap(&log);
+                }
+            };
+
+            for (auto& index_channel : _channels) {
+                index_channel->for_each_node_channel(merge_txn_log);
+            }
+
+            status.update(_write_combined_txn_log());
+        }
 
         // only if status is ok can we call this _profile->total_time_counter().
         // if status is not ok, this sink may not be prepared, so that _profile is null
@@ -337,8 +351,8 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
     }
 
     Expr::close(_output_expr_ctxs, state);
-    if (_vectorized_partition) {
-        _vectorized_partition->close(state);
+    if (_partition_params) {
+        _partition_params->close(state);
     }
     return status;
 }
@@ -353,6 +367,14 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
         }
     });
     return has_immutable_partition;
+}
+
+Status TabletSinkSender::_write_combined_txn_log() {
+    for (const auto& [partition_id, logs] : _txn_log_map) {
+        (void)partition_id;
+        RETURN_IF_ERROR(write_combined_txn_log(logs));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

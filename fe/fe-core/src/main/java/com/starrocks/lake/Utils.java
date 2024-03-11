@@ -112,7 +112,6 @@ public class Utils {
         if (nodeToTablets == null) {
             nodeToTablets = new HashMap<>();
         }
-
         for (Tablet tablet : tablets) {
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
@@ -123,7 +122,7 @@ public class Utils {
         }
 
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
-        List<ComputeNode> backendList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+        List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
@@ -136,7 +135,7 @@ public class Utils {
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
-            backendList.add(node);
+            nodeList.add(node);
         }
 
         for (int i = 0; i < responseList.size(); i++) {
@@ -150,7 +149,7 @@ public class Utils {
                     compactionScores.putAll(response.compactionScores);
                 }
             } catch (Exception e) {
-                throw new RpcException(backendList.get(i).getHost(), e.getMessage());
+                throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
             }
         }
     }

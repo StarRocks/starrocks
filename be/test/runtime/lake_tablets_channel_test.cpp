@@ -760,13 +760,14 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
     }
 }
 
-TEST_F(LakeTabletsChannelTest, test_profile) {
+TEST_F(LakeTabletsChannelTest, test_dont_write_txn_log) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
+    open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
 
     ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
-    constexpr int kChunkSize = 128;
+    constexpr int kChunkSize = 24;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
     auto chunk = generate_data(kChunkSize);
 
@@ -774,7 +775,7 @@ TEST_F(LakeTabletsChannelTest, test_profile) {
     PTabletWriterAddBatchResult add_chunk_response;
     add_chunk_request.set_index_id(kIndexId);
     add_chunk_request.set_sender_id(0);
-    add_chunk_request.set_eos(true);
+    add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
 
     for (int i = 0; i < kChunkSize; i++) {
@@ -788,14 +789,40 @@ TEST_F(LakeTabletsChannelTest, test_profile) {
 
     _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+    ASSERT_FALSE(add_chunk_response.has_lake_tablet_data());
 
-    auto* profile = _root_profile->get_child(fmt::format("Index (id={})", kIndexId));
-    ASSERT_NE(nullptr, profile);
-    ASSERT_EQ(4, profile->get_counter("TabletsNum")->value());
-    ASSERT_EQ(1, profile->get_counter("OpenCount")->value());
-    ASSERT_TRUE(profile->get_counter("OpenTime")->value() > 0);
-    ASSERT_EQ(1, profile->get_counter("AddChunkCount")->value());
-    ASSERT_TRUE(profile->get_counter("AddChunkTime")->value() > 0);
-    ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
+    PTabletWriterAddChunkRequest finish_request;
+    PTabletWriterAddBatchResult finish_response;
+    finish_request.set_index_id(kIndexId);
+    finish_request.set_sender_id(0);
+    finish_request.set_eos(true);
+    finish_request.set_packet_seq(1);
+    finish_request.add_partition_ids(10);
+    finish_request.add_partition_ids(11);
+
+    _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
+    ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code());
+    ASSERT_EQ(4, finish_response.tablet_vec_size());
+
+    std::vector<int64_t> finished_tablets;
+    for (auto& info : finish_response.tablet_vec()) {
+        finished_tablets.emplace_back(info.tablet_id());
+    }
+    std::sort(finished_tablets.begin(), finished_tablets.end());
+    ASSERT_EQ(10086, finished_tablets[0]);
+    ASSERT_EQ(10087, finished_tablets[1]);
+    ASSERT_EQ(10088, finished_tablets[2]);
+    ASSERT_EQ(10089, finished_tablets[3]);
+
+    ASSERT_TRUE(finish_response.has_lake_tablet_data());
+    ASSERT_EQ(4, finish_response.lake_tablet_data().txn_logs_size());
+
+    auto metacache = _tablet_manager->metacache();
+    for (auto tablet_id : finished_tablets) {
+        auto txn_log_path = _tablet_manager->txn_log_location(tablet_id, kTxnId);
+        ASSERT_TRUE(metacache->lookup_txn_log(txn_log_path));
+        ASSERT_TRUE(FileSystem::Default()->path_exists(txn_log_path).is_not_found());
+    }
 }
+
 } // namespace starrocks

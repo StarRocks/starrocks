@@ -68,6 +68,10 @@ public:
         return join_path(txn_log_root_location(tablet_id), txn_vlog_filename(tablet_id, version));
     }
 
+    std::string combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const {
+        return join_path(txn_log_root_location(tablet_id), combined_txn_log_filename(txn_id));
+    }
+
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const {
         return join_path(segment_root_location(tablet_id), segment_name);
     }

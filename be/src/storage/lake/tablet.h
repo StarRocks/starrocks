@@ -74,6 +74,8 @@ public:
 
     [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
 
+    [[nodiscard]] Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_slog(int64_t txn_id);
