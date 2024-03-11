@@ -572,17 +572,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 引入版本：-
 
 <!--
-##### update_schema_worker_count
-
-- 默认值：3
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### upload_worker_count
 
 - 默认值：1
@@ -989,17 +978,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 是否动态：是
 - 描述：主键表每个 Tablet 做 Compaction 的最小时间间隔。
 - 引入版本：-
-
-<!--
-##### update_compaction_chunk_size_for_row_store
-
-- 默认值：0
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### max_update_compaction_num_singleton_deltas
 
@@ -1593,44 +1571,11 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 -->
 
 <!--
-##### stale_memtable_flush_time_sec
-
-- 默认值：30
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### dictionary_encoding_ratio
 
 - 默认值：0.7
 - 类型：Double
 - 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### dictionary_page_size
-
-- 默认值：1048576
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### dictionary_encoding_ratio_for_non_string_column
-
-- 默认值：0
-- 类型：Double
-- 单位：
 - 是否动态：否
 - 描述：
 - 引入版本：-
@@ -2027,28 +1972,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 是否动态：是
 - 描述：是否为 Bitmap index 开启 Memory Cache。使用 Bitmap index 加速点查时，可以考虑开启。
 - 引入版本：v3.1
--->
-
-<!--
-##### enable_zonemap_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_ordinal_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
 -->
 
 <!--
@@ -2677,17 +2600,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 -->
 
 <!--
-##### enable_orc_libdeflate_decompression
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### orc_natural_read_size
 
 - 默认值：8388608
@@ -2705,17 +2617,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### orc_tiny_stripe_threshold_size
-
-- 默认值：8388608
-- 类型：Int
-- 单位：
-- 是否动态：否
 - 描述：
 - 引入版本：-
 -->
@@ -2754,17 +2655,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 -->
 
 <!--
-##### parquet_page_index_enable
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### io_coalesce_read_max_buffer_size
 
 - 默认值：8388608
@@ -2782,17 +2672,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 类型：Int
 - 单位：
 - 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### io_coalesce_adaptive_lazy_active
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -3226,28 +3105,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 -->
 
 <!--
-##### starlet_cache_evict_percent
-
-- 默认值：0.1
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### starlet_cache_evict_throughput_mb
-
-- 默认值：200
-- 类型：Int
-- 单位：MB
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### starlet_fs_stream_buffer_size_bytes
 
 - 默认值：1048576
@@ -3365,39 +3222,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 -->
 
 <!--
-##### starlet_fslib_s3client_nonread_max_retries
-
-- 默认值：5
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### starlet_fslib_s3client_nonread_retry_scale_factor
-
-- 默认值：200
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### starlet_fslib_s3client_connect_timeout_ms
-
-- 默认值：1000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### lake_metadata_cache_limit
 
 - 默认值：2147483648
@@ -3418,15 +3242,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 描述：
 - 引入版本：-
 -->
-
-##### lake_compaction_stream_buffer_size_bytes
-
-- 默认值：1048576
-- 类型：Int
-- 单位：Bytes
-- 是否动态：是
-- 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
-- 引入版本：v3.2.3
 
 <!--
 ##### experimental_lake_ignore_lost_segment
@@ -3551,17 +3366,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 
 <!--
 ##### enable_primary_key_recover
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_enable_compaction_async_write
 
 - 默认值：false
 - 类型：Boolean
@@ -3715,17 +3519,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 类型：Int
 - 单位：Bytes
 - 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### spill_max_dir_bytes_ratio
-
-- 默认值：0.8
-- 类型：Double
-- 单位：-
-- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4388,83 +4181,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 引入版本：v3.1.7, v3.2.3
 
 <!--
-##### dictionary_cache_refresh_timeout_ms
-
-- 默认值：60000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### dictionary_cache_refresh_threadpool_size
-
-- 默认值：8
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_json_flat
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_null_factor
-
-- 默认值：0.3
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_sparsity_factor
-
-- 默认值：0.9
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_internal_column_min_limit
-
-- 默认值：5
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_column_max
-
-- 默认值：20
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### pk_dump_interval_seconds
 
 - 默认值：3600
@@ -4481,28 +4197,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 默认值：false
 - 类型：Boolean
 - 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### olap_string_max_length
-
-- 默认值：1048576
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### jit_lru_cache_size
-
-- 默认值：0
-- 类型：Int
-- 单位：
 - 是否动态：是
 - 描述：
 - 引入版本：-
