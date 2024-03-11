@@ -939,6 +939,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             TTabletSchema tabletSchema = SchemaInfo.builder()
                     .setId(indexMeta.getSchemaId())
                     .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                    .setSchemaHash(indexMeta.getSchemaHash())
                     .setKeysType(indexMeta.getKeysType())
                     .setStorageType(indexMeta.getStorageType())
                     .setVersion(indexMeta.getSchemaVersion())

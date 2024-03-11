@@ -309,6 +309,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     short shadowShortKeyColumnCount = indexShortKeyMap.get(shadowIdxId);
                     List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
+                    int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int shadowSchemaVersion = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion;
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
@@ -317,6 +318,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
+                            .setSchemaHash(shadowSchemaHash)
                             .setVersion(shadowSchemaVersion)
                             .setStorageType(tbl.getStorageType())
                             .setBloomFilterColumnNames(bfColumns)

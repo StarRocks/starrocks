@@ -175,7 +175,8 @@ public class CreateReplicaTask extends AgentTask {
     }
 
     public static class Builder {
-        public static final long INVALID_ID = -1;
+        // TabletSchedCtx will use -1 to initialize many fields, so here we choose -2 as an invalid id.
+        public static final long INVALID_ID = -2;
         private long nodeId = INVALID_ID;
         private long dbId = INVALID_ID;
         private long tableId = INVALID_ID;

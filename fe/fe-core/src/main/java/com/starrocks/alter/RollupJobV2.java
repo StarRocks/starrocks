@@ -265,6 +265,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         .setVersion(rollupSchemaVersion)
                         .setKeysType(rollupKeysType)
                         .setShortKeyColumnCount(rollupShortKeyColumnCount)
+                        .setSchemaHash(rollupSchemaHash)
                         .setStorageType(TStorageType.COLUMN)
                         .setBloomFilterColumnNames(tbl.getCopiedBfColumns())
                         .setBloomFilterFpp(tbl.getBfFpp())

@@ -347,6 +347,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             .setBloomFilterFpp(bfFpp)
                             .setStorageType(TStorageType.COLUMN)
                             .addColumns(shadowSchema)
+                            .setSchemaHash(0)
                             .build().toTabletSchema();
 
                     boolean createSchemaFile = true;

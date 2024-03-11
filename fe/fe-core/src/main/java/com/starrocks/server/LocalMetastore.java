@@ -2038,6 +2038,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 .setVersion(indexMeta.getSchemaVersion())
                 .setKeysType(indexMeta.getKeysType())
                 .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                .setSchemaHash(indexMeta.getSchemaHash())
                 .setStorageType(indexMeta.getStorageType())
                 .setIndexes(table.getIndexes())
                 .setSortKeyIndexes(indexMeta.getSortKeyIdxes())

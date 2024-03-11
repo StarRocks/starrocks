@@ -41,6 +41,8 @@ public class SchemaInfo {
     private final TStorageType storageType;
     @SerializedName("version")
     private final int version;
+    @SerializedName("schemaHahs")
+    private final int schemaHash;
     @SerializedName("columns")
     private final List<Column> columns;
     @SerializedName("sortKeyIndexes")
@@ -66,6 +68,7 @@ public class SchemaInfo {
         this.indexes = builder.indexes;
         this.bloomFilterColumnNames = builder.bloomFilterColumnNames;
         this.bloomFilterFpp = builder.bloomFilterFpp;
+        this.schemaHash = builder.schemaHash;
     }
 
     public long getId() {
@@ -119,7 +122,7 @@ public class SchemaInfo {
         tSchema.setStorage_type(storageType);
         tSchema.setId(id);
         tSchema.setSchema_version(version);
-        tSchema.setSchema_hash(0/*unused now*/);
+        tSchema.setSchema_hash(schemaHash);
         tSchema.setIs_in_memory(false/*unused now*/);
 
         List<TColumn> tColumns = new ArrayList<TColumn>();
@@ -164,6 +167,7 @@ public class SchemaInfo {
     public static class Builder {
         private long id;
         private int version;
+        private int schemaHash;
         private KeysType keysType;
         private short shortKeyColumnCount;
         private TStorageType storageType;
@@ -246,6 +250,11 @@ public class SchemaInfo {
 
         public Builder setBloomFilterFpp(double fpp) {
             this.bloomFilterFpp = fpp;
+            return this;
+        }
+
+        public Builder setSchemaHash(int schemaHash) {
+            this.schemaHash = schemaHash;
             return this;
         }
 

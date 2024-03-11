@@ -906,6 +906,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .setId(indexMeta.getSchemaId())
                                             .setKeysType(indexMeta.getKeysType())
                                             .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                                            .setSchemaHash(indexMeta.getSchemaHash())
                                             .setVersion(indexMeta.getSchemaVersion())
                                             .setStorageType(olapTable.getStorageType())
                                             .addColumns(indexMeta.getSchema())

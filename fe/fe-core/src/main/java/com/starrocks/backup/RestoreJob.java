@@ -900,6 +900,7 @@ public class RestoreJob extends AbstractJob {
                         .setId(indexMeta.getSchemaId())
                         .setKeysType(indexMeta.getKeysType())
                         .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                        .setSchemaHash(indexMeta.getSchemaHash())
                         .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                         .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
                         .setStorageType(indexMeta.getStorageType())

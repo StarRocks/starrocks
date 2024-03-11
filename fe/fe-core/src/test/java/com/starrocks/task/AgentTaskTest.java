@@ -120,6 +120,7 @@ public class AgentTaskTest {
                 .setId(indexId1)
                 .setKeysType(KeysType.AGG_KEYS)
                 .setShortKeyColumnCount(shortKeyNum)
+                .setSchemaHash(0)
                 .setStorageType(storageType)
                 .addColumns(columns)
                 .build().toTabletSchema();

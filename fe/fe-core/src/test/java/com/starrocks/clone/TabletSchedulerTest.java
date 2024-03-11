@@ -394,6 +394,7 @@ public class TabletSchedulerTest {
         TTabletSchema tabletSchema = SchemaInfo.builder().setId(schemaId)
                 .setKeysType(DUP_KEYS)
                 .setShortKeyColumnCount((short) 1)
+                .setSchemaHash(-1)
                 .setStorageType(TStorageType.COLUMN)
                 .addColumn(new Column())
                 .build().toTabletSchema();
@@ -404,6 +405,7 @@ public class TabletSchedulerTest {
                 .setTableId(tblId)
                 .setPartitionId(partitionId)
                 .setIndexId(indexId)
+                .setVersion(1)
                 .setTabletId(tabletId)
                 .setStorageMedium(TStorageMedium.HDD)
                 .setPrimaryIndexCacheExpireSec(1)
