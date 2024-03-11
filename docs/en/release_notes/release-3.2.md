@@ -13,7 +13,7 @@ Release date: March 8, 2024
 - Cloud-native Primary Key tables in shared-data clusters support Size-tiered Compaction to reduce the write I/O amplification. [#41034](https://github.com/StarRocks/starrocks/pull/41034)
 - Added the date function `milliseconds_diff`. [#38171](https://github.com/StarRocks/starrocks/pull/38171)
 - Added the session variable `catalog`, which specifies the catalog to which the session belongs. [#41329](https://github.com/StarRocks/starrocks/pull/41329)
-- Supports setting user-defined variables in hints. [#40746](https://github.com/StarRocks/starrocks/pull/40746)
+- Supports [setting user-defined variables in hints](https://docs.starrocks.io/docs/administration/Query_planning/#user-defined-variable-hint). [#40746](https://github.com/StarRocks/starrocks/pull/40746)
 - Supports CREATE TABLE LIKE in Hive catalogs. [#37685](https://github.com/StarRocks/starrocks/pull/37685) 
 - Added the view `information_schema.partitions_meta`, which records detailed metadata of partitions. [#39265](https://github.com/StarRocks/starrocks/pull/39265)
 - Added the view `sys.fe_memory_usage`, which records the memory usage for StarRocks. [#40464](https://github.com/StarRocks/starrocks/pull/40464)
