@@ -2195,15 +2195,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
   - 新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。
 - 引入版本：v2.5.7
 
-##### enable_experimental_rowstore
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启[行列混存表](../table_design/hybrid_table.md)功能。
-- 引入版本：-
-
 ##### storage_usage_soft_limit_percent
 
 - 默认值：90
