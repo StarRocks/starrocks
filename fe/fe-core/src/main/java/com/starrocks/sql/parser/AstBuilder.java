@@ -283,6 +283,9 @@ import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.PivotAggregation;
+import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
@@ -4351,6 +4354,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 from = relation;
             }
+
+            if (fromContext.pivotClause() != null) {
+                PivotRelation pivotRelation = (PivotRelation) visit(fromContext.pivotClause());
+                pivotRelation.setQuery(from);
+                from = pivotRelation;
+            }
         }
 
         /*
@@ -6583,6 +6592,65 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDictionaryGetExpr(StarRocksParser.DictionaryGetExprContext context) {
         List<Expr> params = visit(context.expressionList().expression(), Expr.class);
         return new DictionaryGetExpr(params);
+    }
+
+    @Override
+    public ParseNode visitPivotClause(StarRocksParser.PivotClauseContext ctx) {
+        List<PivotAggregation> aggregations = visit(ctx.pivotAggregationExpression(), PivotAggregation.class);
+        List<Identifier> identifiers;
+        if (ctx.identifierList() != null) {
+            identifiers = visit(ctx.identifierList().identifier(), Identifier.class);
+        } else if (ctx.identifier() != null) {
+            identifiers = ImmutableList.of((Identifier) visit(ctx.identifier()));
+        } else {
+            identifiers = ImmutableList.of();
+        }
+        List<SlotRef> columns = identifiers.stream()
+                .map(id -> {
+                    List<String> parts = ImmutableList.of(id.getValue());
+                    return new SlotRef(QualifiedName.of(parts, createPos(ctx)));
+                })
+                .collect(toList());
+
+        List<PivotValue> values = visit(ctx.pivotValue(), PivotValue.class);
+
+        if (columns.size() != values.get(0).getExprs().size()
+                || values.stream().anyMatch(v -> v.getExprs().size() != columns.size())) {
+            throw new ParsingException(
+                    PARSER_ERROR_MSG.pivotValueArityMismatch(columns.size(), values.get(0).getExprs().size()),
+                    createPos(ctx));
+        }
+        return new PivotRelation(null, aggregations, columns, values, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitPivotAggregationExpression(StarRocksParser.PivotAggregationExpressionContext ctx) {
+        String alias = null;
+        if (ctx.identifier() != null) {
+            alias = ((Identifier) visit(ctx.identifier())).getValue();
+        } else if (ctx.string() != null) {
+            alias = ((StringLiteral) visit(ctx.string())).getStringValue();
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(ctx.functionCall());
+        return new PivotAggregation(functionCallExpr, alias, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitPivotValue(StarRocksParser.PivotValueContext ctx) {
+        ImmutableList.Builder<LiteralExpr> exprs = new ImmutableList.Builder<>();
+        if (ctx.literalExpression() != null) {
+            exprs.add((LiteralExpr) visit(ctx.literalExpression()));
+        } else if (ctx.literalExpressionList() != null) {
+            exprs.addAll(visit(ctx.literalExpressionList().literalExpression(), LiteralExpr.class));
+        }
+
+        String alias = null;
+        if (ctx.identifier() != null) {
+            alias = ((Identifier) visit(ctx.identifier())).getValue();
+        } else if (ctx.string() != null) {
+            alias = ((StringLiteral) visit(ctx.string())).getStringValue();
+        }
+        return new PivotValue(exprs.build(), alias, createPos(ctx));
     }
 
     // ------------------------------------------- COMMON AST --------------------------------------------------------------
