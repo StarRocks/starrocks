@@ -17,7 +17,7 @@
 #include <future>
 
 #include "column/chunk.h"
-#include "column_evaluator.h"
+#include "formats/column_evaluator.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"

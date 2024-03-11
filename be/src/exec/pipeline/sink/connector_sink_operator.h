@@ -61,8 +61,13 @@ private:
 
     std::unique_ptr<connector::ConnectorChunkSink> _connector_chunk_sink;
 
+    // connector sink operator manages two future queue
+    // 1. if any add_chunk_future is not ready, the operator cannot accept more chunks
+    // 2. if commit_file_future is ready, the operator can still accept more chunks
     mutable std::queue<std::future<Status>> _add_chunk_future_queue;
     mutable std::queue<std::future<formats::FileWriter::CommitResult>> _commit_file_future_queue;
+
+    // actions which need to be executed if fragment is cancelled
     mutable std::queue<std::function<void()>> _rollback_actions;
 
     bool _no_more_input = false;

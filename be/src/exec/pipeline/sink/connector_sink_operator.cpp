@@ -45,7 +45,7 @@ bool ConnectorSinkOperator::need_input() const {
     }
 
     while (!_add_chunk_future_queue.empty()) {
-        // return if any future is not ready, check in order of FIFO
+        // cannot accept chunk if any add_chunk_future is not ready
         if (!is_ready(_add_chunk_future_queue.front())) {
             return false;
         }
@@ -65,7 +65,7 @@ bool ConnectorSinkOperator::is_finished() const {
     }
 
     while (!_add_chunk_future_queue.empty()) {
-        // return if any future is not ready, check in order of FIFO
+        // unfinished if any add_chunk_future future is not ready
         if (!is_ready(_add_chunk_future_queue.front())) {
             return false;
         }
@@ -78,7 +78,7 @@ bool ConnectorSinkOperator::is_finished() const {
     }
 
     while (!_commit_file_future_queue.empty()) {
-        // return if any future is not ready, check in order of FIFO
+        // unfinished if any commit_file_future future is not ready
         if (!is_ready(_commit_file_future_queue.front())) {
             return false;
         }
@@ -87,6 +87,7 @@ bool ConnectorSinkOperator::is_finished() const {
         _commit_file_future_queue.pop();
 
         if (auto st = result.io_status; st.ok()) {
+            // invoke callback if file commit succeed
             _connector_chunk_sink->callback_on_success()(result);
         } else {
             LOG(WARNING) << "cancel fragment: " << st;
