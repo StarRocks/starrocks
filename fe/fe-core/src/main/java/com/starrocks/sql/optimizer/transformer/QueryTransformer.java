@@ -364,7 +364,7 @@ class QueryTransformer {
         return subOpt.withNewRoot(limitOperator);
     }
 
-    private OptExprBuilder aggregate(OptExprBuilder subOpt,
+    public OptExprBuilder aggregate(OptExprBuilder subOpt,
                                      List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
         if (aggregates.size() == 0 && groupByExpressions.size() == 0) {

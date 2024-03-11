@@ -2227,7 +2227,7 @@ querySpecification
     ;
 
 fromClause
-    : (FROM relations)?                                                                 #from
+    : (FROM relations pivotClause?)?                                                    #from
     | FROM DUAL                                                                         #dual
     ;
 
@@ -2279,6 +2279,20 @@ relationPrimary
     | FILES propertyList
         (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
+    ;
+
+pivotClause
+    : PIVOT '(' pivotAggregationExpression (',' pivotAggregationExpression)*
+        FOR (identifier | identifierList) IN '(' pivotValue (',' pivotValue)* ')' ')'
+    ;
+
+pivotAggregationExpression
+    : functionCall (AS? (identifier | string))?
+    ;
+
+
+pivotValue
+    : (literalExpression | literalExpressionList) (AS? (identifier | string))?
     ;
 
 argumentList
@@ -2937,7 +2951,7 @@ nonReserved
     | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATERIALIZED | MAX | MEMBER | MEMBERS | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
-    | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLUGIN | PLUGINS | POLICY | POLICIES
     | PERCENT_RANK | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY

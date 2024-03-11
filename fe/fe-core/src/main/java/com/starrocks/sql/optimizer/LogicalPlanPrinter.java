@@ -49,7 +49,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
@@ -218,9 +217,9 @@ public class LogicalPlanPrinter {
 
             LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
             return new OperatorStr("logical aggregate ("
-                    + aggregate.getGroupingKeys().stream().map(ScalarOperator::debugString)
+                    + aggregate.getGroupingKeys().stream().map(scalarOperatorStringFunction)
                     .collect(Collectors.joining(",")) + ") ("
-                    + aggregate.getAggregations().values().stream().map(CallOperator::debugString).
+                    + aggregate.getAggregations().values().stream().map(scalarOperatorStringFunction).
                     collect(Collectors.joining(",")) + ")",
                     step, Collections.singletonList(child));
         }
