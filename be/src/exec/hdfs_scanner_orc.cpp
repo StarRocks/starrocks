@@ -145,7 +145,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             int part_idx = 0;
             const int part_size = _scanner_ctx.partition_columns.size();
             for (part_idx = 0; part_idx < part_size; part_idx++) {
-                if (_scanner_ctx.partition_columns[part_idx].col_name == slot->col_name()) {
+                if (_scanner_ctx.partition_columns[part_idx].name() == slot->col_name()) {
                     break;
                 }
             }
@@ -207,7 +207,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 continue;
             }
             int32_t column_index = -1;
-            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.col_name);
+            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.name());
             if (orc_type != nullptr) {
                 column_index = orc_type->getColumnId();
             }
@@ -397,9 +397,9 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_ctx.case_sensitive);
+        auto col_name = OrcChunkReader::format_column_name(column.name(), _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id);
+        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(column.slot_desc);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
@@ -415,7 +415,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
         // put materialized columns' conjunctions into _eval_conjunct_ctxs_by_materialized_slot
         // for example, partition column's conjunctions will not put into _eval_conjunct_ctxs_by_materialized_slot
         {
-            auto it = _scanner_params.conjunct_ctxs_by_slot.find(column.slot_id);
+            auto it = _scanner_params.conjunct_ctxs_by_slot.find(column.slot_id());
             if (it != _scanner_params.conjunct_ctxs_by_slot.end()) {
                 _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
             }
@@ -585,7 +585,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
 
             // we need to append none existed column before do eval, just for count(*) optimization
-            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, rows_read);
+            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read);
 
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;

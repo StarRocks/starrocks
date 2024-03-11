@@ -351,9 +351,10 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
         }
     }
     // call the real __cxa_throw():
-#ifdef __clang__
-    __real___cxa_throw(thrown_exception, info, dest);
-#elif defined(__GNUC__)
+
+#if defined(ADDRESS_SANITIZER)
+    __interceptor___cxa_throw(thrown_exception, info, dest);
+#else
     __real___cxa_throw(thrown_exception, info, dest);
 #endif
 }

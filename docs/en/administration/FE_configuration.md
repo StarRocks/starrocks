@@ -187,7 +187,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: ms
 - Default: 5000
 - Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
-- Introduced in: 2.5.15，3.1.5
+- Introduced in: 2.5.15, 3.1.5
 
 #### max_partitions_in_one_batch
 
@@ -1093,7 +1093,7 @@ This section provides an overview of the static parameters that you can configur
 
 - **Default:** 0
 - **Description:** Number of worker threads for http server to deal with http requests. For a negative or 0 value, the number of threads will be twice the number of cpu cores.
-- Introduced in: 2.5.18，3.0.10，3.1.7，3.2.2
+- Introduced in: 2.5.18, 3.0.10, 3.1.7, 3.2.2
 
 #### http_backlog_num
 

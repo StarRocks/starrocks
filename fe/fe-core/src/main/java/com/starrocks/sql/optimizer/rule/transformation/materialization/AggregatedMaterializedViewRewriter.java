@@ -506,7 +506,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 unionExpr, newProjection);
         // Add extra union all predicates above union all operator.
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
-            addUnionAllExtraPredicate(result.getOp(), rewriteContext.getUnionRewriteQueryExtraPredicate());
+            addUnionAllExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
         }
         deriveLogicalProperty(result);
 

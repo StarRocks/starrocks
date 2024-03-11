@@ -34,6 +34,8 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Enums;
+import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
@@ -64,6 +66,7 @@ import com.starrocks.thrift.TSpillToRemoteStorageOptions;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TTimeUnit;
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.TestOnly;
@@ -78,6 +81,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+
+import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -340,6 +345,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
 
+    public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -420,6 +427,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
     public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optimize";
+    public static final String ENABLE_PARTITION_BUCKET_OPTIMIZE = "enable_partition_bucket_optimize";
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
     public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
 
@@ -461,6 +469,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+    public static final String MATERIALIZED_VIEW_UNION_REWRITE_MODE = "materialized_view_union_rewrite_mode";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
 
@@ -1279,6 +1288,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PER_BUCKET_OPTIMIZE)
     private boolean enablePerBucketComputeOptimize = true;
 
+    @VarAttr(name = ENABLE_PARTITION_BUCKET_OPTIMIZE, flag = VariableMgr.INVISIBLE)
+    private boolean enablePartitionBucketOptimize = false;
+
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
     private boolean enableParallelMerge = true;
 
@@ -1379,6 +1391,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePerBucketComputeOptimize() {
         return enablePerBucketComputeOptimize;
+    }
+
+    public boolean isEnablePartitionBucketOptimize() {
+        return enablePartitionBucketOptimize;
+    }
+    public void setEnablePartitionBucketOptimize(boolean enablePartitionBucketOptimize) {
+        this.enablePartitionBucketOptimize = enablePartitionBucketOptimize;
     }
 
     public int getWindowPartitionMode() {
@@ -1493,6 +1512,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
     private boolean enableMaterializedViewUnionRewrite = true;
+
+    /**
+     * <= 0: default mode, only try to union all rewrite by logical plan tree after partition compensate
+     * 1: eager mode v1, try to pull up query's filter after union when query's output matches mv's define query
+     *  which will increase union rewrite's ability.
+     * 2: eager mode v2, try to pull up query's filter after union as much as possible.
+     */
+    @VarAttr(name = MATERIALIZED_VIEW_UNION_REWRITE_MODE)
+    private int materializedViewUnionRewriteMode = 0;
 
     /**
      * Whether to compensate partition predicates in mv rewrite, see
@@ -1759,6 +1787,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_RESULT_SINK_ACCUMULATE)
     private boolean enableResultSinkAccumulate = true;
+
+    @VarAttr(name = CHOOSE_EXECUTE_INSTANCES_MODE)
+    private String chooseExecuteInstancesMode = LOCALITY.name();
+
+    public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
+        return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
+                        StringUtils.upperCase(chooseExecuteInstancesMode))
+                .or(SessionVariableConstants.ChooseInstancesMode.LOCALITY);
+    }
+
+    public void setChooseExecuteInstancesMode(String mode) {
+        SessionVariableConstants.ChooseInstancesMode result =
+                Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class, StringUtils.upperCase(mode))
+                        .orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ChooseInstancesMode.values());
+            throw new IllegalArgumentException("Legal values of choose_execute_instances_mode are " + legalValues);
+        }
+        this.chooseExecuteInstancesMode = StringUtils.upperCase(mode);
+    }
 
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
@@ -2920,6 +2968,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewUnionRewrite(boolean enableMaterializedViewUnionRewrite) {
         this.enableMaterializedViewUnionRewrite = enableMaterializedViewUnionRewrite;
+    }
+
+    public int getMaterializedViewUnionRewriteMode() {
+        return materializedViewUnionRewriteMode;
+    }
+
+    public void setMaterializedViewUnionRewriteMode(int materializedViewUnionRewriteMode) {
+        this.materializedViewUnionRewriteMode = materializedViewUnionRewriteMode;
     }
 
     public boolean isEnableSyncMaterializedViewRewrite() {

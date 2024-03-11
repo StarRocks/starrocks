@@ -79,7 +79,7 @@ public:
     virtual ~StoredColumnReaderImpl() = default;
 
     // Reset internal state and ready for next read_values
-    virtual void reset() = 0;
+    virtual void reset_levels() = 0;
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                       Column* dst) override;
@@ -96,9 +96,6 @@ public:
     Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) override;
 
     void set_page_num(size_t page_num) override { _reader->set_page_num(page_num); }
-
-    static size_t get_level_to_decode_batch_size(size_t row, size_t num_values_left_in_cur_page, size_t decoded,
-                                                 size_t parsed);
 
     static size_t count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level);
 

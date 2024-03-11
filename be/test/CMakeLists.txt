@@ -22,6 +22,9 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./connector_sink/hive_chunk_sink_test.cpp
+        ./connector_sink/iceberg_chunk_sink_test.cpp
+        ./connector_sink/file_chunk_sink_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
@@ -138,6 +141,7 @@ set(EXEC_FILES
         ./exprs/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
+        ./formats/csv/csv_file_writer_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp

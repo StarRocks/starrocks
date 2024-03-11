@@ -336,37 +336,39 @@ HASH_JOIN_NODE (id=2):(Active: 996.337ms, % non-child: 52.05%)
 - RowsReturnedRate: 440.114K /sec
 ```
 
-## Query Hint
+## Query hint
 
- StarRocks 支持提示（Hint）功能。Hint 是一种指令或注释，显式地向查询优化器建议如何执行查询。目前支持两种 Hint：系统变量 Hint 和 Join Hint。Hint 仅在单个查询范围内生效。
+Query hint 是一种指令或注释，显式地向查询优化器建议如何执行查询。目前 StarRocks 支持三种 hint：系统变量 hint (`SET_VAR`)，用户自定义变量 hint (`SET_USER_VARIABLE`) 和 Join hint。Hint 仅在单个查询范围内生效。
 
-### 系统变量 Hint
+### 系统变量 hint
 
-在 SELECT、SUBMIT TASK 语句中通过 `/*+ ... */` 注释的形式设置一个或多个[系统变量](../reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。
+在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` hint 设置一个或多个[系统变量](../reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_VAR` hint 设置系统变量，即使语句执行成功，但是该 `SET_VAR` hint 不会生效。
+
+相比于[系统变量的一般用法](../reference/System_variable.md)是会话级别生效的，`SET_VAR` hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
 ```SQL
-[...] SELECT [/*+ SET_VAR(key=value [, key = value]*) */] ...
-SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
+[...] SELECT /*+ SET_VAR(key=value [, key = value]) */ ...
+SUBMIT [/*+ SET_VAR(key=value [, key = value]) */] TASK ...
 ```
 
 #### 示例
 
-在聚合查询语句中通过系统变量 `streaming_preaggregation_mode` 和 `new_planner_agg_stage` 来设置聚合方式。
+如果需要指定聚合查询的聚合方式，可以在聚合查询中使用 `SET_VAR` hint 设置系统变量 `streaming_preaggregation_mode` 和 `new_planner_agg_stage`。
 
 ```SQL
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ```
 
-在 SUBMIT TASK 语句中通过系统变量 `query_timeout` 来设置查询执行超时时间。
+如果需要指定 SUBMIT TASK 语句执行超时时间，可以在 SUBMIT TASK 语句中使用 `SET_VAR` hint 设置系统变量 `query_timeout`。
 
 ```SQL
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK 
     AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ```
 
-创建物化视图时在 SELECT 子句中通过系统变量 `query_timeout` 来设置查询执行超时时间。
+如果需要指定创建物化视图的子查询执行超时时间，可以在 SELECT 子句中使用 `SET_VAR` hint 设置系统变量 `query_timeout`。
 
 ```SQL
 CREATE MATERIALIZED VIEW mv 
@@ -377,11 +379,32 @@ CREATE MATERIALIZED VIEW mv
     AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 ```
 
-### Join Hint
+### 用户自定义变量 hint
 
-针对多表关联查询，优化器一般会主动选择最优的 Join 执行方式。在特殊情况下，您也可以使用 Join Hint 显式地向优化器建议 Join 执行方式、以及禁用 Join Reorder。目前 Join Hint 支持的 Join 执行方式有 Shuffle Join、Broadcast Join、Bucket Shuffle Join 和 Colocate Join。
+在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` hint 不会生效。自 3.2.4 起，StarRocks 支持用户自定义变量 hint。
 
-当您使用 Join Hint 建议 Join 的执行方式后，优化器不会进行 Join Reorder，因此您需要确保右表为较小的表。并且当您所建议的 Join 执行方式为 [Colocate Join](../using_starrocks/Colocate_join.md) 或者 Bucket Shuffle Join 时，您需要确保表的数据分布情况满足这两种 Join 执行方式的要求，否则所建议的 Join 执行方式不生效。
+相比于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` hint 是语句级别生效，不会影响整个会话。
+
+#### 语法
+
+```SQL
+[...] SELECT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
+INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
+```
+
+#### 示例
+
+如下 SELECT 语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users`，则您可以使用 `SET_USER_VARIABLE` hint，将这两个标量子查询设置为用户自定义变量，然后执行查询。
+
+```SQL
+SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ * FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
+```
+
+### Join hint
+
+针对多表关联查询，优化器一般会主动选择最优的 Join 执行方式。在特殊情况下，您也可以使用 Join hint 显式地向优化器建议 Join 执行方式、以及禁用 Join Reorder。目前 Join hint 支持的 Join 执行方式有 Shuffle Join、Broadcast Join、Bucket Shuffle Join 和 Colocate Join。
+
+当您使用 Join hint 建议 Join 的执行方式后，优化器不会进行 Join Reorder，因此您需要确保右表为较小的表。并且当您所建议的 Join 执行方式为 [Colocate Join](../using_starrocks/Colocate_join.md) 或者 Bucket Shuffle Join 时，您需要确保表的数据分布情况满足这两种 Join 执行方式的要求，否则所建议的 Join 执行方式不生效。
 
 #### 语法
 
@@ -391,13 +414,13 @@ CREATE MATERIALIZED VIEW mv
 
 > **说明**
 >
-> 使用 Join Hint 时大小写不敏感。
+> 使用 Join hint 时大小写不敏感。
 
 #### 示例
 
 * Shuffle Join
 
-  如果需要将表 A、B 中分桶键取值相同的数据行 Shuffle 到相同机器上，再进行 Join 操作，则您可以设置 Join Hint 为 Shuffle Join。
+  如果需要将表 A、B 中分桶键取值相同的数据行 Shuffle 到相同机器上，再进行 Join 操作，则您可以设置 Join hint 为 Shuffle Join。
 
   ```SQL
   select k1 from t1 join [SHUFFLE] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -405,7 +428,7 @@ CREATE MATERIALIZED VIEW mv
 
 * Broadcast Join
   
-  如果表 A 是个大表，表 B 是个小表，则您可以设置 Join Hint 为 Broadcast Join。表 B 的数据全量广播到表 A 数据所在的机器上，再进行 Join 操作。Broadcast Join 相比较于 Shuffle Join，节省了 Shuffle 表 A 数据的开销。
+  如果表 A 是个大表，表 B 是个小表，则您可以设置 Join hint 为 Broadcast Join。表 B 的数据全量广播到表 A 数据所在的机器上，再进行 Join 操作。Broadcast Join 相比较于 Shuffle Join，节省了 Shuffle 表 A 数据的开销。
 
   ```SQL
   select k1 from t1 join [BROADCAST] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -413,7 +436,7 @@ CREATE MATERIALIZED VIEW mv
 
 * Bucket Shuffle Join
   
-  如果关联查询中 Join 等值表达式命中表 A 的分桶键 ，尤其是在表 A 和表 B 均是大表的情况下，您可以设置 Join Hint 为 Bucket Shuffle Join。表 B 数据会按照表 A 数据的分布方式，Shuffle 到表 A 数据所在机器上，再进行 Join 操作。Bucket Shuffle Join 是在 Broadcast Join 的基础上进一步优化，Shuffle B 表的数据量全局只有一份，比 Broadcast Join 少传输了很多倍数据量。
+  如果关联查询中 Join 等值表达式命中表 A 的分桶键 ，尤其是在表 A 和表 B 均是大表的情况下，您可以设置 Join hint 为 Bucket Shuffle Join。表 B 数据会按照表 A 数据的分布方式，Shuffle 到表 A 数据所在机器上，再进行 Join 操作。Bucket Shuffle Join 是在 Broadcast Join 的基础上进一步优化，Shuffle B 表的数据量全局只有一份，比 Broadcast Join 少传输了很多倍数据量。
 
   ```SQL
   select k1 from t1 join [BUCKET] t2 on t1.k1 = t2.k2 group by t2.k2;
@@ -421,15 +444,15 @@ CREATE MATERIALIZED VIEW mv
 
 * Colocate Join
   
-  如果建表时指定表 A 和 B 属于同一个 Colocation Group，则表 A 和表 B 分桶键取值相同的数据行一定分布在相同 BE 节点上。当关联查询中 Join 等值表达式命中表 A 和 B 的分桶键，则您可以设置 Join Hint 为 Colocate Join。 具有相同键值的数据直接在本地 Join，减少数据在节点间的传输耗时，从而提高查询性能。
+  如果建表时指定表 A 和 B 属于同一个 Colocation Group，则表 A 和表 B 分桶键取值相同的数据行一定分布在相同 BE 节点上。当关联查询中 Join 等值表达式命中表 A 和 B 的分桶键，则您可以设置 Join hint 为 Colocate Join。 具有相同键值的数据直接在本地 Join，减少数据在节点间的传输耗时，从而提高查询性能。
 
   ```SQL
   select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
   ```
 
-### 查看实际的 Join 执行方式
+#### 查看实际的 Join 执行方式
 
-通过 `EXPLAIN` 命令来查看 Join Hint 是否生效。如果返回结果所显示的 Join 执行方式符合 Join Hint，则表示 Join Hint 生效。
+通过 `EXPLAIN` 命令来查看 Join hint 是否生效。如果返回结果所显示的 Join 执行方式符合 Join hint，则表示 Join hint 生效。
 
 ```SQL
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;

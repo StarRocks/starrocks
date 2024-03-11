@@ -40,21 +40,19 @@ namespace starrocks::parquet {
 struct GroupReaderParam {
     struct Column {
         // parquet field index in root node's children
-        int32_t field_idx_in_parquet;
-
-        // column index in chunk
-        int32_t col_idx_in_chunk;
+        int32_t idx_in_parquet;
 
         // column type in parquet file
-        tparquet::Type::type col_type_in_parquet;
+        tparquet::Type::type type_in_parquet;
 
-        // column type in chunk
-        TypeDescriptor col_type_in_chunk;
+        SlotDescriptor* slot_desc = nullptr;
 
         const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
 
-        SlotId slot_id;
         bool decode_needed;
+
+        const TypeDescriptor& slot_type() const { return slot_desc->type(); }
+        const SlotId slot_id() const { return slot_desc->id(); }
     };
 
     const TupleDescriptor* tuple_desc = nullptr;
