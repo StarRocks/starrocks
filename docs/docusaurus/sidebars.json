@@ -237,7 +237,8 @@
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
-            "administration/Configuration",
+            "administration/FE_configuration",
+            "administration/BE_configuration",
             {
               "type": "category",
               "label": "Monitor and Alert",
@@ -1149,7 +1150,8 @@
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
-            "administration/Configuration",
+            "administration/FE_configuration",
+            "administration/BE_configuration",
             {
               "type": "category",
               "label": "监控报警",

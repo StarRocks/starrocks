@@ -56,7 +56,7 @@ tar -xzvf stargo-pkg.tar.gz
 
 ### 创建配置文件
 
-根据以下 YAML 模板，创建部署 StarRocks 集群的拓扑文件。具体配置项参考[参数配置](../administration/Configuration.md)。
+根据以下 YAML 模板，创建部署 StarRocks 集群的拓扑文件。具体配置项参考[参数配置](../administration/FE_configuration.md)。
 
 ```yaml
 global:
@@ -489,7 +489,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 
 ### 创建配置文件
 
-根据以下 YAML 模板，创建扩容 StarRocks 集群的拓扑文件。您可以根据需求配置相应的 EF 和/或 BE 节点。具体配置项参考[参数配置](../administration/Configuration.md)。
+根据以下 YAML 模板，创建扩容 StarRocks 集群的拓扑文件。您可以根据需求配置相应的 EF 和/或 BE 节点。具体配置项参考[参数配置](../administration/FE_configuration.md)。
 
 ```yaml
 # 扩容 FE 节点。
