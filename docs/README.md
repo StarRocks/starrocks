@@ -41,7 +41,7 @@ Before contributing, please read this article carefully to quickly understand th
      Details for bar
    ...
    ```
- 
+
    Instead, use a section heading (e.g., `###`) for the setting name and remove the indent for the text:
 
    ```markdown
@@ -58,9 +58,7 @@ Before contributing, please read this article carefully to quickly understand th
    |--------------------------------|-------------------------------|
    |![image](https://github.com/StarRocks/starrocks/assets/25182304/681580e6-820a-4a5a-8d68-65852687a0df)|![image](https://github.com/StarRocks/starrocks/assets/25182304/8623e005-d6e1-4b73-9270-8bc86a2aa680)|
 
-
-  
-5. **Review phase**:
+4. **Review phase**:
 
     The review phase includes automatic checks and manual review.
 
