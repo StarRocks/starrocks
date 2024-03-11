@@ -224,7 +224,7 @@ public class ResourceGroupStmtTest {
     }
 
     private void assertResourceGroupNotExist(String wg) {
-        Assert.assertThrows(ERROR_NO_RG_ERROR.formatErrorMsg(wg), AnalysisException.class,
+        Assert.assertThrows(ERROR_NO_RG_ERROR.formatErrorMsg(wg), SemanticException.class,
                 () -> starRocksAssert.executeResourceGroupShowSql("show resource group " + wg));
     }
 
