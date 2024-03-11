@@ -438,7 +438,7 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> f
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors) {}
 
-Status ParquetFileWriterFactory::_init() {
+Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
     _parsed_options->column_ids = _field_ids;

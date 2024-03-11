@@ -83,7 +83,7 @@ class HiveChunkSinkProvider : public ConnectorChunkSinkProvider {
 public:
     ~HiveChunkSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
+    std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
                                                                     int32_t driver_id) override;
 };
 

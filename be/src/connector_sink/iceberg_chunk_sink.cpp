@@ -41,6 +41,7 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns,
 
 Status IcebergChunkSink::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
+    RETURN_IF_ERROR(_file_writer_factory->init());
     return Status::OK();
 }
 
@@ -126,23 +127,25 @@ std::function<void(const formats::FileWriter::CommitResult& result)> IcebergChun
     };
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(
+std::unique_ptr<ConnectorChunkSink> IcebergChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)));
+    auto fs= FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
     auto location_provider = std::make_unique<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
             boost::to_lower_copy(ctx->format));
 
-    if (!boost::iequals(ctx->format, formats::PARQUET)) {
-        return Status::NotSupported("got unsupported file format: " + ctx->format);
+    std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
+    if (boost::iequals(ctx->format, formats::PARQUET)) {
+        file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
+                std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), ctx->parquet_field_ids,
+                ctx->executor);
+    } else {
+        file_writer_factory = std::make_unique<formats::UnknownFileWriterFactory>(ctx->format);
     }
 
-    auto file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
-            std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), ctx->parquet_field_ids,
-            ctx->executor);
     std::vector<std::string> partition_columns;
     std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators;
     for (auto idx : ctx->partition_column_indices) {

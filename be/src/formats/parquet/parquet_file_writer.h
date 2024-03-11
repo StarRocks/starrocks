@@ -110,11 +110,11 @@ public:
                              std::optional<std::vector<formats::FileColumnId>> field_ids = std::nullopt,
                              PriorityThreadPool* executors = nullptr);
 
+    Status init() override;
+
     StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override;
 
 private:
-    Status _init();
-
     std::shared_ptr<FileSystem> _fs;
     std::optional<std::vector<formats::FileColumnId>> _field_ids;
     std::map<std::string, std::string> _options;
