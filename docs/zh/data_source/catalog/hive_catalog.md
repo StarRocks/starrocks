@@ -941,7 +941,7 @@ DROP DATABASE <database_name>
 
 ## 创建 Hive 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Hive 数据库下创建 Managed Table。本功能自 3.2 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)、[CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)、或 [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) 在该 Hive 数据库下创建 Managed Table。本功能自 3.2 版本起开始支持。
 
 > **说明**
 >
@@ -958,11 +958,8 @@ partition_column_definition1,partition_column_definition2...])
 [partition_desc]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
+[LIKE [database.]<source_table_name>]
 ```
-
-:::note
-自 3.2.4 版本起，Hive catalog 支持通过 [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) 语句创建一个表结构和另一张表完全相同的空表。
-:::
 
 ### 参数说明
 

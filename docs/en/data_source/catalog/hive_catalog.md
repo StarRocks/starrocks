@@ -930,7 +930,7 @@ DROP DATABASE <database_name>
 
 ## Create a Hive table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a managed table in that Hive database. This feature is supported from v3.2 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md), [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md), or [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) statement to create a managed table in that Hive database. This feature is supported from v3.2 onwards.
 
 > **NOTE**
 >
@@ -947,11 +947,8 @@ partition_column_definition1,partition_column_definition2...])
 [partition_desc]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
+[LIKE [database.]<source_table_name>]
 ```
-
-:::note
-From v3.2.4 onwards, Hive catalogs allow you to create an identical empty table based on the definition of another table by using [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md).
-:::
 
 ### Parameters
 
