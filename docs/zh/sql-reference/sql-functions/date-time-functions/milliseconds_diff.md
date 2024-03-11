@@ -8,6 +8,8 @@ displayed_sidebar: "Chinese"
 
 计算开始时间和结束时间相差多少毫秒 (milliseconds)。
 
+该函数从 3.2.4 版本开始支持。
+
 ## 语法
 
 ```Haskell

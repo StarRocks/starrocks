@@ -24,6 +24,8 @@ BIGINT milliseconds_diff(DATETIME expr1, DATETIME expr2);
 
 Returns a value of the BIGINT type. NULL is returned if the input date does not exist.
 
+This function is supported from v3.2.4.
+
 ## Examples
 
 ```Plain Text
