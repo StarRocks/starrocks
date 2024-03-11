@@ -61,8 +61,10 @@ public class MergePlanner {
         for (int i = 0; i < outputColumn.size()-3; i++) {
             outputSlots.add(outputColumn.get(i).getId());
         }
-        outputSlots.add(outputColumn.get(outputColumn.size()-1).getId());//is_distinct_slot_id
-        outputSlots.add(outputColumn.get(outputColumn.size()-2).getId());//op_slot_id
+        if(outputColumn.size() >= 3) {
+            outputSlots.add(outputColumn.get(outputColumn.size() - 1).getId());//is_distinct_slot_id
+            outputSlots.add(outputColumn.get(outputColumn.size() - 2).getId());//op_slot_id
+        }
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();

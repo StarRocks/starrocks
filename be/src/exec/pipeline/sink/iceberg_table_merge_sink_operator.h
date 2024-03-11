@@ -43,7 +43,7 @@ public:
               _location(std::move(location)),
               _iceberg_table_data_location(_location + "/data/"),
               _file_format(std::move(file_format)),
-              _compression_codec(std::move(compression_codec)),
+              _compression_codec(compression_codec),
               _cloud_conf(cloud_conf),
               _iceberg_table(iceberg_table),
               _parquet_file_schema(std::move(schema)),
