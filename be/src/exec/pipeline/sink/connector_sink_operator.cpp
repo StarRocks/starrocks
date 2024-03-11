@@ -13,8 +13,8 @@
 // limitations under the License.
 
 #include "connector_sink_operator.h"
-#include "formats/utils.h"
 
+#include "formats/utils.h"
 #include "glog/logging.h"
 
 namespace starrocks::pipeline {
