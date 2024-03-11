@@ -131,7 +131,7 @@
     },
     {
       "type": "category",
-      "label": "Data Lakehouses",
+      "label": "Data Lakes",
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
@@ -1228,7 +1228,7 @@
     },
     {
       "type": "category",
-      "label": "湖仓一体",
+      "label": "数据湖",
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
