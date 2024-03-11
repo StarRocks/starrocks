@@ -2433,7 +2433,7 @@ public class Config extends ConfigBase {
             "REMINDER: Set this to a value longer than the maximum possible execution time of queries, to avoid deletion of " +
             "versions still being accessed.\n" +
             "NOTE: Increasing this value may increase the space usage of the remote storage system.")
-    public static long lake_autovacuum_grace_period_minutes = 5;
+    public static long lake_autovacuum_grace_period_minutes = 30;
 
     @ConfField(mutable = true, comment =
             "time threshold in hours, if a partition has not been updated for longer than this " +
