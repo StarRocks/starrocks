@@ -960,6 +960,10 @@ partition_column_definition1,partition_column_definition2...])
 [AS SELECT query]
 ```
 
+:::note
+自 3.2.4 版本起，Hive catalog 支持通过 [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) 语句创建一个表结构和另一张表完全相同的空表。
+:::
+
 ### 参数说明
 
 #### column_definition
