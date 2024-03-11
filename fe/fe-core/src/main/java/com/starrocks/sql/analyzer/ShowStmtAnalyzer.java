@@ -46,8 +46,6 @@ import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.epack.sql.ast.ShowClustersStmt;
-import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -178,25 +176,6 @@ public class ShowStmtAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
             }
             node.getTbl().normalization(context);
-            return null;
-        }
-
-        @Override
-        public Void visitShowWarehousesStatement(ShowWarehousesStmt node, ConnectContext context) {
-            return null;
-        }
-
-        @Override
-        public Void visitShowClusterStatement(ShowClustersStmt node, ConnectContext context) {
-            String warehouseName;
-            if (node.getWarehouseName() != null) {
-                warehouseName = node.getWarehouseName();
-            } else {
-                warehouseName = context.getCurrentWarehouseName();
-            }
-            if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
-            }
             return null;
         }
 

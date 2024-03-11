@@ -84,6 +84,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.qe.DDLStmtExecutorEPack;
+import com.starrocks.epack.qe.ShowExecutorEPack;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
@@ -1564,7 +1565,7 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
-        ShowExecutor executor = new ShowExecutor(context, (ShowStmt) parsedStmt);
+        ShowExecutor executor = new ShowExecutorEPack(context, (ShowStmt) parsedStmt);
         ShowResultSet resultSet = executor.execute();
         if (resultSet == null) {
             // state changed in execute
@@ -1710,7 +1711,7 @@ public class StmtExecutor {
                 com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
         ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
         showExportStmt.setQueryId(queryId);
-        ShowExecutor executor = new ShowExecutor(context, showExportStmt);
+        ShowExecutor executor = new ShowExecutorEPack(context, showExportStmt);
         ShowResultSet resultSet = executor.execute();
         if (resultSet == null) {
             // state changed in execute

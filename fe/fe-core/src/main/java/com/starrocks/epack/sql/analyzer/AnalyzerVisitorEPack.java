@@ -25,10 +25,12 @@ import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
+import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
+import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerVisitor;
@@ -139,6 +141,18 @@ public class AnalyzerVisitorEPack extends AnalyzerVisitor {
     @Override
     public Void visitSetWarehouseStatement(SetWarehouseStmt stmt, ConnectContext session) {
         WarehouseAnalyzer.analyze(stmt, session);
+        return null;
+    }
+
+    @Override
+    public Void visitShowWarehousesStatement(ShowWarehousesStmt stmt, ConnectContext context) {
+        WarehouseAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowClusterStatement(ShowClustersStmt stmt, ConnectContext context) {
+        WarehouseAnalyzer.analyze(stmt, context);
         return null;
     }
 

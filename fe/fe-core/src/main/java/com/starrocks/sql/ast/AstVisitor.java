@@ -140,7 +140,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-
     // ---------------------------------------- Warehouse Statement ----------------------------------------------------
 
     public R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {

@@ -45,10 +45,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.LDAPSecurityIntegration;
-import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
@@ -72,7 +69,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -110,23 +106,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
-import com.starrocks.epack.privilege.AuthorizerEPack;
-import com.starrocks.epack.privilege.DbUID;
-import com.starrocks.epack.privilege.LDAPRoleMapping;
-import com.starrocks.epack.privilege.Policy;
-import com.starrocks.epack.privilege.RoleMapping;
-import com.starrocks.epack.sql.ast.CreatePolicyStmt;
-import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
-import com.starrocks.epack.sql.ast.PolicyName;
-import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
-import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
-import com.starrocks.epack.sql.ast.ShowNodesStmt;
-import com.starrocks.epack.sql.ast.ShowPolicyStmt;
-import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
-import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
-import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -165,7 +144,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -248,8 +226,6 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -260,7 +236,6 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -271,7 +246,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -295,9 +269,9 @@ public class ShowExecutor {
     private static final Logger LOG = LogManager.getLogger(ShowExecutor.class);
     private static final List<List<String>> EMPTY_SET = Lists.newArrayList();
 
-    private final ConnectContext connectContext;
-    private final ShowStmt stmt;
-    private ShowResultSet resultSet;
+    protected final ConnectContext connectContext;
+    protected final ShowStmt stmt;
+    protected ShowResultSet resultSet;
     private final MetadataMgr metadataMgr;
 
     public ShowExecutor(ConnectContext connectContext, ShowStmt stmt) {
@@ -316,13 +290,6 @@ public class ShowExecutor {
             handleShowProc();
         } else if (stmt instanceof HelpStmt) {
             handleHelp();
-        } else if (stmt instanceof ShowWarehousesStmt) {
-            handleShowWarehouses();
-        } else if (stmt instanceof ShowNodesStmt) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-                throw new DdlException("unsupported statement in shared_nothing mode");
-            }
-            handleShowNodes();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -397,12 +364,6 @@ public class ShowExecutor {
             handleShowGrants();
         } else if (stmt instanceof ShowRolesStmt) {
             handleShowRoles();
-        } else if (stmt instanceof ShowSecurityIntegrationStatement) {
-            handleShowSecurityIntegration();
-        } else if (stmt instanceof ShowRoleMappingStatement) {
-            handleShowRoleMapping();
-        } else if (stmt instanceof ShowCreateSecurityIntegrationStatement) {
-            handleShowCreateSecurityIntegration();
         } else if (stmt instanceof AdminShowReplicaStatusStmt) {
             handleAdminShowTabletStatus();
         } else if (stmt instanceof AdminShowReplicaDistributionStmt) {
@@ -435,10 +396,6 @@ public class ShowExecutor {
             handleShowResourceGroup();
         } else if (stmt instanceof ShowUserStmt) {
             handleShowUser();
-        } else if (stmt instanceof ShowPolicyStmt) {
-            handleShowPolicy();
-        } else if (stmt instanceof ShowCreatePolicyStmt) {
-            handleShowCreatePolicy();
         } else if (stmt instanceof ShowCatalogsStmt) {
             handleShowCatalogs();
         } else if (stmt instanceof ShowComputeNodesStmt) {
@@ -457,10 +414,6 @@ public class ShowExecutor {
             handleShowPipes();
         } else if (stmt instanceof DescPipeStmt) {
             handleDescPipe();
-        } else if (stmt instanceof ShowFailoverGroupsStmt) {
-            handleShowFailoverGroups();
-        } else if (stmt instanceof DescribeFailoverGroupStmt) {
-            handleDescribeFailoverGroup();
         } else if (stmt instanceof ShowFailPointStatement) {
             handleShowFailPoint();
         } else if (stmt instanceof ShowDictionaryStmt) {
@@ -2401,86 +2354,6 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
-    private void handleShowCreateSecurityIntegration() {
-        ShowCreateSecurityIntegrationStatement showStmt = (ShowCreateSecurityIntegrationStatement) stmt;
-        String name = showStmt.getName();
-        List<List<String>> infos = new ArrayList<>();
-        SecurityIntegration securityIntegration = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                .getSecurityIntegration(name);
-        if (securityIntegration != null) {
-            Map<String, String> propertyMap = securityIntegration.getPropertyMap();
-            String propString = propertyMap.entrySet().stream()
-                    .map(entry -> "\"" + entry.getKey() + "\" = \"" + entry.getValue() + "\"")
-                    .collect(Collectors.joining(",\n"));
-            infos.add(Lists.newArrayList(name,
-                    "CREATE SECURITY INTEGRATION `" + name +
-                            "` PROPERTIES (\n" + propString + "\n)"));
-        }
-        resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
-    }
-
-    private void handleShowSecurityIntegration() {
-        ShowSecurityIntegrationStatement statement = (ShowSecurityIntegrationStatement) stmt;
-        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        Set<SecurityIntegration> securityIntegrations = authenticationManager.getAllSecurityIntegrations();
-        List<List<String>> infos = new ArrayList<>();
-        for (SecurityIntegration securityIntegration : securityIntegrations) {
-            List<String> info = new ArrayList<>();
-            info.add(securityIntegration.getName());
-            info.add(securityIntegration.getType());
-            if (securityIntegration.getComment().isEmpty()) {
-                info.add(FeConstants.NULL_STRING);
-            } else {
-                info.add(securityIntegration.getComment());
-            }
-            infos.add(info);
-        }
-
-        // sort by type, then by name
-        List<List<String>> sortedList = infos.stream()
-                .sorted(
-                        Comparator.comparing((List<String> sublist) -> sublist.get(1))
-                                .thenComparing((List<String> sublist) -> sublist.get(0))
-                )
-                .collect(Collectors.toList());
-
-        resultSet = new ShowResultSet(statement.getMetaData(), sortedList);
-    }
-
-    private void handleShowRoleMapping() {
-        ShowRoleMappingStatement statement = (ShowRoleMappingStatement) stmt;
-        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-        Set<RoleMapping> roleMappings = authorizationManager.getRoleMappingMetaMgr().getAllRoleMappings();
-        List<List<String>> infos = new ArrayList<>();
-        for (RoleMapping roleMapping : roleMappings) {
-            SecurityIntegration securityIntegration = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .getSecurityIntegration(roleMapping.getIntegrationName());
-            if (securityIntegration == null) {
-                continue;
-            }
-            List<String> info = new ArrayList<>();
-            info.add(roleMapping.getName());
-            info.add(roleMapping.getIntegrationName());
-            info.add(roleMapping.getRoleName());
-            info.add(roleMapping instanceof LDAPRoleMapping ?
-                    String.join(";", ((LDAPRoleMapping) roleMapping).getGroupSet()) : FeConstants.NULL_STRING);
-            info.add(securityIntegration instanceof LDAPSecurityIntegration ?
-                    TimeUtils.format(new Date(((LDAPSecurityIntegration) securityIntegration).getLastRefreshTime()),
-                            PrimitiveType.DATETIME) : FeConstants.NULL_STRING);
-            infos.add(info);
-        }
-
-        // sort by integration name, then by role mapping name
-        List<List<String>> sortedList = infos.stream()
-                .sorted(
-                        Comparator.comparing((List<String> sublist) -> sublist.get(1))
-                                .thenComparing((List<String> sublist) -> sublist.get(0))
-                )
-                .collect(Collectors.toList());
-
-        resultSet = new ShowResultSet(statement.getMetaData(), sortedList);
-    }
-
     private void handleShowUser() {
         List<List<String>> rowSet = Lists.newArrayList();
 
@@ -2496,51 +2369,6 @@ public class ShowExecutor {
         }
 
         resultSet = new ShowResultSet(stmt.getMetaData(), rowSet);
-    }
-
-    private void handleShowPolicy() {
-        ShowPolicyStmt showPolicyStmt = (ShowPolicyStmt) stmt;
-        Map<String, Policy> policies = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
-                .getOrCreateNamePolicyMapByDBUID(
-                        DbUID.generate(showPolicyStmt.getCatalog(), showPolicyStmt.getDbName()),
-                        showPolicyStmt.getPolicyType());
-        List<List<String>> rows = new ArrayList<>();
-        if (policies != null) {
-            for (Map.Entry<String, Policy> policyEntry : policies.entrySet()) {
-                List<String> row = new ArrayList<>();
-                row.add(policyEntry.getKey());
-                Policy policy = policyEntry.getValue();
-                if (policy.getPolicyType().equals(PolicyType.ROW_ACCESS)) {
-                    row.add("ROW ACCESS");
-                } else {
-                    row.add("MASKING");
-                }
-                row.add(showPolicyStmt.getCatalog());
-                row.add(showPolicyStmt.getDbName());
-
-                rows.add(row);
-            }
-        }
-        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
-    }
-
-    private void handleShowCreatePolicy() {
-        ShowCreatePolicyStmt describePolicyStmt = (ShowCreatePolicyStmt) stmt;
-        Policy policy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager()
-                .getPolicyByName(describePolicyStmt.getPolicyType(), describePolicyStmt.getPolicyName(), false);
-
-        List<String> row = new ArrayList<>();
-        row.add(policy.getName());
-
-        row.add(AstToSQLBuilder.toSQL(new CreatePolicyStmt(false, policy.getPolicyType(),
-                new PolicyName("", "", policy.getName(), NodePosition.ZERO),
-                policy.getArgNames(),
-                policy.getArgTypes().stream().map(TypeDef::new).collect(Collectors.toList()),
-                new TypeDef(policy.getRetType()),
-                SqlParser.parseSqlToExpr(policy.getPolicyExpressionSQL(), SqlModeHelper.MODE_DEFAULT),
-                policy.getComment(), NodePosition.ZERO)));
-
-        resultSet = new ShowResultSet(stmt.getMetaData(), Collections.singletonList(row));
     }
 
     private void handleAdminShowTabletStatus() throws AnalysisException {
@@ -2824,74 +2652,6 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
     }
 
-    // show warehouse statement
-    private void handleShowWarehouses() {
-        ShowWarehousesStmt showStmt = (ShowWarehousesStmt) stmt;
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-
-        PatternMatcher matcher = null;
-        if (!showStmt.getPattern().isEmpty()) {
-            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
-                    CaseSensibility.WAREHOUSE.getCaseSensibility());
-        }
-        PatternMatcher finalMatcher = matcher;
-        List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
-                .filter(row -> finalMatcher == null || finalMatcher.match(row.get(1)))
-                .filter(row -> {
-                    try {
-                        AuthorizerEPack.checkAnyActionOnWarehouse(connectContext.getCurrentUserIdentity(),
-                                connectContext.getCurrentRoleIds(), row.get(1));
-                    } catch (AccessDeniedException e) {
-                        return false;
-                    }
-                    return true;
-                }).sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
-    }
-
-    // show nodes from warehouse
-    private void handleShowNodes() {
-        ShowNodesStmt showStmt = (ShowNodesStmt) stmt;
-        List<List<String>> rows = Lists.newArrayList();
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-
-        // filter by pattern or warehouseName
-        String warehouseName = null;
-        PatternMatcher matcher = null;
-        if (showStmt.getWarehouseName() != null) {
-            warehouseName = showStmt.getWarehouseName();
-        } else if (showStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
-                    CaseSensibility.WAREHOUSE.getCaseSensibility());
-        }
-
-        List<Warehouse> warehouseList = warehouseMgr.getAllWarehouses().stream().filter(
-                warehouse -> {
-                    try {
-                        AuthorizerEPack.checkAnyActionOnWarehouse(connectContext.getCurrentUserIdentity(),
-                                connectContext.getCurrentRoleIds(), warehouse.getName());
-                    } catch (AccessDeniedException e) {
-                        return false;
-                    }
-                    return true;
-                }
-        ).collect(Collectors.toList());
-
-        for (Warehouse wh : warehouseList) {
-            if (warehouseName != null && !wh.getName().equalsIgnoreCase(warehouseName)) {
-                continue;
-            }
-
-            if (matcher != null && !matcher.match(wh.getName())) {
-                continue;
-            }
-
-            rows.addAll(wh.getNodesInfo());
-        }
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
-    }
-
     private List<List<String>> doPredicate(ShowStmt showStmt,
                                            ShowResultSetMetaData showResultSetMetaData,
                                            List<List<String>> rows) {
@@ -3057,16 +2817,6 @@ public class ShowExecutor {
         DescPipeStmt.handleDesc(row, pipe);
         rows.add(row);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
-    }
-
-    private void handleShowFailoverGroups() throws AnalysisException {
-        ShowFailoverGroupsStmt showStmt = (ShowFailoverGroupsStmt) stmt;
-        resultSet = new ShowResultSet(showStmt.getMetaData(), showStmt.getRows());
-    }
-
-    private void handleDescribeFailoverGroup() throws AnalysisException {
-        DescribeFailoverGroupStmt descStmt = (DescribeFailoverGroupStmt) stmt;
-        resultSet = new ShowResultSet(descStmt.getMetaData(), descStmt.getRows());
     }
 
     private void handleShowFailPoint() throws AnalysisException {

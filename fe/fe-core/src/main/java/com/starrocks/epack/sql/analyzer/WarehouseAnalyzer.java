@@ -21,8 +21,11 @@ import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
+import com.starrocks.epack.sql.ast.ShowClustersStmt;
+import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -88,6 +91,25 @@ public class WarehouseAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_WAREHOUSE_NAME);
             }
             FeNameFormat.checkWarehouseName(whName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowWarehousesStatement(ShowWarehousesStmt node, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitShowClusterStatement(ShowClustersStmt node, ConnectContext context) {
+            String warehouseName;
+            if (node.getWarehouseName() != null) {
+                warehouseName = node.getWarehouseName();
+            } else {
+                warehouseName = context.getCurrentWarehouseName();
+            }
+            if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+            }
             return null;
         }
     }

@@ -296,7 +296,6 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
-    | setWarehouseStatement
 
     // Storage Volume Statement
     | createStorageVolumeStatement
@@ -348,6 +347,43 @@ statement
 
     // Unsupported Statement
     | unsupportedStatement
+    ;
+
+
+// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
+
+createWarehouseStatement
+    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
+    comment? properties?
+    ;
+
+dropWarehouseStatement
+    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
+    ;
+
+suspendWarehouseStatement
+    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+resumeWarehouseStatement
+    : RESUME WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+setWarehouseStatement
+    : SET SESSION? WAREHOUSE EQ? identifierOrString
+    ;
+
+showWarehousesStatement
+    : SHOW WAREHOUSES (LIKE pattern=string)?
+    ;
+
+showClustersStatement
+    : SHOW CLUSTERS FROM WAREHOUSE identifier
+    ;
+
+showNodesStatement
+    : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
+    | SHOW NODES FROM WAREHOUSE identifier
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -776,38 +812,6 @@ showCatalogsStatement
 
 alterCatalogStatement
     : ALTER CATALOG catalogName=identifierOrString modifyPropertiesClause
-    ;
-
-// ---------------------------------------- Warehouse Statement ---------------------------------------------------------
-
-createWarehouseStatement
-    : CREATE (WAREHOUSE) (IF NOT EXISTS)? warehouseName=identifierOrString
-    comment? properties?
-    ;
-
-showWarehousesStatement
-    : SHOW WAREHOUSES (LIKE pattern=string)?
-    ;
-
-dropWarehouseStatement
-    : DROP WAREHOUSE (IF EXISTS)? warehouseName=identifierOrString
-    ;
-
-showClustersStatement
-    : SHOW CLUSTERS FROM WAREHOUSE identifier
-    ;
-
-suspendWarehouseStatement
-    : SUSPEND WAREHOUSE (IF EXISTS)? identifier
-    ;
-
-resumeWarehouseStatement
-    : RESUME WAREHOUSE (IF EXISTS)? identifier
-    ;
-
-showNodesStatement
-    : SHOW NODES FROM WAREHOUSES (LIKE pattern=string)?
-    | SHOW NODES FROM WAREHOUSE identifier
     ;
 
 // ---------------------------------------- Storage Volume Statement ---------------------------------------------------
@@ -2141,10 +2145,6 @@ setUserPropertyStatement
 
 roleList
     : identifierOrString (',' identifierOrString)*
-    ;
-
-setWarehouseStatement
-    : SET SESSION? WAREHOUSE EQ? identifierOrString
     ;
 
 executeScriptStatement
