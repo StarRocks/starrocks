@@ -131,7 +131,7 @@
     },
     {
       "type": "category",
-      "label": "Query Data Lakes",
+      "label": "Data Lakehouses",
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
@@ -1228,7 +1228,7 @@
     },
     {
       "type": "category",
-      "label": "查询数据湖",
+      "label": "湖仓一体",
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
