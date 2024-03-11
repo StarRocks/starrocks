@@ -38,8 +38,8 @@ namespace starrocks::lake {
 
 CompactionTaskCallback::~CompactionTaskCallback() = default;
 
-CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const lake::CompactRequest* request,
-                                               lake::CompactResponse* response, ::google::protobuf::Closure* done)
+CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
+                                               CompactResponse* response, ::google::protobuf::Closure* done)
         : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);

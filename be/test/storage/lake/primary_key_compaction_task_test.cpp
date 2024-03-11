@@ -883,11 +883,11 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
     });
 
     std::thread t2([&]() {
-        lake::AbortTxnRequest request;
+        AbortTxnRequest request;
         request.add_tablet_ids(tablet_id);
         request.add_txn_ids(txn_id);
         request.set_skip_cleanup(false);
-        lake::AbortTxnResponse response;
+        AbortTxnResponse response;
         auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), _tablet_mgr.get());
         lake_service.abort_txn(nullptr, &request, &response, nullptr);
     });

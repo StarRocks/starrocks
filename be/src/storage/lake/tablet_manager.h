@@ -70,9 +70,9 @@ public:
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
-    [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
+    Status put_tablet_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_tablet_metadata(const TabletMetadataPtr& metadata);
+    Status put_tablet_metadata(const TabletMetadataPtr& metadata);
 
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version);
 
@@ -82,21 +82,25 @@ public:
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
 
-    [[nodiscard]] Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
+    Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
 
-    [[nodiscard]] Status put_txn_log(const TxnLog& log);
+    Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
+    Status put_txn_log(const TxnLogPtr& log);
 
-    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log, const std::string& path);
+    Status put_txn_log(const TxnLogPtr& log, const std::string& path);
 
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+    Status put_txn_slog(const TxnLogPtr& log);
 
-    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+    Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
+    StatusOr<CombinedTxnLogPtr> get_combined_txn_log(const std::string& path, bool fill_cache = true);
 
     StatusOr<TxnLogPtr> get_txn_slog(int64_t tablet_id, int64_t txn_id);
 
@@ -130,6 +134,8 @@ public:
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
+
+    std::string combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
 

@@ -30,12 +30,12 @@ class RowSourceMaskBuffer;
 class SeekRange;
 class SeekTuple;
 class TabletSchema;
+class TabletMetadataPB;
 
 namespace lake {
 
 class Rowset;
 class TabletManager;
-class TabletMetadataPB;
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;

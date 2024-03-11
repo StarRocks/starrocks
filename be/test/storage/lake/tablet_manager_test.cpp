@@ -76,7 +76,7 @@ public:
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
-    starrocks::lake::TabletMetadata metadata;
+    starrocks::TabletMetadata metadata;
     metadata.set_id(12345);
     metadata.set_version(2);
     auto rowset_meta_pb = metadata.add_rowsets();
@@ -96,7 +96,7 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
-    starrocks::lake::TxnLog txnLog;
+    starrocks::TxnLog txnLog;
     txnLog.set_tablet_id(12345);
     txnLog.set_txn_id(2);
     EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
@@ -169,7 +169,7 @@ TEST_F(LakeTabletManagerTest, create_tablet_without_schema_file) {
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, list_tablet_meta) {
-    starrocks::lake::TabletMetadata metadata;
+    starrocks::TabletMetadata metadata;
     metadata.set_id(12345);
     metadata.set_version(2);
     auto rowset_meta_pb = metadata.add_rowsets();
@@ -221,11 +221,11 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, DISABLED_put_get_tabletmetadata_witch_cache_evict) {
     int64_t tablet_id = 23456;
-    std::vector<lake::TabletMetadataPtr> vec;
+    std::vector<TabletMetadataPtr> vec;
 
     // we set meta cache capacity to 16K, and each meta here cost 232 bytes,putting 64 tablet meta will fill up the cache space.
     for (int i = 0; i < 64; ++i) {
-        auto metadata = std::make_shared<lake::TabletMetadata>();
+        auto metadata = std::make_shared<TabletMetadata>();
         metadata->set_id(tablet_id);
         metadata->set_version(2 + i);
         auto rowset_meta_pb = metadata->add_rowsets();
@@ -247,7 +247,7 @@ TEST_F(LakeTabletManagerTest, DISABLED_put_get_tabletmetadata_witch_cache_evict)
 
     // put another 32 tablet meta to trigger cache eviction.
     for (int i = 0; i < 32; ++i) {
-        auto metadata = std::make_shared<lake::TabletMetadata>();
+        auto metadata = std::make_shared<TabletMetadata>();
         metadata->set_id(tablet_id);
         metadata->set_version(66 + i);
         auto rowset_meta_pb = metadata->add_rowsets();
@@ -279,7 +279,7 @@ TEST_F(LakeTabletManagerTest, DISABLED_put_get_tabletmetadata_witch_cache_evict)
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_schema_load) {
-    starrocks::lake::TabletMetadata metadata;
+    starrocks::TabletMetadata metadata;
     metadata.set_id(12345);
     metadata.set_version(2);
 

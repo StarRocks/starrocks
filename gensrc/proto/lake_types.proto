@@ -14,7 +14,7 @@
 //
 syntax = "proto2";
 
-package starrocks.lake;
+package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
@@ -156,6 +156,20 @@ message TxnLogPB {
     optional OpSchemaChange op_schema_change = 5;
     optional OpAlterMetadata op_alter_metadata = 6;
     optional OpReplication op_replication = 7;
+    optional int64 partition_id = 8;
+}
+
+message CombinedTxnLogPB {
+    repeated TxnLogPB txn_logs = 1;    
 }
 
 message TabletMetadataLockPB {}
+
+message TxnInfoPB {
+    optional int64 txn_id = 1;
+    optional int64 commit_time = 2;
+    // Does the transaction generated a combined txn log
+    optional bool combined_txn_log = 3;
+    optional TxnTypePB txn_type = 4;
+};
+

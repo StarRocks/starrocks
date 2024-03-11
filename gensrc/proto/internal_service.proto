@@ -43,6 +43,7 @@ import "status.proto";
 import "types.proto";
 import "olap_common.proto";
 import "olap_file.proto";
+import "lake_types.proto";
 
 option cc_generic_services = true;
 
@@ -153,6 +154,10 @@ message PTabletInfo {
 
 // Open a tablet writer.
 message PTabletWriterOpenRequest {
+    message LakeTabletParams {
+        optional bool write_txn_log = 1;
+    };
+
     required PUniqueId id = 1;
     required int64 index_id = 2;
     required int64 txn_id = 3;
@@ -181,6 +186,8 @@ message PTabletWriterOpenRequest {
 
     // tablet's data size larger than this will mark as inmutable
     optional int64 immutable_tablet_size = 33 [default = 0];
+    // intentionaly choosing 35 as the id, for consistency with the main branch
+    optional LakeTabletParams lake_tablet_params = 35;
 };
 
 message PTabletWriterOpenResult {
@@ -239,6 +246,10 @@ message PTabletWriterAddChunksRequest {
 }
 
 message PTabletWriterAddBatchResult {
+    message LakeTabletData {
+        repeated TxnLogPB txn_logs = 1;
+    };
+
     required StatusPB status = 1;
     repeated PTabletInfo tablet_vec = 2;
     optional int64 execution_time_us = 3;
@@ -248,6 +259,8 @@ message PTabletWriterAddBatchResult {
 
     repeated int64 immutable_tablet_ids = 7;
     repeated int64 immutable_partition_ids = 8;
+    // intentionaly choosing 10 as the id, for consistency with the main branch
+    optional LakeTabletData lake_tablet_data = 10;
 };
 
 message PTabletWriterAddSegmentRequest {
