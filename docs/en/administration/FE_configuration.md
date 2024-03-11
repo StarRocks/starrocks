@@ -385,17 +385,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Introduced in: v3.1
 -->
 
-<!--
-##### log_register_and_unregister_query_id
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ### Server
 
 ##### frontend_address
@@ -660,17 +649,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Is mutable: No
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
 - Introduced in: -
-
-<!--
-##### max_http_sql_service_task_threads_num
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
 
 ##### mysql_server_version
 
@@ -1145,37 +1123,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Introduced in: -
 -->
 
-##### enable_backup_materialized_view
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
-- Introduced in: v3.2.0
-
-<!--
-##### enable_show_materialized_views_include_all_task_runs
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### materialized_view_min_refresh_interval
-
-- Default: 60
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 <!--
 ##### skip_whole_phase_lock_mv_limit
 
@@ -1195,24 +1142,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Is mutable: Yes
 - Description: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
 - Introduced in: v2.4
-
-##### enable_colocate_mv_index
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views.
-- Introduced in: v3.2.0
-
-##### default_mv_refresh_immediate
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
-- Introduced in: v3.2.3
 
 ##### enable_mv_automatic_active_check
 
@@ -1619,15 +1548,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Introduced in: -
 -->
 
-##### statistic_auto_collect_small_table_rows
-
-- Default: 10000000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
-- Introduced in: v3.2
-
 <!--
 ##### statistic_auto_collect_small_table_interval
 
@@ -1835,17 +1755,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Default: 100
 - Type: Int
 - Unit: MB
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### stream_load_max_txn_num_per_be
-
-- Default: -1
-- Type: Int
-- Unit:
 - Is mutable: Yes
 - Description:
 - Introduced in: -
@@ -2175,39 +2084,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Description: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 - Introduced in: -
 
-##### enable_sync_publish
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to synchronously execute the apply task at the publish phase of a load transaction. This parameter is applicable only to Primary Key tables. Valid values:
-  - `TRUE` (default): The apply task is synchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful only after the apply task is completed, and the loaded data can truly be queried. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `true` can improve query performance and stability, but may increase load latency.
-  - `FALSE`: The apply task is asynchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful after the apply task is submitted, but the loaded data cannot be immediately queried. In this case, concurrent queries need to wait for the apply task to complete or time out before they can continue. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `false` may affect query performance and stability.
-- Introduced in: v3.2.0
-
-<!--
-##### stream_load_task_keep_max_num
-
-- Default: 1000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### stream_load_task_keep_max_second
-
-- Default: 3 * 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### label_clean_interval_second
 
 - Default: 4 * 3600
@@ -2310,15 +2186,6 @@ You can only set the static parameters of a FE by changing them in the correspon
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.
 - Introduced in: v2.5.7
 
-##### enable_experimental_rowstore
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable the [hybrid row-column storage](../table_design/hybrid_table.md).
-- Introduced in: v3.2.3
-
 ##### storage_usage_soft_limit_percent
 
 - Default: 90
@@ -2367,20 +2234,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Is mutable: Yes
 - Description: The timeout duration for the schema change operation (ALTER TABLE).
 - Introduced in: -
-
-##### enable_fast_schema_evolution
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
-- Introduced in: v3.2.0
-
-> **NOTE**
->
-> - StarRocks shared-data clusters do not support this parameter.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### recover_with_empty_tablet
 
@@ -2858,17 +2711,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Description: The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
 - Introduced in: v3.1
 
-<!--
-##### starmgr_grpc_timeout_seconds
-
-- Default: 5
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### lake_compaction_score_selector_min_score
 
 - Default: 10.0
@@ -2904,37 +2746,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Is mutable: Yes
 - Description: The number of recent failed Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
-
-##### lake_publish_version_max_threads
-
-- Default: 512
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
-- Introduced in: v3.2.0
-
-<!--
-##### lake_publish_delete_txnlog_max_threads
-
-- Default: 16
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_compaction_default_timeout_second
-
-- Default: 86400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 <!--
 ##### lake_autovacuum_max_previous_versions
@@ -2982,51 +2793,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Is mutable: Yes
 - Description: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
 - Introduced in: v3.1.0
-
-##### lake_enable_ingest_slowdown
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`.
-- Introduced in: v3.2.0
-
-##### lake_ingest_slowdown_threshold
-
-- Default: 100
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: The Compaction Score threshold that triggers Data Ingestion Slowdown in a shared-data cluster. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
-- Introduced in: v3.2.0
-
-##### lake_ingest_slowdown_ratio
-
-- Default: 0.1
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
-
-  Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
-
-- Introduced in: v3.2.0
-
-> **NOTE**
->
-> - If a loading task writes to multiple partitions simultaneously, the maximum Compaction Score among all partitions is used to calculate the delay in committing time.
-> - The delay in committing time is calculated during the first attempt to commit. Once set, it will not change. Once the delay time is up, as long as the Compaction Score is not above `lake_compaction_score_upper_bound`, the system will perform the data committing operation.
-> - If the delay in committing time exceeds the timeout of the loading task, the task will fail directly.
-
-##### lake_compaction_score_upper_bound
-
-- Default: 0
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
-- Introduced in: v3.2.0
 
 ### Other
 
@@ -3114,39 +2880,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Default: 3600
 - Type: Int
 - Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_enable_batch_publish_version 
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_batch_publish_max_version_num
-
-- Default: 10
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_batch_publish_min_version_num
-
-- Default: 1
-- Type: Int
-- Unit: -
 - Is mutable: Yes
 - Description:
 - Introduced in: -
@@ -3390,17 +3123,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 -->
 
 <!--
-##### authorization_enable_column_level_privilege
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### authentication_chain
 
 - Default: {AUTHENTICATION_CHAIN_MECHANISM_NATIVE}
@@ -3546,28 +3268,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Default: 4096
 - Type: Long
 - Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_automatic_bucket
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### default_automatic_bucket_size
-
-- Default: 0
-- Type: Long
-- Unit:
 - Is mutable: Yes
 - Description:
 - Introduced in: -
@@ -4616,81 +4316,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Introduced in: -
 -->
 
-##### allow_system_reserved_names
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feature, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default.
-- Introduced in: v3.2.0
-
-<!--
-##### use_lock_manager
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_table_num
-
-- Default: 32
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_manager_enable_resolve_deadlock
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_manager_enable_loading_using_fine_granularity_lock
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lock_manager_dead_lock_detection_delay_time_ms
-
-- Default: 3000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### refresh_dictionary_cache_thread_num
-
-- Default: 2
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 <!--
 ##### replication_max_parallel_table_count
 
@@ -4742,28 +4367,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
 - Introduced in: -
 
-<!--
-##### black_host_history_sec
-
-- Default: 2 * 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### black_host_connect_failures_within_time
-
-- Default: 5
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
 ##### jdbc_connection_pool_size
 
 - Default: 8
@@ -4790,14 +4393,3 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Is mutable: Yes
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
-
-<!--
-##### max_varchar_length
-
-- Default: 1048576
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
