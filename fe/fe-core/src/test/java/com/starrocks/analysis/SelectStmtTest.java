@@ -374,23 +374,16 @@ public class SelectStmtTest {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  5:Project\n" +
-                "  |  <slot 3> : 'aaa'\n" +
-                "  |  <slot 4> : 4: count\n" +
-                "  |  \n" +
-                "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(4: count)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  3:AGGREGATE (update serialize)\n" +
+                "  3:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: split)\n" +
-                "  |  group by: \n" +
+                "  |  group by: 3: expr\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update serialize)\n" +
-                "  |  group by: 2: split\n" +
+                "  |  group by: 2: split, 3: expr\n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 2> : split('a,b,c', ',')\n" +
+                "  |  <slot 3> : 'aaa'\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +

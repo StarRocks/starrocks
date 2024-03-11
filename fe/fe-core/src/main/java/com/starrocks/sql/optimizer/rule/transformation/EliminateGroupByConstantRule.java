@@ -44,16 +44,16 @@ public class EliminateGroupByConstantRule extends TransformationRule {
         LogicalAggregationOperator aggOp = input.getOp().cast();
         LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOp.getColumnRefMap();
-        if (aggOp.getGroupingKeys().isEmpty() || aggOp.getAggregations().isEmpty()) {
+        if (aggOp.getGroupingKeys().size() <= 1) {
             return false;
         }
 
         for (ColumnRefOperator groupByCol : aggOp.getGroupingKeys()) {
-            if (!columnRefMap.get(groupByCol).isConstant()) {
-                return false;
+            if (columnRefMap.get(groupByCol).isConstant()) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     @Override
@@ -63,24 +63,41 @@ public class EliminateGroupByConstantRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> bottomMap = Maps.newHashMap();
         Map<ColumnRefOperator, ScalarOperator> topMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOp.getColumnRefMap().entrySet()) {
-            if (aggOp.getGroupingKeys().contains(entry.getKey())) {
+            if (entry.getValue().isConstant() && aggOp.getGroupingKeys().contains(entry.getKey())) {
                 topMap.put(entry.getKey(), entry.getValue());
             } else {
                 bottomMap.put(entry.getKey(), entry.getValue());
             }
         }
 
-        aggOp.getAggregations().keySet().forEach(e -> topMap.put(e, e));
-        LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(topMap).build();
+        List<ColumnRefOperator> newGroupByKeys = Lists.newArrayList();
+        if (topMap.keySet().containsAll(aggOp.getGroupingKeys())) {
+            // all group by keys are constant, we need keep one group by key
+            newGroupByKeys.add(aggOp.getGroupingKeys().get(0));
+            ScalarOperator scalarOperator = topMap.remove(aggOp.getGroupingKeys().get(0));
+            bottomMap.put(aggOp.getGroupingKeys().get(0), scalarOperator);
+        } else {
+            for (ColumnRefOperator groupByKey : aggOp.getGroupingKeys()) {
+                if (!topMap.containsKey(groupByKey)) {
+                    newGroupByKeys.add(groupByKey);
+                }
+            }
+        }
+
         ScalarOperator newPredicate = aggOp.getPredicate();
         if (newPredicate != null) {
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectOp.getColumnRefMap());
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(topMap);
             newPredicate = rewriter.rewrite(newPredicate);
         }
+
+        aggOp.getAggregations().keySet().forEach(e -> topMap.put(e, e));
+        newGroupByKeys.forEach(e -> topMap.put(e, e));
+        LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(topMap).build();
+
         LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder()
                 .withOperator(aggOp)
-                .setGroupingKeys(Lists.newArrayList())
-                .setPartitionByColumns(Lists.newArrayList())
+                .setGroupingKeys(newGroupByKeys)
+                .setPartitionByColumns(newGroupByKeys)
                 .setPredicate(newPredicate)
                 .build();
 
