@@ -214,6 +214,53 @@ public class ColumnDefTest {
         }
     }
 
+    @Test
+    public void testFloatDefaultValue() throws AnalysisException {
+        ColumnDef column1 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1")),
+                        "");
+        column1.analyze(true);
+        Assert.assertEquals("1", column1.getDefaultValue());
+
+        ColumnDef column2 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.1")),
+                        "");
+        column2.analyze(true);
+        Assert.assertEquals("1.1", column2.getDefaultValue());
+
+        ColumnDef column3 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.100000000")),
+                        "");
+        Assert.assertEquals("1.100000000", column3.getDefaultValue());
+
+        ColumnDef column4 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.1234567")),
+                        "");
+        Assert.assertEquals("1.1234567", column4.getDefaultValue());
+
+        ColumnDef column5 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.12345678")),
+                        "");
+        try {
+            column5.analyze(true);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Default value will loose precision: 1.12345678"));
+        }
+
+        ColumnDef column6 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("123456789")),
+                        "");
+        try {
+            column6.analyze(true);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Default value will loose precision: 123456789"));
+        }
+        ColumnDef column7 =
+                new ColumnDef("col", floatCol, false, null, true, new DefaultValueDef(true, new StringLiteral("1.99E38")),
+                        "");
+        Assert.assertEquals("1.99E38", column7.getDefaultValue());
+    }
+
     @Test(expected = AnalysisException.class)
     public void testArrayHLL() throws AnalysisException {
         ColumnDef column =
