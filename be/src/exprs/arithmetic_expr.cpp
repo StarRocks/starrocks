@@ -34,11 +34,13 @@
 
 namespace starrocks {
 
-#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
-    CLASS_NAME(const TExprNode& node) : Expr(node) {} \
-    virtual ~CLASS_NAME() {}                          \
-                                                      \
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
+#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)               \
+    CLASS_NAME(const TExprNode& node) : Expr(node) {}      \
+    virtual ~CLASS_NAME() {}                               \
+                                                           \
+    virtual Expr* clone(ObjectPool* pool) const override { \
+        return pool->add(new CLASS_NAME(*this));           \
+    }
 
 static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
     DIAGNOSTIC_PUSH
@@ -124,7 +126,9 @@ public:
         }
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable() const override {
+        return IRHelper::support_jit(Type);
+    }
 
     std::string jit_func_name_impl() const override {
         return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
@@ -193,7 +197,9 @@ public:
         }
     }
 
-    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
+    bool is_compilable() const override {
+        return Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+    }
 
     std::string jit_func_name_impl() const override {
         return "{" + _children[0]->jit_func_name() + "/" + _children[1]->jit_func_name() + "}" +

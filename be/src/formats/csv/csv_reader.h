@@ -180,7 +180,9 @@ public:
 
     Status more_rows();
 
-    void set_limit(size_t limit) { _limit = limit; }
+    void set_limit(size_t limit) {
+        _limit = limit;
+    }
 
     void split_record(const Record& record, Fields* fields) const;
 
@@ -197,7 +199,9 @@ public:
     char* escapeDataPtr();
 
     // For benchmark, we need to separate io from parsing.
-    Status init_buff() { return _fill_buffer(); }
+    Status init_buff() {
+        return _fill_buffer();
+    }
 
     size_t buff_capacity() const;
 
@@ -208,7 +212,9 @@ protected:
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;
-    virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
+    virtual Status _fill_buffer() {
+        return Status::InternalError("unsupported csv reader!");
+    }
     virtual char* _find_line_delimiter(CSVBuffer& buffer, size_t pos) = 0;
     std::queue<CSVRow> _csv_buff;
     std::unordered_set<size_t> _escape_pos;

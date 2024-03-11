@@ -58,7 +58,7 @@ bool BackendOptions::init() {
     auto addr_it = hosts.begin();
     for (; addr_it != hosts.end(); ++addr_it) {
         VLOG(2) << "check ip=" << addr_it->get_host_address();
-        if(!_s_priority_cidrs.empty()) {
+        if (!_s_priority_cidrs.empty()) {
             //Whether to use IPv4 or IPv6, it's configured by CIDR format.
             //If both IPv4 and IPv6 are configured, the config order decides priority.
             if (is_in_prior_network(addr_it->get_host_address())) {

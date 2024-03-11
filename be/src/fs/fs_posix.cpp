@@ -302,8 +302,12 @@ public:
         return Status::OK();
     }
 
-    uint64_t size() const override { return _filesize; }
-    const string& filename() const override { return _filename; }
+    uint64_t size() const override {
+        return _filesize;
+    }
+    const string& filename() const override {
+        return _filename;
+    }
 
 private:
     std::string _filename;

@@ -56,8 +56,7 @@ constexpr std::uint8_t kIPv6Bits = 128;
 
 bool CIDR::reset(const std::string& cidr_str) {
     auto slash = std::find(std::begin(cidr_str), std::end(cidr_str), '/');
-    auto ip = (slash == std::end(cidr_str)) ? cidr_str
-                                            : cidr_str.substr(0, slash - std::begin(cidr_str));
+    auto ip = (slash == std::end(cidr_str)) ? cidr_str : cidr_str.substr(0, slash - std::begin(cidr_str));
 
     if (inet_pton(AF_INET, ip.c_str(), _address.data())) {
         _family = AF_INET;
@@ -106,7 +105,7 @@ bool CIDR::ip_to_int(const std::string& ip_str, uint32_t* value) {
     }
     struct in6_addr addr_v6;
     flag = inet_pton(AF_INET6, ip_str.c_str(), &addr_v6);
-    if(flag == 1) {
+    if (flag == 1) {
         if (IN6_IS_ADDR_V4MAPPED(&addr_v6)) {
             *value = ntohl(*(reinterpret_cast<uint32_t*>(&addr_v6.s6_addr[12])));
             return true;
