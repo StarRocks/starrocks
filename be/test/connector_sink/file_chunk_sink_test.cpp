@@ -306,7 +306,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         auto sink = provider.create_chunk_sink(sink_ctx, 0);
-        EXPECT_OK(sink->init());
+        EXPECT_ERROR(sink->init());
     }
 }
 
