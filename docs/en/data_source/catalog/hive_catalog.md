@@ -950,7 +950,7 @@ partition_column_definition1,partition_column_definition2...])
 ```
 
 :::note
-From v3.2.4 onwards, Hive catalogs allows you to create an identical empty table based on the definition of another table by using [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md).
+From v3.2.4 onwards, Hive catalogs allow you to create an identical empty table based on the definition of another table by using [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md).
 :::
 
 ### Parameters
