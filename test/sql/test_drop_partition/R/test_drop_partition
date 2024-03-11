@@ -69,7 +69,7 @@ SELECT * FROM t0 ORDER BY k1;
 -- !result
 ALTER TABLE t0 DROP PARTITION pxxxx;
 -- result:
-E: (1064, 'Error in list of partitions to pxxxx')
+E: (1507, 'Error in list of partitions to pxxxx')
 -- !result
 RECOVER PARTITION pyyyy FROM t0;
 -- result:
