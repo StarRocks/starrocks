@@ -206,7 +206,6 @@ You can find a function based on the following categories:
 - [makedate](./date-time-functions/makedate.md)
 - [microseconds_add](./date-time-functions/microseconds_add.md)
 - [microseconds_sub](./date-time-functions/microseconds_sub.md)
-- [milliseconds_diff](./date-time-functions/milliseconds_diff.md)
 - [minute](./date-time-functions/minute.md)
 - [minutes_add](./date-time-functions/minutes_add.md)
 - [minutes_diff](./date-time-functions/minutes_diff.md)
