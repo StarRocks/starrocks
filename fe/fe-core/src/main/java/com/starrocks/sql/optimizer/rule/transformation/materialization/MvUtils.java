@@ -487,6 +487,13 @@ public class MvUtils {
         }
     }
 
+    public static Set<ScalarOperator> getAllValidPredicatesFromScans(OptExpression root) {
+        List<LogicalScanOperator> scanOperators = getScanOperator(root);
+        Set<ScalarOperator> predicates = Sets.newHashSet();
+        scanOperators.stream().forEach(scanOperator -> predicates.addAll(Utils.extractConjuncts(scanOperator.getPredicate())));
+        return predicates.stream().filter(MvUtils::isValidPredicate).collect(Collectors.toSet());
+    }
+
     // get all predicates within and below root
     public static Set<ScalarOperator> getAllValidPredicates(OptExpression root) {
         Set<ScalarOperator> predicates = Sets.newHashSet();

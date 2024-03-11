@@ -60,7 +60,7 @@ public class BestMvSelector {
 
         // collect original table scans
         List<Table> originalTables = MvUtils.getAllTables(queryPlan);
-        Set<ScalarOperator> predicates = MvUtils.getAllValidPredicates(queryPlan);
+        Set<ScalarOperator> predicates = MvUtils.getAllValidPredicatesFromScans(queryPlan);
         Set<String> equivalenceColumns = Sets.newHashSet();
         Set<String> nonEquivalenceColumns = Sets.newHashSet();
         MvUtils.splitPredicate(predicates, equivalenceColumns, nonEquivalenceColumns);
