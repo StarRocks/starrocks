@@ -892,6 +892,8 @@ TEST_P(FpeFf1EncryptTestFixture, fpe_ff1_encryptTest) {
     columns.emplace_back(key_column);
     columns.emplace_back(radix_column);
 
+    ctx->set_constant_columns(columns);
+
     ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
     //ASSERT_TRUE(result->is_nullable());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -921,6 +923,8 @@ TEST_P(FpeFf1DecryptTestFixture, fpe_ff1_decryptTest) {
     columns.emplace_back(key_column);
     columns.emplace_back(radix_column);
 
+    ctx->set_constant_columns(columns);
+
     ColumnPtr result = EncryptionFunctions::fpe_ff1_decrypt(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     EXPECT_EQ(expected, v->get_data()[0].to_string());
@@ -946,6 +950,8 @@ TEST_P(FpeFf1NumEncryptTestFixture, fpe_ff1_encrypt_numTest) {
 
     columns.emplace_back(str_plain);
     columns.emplace_back(key_column);
+
+    ctx->set_constant_columns(columns);
 
     ColumnPtr result = EncryptionFunctions::fpe_encrypt(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -980,6 +986,8 @@ TEST_P(FpeFf1NumDecryptTestFixture, fpe_ff1_decrypt_numTest) {
 
     columns.emplace_back(str_plain);
     columns.emplace_back(key_column);
+
+    ctx->set_constant_columns(columns);
 
     ColumnPtr result = EncryptionFunctions::fpe_decrypt(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
