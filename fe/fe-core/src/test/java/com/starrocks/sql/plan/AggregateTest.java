@@ -2674,4 +2674,20 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "aggregate: count[(if[([4: expr, BOOLEAN, false], 1, NULL); " +
                 "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]);");
     }
+
+    @Test
+    public void testOuterJoinBelowDistinctAgg() throws Exception {
+        String sql = "select count(distinct v1), count(v4), 'a' as a " +
+                "from (select * from t0 left join t1 on v1 = v5) t group by a having max(v6) > a";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "12:Project\n" +
+                "  |  <slot 7> : 'a'\n" +
+                "  |  <slot 8> : 8: count\n" +
+                "  |  <slot 9> : 9: count\n" +
+                "  |  \n" +
+                "  11:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(8: count), count(9: count), max(10: max)\n" +
+                "  |  group by: \n" +
+                "  |  having: CAST(10: max AS DOUBLE) > CAST('a' AS DOUBLE)");
+    }
 }
