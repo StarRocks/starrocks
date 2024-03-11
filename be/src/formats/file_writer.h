@@ -17,8 +17,8 @@
 #include <future>
 
 #include "column/chunk.h"
-#include "formats/column_evaluator.h"
 #include "common/status.h"
+#include "formats/column_evaluator.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
