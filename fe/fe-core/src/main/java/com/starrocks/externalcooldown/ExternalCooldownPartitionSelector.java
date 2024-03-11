@@ -36,7 +36,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -263,20 +262,6 @@ public class ExternalCooldownPartitionSelector {
                 return chosenPartitions;
             }
         }
-
-        List<Partition> partitions = new ArrayList<>();
-        if (partitionInfo instanceof RangePartitionInfo) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) (olapTable.getPartitionInfo());
-            List<Map.Entry<Long, Range<PartitionKey>>> idToRanges =
-                    new ArrayList<>(rangePartitionInfo.getIdToRange(false).entrySet());
-            idToRanges.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
-            for (Map.Entry<Long, Range<com.starrocks.catalog.PartitionKey>> idToRange : idToRanges) {
-                partitions.add(olapTable.getPartition(idToRange.getKey()));
-            }
-        } else {
-            partitions = new ArrayList<>(olapTable.getPartitions());
-        }
-        partitions.sort(Comparator.comparing(Partition::getName));
 
         boolean isSatisfied;
         Set<String> partitionNames;

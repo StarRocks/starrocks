@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -27,16 +28,21 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.PartitionSpec;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 
 public class ExternalCooldownPartitionSelectorTest {
@@ -56,10 +62,7 @@ public class ExternalCooldownPartitionSelectorTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
-    }
 
-    @Test
-    public void testGetPartition() throws Exception {
         Config.default_replication_num = 1;
 
         starRocksAssert.withDatabase("test");
@@ -79,6 +82,12 @@ public class ExternalCooldownPartitionSelectorTest {
                 return "iceberg_catalog.iceberg_db.iceberg_tbl";
             }
         };
+        new MockUp<BaseTable>() {
+            @Mock
+            public PartitionSpec spec() {
+                return PartitionSpec.unpartitioned();
+            }
+        };
 
         ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
         Map<String, String> properties = Maps.newHashMap();
@@ -89,30 +98,241 @@ public class ExternalCooldownPartitionSelectorTest {
         connectorMgr.createConnector(new ConnectorContext("iceberg_catalog", "iceberg", properties));
 
         starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
-                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
-                        "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
-                        "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
-                        "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
-                        "PROPERTIES(" +
-                        "'replication_num' = '1',\n" +
-                        "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
-                        "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
-                        "'external_cooldown_wait_second' = '3600'\n" +
-                        ");");
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2024-03-01 00:00:00'),('2024-03-02 00:00:00')),\n" +
+                "    PARTITION p2 values [('2024-03-02 00:00:00'),('2024-03-03 00:00:00')),\n" +
+                "    PARTITION p3 values [('2024-03-03 00:00:00'),('2024-03-04 00:00:00')),\n" +
+                "    PARTITION p4 values [('2024-03-04 00:00:00'),('2024-03-05 00:00:00')),\n" +
+                "    PARTITION p5 values [('2024-03-05 00:00:00'),('2024-03-06 00:00:00'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
+                "PROPERTIES(" +
+                "'replication_num' = '1',\n" +
+                "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "'external_cooldown_wait_second' = '1'\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE test.tbl2\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2024-03-01 00:00:00'),('2024-03-02 00:00:00')),\n" +
+                "    PARTITION p2 values [('2024-03-02 00:00:00'),('2024-03-03 00:00:00')),\n" +
+                "    PARTITION p3 values [('2024-03-03 00:00:00'),('2024-03-04 00:00:00')),\n" +
+                "    PARTITION p4 values [('2024-03-04 00:00:00'),('2024-03-05 00:00:00')),\n" +
+                "    PARTITION p5 values [('2024-03-05 00:00:00'),('2024-03-06 00:00:00'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
+                "PROPERTIES(" +
+                "'replication_num' = '1',\n" +
+                "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "'external_cooldown_wait_second' = '1'\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE test.tbl3\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2024-03-01 00:00:00'),('2024-03-02 00:00:00')),\n" +
+                "    PARTITION p2 values [('2024-03-02 00:00:00'),('2024-03-03 00:00:00')),\n" +
+                "    PARTITION p3 values [('2024-03-03 00:00:00'),('2024-03-04 00:00:00')),\n" +
+                "    PARTITION p4 values [('2024-03-04 00:00:00'),('2024-03-05 00:00:00')),\n" +
+                "    PARTITION p5 values [('2024-03-05 00:00:00'),('2024-03-06 00:00:00'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
+                "PROPERTIES(" +
+                "'replication_num' = '1',\n" +
+                "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "'external_cooldown_wait_second' = '1'\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE test.tbl4\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
+                "PROPERTIES(" +
+                "'replication_num' = '1',\n" +
+                "'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
+                "'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "'external_cooldown_wait_second' = '1'\n" +
+                ");");
 
+        starRocksAssert.withTable("CREATE TABLE test.tbl5 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) not null\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN ('beijing','chongqing') ,\n" +
+                "     PARTITION p2 VALUES IN ('shenzhen','hainan') ,\n" +
+                "     PARTITION p3 VALUES IN ('guangdong') \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'external_cooldown_target' = 'iceberg_catalog.iceberg_db.iceberg_tbl',\n" +
+                "    'external_cooldown_schedule' = 'START 01:00 END 07:59 EVERY INTERVAL 1m'\n," +
+                "    'external_cooldown_wait_second' = '1'\n" +
+                ")");
+    }
+
+    @Test
+    public void testCooldownWaitSecond() throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) testDb.getTable("tbl1");
+
+        Partition p1 = table.getPartition("p1");
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
+        Partition p2 = table.getPartition("p2");
+        p2.updateVisibleVersion(p2.getVisibleVersion() + 1);
+        Partition p3 = table.getPartition("p3");
+        p3.updateVisibleVersion(p3.getVisibleVersion() + 1);
+        Partition p5 = table.getPartition("p5");
+        p5.updateVisibleVersion(p5.getVisibleVersion() + 1);
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql3 = "ALTER TABLE test.tbl1 SET(\"external_cooldown_wait_second\" = \"1\");";
+        AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt3);
+        Thread.sleep(1150);
+
         ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(testDb, table);
         Assert.assertTrue(selector.isTableSatisfied());
+
+        List<Partition> partitions = selector.getSatisfiedPartitions(-1);
+        Assert.assertEquals(4, partitions.size());
+        Set<String> satisfiedPartitionNames = partitions.stream().map(Partition::getName).collect(Collectors.toSet());
+        Assert.assertTrue("p1 satisfied cooldown condition", satisfiedPartitionNames.contains("p1"));
+        Assert.assertTrue("p2 satisfied cooldown condition", satisfiedPartitionNames.contains("p2"));
+        Assert.assertTrue("p3 satisfied cooldown condition", satisfiedPartitionNames.contains("p3"));
+        Assert.assertFalse("p4 not satisfied cooldown condition", satisfiedPartitionNames.contains("p4"));
+        Assert.assertTrue("p5 satisfied cooldown condition", satisfiedPartitionNames.contains("p5"));
+    }
+
+    @Test
+    public void testPartitionStartEnd() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) testDb.getTable("tbl2");
+
+        Partition p1 = table.getPartition("p1");
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
+        Partition p2 = table.getPartition("p2");
+        p2.updateVisibleVersion(p2.getVisibleVersion() + 1);
+        Partition p3 = table.getPartition("p3");
+        p3.updateVisibleVersion(p3.getVisibleVersion() + 1);
+        Partition p5 = table.getPartition("p5");
+        p5.updateVisibleVersion(p5.getVisibleVersion() + 1);
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql3 = "ALTER TABLE test.tbl2 SET(\"external_cooldown_wait_second\" = \"1\");";
+        AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt3);
+        Thread.sleep(1150);
+
+        ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(
+                testDb, table, "2024-03-02 00:00:00", "2024-03-05 00:00:00", false);
+        Assert.assertTrue(selector.isTableSatisfied());
+
+        List<Partition> partitions = selector.getSatisfiedPartitions(-1);
+        Assert.assertEquals(2, partitions.size());
+        Set<String> satisfiedPartitionNames = partitions.stream().map(Partition::getName).collect(Collectors.toSet());
+        Assert.assertFalse("p1 not in partition range", satisfiedPartitionNames.contains("p1"));
+        Assert.assertTrue("p2 in partition range", satisfiedPartitionNames.contains("p2"));
+        Assert.assertTrue("p3 in partition range", satisfiedPartitionNames.contains("p3"));
+        Assert.assertFalse("p4 not in partition range", satisfiedPartitionNames.contains("p4"));
+        Assert.assertFalse("p5 not in partition range", satisfiedPartitionNames.contains("p5"));
+    }
+
+    @Test
+    public void testForce() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) testDb.getTable("tbl3");
+
+        Partition p1 = table.getPartition("p1");
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
+        Partition p2 = table.getPartition("p2");
+        p2.updateVisibleVersion(p2.getVisibleVersion() + 1);
+        Partition p4 = table.getPartition("p4");
+        p4.updateVisibleVersion(p4.getVisibleVersion() + 1);
+        Partition p5 = table.getPartition("p5");
+        p5.updateVisibleVersion(p5.getVisibleVersion() + 1);
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql3 = "ALTER TABLE test.tbl3 SET(\"external_cooldown_wait_second\" = \"7200\");";
+        AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt3);
+
+        ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(
+                testDb, table, "2024-03-02 00:00:00", "2024-03-05 00:00:00", true);
+        Assert.assertTrue(selector.isTableSatisfied());
+
+        List<Partition> partitions = selector.getSatisfiedPartitions(-1);
+        Assert.assertEquals(2, partitions.size());
+        Set<String> satisfiedPartitionNames = partitions.stream().map(Partition::getName).collect(Collectors.toSet());
+        Assert.assertFalse("p1 not in partition range", satisfiedPartitionNames.contains("p1"));
+        Assert.assertTrue("p2 in partition range", satisfiedPartitionNames.contains("p2"));
+        Assert.assertFalse("p3 not satisfied condition", satisfiedPartitionNames.contains("p3"));
+        Assert.assertTrue("p4 in partition range", satisfiedPartitionNames.contains("p4"));
+        Assert.assertFalse("p5 not in partition range", satisfiedPartitionNames.contains("p5"));
+    }
+
+    @Test
+    public void testSinglePartitionTable() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) testDb.getTable("tbl4");
+
+        Partition p1 = table.getPartition("tbl4");
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
+        Thread.sleep(1150);
+
+        ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(testDb, table);
+        Assert.assertTrue(selector.isTableSatisfied());
+
+        List<Partition> partitions = selector.getSatisfiedPartitions(-1);
+        Assert.assertEquals(1, partitions.size());
+        Set<String> satisfiedPartitionNames = partitions.stream().map(Partition::getName).collect(Collectors.toSet());
+        Assert.assertTrue("tbl4 in partition range", satisfiedPartitionNames.contains("tbl4"));
+    }
+
+    @Test
+    public void testListPartitionTable() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) testDb.getTable("tbl5");
+
+        Partition p1 = table.getPartition("p1");
+        p1.updateVisibleVersion(p1.getVisibleVersion() + 1);
+        Partition p3 = table.getPartition("p3");
+        p3.updateVisibleVersion(p3.getVisibleVersion() + 1);
+        Thread.sleep(1150);
+
+        ExternalCooldownPartitionSelector selector = new ExternalCooldownPartitionSelector(testDb, table);
+        Assert.assertTrue(selector.isTableSatisfied());
+
+        List<Partition> partitions = selector.getSatisfiedPartitions(-1);
+        Assert.assertEquals(2, partitions.size());
+        Set<String> satisfiedPartitionNames = partitions.stream().map(Partition::getName).collect(Collectors.toSet());
+        Assert.assertTrue("p1 satisfied condition", satisfiedPartitionNames.contains("p1"));
+        Assert.assertFalse("p2 not satisfied condition", satisfiedPartitionNames.contains("p2"));
+        Assert.assertTrue("p3 satisfied condition", satisfiedPartitionNames.contains("p3"));
     }
 }
