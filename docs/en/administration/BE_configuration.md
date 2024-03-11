@@ -571,17 +571,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Introduced in: -
 
 <!--
-##### update_schema_worker_count
-
-- Default: 3
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### upload_worker_count
 
 - Default: 1
@@ -988,17 +977,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Is mutable: Yes
 - Description: The minimum time interval at which compaction is triggered for each tablet in a Primary Key table.
 - Introduced in: -
-
-<!--
-##### update_compaction_chunk_size_for_row_store
-
-- Default: 0
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ##### max_update_compaction_num_singleton_deltas
 
@@ -1652,44 +1630,11 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### stale_memtable_flush_time_sec
-
-- Default: 30
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### dictionary_encoding_ratio
 
 - Default: 0.7
 - Type: Double
 - Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### dictionary_page_size
-
-- Default: 1048576
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### dictionary_encoding_ratio_for_non_string_column
-
-- Default: 0
-- Type: Double
-- Unit:
 - Is mutable: No
 - Description:
 - Introduced in: -
@@ -2084,28 +2029,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Is mutable: Yes
 - Description: Whether to enable memory cache for Bitmap index. Memory cache is recommended if you want to use Bitmap indexes to accelerate point queries.
 - Introduced in: v3.1
--->
-
-<!--
-##### enable_zonemap_index_memory_page_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_ordinal_index_memory_page_cache
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
 -->
 
 <!--
@@ -2730,17 +2653,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### enable_orc_libdeflate_decompression
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### orc_natural_read_size
 
 - Default: 8388608
@@ -2758,17 +2670,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### orc_tiny_stripe_threshold_size
-
-- Default: 8388608
-- Type: Int
-- Unit:
-- Is mutable: No
 - Description:
 - Introduced in: -
 -->
@@ -2807,17 +2708,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### parquet_page_index_enable
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### io_coalesce_read_max_buffer_size
 
 - Default: 8388608
@@ -2835,17 +2725,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Type: Int
 - Unit:
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### io_coalesce_adaptive_lazy_active
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -3281,28 +3160,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### starlet_cache_evict_percent
-
-- Default: 0.1
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### starlet_cache_evict_throughput_mb
-
-- Default: 200
-- Type: Int
-- Unit: MB
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### starlet_fs_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -3420,39 +3277,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### starlet_fslib_s3client_nonread_max_retries
-
-- Default: 5
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### starlet_fslib_s3client_nonread_retry_scale_factor
-
-- Default: 200
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### starlet_fslib_s3client_connect_timeout_ms
-
-- Default: 1000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### lake_metadata_cache_limit
 
 - Default: 2147483648
@@ -3473,15 +3297,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Description:
 - Introduced in: -
 -->
-
-##### lake_compaction_stream_buffer_size_bytes
-
-- Default: 1048576
-- Type: Int
-- Unit: Bytes
-- Is mutable: Yes
-- Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
-- Introduced in: v3.2.3
 
 <!--
 ##### experimental_lake_ignore_lost_segment
@@ -3606,17 +3421,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 
 <!--
 ##### enable_primary_key_recover
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### lake_enable_compaction_async_write
 
 - Default: false
 - Type: Boolean
@@ -3770,17 +3574,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### spill_max_dir_bytes_ratio
-
-- Default: 0.8
-- Type: Double
-- Unit: -
-- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4443,83 +4236,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Introduced in: v3.1.7, v3.2.3
 
 <!--
-##### dictionary_cache_refresh_timeout_ms
-
-- Default: 60000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### dictionary_cache_refresh_threadpool_size
-
-- Default: 8
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_json_flat
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_null_factor
-
-- Default: 0.3
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_sparsity_factor
-
-- Default: 0.9
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_internal_column_min_limit
-
-- Default: 5
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_column_max
-
-- Default: 20
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### pk_dump_interval_seconds
 
 - Default: 3600
@@ -4545,17 +4261,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 ##### olap_string_max_length
 
 - Default: 1048576
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### jit_lru_cache_size
-
-- Default: 0
 - Type: Int
 - Unit:
 - Is mutable: Yes
