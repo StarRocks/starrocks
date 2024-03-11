@@ -154,8 +154,9 @@ void Chunk::append_or_update_column(ColumnPtr column, SlotId slot_id) {
     } else {
         _slot_id_to_index[slot_id] = _columns.size();
         _columns.emplace_back(std::move(column));
+        // only check it when append a new column
+        check_or_die();
     }
-    check_or_die();
 }
 
 void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
