@@ -14,16 +14,14 @@
 
 #pragma once
 
-#include <memory>
-
-#include "gen_cpp/lake_types.pb.h"
+#include "common/status.h"
 
 namespace starrocks {
+class CombinedTxnLogPB;
+}
 
-using TxnLog = TxnLogPB;
-using TxnLogPtr = std::shared_ptr<const TxnLog>;
-using MutableTxnLogPtr = std::shared_ptr<TxnLog>;
-using CombinedTxnLog = CombinedTxnLogPB;
-using CombinedTxnLogPtr = std::shared_ptr<const CombinedTxnLog>;
+namespace starrocks::stream_load {
 
-} // namespace starrocks
+Status write_combined_txn_log(const CombinedTxnLogPB& logs);
+
+}

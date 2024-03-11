@@ -227,6 +227,7 @@ struct TOlapTableSink {
     // enable colocated for sync mv 
     27: optional bool enable_colocate_mv_index 
     28: optional i64 automatic_bucket_size
+    29: optional bool write_txn_log
 }
 
 struct TSchemaTableSink {
