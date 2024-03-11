@@ -115,12 +115,8 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
-<<<<<<< HEAD
         --use-staros) USE_STAROS=ON; shift ;;
-=======
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
-        --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
->>>>>>> 89b9699086 ([UT] Add option to run-be-ut.sh to filter cases of specific group (#42344))
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
