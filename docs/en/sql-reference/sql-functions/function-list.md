@@ -16,7 +16,7 @@ You can find a function based on the following categories:
   - [Bitmap functions](#bitmap-functions)
   - [Conditional functions](#conditional-functions)
   - [Cryptographic functions](#cryptographic-functions)
-  - [Date functions](#date-functions)
+  - [Date and time functions](#date-and-time-functions)
   - [Geographic functions](#geographic-functions)
   - [Hash functions](#hash-functions)
   - [JSON functions](#json-functions)
@@ -170,7 +170,7 @@ You can find a function based on the following categories:
 - [sm3](../sql-functions/crytographic-functions/sm3.md)
 - [to_base64](../sql-functions/crytographic-functions/from_base64.md)
 
-## Date functions
+## Date and time functions
 
 - [add_months](./date-time-functions/add_months.md)
 - [adddate](./date-time-functions/adddate.md)
@@ -206,6 +206,7 @@ You can find a function based on the following categories:
 - [makedate](./date-time-functions/makedate.md)
 - [microseconds_add](./date-time-functions/microseconds_add.md)
 - [microseconds_sub](./date-time-functions/microseconds_sub.md)
+- [milliseconds_diff](./date-time-functions/milliseconds_diff.md)
 - [minute](./date-time-functions/minute.md)
 - [minutes_add](./date-time-functions/minutes_add.md)
 - [minutes_diff](./date-time-functions/minutes_diff.md)
