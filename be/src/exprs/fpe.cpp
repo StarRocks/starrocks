@@ -182,7 +182,6 @@ Status FPE::encrypt_num(std::string_view num_str, const std::vector<uint8_t>& ke
 
         RETURN_IF_ERROR(encrypt(dec_int_part_str, key, result.data() + result_len, DEFAULT_RADIX));
 
-
         auto dec_int_part_size =
                 dec_int_part_str.length() > FPE::MIN_LENGTH ? dec_int_part_str.length() : FPE::MIN_LENGTH;
         result_len += dec_int_part_size;
