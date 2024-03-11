@@ -170,12 +170,12 @@ Status FPE::encrypt_num(std::string_view num_str, const std::vector<uint8_t>& ke
 
         std::string dec_int_part_str;
         dec_int_part_str = dec_part.substr(first_not_zero);
-        dec_int_part_str.resize(FPE::EXPANDED_LENGTH - first_not_zero, '0');
         if (UNLIKELY(FPE::EXPANDED_LENGTH - first_not_zero <= 0)) {
             result.resize(result_len);
             value = std::move(result);
             return Status::OK();
         }
+        dec_int_part_str.resize(FPE::EXPANDED_LENGTH - first_not_zero, '0');
 
         result[result_len] = '.';
         ++result_len;
