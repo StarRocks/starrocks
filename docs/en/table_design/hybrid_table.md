@@ -29,8 +29,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - The table must be a Primary Key table.
 - The length of the `__row` column cannot exceed 1 MB.
-- Columns cannot be of data types like ARRAY, MAP, and STRUCT.
-
+- Since v3.2.4, StarRocks extends support to the following column types: BITMAP, HLL, JSON, ARRAY, MAP, and STRUCT.
 :::
 
 ```SQL
@@ -162,7 +161,7 @@ EXECUTE select_by_id_stmt USING @id2;
 
 ## Limits
 
-- Currently, the table with hybrid row-column storage cannot be altered by using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+- Since v3.2.4, the table with hybrid row-column storage can be altered by using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
 - The short circuiting for queries is currently only suitable for queries that happen after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short circuiting for queries happens at the apply stage of the data writing process, data writing may block short circuiting for queries, affecting the response time of point queries during data writing.
 - Hybrid row-column storage may significantly increase storage consumption. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.
 - Hybrid row-column storage can increase the time and resource consumption during data loading.
