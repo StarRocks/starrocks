@@ -188,6 +188,7 @@ public class OlapTableSink extends DataSink {
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
+            tSink.setWrite_txn_log(txnState.isCombinedTxnLog());
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
