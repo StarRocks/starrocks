@@ -889,6 +889,25 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
+void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
+    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+
+    if (!_equality_delete_slots.empty()) {
+        std::map<SlotId, SlotDescriptor*> id_to_slots;
+        for (const auto& slot : _tuple_desc->slots()) {
+            id_to_slots.emplace(slot->id(), slot);
+        }
+
+        for (const auto& slot : _equality_delete_slots) {
+            if (!id_to_slots.contains(slot->id())) {
+                const auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+                column->reserve(n);
+                (*chunk)->append_column(column, slot->id());
+            }
+        }
+    }
+}
+
 const std::string HiveDataSource::get_custom_coredump_msg() const {
     const std::string path = !_scan_range.relative_path.empty() ? _scan_range.relative_path : _scan_range.full_path;
     return strings::Substitute("Hive file path: $0, partition id: $1, length: $2, offset: $3", path,
