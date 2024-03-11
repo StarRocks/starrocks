@@ -45,7 +45,7 @@ bool ConnectorSinkOperator::need_input() const {
     }
 
     while (!_add_chunk_future_queue.empty()) {
-        // cannot accept chunk if any add_chunk_future is not ready
+        // cannot accept chunk if any add_chunk_futures is not ready
         if (!is_ready(_add_chunk_future_queue.front())) {
             return false;
         }
@@ -65,7 +65,7 @@ bool ConnectorSinkOperator::is_finished() const {
     }
 
     while (!_add_chunk_future_queue.empty()) {
-        // unfinished if any add_chunk_future future is not ready
+        // unfinished if any add_chunk_futures future is not ready
         if (!is_ready(_add_chunk_future_queue.front())) {
             return false;
         }
@@ -78,7 +78,7 @@ bool ConnectorSinkOperator::is_finished() const {
     }
 
     while (!_commit_file_future_queue.empty()) {
-        // unfinished if any commit_file_future future is not ready
+        // unfinished if any commit_file_futures future is not ready
         if (!is_ready(_commit_file_future_queue.front())) {
             return false;
         }
@@ -128,11 +128,11 @@ Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     return Status::OK();
 }
 
-void ConnectorSinkOperator::_enqueue_futures(connector::ConnectorChunkSink::Futures future) {
-    for (auto& f : future.add_chunk_future) {
+void ConnectorSinkOperator::_enqueue_futures(connector::ConnectorChunkSink::Futures futures) {
+    for (auto& f : futures.add_chunk_futures) {
         _add_chunk_future_queue.push(std::move(f));
     }
-    for (auto& f : future.commit_file_future) {
+    for (auto& f : futures.commit_file_futures) {
         _commit_file_future_queue.push(std::move(f));
     }
 }

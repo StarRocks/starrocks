@@ -66,7 +66,7 @@ StatusOr<ConnectorChunkSink::Futures> FileChunkSink::add(ChunkPtr chunk) {
     auto writer = _partition_writers[partition];
     if (writer->get_written_bytes() >= _max_file_size) {
         auto f = writer->commit();
-        futures.commit_file_future.push_back(std::move(f));
+        futures.commit_file_futures.push_back(std::move(f));
         auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
         ASSIGN_OR_RETURN(writer, _file_writer_factory->create(path));
         RETURN_IF_ERROR(writer->init());
@@ -74,7 +74,7 @@ StatusOr<ConnectorChunkSink::Futures> FileChunkSink::add(ChunkPtr chunk) {
     }
 
     auto f = writer->write(chunk);
-    futures.add_chunk_future.push_back(std::move(f));
+    futures.add_chunk_futures.push_back(std::move(f));
     return futures;
 }
 
@@ -82,7 +82,7 @@ ConnectorChunkSink::Futures FileChunkSink::finish() {
     Futures futures;
     for (auto& [_, writer] : _partition_writers) {
         auto f = writer->commit();
-        futures.commit_file_future.push_back(std::move(f));
+        futures.commit_file_futures.push_back(std::move(f));
     }
     return futures;
 }
