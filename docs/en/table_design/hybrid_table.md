@@ -29,8 +29,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - The table must be a Primary Key table.
 - The length of the `__row` column cannot exceed 1 MB.
-- Since v3.2.4, the column types newly support to be BITMAP, HLL, JSON, ARRAY, MAP, and STRUCT.
-
+- Since v3.2.4, StarRocks extends support to the following column types: BITMAP, HLL, JSON, ARRAY, MAP, and STRUCT.
 :::
 
 ```SQL
