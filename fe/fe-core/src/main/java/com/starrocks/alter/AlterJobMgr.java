@@ -177,6 +177,15 @@ public class AlterJobMgr {
         schemaChangeHandler.start();
         materializedViewHandler.start();
         clusterHandler.start();
+<<<<<<< HEAD
+=======
+    }
+
+    public void stop() {
+        schemaChangeHandler.setStop();
+        materializedViewHandler.setStop();
+        clusterHandler.setStop();
+>>>>>>> 4fc9849514 ([UT] Fix colocate balancer unstable ut (#42421))
     }
 
     public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
