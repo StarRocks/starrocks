@@ -36,16 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.JsonWriter;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.lang.NotImplementedException;

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -144,7 +145,6 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -422,7 +422,9 @@ public class DDLStmtExecutor {
                                                             ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                Table table = MetaUtils.getTable(context, stmt.getTableName());
+                TableName tableName = stmt.getTableName();
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(
+                        tableName.getDb(), tableName.getTbl());
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException("only support cooldown for olap table, got " + table.getType());
                 }

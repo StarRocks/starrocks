@@ -58,49 +58,44 @@ public class PartitionBasedCooldownProcessor extends BaseTaskRunProcessor {
     private ExternalCooldownPartitionSelector partitionSelector;
 
     private void prepare(TaskRunContext context) {
-        db = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
+        db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context.ctx.getCurrentCatalog(), context.ctx.getDatabase());
         long tableId = Long.parseLong(context.getProperties().get(TABLE_ID));
         String partitionStart = context.getProperties().get(PARTITION_START);
         String partitionEnd = context.getProperties().get(PARTITION_END);
         boolean isForce = Boolean.parseBoolean(context.getProperties().get(FORCE));
-        db.readLock();
-        try {
-            Table table = db.getTable(tableId);
-            if (table == null) {
-                throw new DmlException("Table with id[" + tableId + "] not found");
-            }
-            if (!(table instanceof OlapTable)) {
-                throw new DmlException("Table " + table.getName() + " not found or not olap table");
-            }
-            olapTable = (OlapTable) table;
-            externalTableName = olapTable.getExternalCoolDownTarget();
-            if (Strings.isNullOrEmpty(externalTableName)) {
-                throw new DmlException("Table " + table.getName() + " not found external cool down target table");
-            }
-            Table iTable = olapTable.getExternalCoolDownTable();
-            if (iTable == null) {
-                throw new DmlException("Table " + table.getName() + " get external cool down target table failed");
-            }
-            if (!(iTable instanceof IcebergTable)) {
-                throw new DmlException("Table " + table.getName() + "'s external table is not iceberg table");
-            }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            throw new DmlException("Table with id[" + tableId + "] not found");
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new DmlException("Table " + table.getName() + " not found or not olap table");
+        }
+        olapTable = (OlapTable) table;
+        externalTableName = olapTable.getExternalCoolDownTarget();
+        if (Strings.isNullOrEmpty(externalTableName)) {
+            throw new DmlException("Table " + table.getName() + " not found external cool down target table");
+        }
+        Table iTable = olapTable.getExternalCoolDownTable();
+        if (iTable == null) {
+            throw new DmlException("Table " + table.getName() + " get external cool down target table failed");
+        }
+        if (!(iTable instanceof IcebergTable)) {
+            throw new DmlException("Table " + table.getName() + "'s external table is not iceberg table");
+        }
 
-            partitionSelector = new ExternalCooldownPartitionSelector(
-                    db, olapTable, partitionStart, partitionEnd, isForce);
-            if (!partitionSelector.isTableSatisfied()) {
-                throw new DmlException("Table " + table.getName() + " don't satisfy external cool down condition");
-            }
-            if (!partitionSelector.hasPartitionSatisfied()) {
-                throw new DmlException("Table " + table.getName() + " has no partition satisfy external cool down condition");
-            }
-            if (context.getProperties().containsKey(PARTITION_ID)) {
-                long partitionId = Long.parseLong(context.getProperties().get(PARTITION_ID));
-                partition = olapTable.getPartition(partitionId);
-            } else {
-                partition = partitionSelector.getOneSatisfiedPartition();
-            }
-        } finally {
-            db.readUnlock();
+        partitionSelector = new ExternalCooldownPartitionSelector(
+                db, olapTable, partitionStart, partitionEnd, isForce);
+        if (!partitionSelector.isTableSatisfied()) {
+            throw new DmlException("Table " + table.getName() + " don't satisfy external cool down condition");
+        }
+        if (!partitionSelector.hasPartitionSatisfied()) {
+            throw new DmlException("Table " + table.getName() + " has no partition satisfy external cool down condition");
+        }
+        if (context.getProperties().containsKey(PARTITION_ID)) {
+            long partitionId = Long.parseLong(context.getProperties().get(PARTITION_ID));
+            partition = olapTable.getPartition(partitionId);
+        } else {
+            partition = partitionSelector.getOneSatisfiedPartition();
         }
     }
 
@@ -174,32 +169,27 @@ public class PartitionBasedCooldownProcessor extends BaseTaskRunProcessor {
                 throw new DdlException(ctx.getState().getErrorMessage());
             }
 
-            db.writeLock();
-            try {
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                long partitionId = partition.getId();
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            long partitionId = partition.getId();
 
-                partitionInfo.setExternalCoolDownSyncedTimeMs(partitionId, visibleVersionTime);
-                // update olap table partition external cool down time
-                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-                // persist editlog
-                editLog.logModifyPartition(new ModifyPartitionInfo(db.getId(), olapTable.getId(), partitionId,
-                        partitionInfo.getDataProperty(partitionId),
-                        partitionInfo.getReplicationNum(partitionId),
-                        partitionInfo.getIsInMemory(partitionId),
-                        visibleVersionTime,
-                        -1L));
-                LOG.info("[QueryId:{}] finished modify partition cooldown flag as " +
-                                "external cooldown table {} partition {} finished",
-                        ctx.getQueryId(), olapTable.getName(), partition.getName());
+            partitionInfo.setExternalCoolDownSyncedTimeMs(partitionId, visibleVersionTime);
+            // update olap table partition external cool down time
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            // persist editlog
+            editLog.logModifyPartition(new ModifyPartitionInfo(db.getId(), olapTable.getId(), partitionId,
+                    partitionInfo.getDataProperty(partitionId),
+                    partitionInfo.getReplicationNum(partitionId),
+                    partitionInfo.getIsInMemory(partitionId),
+                    visibleVersionTime,
+                    -1L));
+            LOG.info("[QueryId:{}] finished modify partition cooldown flag as " +
+                            "external cooldown table {} partition {} finished",
+                    ctx.getQueryId(), olapTable.getName(), partition.getName());
 
-                if (!generateNextTaskRun(context)) {
-                    LOG.info("[QueryId:{}] finished cooldown table {} " +
-                                    "as no partition satisfied cooldown condition",
-                            ctx.getQueryId(), olapTable.getName());
-                }
-            } finally {
-                db.writeUnlock();
+            if (!generateNextTaskRun(context)) {
+                LOG.info("[QueryId:{}] finished cooldown table {} " +
+                                "as no partition satisfied cooldown condition",
+                        ctx.getQueryId(), olapTable.getName());
             }
         } finally {
             if (executor != null) {

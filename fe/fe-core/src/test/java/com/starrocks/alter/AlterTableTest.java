@@ -486,7 +486,7 @@ public class AlterTableTest {
             public Table getTable(String dbName, String tblName) {
                 return new IcebergTable(1, "table1", "iceberg_catalog",
                         "iceberg_catalog", "iceberg_db",
-                        "table1", Lists.newArrayList(), new BaseTable(null, ""), Maps.newHashMap());
+                        "table1", "", Lists.newArrayList(), new BaseTable(null, ""), Maps.newHashMap());
             }
         };
         new MockUp<IcebergTable>() {
@@ -502,7 +502,7 @@ public class AlterTableTest {
         properties.put("type", "iceberg");
         properties.put("iceberg.catalog.type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
-        connectorMgr.createConnector(new ConnectorContext("iceberg_catalog", "iceberg", properties));
+        connectorMgr.createConnector(new ConnectorContext("iceberg_catalog", "iceberg", properties), false);
 
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_external_cooldown (\n" +
                 "event_day DATE,\n" +
@@ -527,7 +527,7 @@ public class AlterTableTest {
                 ");");
 
         ConnectContext ctx = starRocksAssert.getCtx();
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("test_external_cooldown");
 
         Assert.assertNotNull(olapTable.getExternalCoolDownTarget());
@@ -536,19 +536,19 @@ public class AlterTableTest {
         Assert.assertTrue(olapTable.getExternalCoolDownWaitSecond().equals(3600L));
         String sql = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_target\" = \"iceberg_catalog.db.tbl\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
         Assert.assertTrue(olapTable.getExternalCoolDownTarget().equals("iceberg_catalog.db.tbl"));
 
         String sql2 = "ALTER TABLE test_external_cooldown " +
                 "SET(\"external_cooldown_schedule\" = \"START 00:00 END 07:59 EVERY INTERVAL 2 MINUTE\");";
         AlterTableStmt alterTableStmt2 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt2);
         Assert.assertTrue(olapTable.getExternalCoolDownSchedule().equals(
                 "START 00:00 END 07:59 EVERY INTERVAL 2 MINUTE"));
 
         String sql3 = "ALTER TABLE test_external_cooldown SET(\"external_cooldown_wait_second\" = \"7200\");";
         AlterTableStmt alterTableStmt3 = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql3, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt3);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt3);
         Assert.assertTrue(olapTable.getExternalCoolDownWaitSecond().equals(7200L));
     }
 
@@ -572,7 +572,8 @@ public class AlterTableTest {
                 "DISTRIBUTED BY HASH(event_day, site_id);");
 
         ConnectContext ctx = starRocksAssert.getCtx();
-        Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("test_alter_external_cool_down_synced_time");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(
+                "test", "test_alter_external_cool_down_synced_time");
         OlapTable olapTable = (OlapTable) table;
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
 
@@ -580,7 +581,7 @@ public class AlterTableTest {
                 "MODIFY PARTITION (*) SET(\"external_cooldown_synced_time\" = \"2020-03-25 01:00:00\",\n" +
                 " \"external_cooldown_consistency_check_time\" = \"2020-03-25 02:00:00\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
 
         Assert.assertEquals((Long) (TimeUtils.parseDate("2020-03-25 01:00:00", PrimitiveType.DATETIME).getTime()),
                 rangePartitionInfo.getExternalCoolDownSyncedTimeMs(olapTable.getPartition("p20200321").getId()));
