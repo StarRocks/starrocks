@@ -35,8 +35,32 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     }
 
+    class FakeConstExpr : public starrocks::Expr {
+    public:
+        explicit FakeConstExpr(const TExprNode& dummy) : Expr(dummy) {}
+
+        StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
+
+        Expr* clone(ObjectPool*) const override { return nullptr; }
+
+        ColumnPtr _column;
+    };
+
+    FakeConstExpr* new_fake_const_expr(ColumnPtr value, const TypeDescriptor& type) {
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::INT_LITERAL);
+        node.__set_num_children(0);
+        node.__set_type(type.to_thrift());
+        FakeConstExpr* e = _objpool.add(new FakeConstExpr(node));
+        e->_column = std::move(value);
+        return e;
+    }
+
 public:
     TExprNode expr_node;
+
+private:
+    ObjectPool _objpool;
 };
 
 TEST_F(VectorizedCastExprTest, IntCastToDate) {
@@ -2138,6 +2162,56 @@ TEST_F(VectorizedCastExprTest, unsupported_test) {
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
     ASSERT_TRUE(expr == nullptr);
+}
+
+// cast array<int> to array<string>
+TEST_F(VectorizedCastExprTest, array_int_to_array_string) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+    cast_expr.__isset.child_type_desc = true;
+    cast_expr.child_type = to_thrift(PrimitiveType::TYPE_ARRAY);
+    cast_expr.child_type_desc = gen_array_type_desc(to_thrift(TYPE_INT));
+    cast_expr.type = gen_array_type_desc(to_thrift(TYPE_VARCHAR));
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    ASSERT_TRUE(expr != nullptr);
+
+    TypeDescriptor type_arr_int;
+    type_arr_int.type = PrimitiveType::TYPE_ARRAY;
+    type_arr_int.children.emplace_back();
+    type_arr_int.children.back().type = PrimitiveType::TYPE_INT;
+
+    {
+        // [1,4]
+        // [null,null]
+        // [null,12]
+        auto array = ColumnHelper::create_column(type_arr_int, true);
+        array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+        array->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
+        array->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
+        auto* array_values = new_fake_const_expr(array, type_arr_int);
+
+        expr->clear_children();
+        expr->add_child(array_values);
+        auto result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ("[['1','4'], [NULL,NULL], [NULL,'12']]", result->debug_string());
+    }
+    // const
+    {
+        auto array = ColumnHelper::create_column(type_arr_int, false);
+        array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
+        auto const_col = ConstColumn::create(array, 3);
+        auto* const_array = new_fake_const_expr(const_col, type_arr_int);
+        expr->clear_children();
+        expr->add_child(const_array);
+        auto result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ("[['1','4'], ['1','4'], ['1','4']]", result->debug_string());
+    }
 }
 
 } // namespace starrocks::vectorized
