@@ -17,6 +17,13 @@
 
 package com.starrocks.rpc;
 
+<<<<<<< HEAD
+=======
+import com.baidu.bjf.remoting.protobuf.annotation.Ignore;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import org.apache.commons.lang3.StringUtils;
+>>>>>>> ee11285936 ([Enhancement] Reduce duplicate data in RpcDataPackage during RPC transmission. (#42202))
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
@@ -24,7 +31,9 @@ import org.apache.thrift.TSerializer;
 
 // used to compatible with our older thrift protocol
 public class AttachmentRequest {
+    @Ignore
     protected byte[] serializedRequest;
+    @Ignore
     protected byte[] serializedResult;
 
     public void setRequest(TBase request) throws TException {
