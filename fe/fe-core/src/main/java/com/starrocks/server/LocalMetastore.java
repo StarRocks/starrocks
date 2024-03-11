@@ -3782,7 +3782,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void modifyExternalCoolDownMeta(Database db, OlapTable table, ExternalCoolDownConfig externalCoolDownConfig) {
         Locker locker = new Locker();
-        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
         ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
                 db.getId(),
                 table.getId(),

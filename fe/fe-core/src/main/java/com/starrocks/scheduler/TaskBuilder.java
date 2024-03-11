@@ -40,10 +40,8 @@ import com.starrocks.sql.ast.CreateExternalCooldownStmt;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.commons.collections.MapUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
@@ -285,8 +283,9 @@ public class TaskBuilder {
     }
 
     public static Task buildExternalCooldownTask(CreateExternalCooldownStmt externalCooldownStmt, ConnectContext context) {
-        Database db = MetaUtils.getDatabase(context, externalCooldownStmt.getTableName());
-        Table table = MetaUtils.getTable(context, externalCooldownStmt.getTableName());
+        TableName tableName = externalCooldownStmt.getTableName();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
         if (!(table instanceof OlapTable)) {
             throw new SemanticException("only support cooldown for olap table, got " + table.getType());
         }

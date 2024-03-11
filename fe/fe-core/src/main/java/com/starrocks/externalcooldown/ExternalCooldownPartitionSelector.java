@@ -30,13 +30,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PListCell;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -191,8 +191,8 @@ public class ExternalCooldownPartitionSelector {
         if (hasPartitionRange) {
             Set<String> result = Sets.newHashSet();
 
-            Map<String, List<List<String>>> listMap = olapTable.getValidListPartitionMap(-1);
-            for (Map.Entry<String, List<List<String>>> entry : listMap.entrySet()) {
+            Map<String, PListCell> listMap = olapTable.getValidListPartitionMap(-1);
+            for (Map.Entry<String, PListCell> entry : listMap.entrySet()) {
                 if (entry.getKey().compareTo(partitionStart) >= 0 && entry.getKey().compareTo(partitionEnd) <= 0) {
                     result.add(entry.getKey());
                 }
@@ -209,7 +209,8 @@ public class ExternalCooldownPartitionSelector {
 
         if (hasPartitionRange) {
             Set<String> result = Sets.newHashSet();
-            Column partitionColumn = olapTable.getPartitionInfo().getPartitionColumns().get(0);
+            List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
+            Column partitionColumn = partitionColumns.get(0);
             Range<PartitionKey> rangeToInclude = createRange(partitionStart, partitionEnd, partitionColumn);
             Map<String, Range<PartitionKey>> rangeMap = olapTable.getValidRangePartitionMap(-1);
             for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
@@ -263,20 +264,6 @@ public class ExternalCooldownPartitionSelector {
                 return chosenPartitions;
             }
         }
-
-        List<Partition> partitions = new ArrayList<>();
-        if (partitionInfo instanceof RangePartitionInfo) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) (olapTable.getPartitionInfo());
-            List<Map.Entry<Long, Range<PartitionKey>>> idToRanges =
-                    new ArrayList<>(rangePartitionInfo.getIdToRange(false).entrySet());
-            idToRanges.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
-            for (Map.Entry<Long, Range<com.starrocks.catalog.PartitionKey>> idToRange : idToRanges) {
-                partitions.add(olapTable.getPartition(idToRange.getKey()));
-            }
-        } else {
-            partitions = new ArrayList<>(olapTable.getPartitions());
-        }
-        partitions.sort(Comparator.comparing(Partition::getName));
 
         boolean isSatisfied;
         Set<String> partitionNames;
