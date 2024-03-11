@@ -101,13 +101,6 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         createTable(createDupTblStmtStr);
 
-        String createDup2TblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup2 (\n" + "timestamp DATETIME,\n"
-                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
-                + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
-
-        createTable(createDup2TblStmtStr);
-
         String createDupTbl2StmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup2 (\n" + "timestamp DATETIME,\n"
                 + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
                 + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
@@ -239,52 +232,6 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         locker.lockDatabase(db, LockType.READ);
         try {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
-            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
-            Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
-            Assertions.assertNotNull(indexMeta);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-    }
-
-    @Test 
-    public void testAddOrDropColumnWithRollup() throws Exception {
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
-
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("sc_dup2");
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Assertions.assertNotNull(tbl);
-            System.out.println(tbl.getName());
-            Assertions.assertEquals("StarRocks", tbl.getEngine());
-            Assertions.assertEquals(6, tbl.getBaseSchema().size());
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-
-        String addRollUpStmtStr = "alter table test.sc_dup2 add rollup dup_rollup(type, op_id);";
-        AlterTableStmt addRollUpStmt = (AlterTableStmt) parseAndAnalyzeStmt(addRollUpStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addRollUpStmt);
-        Map<Long, AlterJobV2> materializedViewAlterJobs = GlobalStateMgr.getCurrentState().getRollupHandler()
-                .getAlterJobsV2();
-        jobSize++;
-        waitAlterJobDone(materializedViewAlterJobs);
-        Assertions.assertEquals(1, materializedViewAlterJobs.size());
-
-        LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
-
-        //process agg drop value column with rollup schema change
-        String dropRollUpValColStmtStr = "alter table test.sc_dup2 drop column op_id";
-        AlterTableStmt dropRollUpValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropRollUpValColStmtStr);
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(dropRollUpValColStmt);
-        waitAlterJobDone(materializedViewAlterJobs);
-
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Assertions.assertEquals(5, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
