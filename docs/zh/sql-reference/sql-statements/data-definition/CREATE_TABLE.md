@@ -129,7 +129,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT, SMALLINT, INT, BIGINT`。
 2. 如果在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
-  该类型只对聚合表有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
+  该类型只对聚合表有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。自 3.1.9 起，`REPLACE_IF_NOT_NULL` 新增支持 BITMAP 类型的列。
 
 **NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细表、聚合表和更新表中所有列都默认指定 `NULL`。主键表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
 
