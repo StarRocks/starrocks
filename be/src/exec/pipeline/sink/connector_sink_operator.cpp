@@ -19,6 +19,14 @@
 
 namespace starrocks::pipeline {
 
+ConnectorSinkOperator::ConnectorSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,
+                                             const int32_t driver_sequence,
+                                             std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
+                                             FragmentContext* fragment_context)
+        : Operator(factory, id, "connector_sink_operator", plan_node_id, false, driver_sequence),
+          _connector_chunk_sink(std::move(connector_chunk_sink)),
+          _fragment_context(fragment_context) {}
+
 Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 #ifndef BE_TEST
     RETURN_IF_ERROR(Operator::prepare(state));

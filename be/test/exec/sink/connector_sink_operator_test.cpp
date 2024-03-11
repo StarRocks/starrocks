@@ -22,6 +22,7 @@
 #include <thread>
 
 #include "connector_sink/connector_chunk_sink.h"
+#include "connector_sink/hive_chunk_sink.h"
 #include "formats/utils.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
@@ -65,6 +66,7 @@ TEST_F(ConnectorSinkOperatorTest, test_prepare) {
         EXPECT_CALL(*mock_sink, init()).WillOnce(Return(Status::Unknown("error")));
         auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
         ASSERT_ERROR(op->prepare(_runtime_state));
+        ASSERT_FALSE(op->has_output());
     }
 
     {
@@ -72,6 +74,7 @@ TEST_F(ConnectorSinkOperatorTest, test_prepare) {
         EXPECT_CALL(*mock_sink, init()).WillOnce(Return(Status::OK()));
         auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
         ASSERT_OK(op->prepare(_runtime_state));
+        ASSERT_FALSE(op->has_output());
     }
 }
 
@@ -106,6 +109,7 @@ TEST_F(ConnectorSinkOperatorTest, test_push_chunk) {
         EXPECT_TRUE(op->need_input()); // can accept more chunks
         EXPECT_OK(op->set_finishing(_runtime_state));
         EXPECT_TRUE(op->is_finished());
+        EXPECT_FALSE(op->pending_finish());
     }
 
     {
@@ -128,6 +132,7 @@ TEST_F(ConnectorSinkOperatorTest, test_push_chunk) {
                 .rollback_action = []() {},
         });
         EXPECT_TRUE(op->is_finished());
+        EXPECT_FALSE(op->pending_finish());
     }
 }
 
@@ -168,6 +173,30 @@ TEST_F(ConnectorSinkOperatorTest, test_cleanup_after_cancel) {
         EXPECT_FALSE(cleanup);
         op->close(_runtime_state); // execute rollback action
         EXPECT_TRUE(cleanup);
+    }
+}
+
+TEST_F(ConnectorSinkOperatorTest, test_factory) {
+    {
+        auto provider = std::make_unique<connector::HiveChunkSinkProvider>();
+        auto sink_ctx = std::make_shared<connector::HiveChunkSinkContext>();
+        sink_ctx->path = "/path/to/directory/";
+        sink_ctx->data_column_names = {"k1"};
+        sink_ctx->partition_column_names = {"k2"};
+        sink_ctx->data_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
+        sink_ctx->partition_column_evaluators =
+                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->executor = nullptr;
+        sink_ctx->format = formats::PARQUET;
+        sink_ctx->options = {}; // default for now
+        sink_ctx->max_file_size = 1 << 30;
+        sink_ctx->fragment_context = _fragment_context;
+        auto op_factory =
+                std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), sink_ctx, _fragment_context);
+        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
+        auto op = op_factory->create(1, 0);
+        EXPECT_OK(op->prepare(_runtime_state));
     }
 }
 
