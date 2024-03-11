@@ -35,6 +35,7 @@ LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tabl
                                          PersistentIndexSstableMetaPB sstable_meta)
         : PersistentIndex(""),
           _sstable_meta(std::make_unique<PersistentIndexSstableMetaPB>(sstable_meta)),
+          _cache(new_lru_cache(config::lake_pk_index_sst_cache_limit)),
           _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_id) {
     _sstable = std::make_unique<PersistentIndexSstablePB>();
@@ -80,7 +81,8 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
             TRACE_COUNTER_INCREMENT("random_access_file", end_ts - start_ts);
             auto pindex_sst = std::make_unique<LakePersistentIndexSstable>();
             start_ts = butil::gettimeofday_us();
-            RETURN_IF_ERROR(pindex_sst->init(rf.get(), _sstable_meta->sstables(i - 1).sstables(j - 1).filesz()));
+            RETURN_IF_ERROR(
+                    pindex_sst->init(rf.get(), _sstable_meta->sstables(i - 1).sstables(j - 1).filesz(), _cache.get()));
             end_ts = butil::gettimeofday_us();
             TRACE_COUNTER_INCREMENT("sst_init", end_ts - start_ts);
             KeyIndexesInfo found_key_indexes_info;

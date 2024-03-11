@@ -24,8 +24,9 @@ namespace starrocks {
 
 namespace lake {
 
-Status LakePersistentIndexSstable::init(RandomAccessFile* rf, const int64_t filesz) {
+Status LakePersistentIndexSstable::init(RandomAccessFile* rf, const int64_t filesz, Cache* cache) {
     sstable::Options options;
+    options.block_cache = cache;
     RETURN_IF_ERROR(sstable::Table::Open(options, rf, filesz, &_table));
     _sst.reset(_table);
     return Status::OK();

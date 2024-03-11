@@ -17,7 +17,9 @@
 #include "storage/lake/tablet.h"
 #include "storage/persistent_index.h"
 
-namespace starrocks::lake {
+namespace starrocks {
+class Cache;
+namespace lake {
 
 struct KeyIndexesInfo;
 class MetaFileBuilder;
@@ -102,9 +104,11 @@ private:
     std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
     std::shared_ptr<PersistentIndexSstableMetaPB> _sstable_meta;
     std::unique_ptr<PersistentIndexSstablePB> _sstable{nullptr};
+    std::unique_ptr<Cache> _cache;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     int64_t _txn_id{0};
 };
 
-} // namespace starrocks::lake
+} // namespace lake
+} // namespace starrocks

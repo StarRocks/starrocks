@@ -7,6 +7,7 @@
 #include <string>
 
 namespace starrocks {
+class Cache;
 
 namespace lake {
 
@@ -47,6 +48,10 @@ struct Options {
     // corruption of one DB entry may cause a large number of entries to
     // become unreadable or for the entire DB to become unopenable.
     bool paranoid_checks = false;
+
+    // If non-null, use the specified cache for blocks.
+    // If null, leveldb will automatically create and use an 8MB internal cache.
+    Cache* block_cache = nullptr;
 
     // Approximate size of user data packed per block.  Note that the
     // block size specified here corresponds to uncompressed data.  The

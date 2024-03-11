@@ -5,6 +5,7 @@
 #include "storage/lake/sstable/table.h"
 
 #include <butil/time.h> // NOLINT
+
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/lake/key_index.h"
@@ -15,6 +16,8 @@
 #include "storage/lake/sstable/format.h"
 #include "storage/lake/sstable/options.h"
 #include "storage/lake/sstable/two_level_iterator.h"
+#include "util/coding.h"
+#include "util/lru_cache.h"
 #include "util/trace.h"
 
 namespace starrocks {
@@ -72,7 +75,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
         rep->file = file;
         rep->metaindex_handle = footer.metaindex_handle();
         rep->index_block = index_block;
-        rep->cache_id = 0;
+        rep->cache_id = (options.block_cache ? options.block_cache->new_id() : 0);
         rep->filter_data = nullptr;
         rep->filter = nullptr;
         *table = new Table(rep);
@@ -142,8 +145,7 @@ static void DeleteBlock(void* arg, void* ignored) {
     delete reinterpret_cast<Block*>(arg);
 }
 
-/*
-static void DeleteCachedBlock(const Slice& key, void* value) {
+static void DeleteCachedBlock(const CacheKey& key, void* value) {
     Block* block = reinterpret_cast<Block*>(value);
     delete block;
 }
@@ -151,14 +153,16 @@ static void DeleteCachedBlock(const Slice& key, void* value) {
 static void ReleaseBlock(void* arg, void* h) {
     Cache* cache = reinterpret_cast<Cache*>(arg);
     Cache::Handle* handle = reinterpret_cast<Cache::Handle*>(h);
-    cache->Release(handle);
-}*/
+    cache->release(handle);
+}
 
 // Convert an index iterator value (i.e., an encoded BlockHandle)
 // into an iterator over the contents of the corresponding block.
 Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice& index_value) {
     Table* table = reinterpret_cast<Table*>(arg);
+    Cache* block_cache = table->rep_->options.block_cache;
     Block* block = nullptr;
+    Cache::Handle* cache_handle = nullptr;
 
     BlockHandle handle;
     Slice input = index_value;
@@ -168,16 +172,40 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
 
     if (s.ok()) {
         BlockContents contents;
-        s = ReadBlock(table->rep_->file, options, handle, &contents);
-        if (s.ok()) {
-            block = new Block(contents);
+        if (block_cache != nullptr) {
+            char cache_key_buffer[16];
+            encode_fixed64_le(reinterpret_cast<uint8_t*>(cache_key_buffer), table->rep_->cache_id);
+            encode_fixed64_le(reinterpret_cast<uint8_t*>(cache_key_buffer + 8), handle.offset());
+            CacheKey key(cache_key_buffer, sizeof(cache_key_buffer));
+            cache_handle = block_cache->lookup(key);
+            if (cache_handle != nullptr) {
+                block = reinterpret_cast<Block*>(block_cache->value(cache_handle));
+            } else {
+                s = ReadBlock(table->rep_->file, options, handle, &contents);
+                if (s.ok()) {
+                    block = new Block(contents);
+                    if (contents.cachable && options.fill_cache) {
+                        cache_handle = block_cache->insert(key, block, block->size(), &DeleteCachedBlock);
+                    }
+                }
+            }
+        } else {
+            BlockContents contents;
+            s = ReadBlock(table->rep_->file, options, handle, &contents);
+            if (s.ok()) {
+                block = new Block(contents);
+            }
         }
     }
 
     Iterator* iter;
     if (block != nullptr) {
         iter = block->NewIterator(table->rep_->options.comparator);
-        iter->RegisterCleanup(&DeleteBlock, block, nullptr);
+        if (cache_handle == nullptr) {
+            iter->RegisterCleanup(&DeleteBlock, block, nullptr);
+        } else {
+            iter->RegisterCleanup(&ReleaseBlock, block_cache, cache_handle);
+        }
     } else {
         iter = NewErrorIterator(s);
     }

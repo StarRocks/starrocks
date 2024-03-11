@@ -34,7 +34,7 @@ public:
     LakePersistentIndexSstable() = default;
     ~LakePersistentIndexSstable() = default;
 
-    Status init(RandomAccessFile* rf, const int64_t filesz);
+    Status init(RandomAccessFile* rf, const int64_t filesz, Cache* cache);
 
     static Status build_sstable(
             phmap::btree_map<std::string, std::list<std::pair<int64_t, IndexValue>>, std::less<>>& memtable,
