@@ -48,6 +48,7 @@ protected:
 
 class MockFileWriterFactory : public formats::FileWriterFactory {
 public:
+    MOCK_METHOD(Status, init, (), (override));
     MOCK_METHOD(StatusOr<std::shared_ptr<formats::FileWriter>>, create, (const std::string&), (override));
 };
 
@@ -74,6 +75,7 @@ TEST_F(FileChunkSinkTest, test_unpartitioned_sink) {
         EXPECT_CALL(*mock_file_writer, get_written_bytes()).WillOnce(Return(0));
         EXPECT_CALL(*mock_file_writer, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
         auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
+        EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
         EXPECT_CALL(*mock_file_writer_factory, create(_)).WillOnce(Return(ByMove(mock_file_writer)));
         auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
         auto sink = std::make_unique<FileChunkSink>(partition_column_names, std::move(partition_column_evaluators),
@@ -104,6 +106,7 @@ TEST_F(FileChunkSinkTest, test_unpartitioned_sink) {
         EXPECT_CALL(*mock_file_writer2, commit())
                 .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
         auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
+        EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
         EXPECT_CALL(*mock_file_writer_factory, create(_))
                 .WillOnce(Return(ByMove(mock_file_writer1)))
                 .WillOnce(Return(ByMove(mock_file_writer2)));
@@ -147,6 +150,7 @@ TEST_F(FileChunkSinkTest, test_partitioned_sink) {
         EXPECT_CALL(*mock_file_writer, get_written_bytes()).WillOnce(Return(0));
         EXPECT_CALL(*mock_file_writer, write(_)).WillOnce(Return(ByMove(make_ready_future(Status::OK()))));
         auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
+        EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
         EXPECT_CALL(*mock_file_writer_factory, create(_)).WillOnce(Return(ByMove(mock_file_writer)));
         auto location_provider = std::make_unique<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
         auto sink = std::make_unique<FileChunkSink>(partition_column_names, std::move(partition_column_evaluators),
@@ -184,6 +188,7 @@ TEST_F(FileChunkSinkTest, test_partitioned_sink) {
         EXPECT_CALL(*mock_file_writer2, commit())
                 .WillOnce(Return(ByMove(make_ready_future(CommitResult{.io_status = Status::OK()}))));
         auto mock_file_writer_factory = std::make_unique<MockFileWriterFactory>();
+        EXPECT_CALL(*mock_file_writer_factory, init()).WillOnce(Return(Status::OK()));
         EXPECT_CALL(*mock_file_writer_factory, create(_))
                 .WillOnce(Return(ByMove(mock_file_writer1)))
                 .WillOnce(Return(ByMove(mock_file_writer2)));
@@ -268,9 +273,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto maybe_sink = provider.create_chunk_sink(sink_ctx, 0);
-        EXPECT_TRUE(maybe_sink.ok());
-        auto sink = std::move(maybe_sink.value());
+        auto sink = provider.create_chunk_sink(sink_ctx, 0);
         EXPECT_OK(sink->init());
     }
 
@@ -286,9 +289,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto maybe_sink = provider.create_chunk_sink(sink_ctx, 0);
-        EXPECT_TRUE(maybe_sink.ok());
-        auto sink = std::move(maybe_sink.value());
+        auto sink = provider.create_chunk_sink(sink_ctx, 0);
         EXPECT_OK(sink->init());
     }
 
@@ -304,8 +305,8 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto maybe_sink = provider.create_chunk_sink(sink_ctx, 0);
-        EXPECT_FALSE(maybe_sink.ok()); // format is not supported
+        auto sink = provider.create_chunk_sink(sink_ctx, 0);
+        EXPECT_OK(sink->init());
     }
 }
 
