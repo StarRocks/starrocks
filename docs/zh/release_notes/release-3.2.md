@@ -22,7 +22,7 @@ displayed_sidebar: "Chinese"
 ### 行为变更
 
 - `cbo_decimal_cast_string_strict` 用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。默认值是 `true`，即执行严格转换（按 Scale 截断补 `0`）。在历史版本中没有严格按照 DECIMAL 类型进行补齐，从而在 DECIMAL 与 STRING 类型进行比等时会产生不同效果。[#40619](https://github.com/StarRocks/starrocks/pull/40619)
-- Iceberg Catalog 的参数 `enable_iceberg_metadata_cache` 默认值改为 `false`。在 v3.2.1 到 v3.2.3 版本中，此参数统一默认为 `true`，即默认缓存 Iceberg 的元数据信息。在 v3.2.4 及以上版本中，如果 Iceberg Catalog 元数据服务为 HMS，此参数默认值变更为 `false`，如果元数据服务为 Glue，此参数默认值仍为 `true`。[#41826](https://github.com/StarRocks/starrocks/pull/41826)
+- Iceberg Catalog 的参数 `enable_iceberg_metadata_cache` 默认值改为 `false`。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。[#41826](https://github.com/StarRocks/starrocks/pull/41826)
 - 修改能发起物化视图刷新任务的用户，从原本的 `root` 用户变成创建物化视图的用户，已有的物化视图不受影响。[#40670](https://github.com/StarRocks/starrocks/pull/40670)  
 - 常量和字符串类型的列进行比较时，默认按字符串进行比较，用户可以通过设置变量 `cbo_eq_base_type` 来调整默认行为。将 `cbo_eq_base_type` 设置为 `decimal` 可以改为按数值进行比较。[#40619](https://github.com/StarRocks/starrocks/pull/40619)
 
