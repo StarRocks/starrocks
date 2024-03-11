@@ -35,7 +35,7 @@ Release date: March 8, 2024
 - The `agg_type` of BITMAP-type columns in an Aggregate table can be set to `replace_if_not_null` in order to support updates only to a few columns of the table. [#42034](https://github.com/StarRocks/starrocks/pull/42034)
 - Improved the Broker Load performance when loading small ORC files. [#41765](https://github.com/StarRocks/starrocks/pull/41765)
 - The tables with hybrid row-column storage support Schema Change. [#40851](https://github.com/StarRocks/starrocks/pull/40851)
-- The tables with hybrid row-column storage support complex types including BITMAP, ARRAY, and STRUCT. [#41476](https://github.com/StarRocks/starrocks/pull/41476)
+- The tables with hybrid row-column storage support complex types including BITMAP, HHL, JSON, ARRAY, MAP, and STRUCT. [#41476](https://github.com/StarRocks/starrocks/pull/41476)
 - A new internal SQL log file is added to record log data related to statistics and materialized views. [#40453](https://github.com/StarRocks/starrocks/pull/40453)
 
 ### Bug Fixes
