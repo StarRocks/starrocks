@@ -20,6 +20,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/Volnitsky.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -408,9 +409,17 @@ StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* conte
     hs_scratch_t* scratch = nullptr;
     hs_error_t status;
     if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
-        CHECK(false) << "ERROR: Unable to clone scratch space."
-                     << " status: " << status;
+        return Status::InternalError(fmt::format("unable to clone scratch space, status: {}", status));
     }
+
+    DeferOp op([&] {
+        if (scratch != nullptr) {
+            hs_error_t st;
+            if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
+                LOG(ERROR) << "free scratch space failure. status: " << st;
+            }
+        }
+    });
 
     for (int row = 0; row < value_viewer.size(); ++row) {
         if (value_viewer.is_null(row)) {
@@ -435,10 +444,6 @@ StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* conte
         result->append(v);
     }
 
-    if ((status = hs_free_scratch(scratch)) != HS_SUCCESS) {
-        CHECK(false) << "ERROR: free scratch space failure"
-                     << " status: " << status;
-    }
     return result->build(value_column->is_constant());
 }
 
