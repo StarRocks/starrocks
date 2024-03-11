@@ -158,6 +158,7 @@ Status FPE::encrypt_num(std::string_view num_str, const std::vector<uint8_t>& ke
     if (dec_part.empty()) {
         result.resize(result_len);
         value = std::move(result);
+
         return Status::OK();
     } else {
         std::size_t first_not_zero = dec_part.find_first_not_of('0');
@@ -167,14 +168,20 @@ Status FPE::encrypt_num(std::string_view num_str, const std::vector<uint8_t>& ke
             return Status::OK();
         }
 
-        result[result_len] = '.';
-        ++result_len;
-
         std::string dec_int_part_str;
         dec_int_part_str = dec_part.substr(first_not_zero);
         dec_int_part_str.resize(FPE::EXPANDED_LENGTH - first_not_zero, '0');
+        if (UNLIKELY(FPE::EXPANDED_LENGTH - first_not_zero <= 0)) {
+            result.resize(result_len);
+            value = std::move(result);
+            return Status::OK();
+        }
+
+        result[result_len] = '.';
+        ++result_len;
 
         RETURN_IF_ERROR(encrypt(dec_int_part_str, key, result.data() + result_len, DEFAULT_RADIX));
+
 
         auto dec_int_part_size =
                 dec_int_part_str.length() > FPE::MIN_LENGTH ? dec_int_part_str.length() : FPE::MIN_LENGTH;
