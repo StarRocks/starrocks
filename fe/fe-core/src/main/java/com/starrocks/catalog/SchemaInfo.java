@@ -60,7 +60,7 @@ public class SchemaInfo {
         this.keysType = builder.keysType;
         this.storageType = builder.storageType;
         this.version = builder.version;
-        this.columns = new ArrayList<>(builder.columns);
+        this.columns = builder.columns;
         this.sortKeyIndexes = builder.sortKeyIndexes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
         this.indexes = builder.indexes;
@@ -250,21 +250,11 @@ public class SchemaInfo {
         }
 
         public SchemaInfo build() {
-            if (id == 0) {
-                throw new RuntimeException("id not set");
-            }
-            if (keysType == null) {
-                throw new RuntimeException("keys type not set");
-            }
-            if (shortKeyColumnCount == 0) {
-                throw new RuntimeException("short key column count not set");
-            }
-            if (columns == null) {
-                throw new RuntimeException("no column");
-            }
-            if (storageType == null) {
-                throw new RuntimeException("storage type not set");
-            }
+            Preconditions.checkState(id > 0);
+            Preconditions.checkState(keysType != null);
+            Preconditions.checkState(shortKeyColumnCount > 0);
+            Preconditions.checkState(columns != null);
+            Preconditions.checkState(storageType != null);
             return new SchemaInfo(this);
         }
     }

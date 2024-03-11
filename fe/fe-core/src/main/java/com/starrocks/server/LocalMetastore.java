@@ -2027,10 +2027,11 @@ public class LocalMetastore implements ConnectorMetadata {
                                                             MaterializedIndex index) throws DdlException {
         LOG.info("build create replica tasks for index {} db {} table {} partition {}",
                 index, dbId, table.getId(), partition);
+        boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
         boolean createSchemaFile = true;
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
-        TTabletType tabletType = RunMode.isSharedDataMode() ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
+        TTabletType tabletType = isCloudNativeTable ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
         TStorageMedium storageMedium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
         TTabletSchema tabletSchema = SchemaInfo.builder()
                 .setId(indexMeta.getSchemaId())
@@ -2048,7 +2049,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         for (Tablet tablet : index.getTablets()) {
             List<Long> nodeIdsOfReplicas = new ArrayList<>();
-            if (table.isCloudNativeTableOrMaterializedView()) {
+            if (isCloudNativeTable) {
                 try {
                     Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                     long nodeId = ((LakeTablet) tablet).

@@ -85,7 +85,7 @@ public class CreateReplicaTask extends AgentTask {
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
-                builder.getTableId(), builder.getIndexId(), builder.getTabletId());
+                builder.getPartitionId(), builder.getIndexId(), builder.getTabletId());
         this.version = builder.getVersion();
         this.storageMedium = builder.getStorageMedium();
         this.latch = builder.getLatch();
