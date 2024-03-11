@@ -1674,28 +1674,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### dictionary_page_size
-
-- Default: 1048576
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### dictionary_encoding_ratio_for_non_string_column
-
-- Default: 0
-- Type: Double
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### dictionary_speculate_min_chunk_size
 
 - Default: 10000
@@ -3420,39 +3398,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### starlet_fslib_s3client_nonread_max_retries
-
-- Default: 5
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### starlet_fslib_s3client_nonread_retry_scale_factor
-
-- Default: 200
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### starlet_fslib_s3client_connect_timeout_ms
-
-- Default: 1000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### lake_metadata_cache_limit
 
 - Default: 2147483648
@@ -3742,28 +3687,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### spill_max_partition_level
-
-- Default: 7
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### spill_max_partition_size
-
-- Default: 1024
-- Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### spill_max_log_block_container_bytes
 
 - Default: 10737418240
@@ -3958,17 +3881,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### report_datacache_metrics_interval_ms
-
-- Default: 60000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
 - Description:
 - Introduced in: -
 -->
@@ -4443,83 +4355,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Introduced in: v3.1.7, v3.2.3
 
 <!--
-##### dictionary_cache_refresh_timeout_ms
-
-- Default: 60000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### dictionary_cache_refresh_threadpool_size
-
-- Default: 8
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### enable_json_flat
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_null_factor
-
-- Default: 0.3
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_sparsity_factor
-
-- Default: 0.9
-- Type: Double
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_internal_column_min_limit
-
-- Default: 5
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### json_flat_column_max
-
-- Default: 20
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
 ##### pk_dump_interval_seconds
 
 - Default: 3600
@@ -4545,17 +4380,6 @@ You can only set the static parameters of a BE by changing them in the correspon
 ##### olap_string_max_length
 
 - Default: 1048576
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### jit_lru_cache_size
-
-- Default: 0
 - Type: Int
 - Unit:
 - Is mutable: Yes
