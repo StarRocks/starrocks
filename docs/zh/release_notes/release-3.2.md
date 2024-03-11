@@ -30,7 +30,7 @@ displayed_sidebar: "Chinese"
 
 - 存算分离架构中，支持将数据分区存储于 S3 存储桶中的不同路径中，分区路径使用统一前缀。此举可以提升 StarRocks 对 S3 文件的读写访问效率。[#41627](https://github.com/StarRocks/starrocks/pull/41627)
 - 支持通过 `s3_compatible_fs_list` 参数设置可以使用 AWS SDK 接入的 S3 兼容对象存储。同时支持通过 `fallback_to_hadoop_fs_list` 参数配置需要通过 HDFS 的 Schema 接入的非 S3 兼容对象存储（该方法需要使用厂商提供的 JAR 包）。[#41123](https://github.com/StarRocks/starrocks/pull/41123)
-- 优化 Trino 语法兼容性，支持 Trino 的 `current_catalog`、`current_schema`、`to_char`、`from_hex`、`to_date`、`to_timestamp` 以及 `index` 函数的语法转换。[#41217](https://github.com/StarRocks/starrocks/pull/41217) [#41319](https://github.com/StarRocks/starrocks/pull/41319)[ ](https://github.com/StarRocks/starrocks/pull/40837)[#40803](https://github.com/StarRocks/starrocks/pull/40803)
+- 优化 Trino 语法兼容性，支持 Trino 的 `current_catalog`、`current_schema`、`to_char`、`from_hex`、`to_date`、`to_timestamp` 以及 `index` 函数的语法转换。[#41217](https://github.com/StarRocks/starrocks/pull/41217) [#41319](https://github.com/StarRocks/starrocks/pull/41319) [#40803](https://github.com/StarRocks/starrocks/pull/40803)
 - 优化物化视图改写，支持基于逻辑视图创建的物化视图的改写。[#42173](https://github.com/StarRocks/starrocks/pull/42173)
 - 优化 STRING 向 DATETIME 类型转换的效率，性能约提升 35%~40%。[#41464](https://github.com/StarRocks/starrocks/pull/41464)
 - 聚合表中 BITMAP 类型的列支持指定聚合类型为 `replace_if_not_null`，从而支持部分列更新。[#42034](https://github.com/StarRocks/starrocks/pull/42034)
