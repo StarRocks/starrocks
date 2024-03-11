@@ -36,7 +36,7 @@ displayed_sidebar: "Chinese"
 - 聚合表中 BITMAP 类型的列支持指定聚合类型为 `replace_if_not_null`，从而支持部分列更新。[#42034](https://github.com/StarRocks/starrocks/pull/42034)
 - 优化 Broker Load 导入 ORC 小文件时的性能。[#41765](https://github.com/StarRocks/starrocks/pull/41765)
 - 行列混存表支持 Schema Change。[#40851](https://github.com/StarRocks/starrocks/pull/40851)
-- 行列混存表支持 BITMAP、ARRAY 以及 STRUCT 等复杂类型。[#41476](https://github.com/StarRocks/starrocks/pull/41476)
+- 行列混存表支持 BITMAP、HLL、JSON、ARRAY、MAP 和 STRUCT 等复杂类型。[#41476](https://github.com/StarRocks/starrocks/pull/41476)
 - 新增内部 SQL 日志，其中包含统计信息和物化视图等相关的日志信息。[#40453](https://github.com/StarRocks/starrocks/pull/40453)
 
 ### 问题修复
