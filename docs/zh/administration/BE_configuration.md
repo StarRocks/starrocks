@@ -31,6 +31,8 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 
 ## BE 参数描述
 
+### Server
+
 <!--
 ##### cluster_id
 
@@ -41,6 +43,91 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 描述：
 - 引入版本：-
 -->
+
+##### priority_networks
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：以 CIDR 形式指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。
+- 引入版本：-
+
+##### mem_limit
+
+- 默认值：90%
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认的硬限制为服务器内存大小的 90%，软限制为 80%。如果您希望在同一台服务器上同时部署 StarRocks 和其他内存密集型服务，则需要配置此参数。
+- 引入版本：-
+
+##### num_threads_per_core
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：每个 CPU Core 启动的线程数。
+- 引入版本：-
+
+##### be_http_port
+
+- 默认值：8040
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：BE HTTP Server 端口。
+- 引入版本：-
+
+##### be_http_num_workers
+
+- 默认值：48
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：HTTP Server 线程数。
+- 引入版本：-
+
+##### be_exit_after_disk_write_hang_second
+
+- 默认值：60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：磁盘挂起后触发 BE 进程退出的等待时间。
+- 引入版本：-
+
+##### compress_rowbatches
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：BE 之间 RPC 通信是否压缩 RowBatch，用于查询层之间的数据传输。`true` 表示压缩，`false` 表示不压缩。
+- 引入版本：-
+
+<!--
+##### rpc_compress_ratio_threshold
+
+- 默认值：1.1
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### serialize_batch
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：BE 之间 RPC 通信是否序列化 RowBatch，用于查询层之间的数据传输。`true` 表示序列化，`false` 表示不进行序列化。
+- 引入版本：-
+
+#### Thrift
 
 ##### be_port
 
@@ -61,6 +148,59 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 描述：
 - 引入版本：-
 -->
+
+<!--
+##### thrift_connect_timeout_seconds
+
+- 默认值：3
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+##### thrift_client_retry_interval_ms
+
+- 默认值：100
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Thrift Client 默认的重试时间间隔。
+- 引入版本：-
+
+##### thrift_rpc_timeout_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Thrift RPC 超时的时长。
+- 引入版本：-
+
+<!--
+##### thrift_rpc_strict_mode
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### thrift_rpc_max_body_size
+
+- 默认值：0
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+#### bRPC
 
 ##### brpc_port
 
@@ -91,14 +231,25 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 引入版本：-
 -->
 
-##### priority_networks
+##### brpc_max_body_size
 
-- 默认值：空字符串
-- 类型：String
-- 单位：-
+- 默认值：2147483648
+- 类型：Int
+- 单位：Bytes
 - 是否动态：否
-- 描述：以 CIDR 形式指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。
+- 描述：bRPC 最大的包容量。
 - 引入版本：-
+
+<!--
+##### brpc_socket_max_unwritten_bytes
+
+- 默认值：1073741824
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
 
 <!--
 ##### enable_auto_adjust_pagecache
@@ -155,14 +306,7 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 引入版本：-
 -->
 
-##### mem_limit
-
-- 默认值：90%
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认的硬限制为服务器内存大小的 90%，软限制为 80%。如果您希望在同一台服务器上同时部署 StarRocks 和其他内存密集型服务，则需要配置此参数。
-- 引入版本：-
+#### Heartbeat
 
 ##### heartbeat_service_port
 
@@ -181,6 +325,162 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 是否动态：否
 - 描述：心跳线程数。
 - 引入版本：-
+
+### 日志
+
+##### sys_log_dir
+
+- 默认值：`${STARROCKS_HOME}/log`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：存放日志的地方，包括 INFO、WARNING、ERROR、FATAL 日志。
+- 引入版本：-
+
+##### sys_log_level
+
+- 默认值：INFO
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。
+- 引入版本：-
+
+##### sys_log_roll_mode
+
+- 默认值：SIZE-MB-1024
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：系统日志分卷的模式。有效值包括 `TIME-DAY`、`TIME-HOUR` 和 `SIZE-MB-` 大小。默认值表示日志被分割成大小为 1GB 的日志卷。
+- 引入版本：-
+
+##### sys_log_roll_num
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：日志卷保留的数目。
+- 引入版本：-
+
+##### sys_log_verbose_modules
+
+- 默认值：
+- 类型：Strings
+- 单位：-
+- 是否动态：否
+- 描述：日志打印的模块。有效值为 BE 的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。
+- 引入版本：-
+
+##### sys_log_verbose_level
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：日志显示的级别，用于控制代码中 VLOG 开头的日志输出。
+- 引入版本：-
+
+##### log_buffer_level
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：日志落盘的策略。默认值表示日志缓存在内存中。有效值为 `-1` 和 `0`。`-1` 表示日志不在内存中缓存。
+- 引入版本：-
+
+### 统计信息
+
+##### report_task_interval_seconds
+
+- 默认值：10
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：汇报单个任务的间隔。建表，删除表，导入，Schema Change 都可以被认定是任务。
+- 引入版本：-
+
+##### report_disk_state_interval_seconds
+
+- 默认值：60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：汇报磁盘状态的间隔。汇报各个磁盘的状态，以及其中数据量等。
+- 引入版本：-
+
+##### report_tablet_interval_seconds
+
+- 默认值：60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：汇报 Tablet 的间隔。汇报所有的 Tablet 的最新版本。
+- 引入版本：-
+
+##### report_workgroup_interval_seconds
+
+- 默认值：5
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：汇报 Workgroup 的间隔。汇报所有 Workgroup 的最新版本。
+- 引入版本：-
+
+<!--
+##### report_resource_usage_interval_ms
+
+- 默认值：1000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### status_report_interval
+
+- 默认值：5
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：查询汇报 Profile 的间隔，用于 FE 收集查询统计信息。
+- 引入版本：-
+
+<!--
+##### sleep_one_second
+
+- 默认值：1
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### sleep_five_seconds
+
+- 默认值：5
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+##### periodic_counter_update_period_ms
+
+- 默认值：500
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Counter 统计信息的间隔。
+- 引入版本：-
+
+### 存储
 
 <!--
 ##### create_tablet_worker_count
@@ -202,62 +502,13 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 描述：删除 Tablet 的线程数。
 - 引入版本：-
 
-##### push_worker_count_normal_priority
+##### alter_tablet_worker_count
 
 - 默认值：3
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：导入线程数，用于处理 NORMAL 优先级任务。
-- 引入版本：-
-
-##### push_worker_count_high_priority
-
-- 默认值：3
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：导入线程数，用于处理 HIGH 优先级任务。
-- 引入版本：-
-
-##### transaction_publish_version_worker_count
-
-- 默认值：0
-- 类型：Int
-- 单位：-
 - 是否动态：是
-- 描述：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用 CPU 核数的一半，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
-- 引入版本：-
-
-<!--
-##### transaction_apply_worker_count
-
-- 默认值：0
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### get_pindex_worker_count
-
-- 默认值：0
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### clear_transaction_task_worker_count
-
-- 默认值：1
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：清理事务的线程数。
+- 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
 - 引入版本：-
 
 <!--
@@ -281,15 +532,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 描述：
 - 引入版本：-
 -->
-
-##### alter_tablet_worker_count
-
-- 默认值：3
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
-- 引入版本：-
 
 <!--
 ##### parallel_clone_task_per_path
@@ -384,53 +626,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 引入版本：-
 -->
 
-##### report_task_interval_seconds
-
-- 默认值：10
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：汇报单个任务的间隔。建表，删除表，导入，Schema Change 都可以被认定是任务。
-- 引入版本：-
-
-##### report_disk_state_interval_seconds
-
-- 默认值：60
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：汇报磁盘状态的间隔。汇报各个磁盘的状态，以及其中数据量等。
-- 引入版本：-
-
-##### report_tablet_interval_seconds
-
-- 默认值：60
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：汇报 Tablet 的间隔。汇报所有的 Tablet 的最新版本。
-- 引入版本：-
-
-##### report_workgroup_interval_seconds
-
-- 默认值：5
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：汇报 Workgroup 的间隔。汇报所有 Workgroup 的最新版本。
-- 引入版本：-
-
-<!--
-##### report_resource_usage_interval_ms
-
-- 默认值：1000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### max_download_speed_kbps
 
 - 默认值：50000
@@ -457,397 +652,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 是否动态：是
 - 描述：单个 HTTP 请求持续以低于 `download_low_speed_limit_kbps` 值的速度运行时，允许运行的最长时间。在配置项中指定的时间跨度内，当一个 HTTP 请求持续以低于该值的速度运行时，该请求将被中止。
 - 引入版本：-
-
-<!--
-##### sleep_one_second
-
-- 默认值：1
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### sleep_five_seconds
-
-- 默认值：5
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### compact_threads
-
-- 默认值：4
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：并发 Compaction 任务的最大线程数。自 v3.1.7，v3.2.2 起变为动态参数。
-- 引入版本：v3.0.0
-
-<!--
-##### compact_thread_pool_queue_size
-
-- 默认值：100
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### replication_threads
-
-- 默认值：0
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### clear_expired_replcation_snapshots_interval_seconds
-
-- 默认值：3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### sys_log_dir
-
-- 默认值：`${STARROCKS_HOME}/log`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：存放日志的地方，包括 INFO、WARNING、ERROR、FATAL 日志。
-- 引入版本：-
-
-##### user_function_dir
-
-- 默认值：`${STARROCKS_HOME}/lib/udf`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：UDF 存放的路径。
-- 引入版本：-
-
-##### sys_log_level
-
-- 默认值：INFO
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：日志级别。有效值：INFO、WARNING、ERROR、FATAL。
-- 引入版本：-
-
-##### sys_log_roll_mode
-
-- 默认值：SIZE-MB-1024
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：系统日志分卷的模式。有效值包括 `TIME-DAY`、`TIME-HOUR` 和 `SIZE-MB-` 大小。默认值表示日志被分割成大小为 1GB 的日志卷。
-- 引入版本：-
-
-##### sys_log_roll_num
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：日志卷保留的数目。
-- 引入版本：-
-
-##### sys_log_verbose_modules
-
-- 默认值：
-- 类型：Strings
-- 单位：-
-- 是否动态：否
-- 描述：日志打印的模块。有效值为 BE 的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。
-- 引入版本：-
-
-##### sys_log_verbose_level
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：日志显示的级别，用于控制代码中 VLOG 开头的日志输出。
-- 引入版本：-
-
-##### log_buffer_level
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：日志落盘的策略。默认值表示日志缓存在内存中。有效值为 `-1` 和 `0`。`-1` 表示日志不在内存中缓存。
-- 引入版本：-
-
-<!--
-##### pull_load_task_dir
-
-- 默认值：`${STARROCKS_HOME}/var/pull_load`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### web_log_bytes
-
-- 默认值：1048576
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### be_service_threads
-
-- 默认值：64
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### default_query_options
-
-- 默认值：空字符串
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### num_threads_per_core
-
-- 默认值：3
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：每个 CPU Core 启动的线程数。
-- 引入版本：-
-
-##### compress_rowbatches
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：BE 之间 RPC 通信是否压缩 RowBatch，用于查询层之间的数据传输。`true` 表示压缩，`false` 表示不压缩。
-- 引入版本：-
-
-<!--
-##### rpc_compress_ratio_threshold
-
-- 默认值：1.1
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### serialize_batch
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：A boolean value to control whether to serialize the row batches in RPCs between BEs. `true` indicates serializing the row batches, and `false` indicates -->
-not serializing them.
-
-##### status_report_interval
-
-- 默认值：5
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：查询汇报 Profile 的间隔，用于 FE 收集查询统计信息。
-- 引入版本：-
-
-<!--
-##### local_library_dir
-
-- 默认值：`${UDF_RUNTIME_DIR}`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### scanner_thread_pool_thread_num
-
-- 默认值：48
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存储引擎并发扫描磁盘的线程数，统一管理在线程池中。
-- 引入版本：-
-
-##### scanner_thread_pool_queue_size
-
-- 默认值：102400
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：存储引擎支持的扫描任务数。
-- 引入版本：-
-
-<!--
-##### udf_thread_pool_size
-
-- 默认值：1
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### port
-
-- 默认值：20001
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### thrift_connect_timeout_seconds
-
-- 默认值：3
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### broker_write_timeout_seconds
-
-- 默认值：30
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### thrift_client_retry_interval_ms
-
-- 默认值：100
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：Thrift Client 默认的重试时间间隔。
-- 引入版本：-
-
-##### scanner_row_num
-
-- 默认值：16384
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：每个扫描线程单次执行最多返回的数据行数。
-- 引入版本：-
-
-<!--
-##### max_hdfs_scanner_num
-
-- 默认值：50
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### max_scan_key_num
-
-- 默认值：1024
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：查询最多拆分的 Scan Key 数目。
-- 引入版本：-
-
-##### max_pushdown_conditions_per_column
-
-- 默认值：1024
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：单列上允许下推的最大谓词数量，如果超出数量限制，谓词不会下推到存储层。
-- 引入版本：-
-
-##### exchg_node_buffer_size_bytes
-
-- 默认值：10485760
-- 类型：Int
-- 单位：Bytes
-- 是否动态：是
-- 描述：Exchange 算子中，单个查询在接收端的 Buffer 容量。这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。
-- 引入版本：-
-
-<!--
-##### sorter_block_size
-
-- 默认值：8388608
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### column_dictionary_key_ratio_threshold
-
-- 默认值：0
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### column_dictionary_key_size_threshold
-
-- 默认值：0
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ##### memory_limitation_per_thread_for_schema_change
 
@@ -897,11 +701,22 @@ not serializing them.
 - 引入版本：-
 
 <!--
-##### profile_report_interval
+##### replication_threads
 
-- 默认值：30
+- 默认值：0
 - 类型：Int
-- 单位：
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### clear_expired_replcation_snapshots_interval_seconds
+
+- 默认值：3600
+- 类型：Int
+- 单位：Seconds
 - 是否动态：是
 - 描述：
 - 引入版本：-
@@ -1018,93 +833,20 @@ not serializing them.
 - 描述：回收站清理的间隔。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259200 变为 86400。
 - 引入版本：-
 
-##### file_descriptor_cache_capacity
+##### compact_threads
 
-- 默认值：16384
+- 默认值：4
 - 类型：Int
 - 单位：-
-- 是否动态：否
-- 描述：文件描述符缓存的容量。
-- 引入版本：-
+- 是否动态：是
+- 描述：并发 Compaction 任务的最大线程数。自 v3.1.7，v3.2.2 起变为动态参数。
+- 引入版本：v3.0.0
 
-##### min_file_descriptor_number
+<!--
+##### compact_thread_pool_queue_size
 
-- 默认值：60000
+- 默认值：100
 - 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：BE 进程中文件描述符的最小数量。
-- 引入版本：-
-
-##### index_stream_cache_capacity
-
-- 默认值：10737418240
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：BloomFilter/Min/Max 等统计信息缓存的容量。
-- 引入版本：-
-
-##### storage_page_cache_limit
-
-- 默认值：20%
-- 类型：String
-- 单位：-
-- 是否动态：是
-- 描述：PageCache 的容量，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。
-- 引入版本：-
-
-##### disable_storage_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启 PageCache。
-  - 开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，
-  - 对于查询重复性高的场景，会大幅提升查询效率。
-  - `true` 表示不开启。
-  - 自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。
-- 引入版本：-
-
-<!--
-##### enable_bitmap_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否为 Bitmap index 开启 Memory Cache。使用 Bitmap index 加速点查时，可以考虑开启。
-- 引入版本：v3.1
--->
-
-<!--
-##### enable_zonemap_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_ordinal_index_memory_page_cache
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### disable_column_pool
-
-- 默认值：true
-- 类型：Boolean
 - 单位：-
 - 是否动态：否
 - 描述：
@@ -1457,31 +1199,359 @@ not serializing them.
 - 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_mem_limit` 参数的值。
 - 引入版本：-
 
-##### be_http_port
+##### memory_maintenance_sleep_time_s
 
-- 默认值：8040
+- 默认值：10
 - 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：BE HTTP Server 端口。
-- 引入版本：-
-
-##### be_http_num_workers
-
-- 默认值：48
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：HTTP Server 线程数。
-- 引入版本：-
-
-##### periodic_counter_update_period_ms
-
-- 默认值：500
-- 类型：Int
-- 单位：Milliseconds
+- 单位：Seconds
 - 是否动态：是
-- 描述：Counter 统计信息的间隔。
+- 描述：触发 ColumnPool GC 任务的时间间隔。StarRocks 会周期运行 GC 任务，尝试将空闲内存返还给操作系统。
+- 引入版本：-
+
+##### sync_tablet_meta
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Tablet 元数据同步。`true` 表示开启，`false` 表示不开启。
+- 引入版本：-
+
+##### storage_flood_stage_usage_percent
+
+- 默认值：95
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：BE 存储目录整体磁盘空间使用率的硬上限。如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，StarRocks 会拒绝 Load 和 Restore 作业。需要同步修改 FE 配置 `storage_usage_hard_limit_percent` 以使其生效。
+- 引入版本：-
+
+##### storage_flood_stage_left_capacity_bytes
+
+- 默认值：107374182400
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：BE 存储目录整体磁盘剩余空间的硬限制。如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，StarRocks 会拒绝 Load 和 Restore 作业，默认 100GB。需要同步修改 FE 配置 `storage_usage_hard_limit_reserve_bytes` 以使其生效。
+- 引入版本：-
+
+<!--
+##### storage_high_usage_disk_protect_ratio
+
+- 默认值：0.1
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### tablet_meta_checkpoint_min_new_rowsets_num
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：自上次 TabletMeta Checkpoint 至今新创建的 Rowset 数量。
+- 引入版本：-
+
+##### tablet_meta_checkpoint_min_interval_secs
+
+- 默认值：600
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：TabletMeta Checkpoint 线程轮询的时间间隔。
+- 引入版本：-
+
+##### tablet_map_shard_size
+
+- 默认值：32
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Tablet Map Shard 大小。该值必须是二的倍数。
+- 引入版本：-
+
+##### tablet_max_versions
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个 Tablet 上允许的最大版本数。如果超过该值，新的写入请求会失败。
+- 引入版本：-
+
+##### tablet_max_pending_versions
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键表每个 Tablet 上允许已提交 (Commit) 但是未 Apply 的最大版本数。
+- 引入版本：-
+
+##### tablet_stat_cache_update_interval_second
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：Tablet Stat Cache 的更新间隔。
+- 引入版本：-
+
+##### enable_bitmap_union_disk_format_with_set
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启 Bitmap 新存储格式，可以优化 bitmap_union 性能。`true` 表示开启，`false` 表示不开启。
+- 引入版本：-
+
+<!--
+##### l0_l1_merge_ratio
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### l0_max_file_size
+
+- 默认值：209715200
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### l0_min_mem_usage
+
+- 默认值：2097152
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### l0_max_mem_usage
+
+- 默认值：104857600
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### l0_snapshot_size
+
+- 默认值：16777216
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### max_tmp_l1_num
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### enable_parallel_get_and_bf
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### enable_pindex_minor_compaction
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### max_allow_pindex_l2_num
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### pindex_major_compaction_num_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### pindex_major_compaction_limit_per_disk
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题。
+- 引入版本：v3.0.9
+
+<!--
+##### pindex_major_compaction_schedule_interval_seconds
+
+- 默认值：15
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### pindex_shared_data_gc_evict_interval_seconds
+
+- 默认值：18000
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### enable_pindex_filter
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### enable_pindex_compression
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### max_bf_read_bytes_percent
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### enable_pindex_rebuild_in_compaction
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+### 导入导出
+
+##### push_worker_count_normal_priority
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：导入线程数，用于处理 NORMAL 优先级任务。
+- 引入版本：-
+
+##### push_worker_count_high_priority
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：导入线程数，用于处理 HIGH 优先级任务。
+- 引入版本：-
+
+##### transaction_publish_version_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用 CPU 核数的一半，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
+- 引入版本：-
+
+<!--
+##### transaction_apply_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### get_pindex_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### clear_transaction_task_worker_count
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：清理事务的线程数。
 - 引入版本：-
 
 ##### load_data_reserve_hours
@@ -1532,15 +1602,6 @@ not serializing them.
 - 描述：
 - 引入版本：-
 -->
-
-##### be_exit_after_disk_write_hang_second
-
-- 默认值：60
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：磁盘挂起后触发 BE 进程退出的等待时间。
-- 引入版本：-
 
 <!--
 ##### dictionary_encoding_ratio
@@ -1646,10 +1707,77 @@ not serializing them.
 - 描述：流式导入单个 JSON 文件大小的上限。
 - 引入版本：-
 
-<!--
-##### tablet_writer_open_rpc_timeout_sec
+##### write_buffer_size
 
-- 默认值：60
+- 默认值：104857600
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：MemTable 在内存中的 Buffer 大小，超过这个限制会触发 Flush。
+- 引入版本：-
+
+##### load_process_max_memory_limit_bytes
+
+- 默认值：107374182400
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：单节点上所有的导入线程占据的内存上限。
+- 引入版本：-
+
+##### load_process_max_memory_limit_percent
+
+- 默认值：30
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：单节点上所有的导入线程占据的内存上限比例。
+- 引入版本：-
+
+<!--
+##### enable_new_load_on_memory_limit_exceeded
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### txn_commit_rpc_timeout_ms (Deprecated)
+
+- 默认值：60000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Transaction Commit RPC 超时的时长。该参数自 v3.1.0 起弃用。
+- 引入版本：-
+
+##### max_consumer_num_per_group
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Routine load 中，每个 Consumer Group 内最大的 Consumer 数量。
+- 引入版本：-
+
+<!--
+##### max_pulsar_consumer_num_per_group
+
+- 默认值：10
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### routine_load_kafka_timeout_second
+
+- 默认值：10
 - 类型：Int
 - 单位：Seconds
 - 是否动态：否
@@ -1658,23 +1786,278 @@ not serializing them.
 -->
 
 <!--
-##### make_snapshot_rpc_timeout_ms
+##### routine_load_pulsar_timeout_second
 
-- 默认值：20000
+- 默认值：10
 - 类型：Int
-- 单位：Milliseconds
+- 单位：Seconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+##### flush_thread_num_per_store
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个 Store 用以 Flush MemTable 的线程数。
+- 引入版本：-
+
+##### max_runnings_transactions_per_txn_map
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个分区内部同时运行的最大事务数量。
+- 引入版本：-
+
+##### enable_stream_load_verbose_log
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。`true` 表示启用，`false` 表示不启用。
+- 引入版本：v2.5.17, v3.0.9, v3.1.6, v3.2.1
+
+### 查询引擎
+
+
+##### scanner_thread_pool_thread_num
+
+- 默认值：48
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存储引擎并发扫描磁盘的线程数，统一管理在线程池中。
+- 引入版本：-
+
+##### scanner_thread_pool_queue_size
+
+- 默认值：102400
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：存储引擎支持的扫描任务数。
+- 引入版本：-
+
+<!--
+##### udf_thread_pool_size
+
+- 默认值：1
+- 类型：Int
+- 单位：-
 - 是否动态：否
 - 描述：
 - 引入版本：-
 -->
 
 <!--
-##### olap_table_sink_send_interval_ms
+##### port
 
-- 默认值：10
+- 默认值：20001
 - 类型：Int
-- 单位：Milliseconds
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### broker_write_timeout_seconds
+
+- 默认值：30
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+##### scanner_row_num
+
+- 默认值：16384
+- 类型：Int
+- 单位：-
 - 是否动态：是
+- 描述：每个扫描线程单次执行最多返回的数据行数。
+- 引入版本：-
+
+<!--
+##### max_hdfs_scanner_num
+
+- 默认值：50
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+##### max_scan_key_num
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询最多拆分的 Scan Key 数目。
+- 引入版本：-
+
+##### max_pushdown_conditions_per_column
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单列上允许下推的最大谓词数量，如果超出数量限制，谓词不会下推到存储层。
+- 引入版本：-
+
+##### exchg_node_buffer_size_bytes
+
+- 默认值：10485760
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Exchange 算子中，单个查询在接收端的 Buffer 容量。这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。
+- 引入版本：-
+
+<!--
+##### sorter_block_size
+
+- 默认值：8388608
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### column_dictionary_key_ratio_threshold
+
+- 默认值：0
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### column_dictionary_key_size_threshold
+
+- 默认值：0
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+
+<!--
+##### profile_report_interval
+
+- 默认值：30
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### file_descriptor_cache_capacity
+
+- 默认值：16384
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：文件描述符缓存的容量。
+- 引入版本：-
+
+##### min_file_descriptor_number
+
+- 默认值：60000
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：BE 进程中文件描述符的最小数量。
+- 引入版本：-
+
+##### index_stream_cache_capacity
+
+- 默认值：10737418240
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：BloomFilter/Min/Max 等统计信息缓存的容量。
+- 引入版本：-
+
+##### storage_page_cache_limit
+
+- 默认值：20%
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：PageCache 的容量，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。
+- 引入版本：-
+
+##### disable_storage_page_cache
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启 PageCache。
+  - 开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，
+  - 对于查询重复性高的场景，会大幅提升查询效率。
+  - `true` 表示不开启。
+  - 自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。
+- 引入版本：-
+
+<!--
+##### enable_bitmap_index_memory_page_cache
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Bitmap index 开启 Memory Cache。使用 Bitmap index 加速点查时，可以考虑开启。
+- 引入版本：v3.1
+-->
+
+<!--
+##### enable_zonemap_index_memory_page_cache
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### enable_ordinal_index_memory_page_cache
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### disable_column_pool
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
 - 描述：
 - 引入版本：-
 -->
@@ -1772,26 +2155,6 @@ not serializing them.
 - 引入版本：-
 -->
 
-##### enable_token_check
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启 Token 检验。`true` 表示开启，`false` 表示不开启。
-- 引入版本：-
-
-<!--
-##### enable_system_metrics
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
 ##### enable_prefetch
 
 - 默认值：true
@@ -1799,90 +2162,6 @@ not serializing them.
 - 单位：-
 - 是否动态：是
 - 描述：是否开启查询提前预取。`true` 表示开启，`false` 表示不开启。
-- 引入版本：-
-
-<!--
-##### num_cores
-
-- 默认值：0
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ignore_broken_disk
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### scratch_dirs
-
-- 默认值：/tmp
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### madvise_huge_pages
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### mmap_buffers
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### memory_maintenance_sleep_time_s
-
-- 默认值：10
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：触发 ColumnPool GC 任务的时间间隔。StarRocks 会周期运行 GC 任务，尝试将空闲内存返还给操作系统。
-- 引入版本：-
-
-<!--
-##### memory_max_alignment
-
-- 默认值：16
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### write_buffer_size
-
-- 默认值：104857600
-- 类型：Int
-- 单位：Bytes
-- 是否动态：是
-- 描述：MemTable 在内存中的 Buffer 大小，超过这个限制会触发 Flush。
 - 引入版本：-
 
 <!--
@@ -1896,108 +2175,6 @@ not serializing them.
 - 引入版本：-
 -->
 
-##### load_process_max_memory_limit_bytes
-
-- 默认值：107374182400
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：单节点上所有的导入线程占据的内存上限。
-- 引入版本：-
-
-##### load_process_max_memory_limit_percent
-
-- 默认值：30
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：单节点上所有的导入线程占据的内存上限比例。
-- 引入版本：-
-
-<!--
-##### enable_new_load_on_memory_limit_exceeded
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### compaction_max_memory_limit
-
-- 默认值：-1
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### compaction_max_memory_limit_percent
-
-- 默认值：100
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### compaction_memory_limit_per_worker
-
-- 默认值：2147483648
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：单个 Compaction 线程的最大内存使用量。
-- 引入版本：-
-
-<!--
-##### consistency_max_memory_limit
-
-- 默认值：10G
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### consistency_max_memory_limit_percent
-
-- 默认值：20
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### update_memory_limit_percent
-
-- 默认值：60
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### tablet_stat_cache_update_interval_second
-
-- 默认值：300
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：Tablet Stat Cache 的更新间隔。
-- 引入版本：-
-
 ##### result_buffer_cancelled_interval_time
 
 - 默认值：300
@@ -2006,119 +2183,6 @@ not serializing them.
 - 是否动态：是
 - 描述：BufferControlBlock 释放数据的等待时间。
 - 引入版本：-
-
-<!--
-##### priority_queue_remaining_tasks_increased_frequency
-
-- 默认值：512
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### sync_tablet_meta
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否启用 Tablet 元数据同步。`true` 表示开启，`false` 表示不开启。
-- 引入版本：-
-
-##### thrift_rpc_timeout_ms
-
-- 默认值：5000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：Thrift RPC 超时的时长。
-- 引入版本：-
-
-<!--
-##### thrift_rpc_strict_mode
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### thrift_rpc_max_body_size
-
-- 默认值：0
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### txn_commit_rpc_timeout_ms (Deprecated)
-
-- 默认值：60000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：Transaction Commit RPC 超时的时长。该参数自 v3.1.0 起弃用。
-- 引入版本：-
-
-<!--
-##### enable_metric_calculator
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### max_consumer_num_per_group
-
-- 默认值：3
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：Routine load 中，每个 Consumer Group 内最大的 Consumer 数量。
-- 引入版本：-
-
-<!--
-##### max_pulsar_consumer_num_per_group
-
-- 默认值：10
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### routine_load_kafka_timeout_second
-
-- 默认值：10
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### routine_load_pulsar_timeout_second
-
-- 默认值：10
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### max_memory_sink_batch_count
 
@@ -2137,81 +2201,6 @@ not serializing them.
 - 是否动态：是
 - 描述：Scan Context 的清理间隔。
 - 引入版本：-
-
-<!--
-##### es_scroll_keepalive
-
-- 默认值：5m
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### es_http_timeout_ms
-
-- 默认值：5000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### es_index_max_result_window
-
-- 默认值：10000
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_client_cache_size_per_host
-
-- 默认值：10
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### small_file_dir
-
-- 默认值：`${STARROCKS_HOME}/lib/small_file/`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：保存文件管理器下载的文件的目录。
-- 引入版本：-
-
-<!--
-##### path_gc_check
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### path_gc_check_interval_second
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### path_gc_check_step
 
@@ -2238,369 +2227,6 @@ not serializing them.
 - 单位：Seconds
 - 是否动态：是
 - 描述：GC 线程清理过期数据的间隔时间。
-- 引入版本：-
-
-##### storage_flood_stage_usage_percent
-
-- 默认值：95
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：BE 存储目录整体磁盘空间使用率的硬上限。如果空间使用率超过该值且剩余空间小于 `storage_flood_stage_left_capacity_bytes`，StarRocks 会拒绝 Load 和 Restore 作业。需要同步修改 FE 配置 `storage_usage_hard_limit_percent` 以使其生效。
-- 引入版本：-
-
-##### storage_flood_stage_left_capacity_bytes
-
-- 默认值：107374182400
-- 类型：Int
-- 单位：Bytes
-- 是否动态：是
-- 描述：BE 存储目录整体磁盘剩余空间的硬限制。如果剩余空间小于该值且空间使用率超过 `storage_flood_stage_usage_percent`，StarRocks 会拒绝 Load 和 Restore 作业，默认 100GB。需要同步修改 FE 配置 `storage_usage_hard_limit_reserve_bytes` 以使其生效。
-- 引入版本：-
-
-<!--
-##### storage_high_usage_disk_protect_ratio
-
-- 默认值：0.1
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### flush_thread_num_per_store
-
-- 默认值：2
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：每个 Store 用以 Flush MemTable 的线程数。
-- 引入版本：-
-
-##### tablet_meta_checkpoint_min_new_rowsets_num
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：自上次 TabletMeta Checkpoint 至今新创建的 Rowset 数量。
-- 引入版本：-
-
-##### tablet_meta_checkpoint_min_interval_secs
-
-- 默认值：600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：TabletMeta Checkpoint 线程轮询的时间间隔。
-- 引入版本：-
-
-##### brpc_max_body_size
-
-- 默认值：2147483648
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：bRPC 最大的包容量。
-- 引入版本：-
-
-<!--
-##### brpc_socket_max_unwritten_bytes
-
-- 默认值：1073741824
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### max_runnings_transactions_per_txn_map
-
-- 默认值：100
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：每个分区内部同时运行的最大事务数量。
-- 引入版本：-
-
-##### tablet_map_shard_size
-
-- 默认值：32
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：Tablet Map Shard 大小。该值必须是二的倍数。
-- 引入版本：-
-
-<!--
-##### pk_index_map_shard_size
-
-- 默认值：4096
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### plugin_path
-
-- 默认值：`${STARROCKS_HOME}/plugin`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### txn_map_shard_size
-
-- 默认值：128
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### txn_shard_size
-
-- 默认值：1024
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ignore_load_tablet_failure
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### ignore_rowset_stale_unconsistent_delete
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### vector_chunk_size
-
-- 默认值：4096
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### late_materialization_ratio
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### metric_late_materialization_ratio
-
-- 默认值：1000
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_transmit_batched_bytes
-
-- 默认值：262144
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### bitmap_max_filter_items
-
-- 默认值：30
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### bitmap_max_filter_ratio
-
-- 默认值：1
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### bitmap_filter_enable_not_equal
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### storage_format_version
-
-- 默认值：2
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### null_encoding
-
-- 默认值：0
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### pre_aggregate_factor
-
-- 默认值：80
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### sys_minidump_enable
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### sys_minidump_dir
-
-- 默认值：`${STARROCKS_HOME}`
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### sys_minidump_max_files
-
-- 默认值：16
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### sys_minidump_limit
-
-- 默认值：20480
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### sys_minidump_interval
-
-- 默认值：600
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### dump_trace_info
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-##### tablet_max_versions
-
-- 默认值：1000
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：每个 Tablet 上允许的最大版本数。如果超过该值，新的写入请求会失败。
-- 引入版本：-
-
-##### tablet_max_pending_versions
-
-- 默认值：1000
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：主键表每个 Tablet 上允许已提交 (Commit) 但是未 Apply 的最大版本数。
-- 引入版本：-
-
-##### enable_bitmap_union_disk_format_with_set
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启 Bitmap 新存储格式，可以优化 bitmap_union 性能。`true` 表示开启，`false` 表示不开启。
 - 引入版本：-
 
 <!--
@@ -3504,6 +3130,17 @@ not serializing them.
 - 引入版本：-
 -->
 
+##### query_cache_capacity
+
+- 默认值：536870912
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：指定 Query Cache 的大小。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
+- 引入版本：-
+
+### 存算分离
+
 ##### starlet_port
 
 - 默认值：9070
@@ -3987,6 +3624,8 @@ not serializing them.
 - 引入版本：-
 -->
 
+### 数据湖
+
 ##### jdbc_connection_pool_size
 
 - 默认值：8
@@ -4123,24 +3762,6 @@ not serializing them.
 - 描述：
 - 引入版本：-
 -->
-
-##### max_length_for_to_base64
-
-- 默认值：200000
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：to_base64() 函数输入值的最大长度。
-- 引入版本：-
-
-##### max_length_for_bitmap_function
-
-- 默认值：1000000
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：bitmap 函数输入值的最大长度。
-- 引入版本：-
 
 ##### datacache_enable
 
@@ -4406,200 +4027,6 @@ not serializing them.
 - 描述：
 - 引入版本：-
 -->
-
-<!--
-##### l0_l1_merge_ratio
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### l0_max_file_size
-
-- 默认值：209715200
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### l0_min_mem_usage
-
-- 默认值：2097152
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### l0_max_mem_usage
-
-- 默认值：104857600
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### l0_snapshot_size
-
-- 默认值：16777216
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_tmp_l1_num
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_parallel_get_and_bf
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_pindex_minor_compaction
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_allow_pindex_l2_num
-
-- 默认值：5
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### pindex_major_compaction_num_threads
-
-- 默认值：0
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### pindex_major_compaction_limit_per_disk
-
-- 默认值：1
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题。
-- 引入版本：v3.0.9
-
-<!--
-##### pindex_major_compaction_schedule_interval_seconds
-
-- 默认值：15
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### pindex_shared_data_gc_evict_interval_seconds
-
-- 默认值：18000
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_pindex_filter
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_pindex_compression
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### max_bf_read_bytes_percent
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_pindex_rebuild_in_compaction
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### query_cache_capacity
-
-- 默认值：536870912
-- 类型：Int
-- 单位：Bytes
-- 是否动态：否
-- 描述：指定 Query Cache 的大小。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
-- 引入版本：-
 
 <!--
 ##### query_cache_num_lanes_per_driver
@@ -4876,15 +4303,6 @@ not serializing them.
 - 引入版本：-
 -->
 
-##### enable_stream_load_verbose_log
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。`true` 表示启用，`false` 表示不启用。
-- 引入版本：v2.5.17, v3.0.9, v3.1.6, v3.2.1
-
 <!--
 ##### get_txn_status_internal_sec
 
@@ -5089,3 +4507,578 @@ not serializing them.
 - 描述：
 - 引入版本：-
 -->
+
+### 其他
+
+##### user_function_dir
+
+- 默认值：`${STARROCKS_HOME}/lib/udf`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：UDF 存放的路径。
+- 引入版本：-
+
+<!--
+##### pull_load_task_dir
+
+- 默认值：`${STARROCKS_HOME}/var/pull_load`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### web_log_bytes
+
+- 默认值：1048576
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### be_service_threads
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### default_query_options
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### local_library_dir
+
+- 默认值：`${UDF_RUNTIME_DIR}`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### tablet_writer_open_rpc_timeout_sec
+
+- 默认值：60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### make_snapshot_rpc_timeout_ms
+
+- 默认值：20000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### olap_table_sink_send_interval_ms
+
+- 默认值：10
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### enable_token_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启 Token 检验。`true` 表示开启，`false` 表示不开启。
+- 引入版本：-
+
+<!--
+##### enable_system_metrics
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### num_cores
+
+- 默认值：0
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### ignore_broken_disk
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### scratch_dirs
+
+- 默认值：/tmp
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### madvise_huge_pages
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### mmap_buffers
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### memory_max_alignment
+
+- 默认值：16
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### consistency_max_memory_limit
+
+- 默认值：10G
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### consistency_max_memory_limit_percent
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### update_memory_limit_percent
+
+- 默认值：60
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### priority_queue_remaining_tasks_increased_frequency
+
+- 默认值：512
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### enable_metric_calculator
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### es_scroll_keepalive
+
+- 默认值：5m
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### es_http_timeout_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### es_index_max_result_window
+
+- 默认值：10000
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### max_client_cache_size_per_host
+
+- 默认值：10
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+##### small_file_dir
+
+- 默认值：`${STARROCKS_HOME}/lib/small_file/`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：保存文件管理器下载的文件的目录。
+- 引入版本：-
+
+<!--
+##### path_gc_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### path_gc_check_interval_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### pk_index_map_shard_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### plugin_path
+
+- 默认值：`${STARROCKS_HOME}/plugin`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### txn_map_shard_size
+
+- 默认值：128
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### txn_shard_size
+
+- 默认值：1024
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### ignore_load_tablet_failure
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### ignore_rowset_stale_unconsistent_delete
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### vector_chunk_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### late_materialization_ratio
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### metric_late_materialization_ratio
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### max_transmit_batched_bytes
+
+- 默认值：262144
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### bitmap_max_filter_items
+
+- 默认值：30
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### bitmap_max_filter_ratio
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### bitmap_filter_enable_not_equal
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### storage_format_version
+
+- 默认值：2
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### null_encoding
+
+- 默认值：0
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### pre_aggregate_factor
+
+- 默认值：80
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### sys_minidump_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### sys_minidump_dir
+
+- 默认值：`${STARROCKS_HOME}`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### sys_minidump_max_files
+
+- 默认值：16
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### sys_minidump_limit
+
+- 默认值：20480
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### sys_minidump_interval
+
+- 默认值：600
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### dump_trace_info
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+##### max_length_for_to_base64
+
+- 默认值：200000
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：to_base64() 函数输入值的最大长度。
+- 引入版本：-
+
+##### max_length_for_bitmap_function
+
+- 默认值：1000000
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：bitmap 函数输入值的最大长度。
+- 引入版本：-

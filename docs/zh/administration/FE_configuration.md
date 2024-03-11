@@ -27,7 +27,9 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 >
 > 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
 
-## 配置 FE 动态参数
+## 配置 FE 参数
+
+### 配置 FE 动态参数
 
 您可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
 
@@ -39,7 +41,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 >
 > 动态设置的配置项，在 FE 重启之后会恢复成 **fe.conf** 文件中的配置或者默认值。如果需要让配置长期生效，建议设置完之后同时修改 **fe.conf** 文件，防止重启后修改失效。
 
-## 配置 FE 静态参数
+### 配置 FE 静态参数
 
 FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。
 
@@ -393,7 +395,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 引入版本：-
 -->
 
-### 服务器
+### Server
 
 ##### frontend_address
 
