@@ -1,4 +1,4 @@
-# regexp_extract
+# regexp_extract_all
 
 ## Description
 
