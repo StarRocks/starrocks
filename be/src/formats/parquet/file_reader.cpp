@@ -171,9 +171,11 @@ Status FileReader::_get_footer() {
     int64_t file_metadata_size = 0;
     RETURN_IF_ERROR(_parse_footer(&_file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
-        FileMetaDataPtr capture = _file_metadata;
-        auto deleter = [capture]() {};
-        Status st = _cache->write_object(_metacache_key, &_file_metadata, file_metadata_size, deleter, &_cache_handle);
+        // cache does not understand shared ptr at all.
+        // so we have to new a object to hold this shared ptr.
+        FileMetaDataPtr* capture = new FileMetaDataPtr(_file_metadata);
+        auto deleter = [capture]() { delete capture; };
+        Status st = _cache->write_object(_metacache_key, capture, file_metadata_size, deleter, &_cache_handle);
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
