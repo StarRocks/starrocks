@@ -1583,4 +1583,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertCContains(plan, "C_NAME-->[-Infinity, Infinity, 0.0, 25.0, 600000.0] ESTIMATE",
                 "C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE");
     }
+
+    @Test
+    public void testOneTabletDistinctAgg() throws Exception {
+        String sql = "select sum(id), group_concat(distinct name) from skew_table where id = 1 group by id";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
 }
