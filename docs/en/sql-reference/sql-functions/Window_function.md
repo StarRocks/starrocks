@@ -7,22 +7,22 @@ displayed_sidebar: "English"
 - [Window functions](#window-functions)
   - [Background](#background)
   - [Usage](#usage)
-    - [Functions](#functions)
     - [PARTITION BY clause](#partition-by-clause)
     - [ORDER BY clause](#order-by-clause)
     - [Window clause](#window-clause)
-  - [Function Examples](#function-examples)
+  - [Window function sample table](#window-function-sample-table)
+  - [Function examples](#function-examples)
     - [AVG()](#avg)
     - [COUNT()](#count)
     - [CUME\_DIST()](#cume_dist)
     - [DENSE\_RANK()](#dense_rank)
-    - [NTILE()](#ntile)
     - [FIRST\_VALUE()](#first_value)
-    - [LAG()](#lag)
     - [LAST\_VALUE()](#last_value)
+    - [LAG()](#lag)
     - [LEAD()](#lead)
     - [MAX()](#max)
     - [MIN()](#min)
+    - [NTILE()](#ntile)
     - [PERCENT\_RANK()](#percent_rank)
     - [RANK()](#rank)
     - [ROW\_NUMBER()](#row_number)
@@ -49,17 +49,6 @@ function(args) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ```
-
-### Functions
-
-Currently supported functions include:
-
-* MIN(), MAX(), COUNT(), SUM(), AVG()
-* FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
-* ROW_NUMBER(), RANK(), DENSE_RANK()
-* CUME_DIST(), PERCENT_RANK(), QUALIFY()
-* NTILE()
-* VARIANCE(), VAR_SAMP(), STD(), STDDEV_SAMP(), COVAR_SAMP(), COVAR_POP(), CORR()
 
 ### PARTITION BY clause
 
@@ -89,40 +78,80 @@ Syntax:
 ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
 ```
 
-Example:
+## Window function sample table
 
-Suppose we have the following stock data, the stock symbol is JDR, and the closing price is the daily closing price.
+Many of the window function examples below use data in this sample table.
 
 ```SQL
-create table stock_ticker (
-    stock_symbol string,
-    closing_price decimal(8,2),
-    closing_date timestamp);
+CREATE TABLE `scores` (
+    `id` int(11) NULL,
+    `name` varchar(11) NULL,
+    `subject` varchar(11) NULL,
+    `score` int(11) NULL
+  )
+DISTRIBUTED BY HASH(`score`) BUCKETS 10;
 
--- ...load some data...
+INSERT INTO `scores` VALUES
+  (1, "lily", "math", NULL),
+  (1, "lily", "english", 100),
+  (1, "lily", "physics", 60),
+  (2, "tom", "math", 80),
+  (2, "tom", "english", 98),
+  (2, "tom", "physics", NULL),
+  (3, "jack", "math", 95),
+  (3, "jack", "english", NULL),
+  (3, "jack", "physics", 99),
+  (4, "amy", "math", 80),
+  (4, "amy", "english", 92),
+  (4, "amy", "physics", 99),
+  (5, "mike", "math", 70),
+  (5, "mike", "english", 85),
+  (5, "mike", "physics", 85),
+  (6, "amber", "math", 92),
+  (6, "amber", NULL, 90),
+  (6, "amber", "physics", 100);
+  ```
 
-select *
-from stock_ticker
-order by stock_symbol, closing_date
+## Function examples
+
+This section describes the window functions supported in StarRocks.
+
+### AVG()
+
+Calculate the average value of a field in a given window. This function ignores NULL values.
+
+**Syntax:**
+
+```SQL
+AVG(expr) [OVER (*analytic_clause*)]
 ```
 
-The raw data was shown as follows:
+**Examples:**
 
-```plaintext
-+--------------+---------------+---------------------+
-| stock_symbol | closing_price | closing_date        |
-+--------------+---------------+---------------------+
-| JDR          | 12.86         | 2014-10-02 00:00:00 |
-| JDR          | 12.89         | 2014-10-03 00:00:00 |
-| JDR          | 12.94         | 2014-10-04 00:00:00 |
-| JDR          | 12.55         | 2014-10-05 00:00:00 |
-| JDR          | 14.03         | 2014-10-06 00:00:00 |
-| JDR          | 14.75         | 2014-10-07 00:00:00 |
-| JDR          | 13.98         | 2014-10-08 00:00:00 |
-+--------------+---------------+---------------------+
+The following example uses stock data as an example.
+
+```SQL
+CREATE TABLE stock_ticker (
+    stock_symbol  STRING,
+    closing_price DECIMAL(8,2),
+    closing_date  DATETIME
+)
+DUPLICATE KEY(stock_symbol)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(closing_date);
+
+INSERT INTO stock_ticker VALUES 
+    ("JDR", 12.86, "2014-10-02 00:00:00"), 
+    ("JDR", 12.89, "2014-10-03 00:00:00"), 
+    ("JDR", 12.94, "2014-10-04 00:00:00"), 
+    ("JDR", 12.55, "2014-10-05 00:00:00"), 
+    ("JDR", 14.03, "2014-10-06 00:00:00"), 
+    ("JDR", 14.75, "2014-10-07 00:00:00"), 
+    ("JDR", 13.98, "2014-10-08 00:00:00")
+;
 ```
 
-This query uses the window function to generate the moving_average column whose value is the 3-day (previous day, current day, and next day) average stock price. The first day does not have the value of its previous day, and the last day does not have the value of the day after, so these two rows only calculate the average value of two days. Here `Partition By` does not take effect, because all the data is JDR data. However, if there is other stock information, `Partition By` will ensure that the window function is operated within each Partition.
+Calculate the average closing price in the current row and each row before and after it.
 
 ```SQL
 select stock_symbol, closing_date, closing_price,
@@ -134,252 +163,150 @@ select stock_symbol, closing_date, closing_price,
 from stock_ticker;
 ```
 
-The following data is obtained:
+Return data:
 
 ```plaintext
 +--------------+---------------------+---------------+----------------+
 | stock_symbol | closing_date        | closing_price | moving_average |
 +--------------+---------------------+---------------+----------------+
-| JDR          | 2014-10-02 00:00:00 | 12.86         | 12.87          |
-| JDR          | 2014-10-03 00:00:00 | 12.89         | 12.89          |
-| JDR          | 2014-10-04 00:00:00 | 12.94         | 12.79          |
-| JDR          | 2014-10-05 00:00:00 | 12.55         | 13.17          |
-| JDR          | 2014-10-06 00:00:00 | 14.03         | 13.77          |
-| JDR          | 2014-10-07 00:00:00 | 14.75         | 14.25          |
-| JDR          | 2014-10-08 00:00:00 | 13.98         | 14.36          |
+| JDR          | 2014-10-02 00:00:00 |         12.86 |    12.87500000 |
+| JDR          | 2014-10-03 00:00:00 |         12.89 |    12.89666667 |
+| JDR          | 2014-10-04 00:00:00 |         12.94 |    12.79333333 |
+| JDR          | 2014-10-05 00:00:00 |         12.55 |    13.17333333 |
+| JDR          | 2014-10-06 00:00:00 |         14.03 |    13.77666667 |
+| JDR          | 2014-10-07 00:00:00 |         14.75 |    14.25333333 |
+| JDR          | 2014-10-08 00:00:00 |         13.98 |    14.36500000 |
 +--------------+---------------------+---------------+----------------+
-```
-
-## Function Examples
-
-This section describes the window functions supported in StarRocks.
-
-### AVG()
-
-Syntax:
-
-```SQL
-AVG(expr) [OVER (*analytic_clause*)]
-```
-
-Example:
-
-Calculate the x-average of the current row and each row before and after it.
-
-```SQL
-select x, property,
-    avg(x)
-        over (
-            partition by property
-            order by x
-            rows between 1 preceding and 1 following
-        ) as 'moving average'
-from int_t
-where property in ('odd','even');
-```
-
-```plaintext
-+----+----------+----------------+
-| x  | property | moving average |
-+----+----------+----------------+
-| 2  | even     | 3              |
-| 4  | even     | 4              |
-| 6  | even     | 6              |
-| 8  | even     | 8              |
-| 10 | even     | 9              |
-| 1  | odd      | 2              |
-| 3  | odd      | 3              |
-| 5  | odd      | 5              |
-| 7  | odd      | 7              |
-| 9  | odd      | 8              |
-+----+----------+----------------+
 ```
 
 ### COUNT()
 
-Syntax:
+Calculates the total number of rows that meet the specified conditions in a give window.
+
+**Syntax:**
 
 ```SQL
 COUNT(expr) [OVER (analytic_clause)]
 ```
 
-Example:
+**Examples:**
 
-Count the occurrence of x from the current row to the first row.
+Count the occurrence of math scores that is greater than 90 from the current row to the first row in the math partition. For the CREATE and INSERT statements of table `scores`, see [Sample table](#window-function-sample-table).
 
 ```SQL
-select x, property,
-    count(x)
+select *,
+    count(score)
         over (
-            partition by property
-            order by x
+            partition by subject
+            order by score
             rows between unbounded preceding and current row
-        ) as 'cumulative total'
-from int_t where property in ('odd','even');
+        ) as 'score_count'
+from scores where subject in ('math') and score > 90;
 ```
 
 ```plaintext
-+----+----------+------------------+
-| x  | property | cumulative count |
-+----+----------+------------------+
-| 2  | even     | 1                |
-| 4  | even     | 2                |
-| 6  | even     | 3                |
-| 8  | even     | 4                |
-| 10 | even     | 5                |
-| 1  | odd      | 1                |
-| 3  | odd      | 2                |
-| 5  | odd      | 3                |
-| 7  | odd      | 4                |
-| 9  | odd      | 5                |
-+----+----------+------------------+
++------+-------+---------+-------+-------------+
+| id   | name  | subject | score | score_count |
++------+-------+---------+-------+-------------+
+|    6 | amber | math    |    92 |           1 |
+|    3 | jack  | math    |    95 |           2 |
++------+-------+---------+-------+-------------+
 ```
 
 ### CUME_DIST()
 
 The CUME_DIST() function calculates the cumulative distribution of a value within a partition, indicating its relative position as a percentage of values less than or equal to the value in the current row. With a range of 0 to 1, it's useful for percentile calculations and data distribution analysis.
 
-Syntax:
+This function is supported from v3.2.
+
+**Syntax:**
 
 ```SQL
 CUME_DIST() OVER (partition_by_clause order_by_clause)
 ```
 
-**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value N/N = 1, where N is the partition size.**
+**This function must be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value `N/N = 1`, where `N` is the partition size.**
 
 CUME_DIST() contains NULL values and treats them as the lowest values.
 
-The following example shows the cumulative distribution of column y within each group of column x.
+**Examples:**
 
-```SQL
-SELECT x, y,
-    CUME_DIST()
-        OVER (
-            PARTITION BY x
-            ORDER BY y
-        ) AS `cume_dist`
-FROM int_t;
-```
+The following example shows the cumulative distribution of each score within each `subject` group. For the CREATE and INSERT statements of table `scores`, see [Sample table](#window-function-sample-table).
 
 ```plaintext
-+---+---+--------------------+
-| x | y | cume_dist          |
-+---+---+--------------------+
-| 1 | 1 | 0.3333333333333333 |
-| 1 | 2 |                  1 |
-| 1 | 2 |                  1 |
-| 2 | 1 | 0.3333333333333333 |
-| 2 | 2 | 0.6666666666666667 |
-| 2 | 3 |                  1 |
-| 3 | 1 | 0.6666666666666667 |
-| 3 | 1 | 0.6666666666666667 |
-| 3 | 2 |                  1 |
-+---+---+--------------------+
+SELECT *, 
+    cume_dist() 
+      OVER (
+        PARTITION BY subject
+        ORDER BY score
+      ) AS cume_dist 
+FROM scores;
++------+-------+---------+-------+---------------------+
+| id   | name  | subject | score | cume_dist           |
++------+-------+---------+-------+---------------------+
+|    6 | amber | NULL    |    90 |                   1 |
+|    3 | jack  | english |  NULL |                 0.2 |
+|    5 | mike  | english |    85 |                 0.4 |
+|    4 | amy   | english |    92 |                 0.6 |
+|    2 | tom   | english |    98 |                 0.8 |
+|    1 | lily  | english |   100 |                   1 |
+|    1 | lily  | math    |  NULL | 0.16666666666666666 |
+|    5 | mike  | math    |    70 |  0.3333333333333333 |
+|    2 | tom   | math    |    80 |  0.6666666666666666 |
+|    4 | amy   | math    |    80 |  0.6666666666666666 |
+|    6 | amber | math    |    92 |  0.8333333333333334 |
+|    3 | jack  | math    |    95 |                   1 |
+|    2 | tom   | physics |  NULL | 0.16666666666666666 |
+|    1 | lily  | physics |    60 |  0.3333333333333333 |
+|    5 | mike  | physics |    85 |                 0.5 |
+|    4 | amy   | physics |    99 |  0.8333333333333334 |
+|    3 | jack  | physics |    99 |  0.8333333333333334 |
+|    6 | amber | physics |   100 |                   1 |
++------+-------+---------+-------+---------------------+
 ```
 
 ### DENSE_RANK()
 
-The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK()**does not have vacant** numbers. For example, if there are two tied 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
+The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK()**does not have vacant** numbers. For example, if there are two 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-The following example shows the ranking of column x according to the property column grouping.
+**Examples**
+
+The following example shows the ranking of math scores (sorted in descending order). For the CREATE and INSERT statements of table `scores`, see [Sample table](#window-function-sample-table).
 
 ```SQL
-select x, y,
+select *,
     dense_rank()
         over (
-            partition by x
-            order by y
+            partition by subject
+            order by score desc
         ) as `rank`
-from int_t;
+from scores where subject in ('math');
 ```
 
 ```plaintext
-+---+---+------+
-| x | y | rank |
-+---+---+------+
-| 1 | 1 | 1    |
-| 1 | 2 | 2    |
-| 1 | 2 | 2    |
-| 2 | 1 | 1    |
-| 2 | 2 | 2    |
-| 2 | 3 | 3    |
-| 3 | 1 | 1    |
-| 3 | 1 | 1    |
-| 3 | 2 | 2    |
-+---+---+------+
++------+-------+---------+-------+------+
+| id   | name  | subject | score | rank |
++------+-------+---------+-------+------+
+|    3 | jack  | math    |    95 |    1 |
+|    6 | amber | math    |    92 |    2 |
+|    2 | tom   | math    |    80 |    3 |
+|    4 | amy   | math    |    80 |    3 |
+|    5 | mike  | math    |    70 |    4 |
+|    1 | lily  | math    |  NULL |    5 |
++------+-------+---------+-------+------+
 ```
-
-### NTILE()
-
-NTILE() function divides the sorted rows in a partition by the specified number of `num_buckets` as equally as possible, stores the divided rows in the respective buckets, starting from 1 `[1, 2, ..., num_buckets]`, and returns the bucket number that each row is in.
-
-About the size of the bucket:
-
-* If the row counts can be divided by the specified number of `num_buckets` exactly, all the buckets will be of the same size.
-* If the row counts cannot be divided by the specified number of `num_buckets` exactly, there will be buckets of two different sizes. The difference between sizes is 1. The buckets with more rows will be listed ahead of the one with fewer rows.
-
-Syntax:
-
-```SQL
-NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
-```
-
-`num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
-
-Window clause is not allowed in NTILE() function.
-
-NTILE() function returns BIGINT type of data.
-
-Example:
-
-The following example divides all rows in the partition into 2 buckets.
-
-```sql
-select id, x, y,
-    ntile(2)
-        over (
-            partition by x
-            order by y
-        ) as bucket_id
-from t1;
-```
-
-Return data:
-
-```plaintext
-+------+------+------+-----------+
-| id   | x    | y    | bucket_id |
-+------+------+------+-----------+
-|    1 |    1 |   11 |         1 |
-|    2 |    1 |   11 |         1 |
-|    3 |    1 |   22 |         1 |
-|    4 |    1 |   33 |         2 |
-|    5 |    1 |   44 |         2 |
-|    6 |    1 |   55 |         2 |
-|    7 |    2 |   66 |         1 |
-|    8 |    2 |   77 |         1 |
-|    9 |    2 |   88 |         2 |
-|   10 |    3 |   99 |         1 |
-+------+------+------+-----------+
-```
-
-As the above example shown, when `num_buckets` is `2`:
-
-* Rows of No.1 to No.6 were classified into the first partition; rows of No.1 to No.3 were stored in the first bucket, and rows of No.4 to No.6 were stored in the second one.
-* Rows of No.7 to No.9 were classified into the second partition; rows of No.7 and No.8 were stored in the first bucket, and row No.9 was stored in the second one.
-* Row No.10 was classified into the third partition and stored in the first bucket.
 
 ### FIRST_VALUE()
 
 FIRST_VALUE() returns the **first** value of the window range.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
@@ -387,51 +314,95 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 `IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the first value in the filtered result is NULL. If you specify IGNORE NULLS, the first non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
-Example:
+**Examples:**
 
-We have the following data:
-
-```SQL
- select name, country, greeting
- from mail_merge;
- ```
-
-```plaintext
-+---------+---------+--------------+
-| name    | country | greeting     |
-+---------+---------+--------------+
-| Pete    | USA     | Hello        |
-| John    | USA     | Hi           |
-| Boris   | Germany | Guten tag    |
-| Michael | Germany | Guten morgen |
-| Bjorn   | Sweden  | Hej          |
-| Mats    | Sweden  | Tja          |
-+---------+---------+--------------+
-```
-
-Use FIRST_VALUE() to return the first greeting value in each grouping, based on the country grouping.
+Return the first greeting value in each grouping, based on the country grouping.
 
 ```SQL
-select country, name,
-    first_value(greeting)
+select *,
+    first_value(score IGNORE NULLS)
         over (
-            partition by country
-            order by name, greeting
-        ) as greeting
-from mail_merge;
+            partition by subject
+            order by score desc
+        ) as first
+from scores;
 ```
 
 ```plaintext
-+---------+---------+-----------+
-| country | name    | greeting  |
-+---------+---------+-----------+
-| Germany | Boris   | Guten tag |
-| Germany | Michael | Guten tag |
-| Sweden  | Bjorn   | Hej       |
-| Sweden  | Mats    | Hej       |
-| USA     | John    | Hi        |
-| USA     | Pete    | Hi        |
-+---------+---------+-----------+
++------+-------+---------+-------+-------+
+| id   | name  | subject | score | first |
++------+-------+---------+-------+-------+
+|    1 | lily  | english |   100 |   100 |
+|    2 | tom   | english |    98 |   100 |
+|    4 | amy   | english |    92 |   100 |
+|    5 | mike  | english |    85 |   100 |
+|    3 | jack  | english |  NULL |   100 |
+|    6 | amber | physics |   100 |   100 |
+|    3 | jack  | physics |    99 |   100 |
+|    4 | amy   | physics |    99 |   100 |
+|    5 | mike  | physics |    85 |   100 |
+|    1 | lily  | physics |    60 |   100 |
+|    2 | tom   | physics |  NULL |   100 |
+|    6 | amber | NULL    |    90 |    90 |
+|    3 | jack  | math    |    95 |    95 |
+|    6 | amber | math    |    92 |    95 |
+|    2 | tom   | math    |    80 |    95 |
+|    4 | amy   | math    |    80 |    95 |
+|    5 | mike  | math    |    70 |    95 |
+|    1 | lily  | math    |  NULL |    95 |
++------+-------+---------+-------+-------+
+```
+
+### LAST_VALUE()
+
+LAST_VALUE() returns the **last** value of the window range. It is the opposite of FIRST_VALUE().
+
+Syntax:
+
+```SQL
+LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
+```
+
+`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the last value in the filtered result is NULL. If you specify IGNORE NULLS, the last non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
+
+By default, last_value() calculates `rows between unbounded preceding and current row`, which compares the current row with all its preceding rows. If you want to show only one value for each partition, use `rows between unbounded preceding and unbounded following` after ORDER BY.
+
+Use the data from the example:
+
+```SQL
+select *,
+    last_value(score IGNORE NULLS)
+        over (
+            partition by subject
+            order by score desc
+            rows between unbounded preceding and unbounded following
+        ) as last
+from scores;
+```
+
+```plaintext
++------+-------+---------+-------+------+
+| id   | name  | subject | score | last |
++------+-------+---------+-------+------+
+|    1 | lily  | english |   100 |   85 |
+|    2 | tom   | english |    98 |   85 |
+|    4 | amy   | english |    92 |   85 |
+|    5 | mike  | english |    85 |   85 |
+|    3 | jack  | english |  NULL |   85 |
+|    6 | amber | physics |   100 |   60 |
+|    3 | jack  | physics |    99 |   60 |
+|    4 | amy   | physics |    99 |   60 |
+|    5 | mike  | physics |    85 |   60 |
+|    1 | lily  | physics |    60 |   60 |
+|    2 | tom   | physics |  NULL |   60 |
+|    6 | amber | NULL    |    90 |   90 |
+|    3 | jack  | math    |    95 |   70 |
+|    6 | amber | math    |    92 |   70 |
+|    2 | tom   | math    |    80 |   70 |
+|    4 | amy   | math    |    80 |   70 |
+|    5 | mike  | math    |    70 |   70 |
+|    1 | lily  | math    |  NULL |   70 |
++------+-------+---------+-------+------+
 ```
 
 ### LAG()
@@ -440,10 +411,10 @@ Returns the value of the row that lags the current row by `offset` rows. This fu
 
 `LAG()` can be used to query data of the following types:
 
-* Numeric: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMAL
-* String: CHAR, VARCHAR
-* Date: DATE, DATETIME
-* BITMAP and HLL are supported from StarRocks v2.5.
+- Numeric: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMAL
+- String: CHAR, VARCHAR
+- Date: DATE, DATETIME
+- BITMAP and HLL are supported from StarRocks v2.5.
 
 Syntax:
 
@@ -534,43 +505,6 @@ For rows 1 to 4, the system cannot find two non-NULL values for each of them in 
 
 For value 6 in row 7, the value two rows backward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for non-null values and 2 in row 4 is returned.
 
-### LAST_VALUE()
-
-LAST_VALUE() returns the **last** value of the window range. It is the opposite of FIRST_VALUE().
-
-Syntax:
-
-```SQL
-LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
-```
-
-`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the last value in the filtered result is NULL. If you specify IGNORE NULLS, the last non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
-
-Use the data from the example:
-
-```SQL
-select country, name,
-    last_value(greeting)
-        over (
-            partition by country
-            order by name, greeting
-        ) as greeting
-from mail_merge;
-```
-
-```plaintext
-+---------+---------+--------------+
-| country | name    | greeting     |
-+---------+---------+--------------+
-| Germany | Boris   | Guten morgen |
-| Germany | Michael | Guten morgen |
-| Sweden  | Bjorn   | Tja          |
-| Sweden  | Mats    | Tja          |
-| USA     | John    | Hello        |
-| USA     | Pete    | Hello        |
-+---------+---------+--------------+
-```
-
 ### LEAD()
 
 Returns the value of the row that leads the current row by `offset` rows. This function is often used to compare values between rows and filter data.
@@ -586,10 +520,10 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 Parameters:
 
-* `expr`: the field you want to compute.
-* `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
-* `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
-* `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
+- `expr`: the field you want to compute.
+- `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
+- `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
+- `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
 
 Example 1: IGNORE NULLS is not specified
 
@@ -772,6 +706,66 @@ from int_t
 where property in ('prime','square');
 ```
 
+### NTILE()
+
+NTILE() function divides the sorted rows in a partition by the specified number of `num_buckets` as equally as possible, stores the divided rows in the respective buckets, starting from 1 `[1, 2, ..., num_buckets]`, and returns the bucket number that each row is in.
+
+About the size of the bucket:
+
+- If the row counts can be divided by the specified number of `num_buckets` exactly, all the buckets will be of the same size.
+- If the row counts cannot be divided by the specified number of `num_buckets` exactly, there will be buckets of two different sizes. The difference between sizes is 1. The buckets with more rows will be listed ahead of the one with fewer rows.
+
+**Syntax:**
+
+```SQL
+NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
+```
+
+`num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
+
+Window clause is not allowed in NTILE() function.
+
+NTILE() function returns BIGINT type of data.
+
+**Examples:**
+
+The following example divides all rows in the partition into 2 buckets. For the CREATE and INSERT statements of table `scores`, see [Sample table](#window-function-sample-table).
+
+```sql
+select id, x, y,
+    ntile(2)
+        over (
+            partition by x
+            order by y
+        ) as bucket_id
+from t1;
+```
+
+Return data:
+
+```plaintext
++------+------+------+-----------+
+| id   | x    | y    | bucket_id |
++------+------+------+-----------+
+|    1 |    1 |   11 |         1 |
+|    2 |    1 |   11 |         1 |
+|    3 |    1 |   22 |         1 |
+|    4 |    1 |   33 |         2 |
+|    5 |    1 |   44 |         2 |
+|    6 |    1 |   55 |         2 |
+|    7 |    2 |   66 |         1 |
+|    8 |    2 |   77 |         1 |
+|    9 |    2 |   88 |         2 |
+|   10 |    3 |   99 |         1 |
++------+------+------+-----------+
+```
+
+As the above example shown, when `num_buckets` is `2`:
+
+* Rows of No.1 to No.6 were classified into the first partition; rows of No.1 to No.3 were stored in the first bucket, and rows of No.4 to No.6 were stored in the second one.
+* Rows of No.7 to No.9 were classified into the second partition; rows of No.7 and No.8 were stored in the first bucket, and row No.9 was stored in the second one.
+* Row No.10 was classified into the third partition and stored in the first bucket.
+
 ### PERCENT_RANK()
 
 The PERCENT_RANK() function calculates the relative rank of a row within a result set as a percentage. It returns the percentage of partition values less than the value in the current row, excluding the highest value. The return values range from 0 to 1. This function is useful for percentile calculations and analyzing data distribution.
@@ -782,40 +776,39 @@ The PERCENT_RANK() function is calculated using the following formula, where ran
 (rank - 1) / (rows - 1)
 ```
 
-Syntax:
+**Syntax:**
 
 ```SQL
 PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 ```
 
-**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value (1 - 1)/(N - 1) = 0, where N is the partition size.**
+**This function must be used with ORDER BY to sort partition rows into the desired order.**
 
-The following example shows the relative rank of column y within each group of column x.
+**Examples:**
+
+The following example shows the relative rank of column `score` within the group of `math`.
 
 ```SQL
-SELECT x, y,
+SELECT *,
     PERCENT_RANK()
         OVER (
-            PARTITION BY x
-            ORDER BY y
+            PARTITION BY subject
+            ORDER BY score
         ) AS `percent_rank`
-FROM int_t;
+FROM scores where subject in ('math');
 ```
 
 ```plaintext
-+---+---+--------------+
-| x | y | percent_rank |
-+---+---+--------------+
-| 1 | 1 |            0 |
-| 1 | 2 |          0.5 |
-| 1 | 2 |          0.5 |
-| 2 | 1 |            0 |
-| 2 | 2 |          0.5 |
-| 2 | 3 |            1 |
-| 3 | 1 |            0 |
-| 3 | 1 |            0 |
-| 3 | 2 |            1 |
-+---+---+--------------+
++------+-------+---------+-------+--------------+
+| id   | name  | subject | score | percent_rank |
++------+-------+---------+-------+--------------+
+|    1 | lily  | math    |  NULL |            0 |
+|    5 | mike  | math    |    70 |          0.2 |
+|    2 | tom   | math    |    80 |          0.4 |
+|    4 | amy   | math    |    80 |          0.4 |
+|    6 | amber | math    |    92 |          0.8 |
+|    3 | jack  | math    |    95 |            1 |
++------+-------+---------+-------+--------------+
 ```
 
 ### RANK()
