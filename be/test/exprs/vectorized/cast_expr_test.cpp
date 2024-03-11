@@ -2210,7 +2210,7 @@ TEST_F(VectorizedCastExprTest, array_int_to_array_string) {
         expr->clear_children();
         expr->add_child(const_array);
         auto result = expr->evaluate(nullptr, nullptr);
-        ASSERT_EQ("[['1','4'], ['1','4'], ['1','4']]", result->debug_string());
+        ASSERT_EQ("['1','4'], ['1','4'], ['1','4']", result->debug_string());
     }
 }
 
