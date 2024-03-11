@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
@@ -164,6 +165,14 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             StorageVolume copied = new StorageVolume(sv);
             validateParams(copied.getType(), params);
 
+            List<String> immutableProperties =
+                    Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
+                            CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
+            for (String param : immutableProperties) {
+                if (params.containsKey(param)) {
+                    throw new DdlException(String.format("Storage volume property '%s' is immutable!", param));
+                }
+            }
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
                 if (!enabledValue) {
@@ -291,6 +300,36 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 throw new DdlException("Invalid properties " + key);
             }
         }
+
+        // storage volume type specific checks
+        if (!svType.equalsIgnoreCase(S3)) {
+            // The following two properties can be only set when storage volume type is 'S3'
+            List<String> s3Params = Lists.newArrayList(
+                    CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
+                    CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
+            for (String param : s3Params) {
+                if (params.containsKey(param)) {
+                    throw new DdlException(
+                            String.format("Invalid property '%s' for storage volume type '%s'", param, svType));
+                }
+            }
+        }
+        if (params.containsKey(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX)) {
+            try {
+                int value = Integer.parseInt(params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+                if (value < 0) {
+                    throw new DdlException(String.format(
+                            "Invalid property value '%s' for property '%s', expecting a positive integer string.",
+                            params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX),
+                            CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+                }
+            } catch (NumberFormatException e) {
+                throw new DdlException(String.format(
+                        "Invalid property value '%s' for property '%s', expecting a valid integer string.",
+                        params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX),
+                        CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+            }
+        }
     }
 
     private void validateLocations(String svType, List<String> locations) throws DdlException {
@@ -338,11 +377,16 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
 
     @Override
     public void gsonPostProcess() throws IOException {
+        // If user upgrades from 3.0 and the createTableInfo and createDbInfo is replayed,
+        // the image will look like: "svToDbs":{"null":[12288,81921,49154,65541,20485]}, "svToTables":{"null":[12288]}
+        // The mapping null to dbs and tables should be removed. These code can be removed when 3.0 is not supported.
+        storageVolumeToDbs.remove("null");
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToDbs.entrySet()) {
             for (Long dbId : entry.getValue()) {
                 dbToStorageVolume.put(dbId, entry.getKey());
             }
         }
+        storageVolumeToTables.remove("null");
         for (Map.Entry<String, Set<Long>> entry : storageVolumeToTables.entrySet()) {
             for (Long tableId : entry.getValue()) {
                 tableToStorageVolume.put(tableId, entry.getKey());

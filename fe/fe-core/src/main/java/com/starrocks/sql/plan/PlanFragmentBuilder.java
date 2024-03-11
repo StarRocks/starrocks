@@ -116,7 +116,6 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
-import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
@@ -392,7 +391,35 @@ public class PlanFragmentBuilder {
         }
 
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
-            return visit(optExpression, context);
+            PlanFragment fragment = visit(optExpression, context);
+            computeFragmentCost(context, fragment);
+            return fragment;
+        }
+
+        private void computeFragmentCost(ExecPlan context, PlanFragment fragment) {
+            for (PlanFragment child : fragment.getChildren()) {
+                computeFragmentCost(context, child);
+            }
+            OptExpression output = getOptExpressionFromPlanNode(context, fragment.getPlanRoot());
+
+            // scan fragment
+            if (fragment.getLeftMostNode() instanceof ScanNode) {
+                fragment.setFragmentCost(output.getCost());
+                return;
+            }
+
+            List<OptExpression> inputs = fragment.getChildren().stream().map(PlanFragment::getPlanRoot)
+                    .map(p -> getOptExpressionFromPlanNode(context, p)).collect(Collectors.toList());
+
+            double childCost = inputs.stream().map(OptExpression::getCost).reduce(Double::sum).orElse(0D);
+            fragment.setFragmentCost(output.getCost() - childCost);
+        }
+
+        private OptExpression getOptExpressionFromPlanNode(ExecPlan context, PlanNode node) {
+            if (context.getOptExpression(node.getId().asInt()) == null && node instanceof ProjectNode) {
+                node = node.getChild(0);
+            }
+            return context.getOptExpression(node.getId().asInt());
         }
 
         @Override
@@ -725,6 +752,7 @@ public class PlanFragmentBuilder {
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
             scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
+            scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
             // set tablet
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
@@ -1855,7 +1883,7 @@ public class PlanFragmentBuilder {
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
                 if (!withLocalShuffle && node.isMergedLocalAgg() &&
                         hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
+                    aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
                 // Local && un-split aggregate meanings only execute local pre-aggregation, we need promise
@@ -1905,7 +1933,7 @@ public class PlanFragmentBuilder {
 
                 // Check colocate for one-phase local agg.
                 if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
+                    aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isDistinctGlobal()) {
                 aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
@@ -1920,7 +1948,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setIntermediateTuple();
 
                 if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
+                    aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isDistinctLocal()) {
                 // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
@@ -2000,25 +2028,27 @@ public class PlanFragmentBuilder {
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT, functionCallExpr.getParams());
                     replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
-                            new Type[] {functionCallExpr.getChild(0).getType()},
+                            functionCallExpr.getFn().getArgs(),
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);
+                    replaceExpr.setType(functionCallExpr.getType());
                 } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM, functionCallExpr.getParams());
                     Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
                             functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
                     replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
+                    replaceExpr.setType(functionCallExpr.getType());
                 } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
                     replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
-                            new Type[] {functionCallExpr.getChild(0).getType()},
+                            functionCallExpr.getFn().getArgs(),
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);
+                    replaceExpr.setType(functionCallExpr.getType());
                 }
-                Preconditions.checkState(replaceExpr != null, functionName + " does not support distinct");
-                ExpressionAnalyzer.analyzeExpressionIgnoreSlot(replaceExpr, ConnectContext.get());
 
+                Preconditions.checkState(replaceExpr != null, functionName + " does not support distinct");
                 aggregateExprList.set(singleDistinctIndex, replaceExpr);
             }
         }
@@ -2578,6 +2608,7 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr()
                         .put(analyticCall.getKey(), new SlotRef(analyticCall.getKey().toString(), slotDesc));
             }
+            outputTupleDesc.computeMemLayout();
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,

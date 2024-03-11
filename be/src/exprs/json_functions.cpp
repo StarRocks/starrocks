@@ -720,8 +720,14 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_exists(FunctionContext* context, c
 
         ColumnBuilder<TYPE_BOOLEAN> result(rows);
         for (size_t row = 0; row < rows; ++row) {
-            if (json_viewer.is_null(row)) {
+            if (columns[0]->is_null(row)) {
+                // only the json value is null, return null
                 result.append_null();
+                continue;
+            }
+            if (json_viewer.is_null(row)) {
+                // may be flat json is NONE/JSON-NULL, return false
+                result.append(0);
                 continue;
             }
             result.append(!json_viewer.value(row)->to_vslice().isNone());
@@ -918,11 +924,15 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_length(FunctionContext* context, c
 
         ColumnBuilder<TYPE_INT> result(rows);
         for (size_t row = 0; row < rows; ++row) {
-            if (json_viewer.is_null(row)) {
+            if (columns[0]->is_null(row)) {
+                // only the json value is null, return null
                 result.append_null();
                 continue;
             }
-
+            if (json_viewer.is_null(row)) {
+                result.append(0);
+                continue;
+            }
             vpack::Slice slice = json_viewer.value(row)->to_vslice();
             if (slice.isObject() || slice.isArray()) {
                 result.append(slice.length());

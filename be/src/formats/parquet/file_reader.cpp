@@ -361,7 +361,7 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
 
 int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const {
     for (int32_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
-        if (_scanner_ctx->partition_columns[i].col_name == col_name) {
+        if (_scanner_ctx->partition_columns[i].name() == col_name) {
             return i;
         }
     }
@@ -613,7 +613,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                _scanner_ctx->update_not_existed_columns_of_chunk(chunk, row_count);
+                _scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count);
                 _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
@@ -642,7 +642,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-        _scanner_ctx->update_not_existed_columns_of_chunk(chunk, read_size);
+        _scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size);
         _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
         _scan_row_count += read_size;
         return Status::OK();

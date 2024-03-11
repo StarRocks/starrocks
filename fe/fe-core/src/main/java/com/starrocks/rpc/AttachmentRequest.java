@@ -17,6 +17,7 @@
 
 package com.starrocks.rpc;
 
+import com.baidu.bjf.remoting.protobuf.annotation.Ignore;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import org.apache.commons.lang3.StringUtils;
@@ -31,7 +32,9 @@ import org.apache.thrift.protocol.TJSONProtocol;
 
 // used to compatible with our older thrift protocol
 public class AttachmentRequest {
+    @Ignore
     protected byte[] serializedRequest;
+    @Ignore
     protected byte[] serializedResult;
 
     public static TSerializer getSerializer(String protocol) {

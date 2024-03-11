@@ -1,0 +1,27 @@
+-- name: test_ngram_bloom_filter_error
+create database ngram_bloom_filter_error_db;
+-- result:
+-- !result
+use  ngram_bloom_filter_error_db;
+-- result:
+-- !result
+CREATE TABLE ngram_index_error(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1","bloom_filter_columns" = "timestamp,username");
+-- result:
+E: (1064, 'column username should only have one bloom filter index or ngram bloom filter index')
+-- !result
+CREATE TABLE ngram_index_error_1(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL
+)PROPERTIES ("replication_num" = "1","bloom_filter_columns" = "timestamp,username");
+-- result:
+-- !result
+ALTER TABLE ngram_index_error_1 ADD INDEX idx_name1(username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.01");
+-- result:
+E: (1064, 'column username should only have one bloom filter index or ngram bloom filter index')
+-- !result

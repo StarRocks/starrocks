@@ -25,6 +25,7 @@ import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
@@ -40,6 +41,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -80,8 +82,15 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public static String CREDENTIAL_MASK = "******";
 
+    private String dumpMaskedParams(Map<String, String> params) {
+        Gson gson = new Gson();
+        Map<String, String> maskedParams = new HashMap<>(params);
+        addMaskForCredential(maskedParams);
+        return gson.toJson(maskedParams);
+    }
+
     public StorageVolume(String id, String name, String svt, List<String> locations,
-                         Map<String, String> params, boolean enabled, String comment) {
+                         Map<String, String> params, boolean enabled, String comment) throws DdlException {
         this.id = id;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
@@ -93,12 +102,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         preprocessAuthenticationIfNeeded(configurationParams);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
         if (!isValidCloudConfiguration()) {
-            Gson gson = new Gson();
-            throw new SemanticException("Storage params is not valid " + gson.toJson(params));
+            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
         }
+        validateStorageVolumeConstraints();
     }
 
-    public StorageVolume(StorageVolume sv) {
+    public StorageVolume(StorageVolume sv) throws DdlException {
         this.id = sv.id;
         this.name = sv.name;
         this.svt = sv.svt;
@@ -107,6 +116,25 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.enabled = sv.enabled;
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
         this.params = new HashMap<>(sv.params);
+        validateStorageVolumeConstraints();
+    }
+
+    private void validateStorageVolumeConstraints() throws DdlException {
+        if (svt == StorageVolumeType.S3) {
+            boolean enablePartitionedPrefix = Boolean.parseBoolean(
+                    params.getOrDefault(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "false"));
+            if (enablePartitionedPrefix) {
+                for (String location : locations) {
+                    URI uri = URI.create(location);
+                    if (!uri.getPath().isEmpty() && !"/".equals(uri.getPath())) {
+                        throw new DdlException(String.format(
+                                "Storage volume '%s' has '%s'='true', the location '%s'" +
+                                        " should not contain sub path after bucket name!",
+                                this.name, CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, location));
+                    }
+                }
+            }
+        }
     }
 
     public void setCloudConfiguration(Map<String, String> params) {
@@ -114,8 +142,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams, true);
         if (!isValidCloudConfiguration()) {
-            Gson gson = new Gson();
-            throw new SemanticException("Storage params is not valid " + gson.toJson(newParams));
+            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(newParams));
         }
         this.params = newParams;
     }
@@ -189,35 +216,34 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public void getProcNodeData(BaseProcResult result) {
-        Gson gson = new Gson();
-        Map<String, String> p = new HashMap<>(params);
-        addMaskForCredential(p);
         result.addRow(Lists.newArrayList(name,
                 svt.name(),
                 String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                         .getDefaultStorageVolumeId().equals(id)),
                 Joiner.on(", ").join(locations),
-                String.valueOf(gson.toJson(p)),
+                dumpMaskedParams(params),
                 String.valueOf(enabled),
                 String.valueOf(comment)));
     }
 
     public static FileStoreInfo createFileStoreInfo(String name, String svt,
                                                     List<String> locations, Map<String, String> params,
-                                                    boolean enabled, String comment) {
+                                                    boolean enabled, String comment) throws DdlException {
         StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
         return sv.toFileStoreInfo();
     }
 
     public FileStoreInfo toFileStoreInfo() {
-        FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
-        FileStoreInfo.Builder builder = fsInfo.toBuilder();
-        builder.setFsKey(id).setFsName(this.name).setComment(this.comment).setEnabled(this.enabled)
-                .addAllLocations(locations).build();
+        FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
+        builder.setFsKey(id)
+                .setFsName(this.name)
+                .setComment(this.comment)
+                .setEnabled(this.enabled)
+                .addAllLocations(locations);
         return builder.build();
     }
 
-    public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) {
+    public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws DdlException {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
         return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
@@ -231,6 +257,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 S3FileStoreInfo s3FileStoreInfo = fsInfo.getS3FsInfo();
                 params.put(CloudConfigurationConstants.AWS_S3_REGION, s3FileStoreInfo.getRegion());
                 params.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, s3FileStoreInfo.getEndpoint());
+                if (s3FileStoreInfo.getPartitionedPrefixEnabled()) {
+                    // Don't show the parameters if not enabled.
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX,
+                            Boolean.toString(true));
+                    params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
+                            Integer.toString(s3FileStoreInfo.getNumPartitionedPrefix()));
+                }
                 AwsCredentialInfo credentialInfo = s3FileStoreInfo.getCredential();
                 if (credentialInfo.hasSimpleCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false");

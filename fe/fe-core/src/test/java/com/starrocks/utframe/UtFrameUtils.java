@@ -126,6 +126,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
@@ -327,6 +328,13 @@ public class UtFrameUtils {
         return addMockBackend(backend, backendId);
     }
 
+    public static ComputeNode addMockComputeNode(int backendId) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend("127.0.108.1");
+        // add be
+        return addMockComputeNode(backend, backendId);
+    }
+
     private static Backend addMockBackend(MockedBackend backend, int backendId) {
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
@@ -350,6 +358,25 @@ public class UtFrameUtils {
             GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
         }
         return be;
+    }
+
+    private static ComputeNode addMockComputeNode(MockedBackend backend, int backendId) {
+        ComputeNode cn = new ComputeNode(backendId, backend.getHost(), backend.getHeartBeatPort());
+        cn.setAlive(true);
+        cn.setBePort(backend.getBeThriftPort());
+        cn.setBrpcPort(backend.getBrpcPort());
+        cn.setHttpPort(backend.getHttpPort());
+        cn.setStarletPort(backend.getStarletPort());
+        cn.setIsStoragePath(false);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = backend.getStarletPort();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            String workerAddress = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress, workerGroupId);
+        }
+        return cn;
     }
 
     public static void addBroker(String brokerName) throws Exception {
@@ -587,6 +614,9 @@ public class UtFrameUtils {
 
     private static void testView(ConnectContext connectContext, String originStmt, StatementBase statementBase)
             throws Exception {
+        if (!FeConstants.unitTestView) {
+            return;
+        }
         if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
                 !statementBase.isExplain()) {
             String viewName = "view" + INDEX.getAndIncrement();
@@ -686,6 +716,9 @@ public class UtFrameUtils {
             }
         });
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateTableStmtMap().entrySet()) {
+            if (entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
+                continue;
+            }
             String dbName = entry.getKey().split("\\.")[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
@@ -695,19 +728,36 @@ public class UtFrameUtils {
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
+            String normalizedViewName = entry.getKey();
+            String[] nameParts = normalizedViewName.split("\\.");
+            String dbName = nameParts[0];
+            if (!starRocksAssert.databaseExist(dbName)) {
+                starRocksAssert.withDatabase(dbName);
+            }
+            String viewName = nameParts[1];
+            starRocksAssert.useDatabase(dbName);
+            String createView = String.format("create view `%s`.`%s` as %s",
+                    dbName, viewName, replayDumpInfo.getCreateViewStmtMap().get(normalizedViewName));
+            starRocksAssert.withView(createView);
+        }
+        // create materialized views
+        for (Map.Entry<String, String> entry : replayDumpInfo.getCreateTableStmtMap().entrySet()) {
+            if (!entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
+                continue;
+            }
             String dbName = entry.getKey().split("\\.")[0];
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
             }
             starRocksAssert.useDatabase(dbName);
-            String createView = "create view " + entry.getKey() + " as " + entry.getValue();
-            starRocksAssert.withView(createView);
+            starRocksAssert.withSingleReplicaAsyncMv(entry.getValue());
         }
         // mock be num
         backendId = 10002;
         for (int i = 1; i < replayDumpInfo.getBeNum(); ++i) {
             UtFrameUtils.addMockBackend(backendId++);
         }
+
         // mock be core stat
         for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
             BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
@@ -922,6 +972,11 @@ public class UtFrameUtils {
 
     public static String getPlanThriftString(ConnectContext ctx, String queryStr) throws Exception {
         return UtFrameUtils.getThriftString(UtFrameUtils.getPlanAndFragment(ctx, queryStr).second.getFragments());
+    }
+
+    public static String getThriftDescTbl(ConnectContext ctx, String queryStr) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(ctx, queryStr);
+        return pair.second.getDescTbl().toThrift().toString();
     }
 
     // Lock all database before analyze

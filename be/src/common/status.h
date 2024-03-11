@@ -220,9 +220,7 @@ public:
         return Status(TStatusCode::INVERTED_INDEX_CLUCENE_ERROR, msg);
     }
 
-    static Status Yield() {
-        return {TStatusCode::YIELD, ""};
-    }
+    static Status Yield() { return {TStatusCode::YIELD, ""}; }
 
     static Status JitCompileError(std::string_view msg) {
         return Status(TStatusCode::JIT_COMPILE_ERROR, msg);

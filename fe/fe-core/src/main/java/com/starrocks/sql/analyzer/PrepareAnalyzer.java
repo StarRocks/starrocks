@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -44,7 +46,7 @@ public class PrepareAnalyzer {
         if (prepareStmt != null) {
             StatementBase innerStmt = prepareStmt.getInnerStmt();
             if (!(innerStmt instanceof QueryStatement)) {
-                throw new ValidateException("Invalid statement type for prepared statement", ErrorType.USER_ERROR);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_UNSUPPORTED_PS, ErrorType.UNSUPPORTED);
             }
             // Analyzing when preparing is only used to return the correct resultset meta, but not to generate an
             // execution plan

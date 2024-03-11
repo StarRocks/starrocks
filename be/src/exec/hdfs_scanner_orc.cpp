@@ -31,6 +31,12 @@
 
 namespace starrocks {
 
+struct HdfsOrcScannerSplitContext : public pipeline::ScanSplitContext {
+    size_t split_start = 0;
+    size_t split_end = 0;
+    std::shared_ptr<std::string> footer;
+};
+
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
     OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, OrcChunkReader* reader);
@@ -89,6 +95,13 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     const auto* scan_range = _scanner_ctx.scan_range;
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
+
+    if (_scanner_ctx.split_context != nullptr) {
+        auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
+        scan_start = split_context->split_start;
+        scan_end = split_context->split_end;
+    }
+
     if (offset >= scan_start && offset < scan_end) {
         return false;
     }
@@ -132,7 +145,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             int part_idx = 0;
             const int part_size = _scanner_ctx.partition_columns.size();
             for (part_idx = 0; part_idx < part_size; part_idx++) {
-                if (_scanner_ctx.partition_columns[part_idx].col_name == slot->col_name()) {
+                if (_scanner_ctx.partition_columns[part_idx].name() == slot->col_name()) {
                     break;
                 }
             }
@@ -194,7 +207,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 continue;
             }
             int32_t column_index = -1;
-            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.col_name);
+            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.name());
             if (orc_type != nullptr) {
                 column_index = orc_type->getColumnId();
             }
@@ -330,6 +343,12 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
+    if (_scanner_ctx.split_context != nullptr) {
+        auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
+        scan_start = split_context->split_start;
+        scan_end = split_context->split_end;
+    }
+
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
         auto stripeInfo = reader->getStripeInOrcFormat(idx);
         int64_t offset = stripeInfo.offset();
@@ -378,9 +397,9 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_ctx.case_sensitive);
+        auto col_name = OrcChunkReader::format_column_name(column.name(), _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id);
+        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(column.slot_desc);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
@@ -396,7 +415,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
         // put materialized columns' conjunctions into _eval_conjunct_ctxs_by_materialized_slot
         // for example, partition column's conjunctions will not put into _eval_conjunct_ctxs_by_materialized_slot
         {
-            auto it = _scanner_params.conjunct_ctxs_by_slot.find(column.slot_id);
+            auto it = _scanner_params.conjunct_ctxs_by_slot.find(column.slot_id());
             if (it != _scanner_params.conjunct_ctxs_by_slot.end()) {
                 _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
             }
@@ -426,6 +445,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         errno = 0;
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
+        if (_split_context != nullptr) {
+            auto* split_context = down_cast<const HdfsOrcScannerSplitContext*>(_split_context);
+            options.setSerializedFileTail(*(split_context->footer.get()));
+        }
         reader = orc::createReader(std::move(_input_stream), options);
     } catch (std::exception& e) {
         bool is_not_found = (errno == ENOENT);
@@ -440,6 +463,26 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // select stripes to read and resolve columns aganist this orc file.
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
+
+    // we can split task if we enable split tasks feature and have >= 2 stripes.
+    // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
+    bool enable_split_tasks =
+            _scanner_params.enable_split_tasks && stripes.size() >= 2 && (_scanner_params.split_context == nullptr);
+    VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename() << ", size = " << stripes.size()
+                  << ", scanner_params.enable_split_tasks = " << _scanner_params.enable_split_tasks
+                  << ", enable_split_tasks = " << enable_split_tasks;
+    if (enable_split_tasks) {
+        auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
+        for (const auto& info : stripes) {
+            auto ctx = std::make_unique<HdfsOrcScannerSplitContext>();
+            ctx->footer = footer;
+            ctx->split_start = info.offset;
+            ctx->split_end = info.offset + info.length;
+            _split_tasks.emplace_back(std::move(ctx));
+        }
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
     RETURN_IF_ERROR(resolve_columns(reader.get()));
     if (_should_skip_file) {
@@ -486,7 +529,7 @@ void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     CHECK(chunk != nullptr);
-    if (_should_skip_file) {
+    if (_should_skip_file || _split_tasks.size() > 0) {
         return Status::EndOfFile("");
     }
 
@@ -542,7 +585,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
 
             // we need to append none existed column before do eval, just for count(*) optimization
-            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, rows_read);
+            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read);
 
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;

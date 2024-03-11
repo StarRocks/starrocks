@@ -113,6 +113,28 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
+### 导出数据到 S3 (MinIO)
+
+以下示例将 `sales_records` 中的所有数据行导出至 MinIO。
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "s3://huditest/ubload/data3",
+    "format" = "parquet",
+    "aws.s3.access_key" = "admin",
+    "aws.s3.secret_key" = "password",
+    "aws.s3.region" = "us-west-2",
+    "aws.s3.use_instance_profile" = "false",
+    "aws.s3.enable_ssl" = "false",
+    "aws.s3.enable_path_style_access" = "true",
+    "compression" = "zstd",
+    "single" = "true",
+    "aws.s3.endpoint" = "http://minio:9000"
+)
+SELECT * FROM sales_records;
+```
+
 ## 另请参阅
 
 - 有关使用 INSERT 的更多说明，请参阅 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。

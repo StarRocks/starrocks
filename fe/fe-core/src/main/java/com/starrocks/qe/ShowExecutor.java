@@ -143,7 +143,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -221,7 +220,6 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
@@ -291,8 +289,6 @@ public class ShowExecutor {
             handleShowProc();
         } else if (stmt instanceof HelpStmt) {
             handleHelp();
-        } else if (stmt instanceof ShowWarehousesStmt) {
-            handleShowWarehouses();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -620,6 +616,7 @@ public class ShowExecutor {
             mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
             // task run status
             mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
+            mvStatus.setQueryRewriteStatus(mvTable.getQueryRewriteStatus());
             rowSets.add(mvStatus);
         }
 
@@ -1071,7 +1068,7 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.isSharedDataMode()) {
+        } else if (RunMode.isSharedDataMode() && !db.isSystemDatabase()) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
@@ -2144,7 +2141,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), snapshotInfos);
     }
 
-    private void handleShowBackup() {
+    private void handleShowBackup() throws AnalysisException {
         ShowBackupStmt showStmt = (ShowBackupStmt) stmt;
         Database filterDb = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
         List<List<String>> infos = Lists.newArrayList();
@@ -2190,7 +2187,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
-    private void handleShowRestore() {
+    private void handleShowRestore() throws AnalysisException {
         ShowRestoreStmt showStmt = (ShowRestoreStmt) stmt;
         Database filterDb = GlobalStateMgr.getCurrentState().getDb(showStmt.getDbName());
         List<List<String>> infos = Lists.newArrayList();
@@ -2643,16 +2640,6 @@ public class ShowExecutor {
                 )
                 .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
-    }
-
-    // show warehouse statement
-    private void handleShowWarehouses() {
-        ShowWarehousesStmt showStmt = (ShowWarehousesStmt) stmt;
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-        List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
-                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
 
     private List<List<String>> doPredicate(ShowStmt showStmt,

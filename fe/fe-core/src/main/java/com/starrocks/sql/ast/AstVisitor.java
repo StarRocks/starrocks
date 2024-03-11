@@ -98,13 +98,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-
-    // ---------------------------------------- Warehouse Statement ----------------------------------------------------
-
-    public R visitShowWarehousesStatement(ShowWarehousesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {
@@ -1123,6 +1116,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitView(ViewRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitPivotRelation(PivotRelation node, C context) {
         return visitRelation(node, context);
     }
 

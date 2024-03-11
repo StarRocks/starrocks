@@ -51,7 +51,7 @@ Returns an array.
 
 - This function can sort elements of an array only in ascending order.
 - `NULL` values are placed at the beginning of the array that is returned.
-- If you want to sort elements of an array in descending order, use the [reverse](./reverse.md) function.
+- If you want to sort elements of an array in descending order, use the [reverse](../string-functions/reverse.md) function.
 - If the sorting array (`array1`) is null, data in `array0` remains unchanged.
 - The elements of the returned array have the same data type as the elements of `array0`. The attribute of null values are also the same.
 - The two arrays must have the same number of elements. Otherwise, an error is returned.

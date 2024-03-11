@@ -100,6 +100,7 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -443,6 +444,7 @@ public class StmtExecutor {
     public void execute() throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
+        context.setIsForward(false);
 
         // set execution id.
         // Try to use query id as execution id when execute first time.
@@ -549,6 +551,7 @@ public class StmtExecutor {
                 return;
             }
             if (isForwardToLeader()) {
+                context.setIsForward(true);
                 forwardToLeader();
                 return;
             } else {
@@ -1933,6 +1936,8 @@ public class StmtExecutor {
         long loadedBytes = 0;
         long jobId = -1;
         long estimateScanRows = -1;
+        int estimateFileNum = 0;
+        long estimateScanFileSize = 0;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         boolean insertError = false;
         String trackingSql = "";
@@ -1942,16 +1947,21 @@ public class StmtExecutor {
 
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
-            boolean containOlapScanNode = false;
+            boolean needQuery = false;
             for (ScanNode scanNode : scanNodes) {
                 if (scanNode instanceof OlapScanNode) {
                     estimateScanRows += ((OlapScanNode) scanNode).getActualRows();
-                    containOlapScanNode = true;
+                    needQuery = true;
+                }
+                if (scanNode instanceof FileScanNode) {
+                    estimateFileNum += ((FileScanNode) scanNode).getFileNum();
+                    estimateScanFileSize += ((FileScanNode ) scanNode).getFileTotalSize();
+                    needQuery = true;
                 }
             }
 
             TLoadJobType type;
-            if (containOlapScanNode) {
+            if (needQuery) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
                 type = TLoadJobType.INSERT_QUERY;
             } else {
@@ -1970,6 +1980,8 @@ public class StmtExecutor {
                         EtlJobType.INSERT,
                         createTime,
                         estimateScanRows,
+                        estimateFileNum,
+                        estimateScanFileSize,
                         type,
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             }

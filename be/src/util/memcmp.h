@@ -154,7 +154,7 @@ inline int memcompare(const char* p1, size_t size1, const char* p2, size_t size2
     size_t min_size = std::min(size1, size2);
     auto res = memcmp(p1, p2, min_size);
     if (res != 0) {
-        return res;
+        return res > 0 ? 1 : -1;
     }
     return compare(size1, size2);
 }

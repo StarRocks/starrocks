@@ -75,6 +75,7 @@ import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -132,7 +133,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
-    public void setUseFastSchemaEvolution(boolean useFastSchemaEvolution) {}
+    public void setUseFastSchemaEvolution(boolean useFastSchemaEvolution) {
+    }
 
     public static class BasePartitionInfo {
 
@@ -446,8 +448,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public MaterializedView(long id, long dbId, String mvName, List<Column> baseSchema, KeysType keysType,
                             PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                             MvRefreshScheme refreshScheme) {
-        super(id, mvName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(), null, TableType.MATERIALIZED_VIEW);
+        super(id, mvName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null, TableType.MATERIALIZED_VIEW);
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
@@ -1728,6 +1729,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
+    /**
+     * Return the status and reason about query rewrite
+     */
+    public String getQueryRewriteStatus() {
+        Pair<Boolean, String> status =
+                MvRewritePreprocessor.isMVValidToRewriteQuery(ConnectContext.get(), this, true, Sets.newHashSet());
+        if (status.first) {
+            return "VALID";
+        }
+        return "INVALID: " + status.second;
+    }
+
     @Override
     public Map<String, String> getProperties() {
         Map<String, String> properties = super.getProperties();
@@ -1916,7 +1929,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 getName(), oldBaseTableInfosStr, newBaseTableInfosStr);
         Preconditions.checkArgument(this.baseTableInfos.size() == newBaseTableInfos.size(),
                 String.format("New baseTableInfos' size should be qual to old baseTableInfos, baseTableInfos:%s," +
-                                "newBaseTableInfos:%s", oldBaseTableInfosStr, newBaseTableInfosStr));
+                        "newBaseTableInfos:%s", oldBaseTableInfosStr, newBaseTableInfosStr));
         this.baseTableInfos = newBaseTableInfos;
 
         // change ExpressionRangePartitionInfo because mv's db may be changed.

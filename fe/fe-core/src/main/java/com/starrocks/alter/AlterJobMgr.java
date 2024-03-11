@@ -165,7 +165,12 @@ public class AlterJobMgr {
         schemaChangeHandler.start();
         materializedViewHandler.start();
         clusterHandler.start();
-        compactionHandler = new CompactionHandler();
+    }
+
+    public void stop() {
+        schemaChangeHandler.setStop();
+        materializedViewHandler.setStop();
+        clusterHandler.setStop();
     }
 
     public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
@@ -425,8 +430,7 @@ public class AlterJobMgr {
         Task currentTask = GlobalStateMgr.getCurrentState().getTaskManager().getTask(
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
-            currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
-                    materializedView.getViewDefineSql());
+            currentTask.setDefinition(materializedView.getTaskDefinition());
             currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }

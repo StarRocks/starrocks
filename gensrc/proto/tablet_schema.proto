@@ -92,6 +92,7 @@ enum IndexType {
     BITMAP = 0;
     GIN = 1;
     INDEX_UNKNOWN = 2;
+    NGRAMBF = 3;
 }
 
 message TabletIndexPB {

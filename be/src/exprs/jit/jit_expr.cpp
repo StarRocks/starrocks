@@ -47,7 +47,18 @@ JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
 
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
+    RETURN_IF_ERROR(prepare_impl(state, context));
+    if (_jit_function == nullptr) {
+        _children.clear();
+        _children.push_back(_expr);
+        // jitExpr becomes an empty node, fallback to original expr, which are prepared again in case of jit
+        // complex expressions later.
+        RETURN_IF_ERROR(Expr::prepare(state, context));
+    }
+    return Status::OK();
+}
 
+Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
     if (_is_prepared) {
         return Status::OK();
     }
@@ -58,7 +69,7 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
 
         // Compile the expression into native code and retrieve the function pointer.
         auto* jit_engine = JITEngine::get_instance();
-        if (!jit_engine->initialized()) {
+        if (!jit_engine->support_jit()) {
             return Status::JitCompileError("JIT is not supported");
         }
         auto expr_name = _expr->jit_func_name();
@@ -71,17 +82,12 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
             LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
                       << " Reason: " << st;
         } else {
-            LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
+            VLOG_QUERY << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
             _jit_function = _jit_obj_cache->get_func();
             if (_jit_function == nullptr) {
-                EXIT_IF_ERROR(Status::RuntimeError("JIT func must be not null")); // TODO: RETURN_IF_ERROR
+                return Status::RuntimeError("JIT func must be not null");
             }
         }
-    }
-    if (_jit_function == nullptr) {
-        _children.clear();
-        _children.push_back(_expr);
-        RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.
     }
     return Status::OK();
 }
@@ -126,9 +132,9 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         auto child = _children[i];
         if (UNLIKELY((column->is_constant() ^ child->is_constant()) ||
                      (column->is_nullable() ^ child->is_nullable()))) {
-            LOG(INFO) << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
-                      << " but col const = " << column->is_constant() << " null = " << column->is_nullable()
-                      << " expr= " << child->debug_string() << " col= " << column->get_name();
+            VLOG_QUERY << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
+                       << " but col const = " << column->is_constant() << " null = " << column->is_nullable()
+                       << " expr= " << child->debug_string() << " col= " << column->get_name();
         }
 
         if (column->is_constant()) {

@@ -20,6 +20,7 @@
 #include <variant>
 
 #include "common/statusor.h"
+#include "compaction_task_context.h"
 #include "gutil/macros.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
@@ -67,7 +68,7 @@ public:
 
     StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
 
-    StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
+    StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
     [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
 

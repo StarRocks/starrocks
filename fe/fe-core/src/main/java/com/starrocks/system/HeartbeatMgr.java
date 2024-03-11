@@ -92,8 +92,9 @@ public class HeartbeatMgr extends FrontendDaemon {
     }
 
     public void setLeader(int clusterId, String token, long epoch) {
-        TMasterInfo tMasterInfo = new TMasterInfo(
-                new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
+        TMasterInfo tMasterInfo = new TMasterInfo(new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port),
+                epoch);
+        tMasterInfo.setCluster_id(clusterId);
         tMasterInfo.setToken(token);
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();
@@ -139,7 +140,6 @@ public class HeartbeatMgr extends FrontendDaemon {
                 masterFeNodeName = frontend.getNodeName();
             }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
                     GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
             hbResponses.add(executor.submit(handler));
         }
@@ -347,13 +347,11 @@ public class HeartbeatMgr extends FrontendDaemon {
 
     // frontend heartbeat
     public static class FrontendHeartbeatHandler implements Callable<HeartbeatResponse> {
-        private Frontend fe;
-        private int clusterId;
-        private String token;
+        private final Frontend fe;
+        private final String token;
 
-        public FrontendHeartbeatHandler(Frontend fe, int clusterId, String token) {
+        public FrontendHeartbeatHandler(Frontend fe, String token) {
             this.fe = fe;
-            this.clusterId = clusterId;
             this.token = token;
         }
 
@@ -372,7 +370,7 @@ public class HeartbeatMgr extends FrontendDaemon {
             }
 
             String url = "http://" + fe.getHost() + ":" + Config.http_port
-                    + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
+                    + "/api/bootstrap?token=" + token;
             try {
                 String result = Util.getResultForUrl(url, null,
                         Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);
