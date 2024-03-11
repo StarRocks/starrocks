@@ -641,6 +641,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
+    public static final String ENABLE_AGGREGATION_RUNTIME_LIMIT = "enable_aggregation_runtime_limit";
+
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
@@ -1327,6 +1329,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
 
+    @VarAttr(name = ENABLE_AGGREGATION_RUNTIME_LIMIT, flag = VariableMgr.INVISIBLE)
+    private boolean enableAggregationRuntimeLimit = false;
+
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
 
@@ -1363,6 +1368,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
         this.cboPushDownTopNLimit = cboPushDownTopNLimit;
+    }
+
+    public boolean getEnableAggregationRuntimeLimit() {
+        return enableAggregationRuntimeLimit;
     }
 
     public String getThriftPlanProtocol() {
