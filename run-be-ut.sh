@@ -53,6 +53,23 @@ Usage: $0 <options>
   exit 1
 }
 
+# Append negative cases to existing $TEST_NAME
+# refer to https://github.com/google/googletest/blob/main/docs/advanced.md#running-a-subset-of-the-tests
+# for detailed explaination of `--gtest_filter`
+append_negative_case() {
+    local exclude_case=$1
+    case $TEST_NAME in
+      *-*)
+        # already has negative cases, just append the cases to the end
+        TEST_NAME=${TEST_NAME}:$exclude_case
+        ;;
+      *)
+        # doesn't have negative cases, start the negative session
+        TEST_NAME=${TEST_NAME}-$exclude_case
+        ;;
+    esac
+}
+
 # -l run and -l gtest_filter only used for compatibility
 OPTS=$(getopt \
   -n $0 \
@@ -204,7 +221,7 @@ export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 
 if [ $WITH_AWS = "OFF" ]; then
-    TEST_NAME="$TEST_NAME*:-*S3*"
+    append_negative_case "*S3*"
 fi
 
 if [ -n "$EXCLUDING_TEST_SUIT" ]; then
@@ -223,6 +240,7 @@ cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util
 
 test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" | grep -v starrocks_test | grep -v bench_test`
 
+echo "[INFO] gtest_filter: $TEST_NAME"
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
 if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
