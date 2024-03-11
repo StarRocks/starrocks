@@ -223,6 +223,7 @@ public class ReplicaTest {
     public void testUpdateVersion4() {
         Replica originalReplica = new Replica(10000, 20000, 3, 0, 100, 78, ReplicaState.NORMAL, 0, 6);
         originalReplica.updateForRestore(2, 10, 20);
+        assertEquals(2, originalReplica.getMinReadableVersion());
     }
 }
 
