@@ -396,7 +396,6 @@ import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -1793,24 +1792,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String catalogName = ((Identifier) visit(context.catalogName)).getValue();
         AlterClause alterClause = (AlterClause) visit(context.modifyPropertiesClause());
         return new AlterCatalogStmt(catalogName, alterClause, createPos(context));
-    }
-
-    // ---------------------------------------- Warehouse Statement -----------------------------------------------------
-
-    @Override
-    public ParseNode visitShowWarehousesStatement(StarRocksParser.ShowWarehousesStatementContext context) {
-        String pattern = null;
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            pattern = stringLiteral.getValue();
-        }
-
-        Expr where = null;
-        if (context.expression() != null) {
-            where = (Expr) visit(context.expression());
-        }
-
-        return new ShowWarehousesStmt(pattern, where, createPos(context));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
