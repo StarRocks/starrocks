@@ -165,7 +165,7 @@ SELECT /*+ SET_VAR
 
 ### cbo_eq_base_type （2.5.14 及以后）
 
-用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认 `VARCHAR`，可选 `DECIMAL`。
+用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
 
 ### character_set_database（global）
 
