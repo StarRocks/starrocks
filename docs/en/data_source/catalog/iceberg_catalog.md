@@ -1355,3 +1355,9 @@ Description: The amount of time after which a cache entry on disk expires counti
 Unit: Bytes
 Default value: `8388608`, equivalent to 8 MB
 Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
+
+### Configure Iceberg table pointer and partition name caching
+
+You can use the session variable [`enable_iceberg_metadata_cache`](../../reference/System_variable.md#enable_iceberg_metadata_cache-321-and-later) to specify whether to cache pointers and partition names for Iceberg tables. This variable is supported from v3.2.1 onwards.
+
+From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
