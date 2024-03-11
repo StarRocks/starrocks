@@ -94,7 +94,7 @@ TEST_F(ConnectorSinkOperatorTest, test_push_chunk) {
         auto mock_sink = std::make_unique<MockConnectorChunkSink>();
         auto promise = std::promise<Status>();
         auto futures = Futures{};
-        futures.add_chunk_future.push_back(promise.get_future()); // block
+        futures.add_chunk_futures.push_back(promise.get_future()); // block
         EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(std::move(futures))));
         EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(Futures{}))); // don't block
         auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
@@ -112,7 +112,7 @@ TEST_F(ConnectorSinkOperatorTest, test_push_chunk) {
         auto mock_sink = std::make_unique<MockConnectorChunkSink>();
         auto promise = std::promise<CommitResult>();
         auto futures = Futures{};
-        futures.commit_file_future.push_back(promise.get_future()); // block
+        futures.commit_file_futures.push_back(promise.get_future()); // block
         EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(std::move(futures))));
         EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(Futures{})));                  // don't block
         EXPECT_CALL(*mock_sink, callback_on_success()).WillOnce(Return([](CommitResult r) {})); // don't block
@@ -136,7 +136,7 @@ TEST_F(ConnectorSinkOperatorTest, test_push_chunk_error) {
         auto mock_sink = std::make_unique<MockConnectorChunkSink>();
         auto promise = std::promise<Status>();
         auto futures = Futures{};
-        futures.add_chunk_future.push_back(promise.get_future()); // block
+        futures.add_chunk_futures.push_back(promise.get_future()); // block
         EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(std::move(futures))));
         auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), _fragment_context);
         auto chunk = std::make_shared<Chunk>();
@@ -154,7 +154,7 @@ TEST_F(ConnectorSinkOperatorTest, test_cleanup_after_cancel) {
         bool cleanup = false;
         auto mock_sink = std::make_unique<MockConnectorChunkSink>();
         auto futures = Futures{};
-        futures.commit_file_future.push_back(make_ready_future(CommitResult{
+        futures.commit_file_futures.push_back(make_ready_future(CommitResult{
                 .io_status = Status::OK(),
                 .rollback_action = [&]() { cleanup = true; },
         }));

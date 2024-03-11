@@ -86,9 +86,9 @@ TEST_F(IcebergChunkSinkTest, test_unpartitioned_sink) {
         auto chunk = std::make_shared<Chunk>();
         auto futures = sink->add(chunk);
         EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().add_chunk_future.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_future[0]));
-        EXPECT_OK(futures.value().add_chunk_future[0].get());
+        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
+        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
+        EXPECT_OK(futures.value().add_chunk_futures[0].get());
     }
 
     {
@@ -118,25 +118,25 @@ TEST_F(IcebergChunkSinkTest, test_unpartitioned_sink) {
         EXPECT_OK(sink->init());
         auto futures = sink->add(nullptr);
         EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_future.size(), 0);
-        EXPECT_EQ(futures.value().add_chunk_future.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_future[0]));
-        EXPECT_OK(futures.value().add_chunk_future[0].get());
+        EXPECT_EQ(futures.value().commit_file_futures.size(), 0);
+        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
+        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
+        EXPECT_OK(futures.value().add_chunk_futures[0].get());
 
         futures = sink->add(nullptr);
         EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_future.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().commit_file_future[0]));
-        EXPECT_OK(futures.value().commit_file_future[0].get().io_status);
-        EXPECT_EQ(futures.value().add_chunk_future.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_future[0]));
-        EXPECT_OK(futures.value().add_chunk_future[0].get());
+        EXPECT_EQ(futures.value().commit_file_futures.size(), 1);
+        EXPECT_TRUE(is_ready(futures.value().commit_file_futures[0]));
+        EXPECT_OK(futures.value().commit_file_futures[0].get().io_status);
+        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
+        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
+        EXPECT_OK(futures.value().add_chunk_futures[0].get());
 
         futures = sink->finish();
         EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_future.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().commit_file_future[0]));
-        EXPECT_OK(futures.value().commit_file_future[0].get().io_status);
+        EXPECT_EQ(futures.value().commit_file_futures.size(), 1);
+        EXPECT_TRUE(is_ready(futures.value().commit_file_futures[0]));
+        EXPECT_OK(futures.value().commit_file_futures[0].get().io_status);
     }
 }
 
@@ -166,9 +166,9 @@ TEST_F(IcebergChunkSinkTest, test_partitioned_sink) {
         }
         auto futures = sink->add(chunk);
         EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().add_chunk_future.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_future[0]));
-        EXPECT_OK(futures.value().add_chunk_future[0].get());
+        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
+        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
+        EXPECT_OK(futures.value().add_chunk_futures[0].get());
     }
 
     {
@@ -206,10 +206,10 @@ TEST_F(IcebergChunkSinkTest, test_partitioned_sink) {
         }
         auto futures = sink->add(chunk);
         EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_future.size(), 0);
-        EXPECT_EQ(futures.value().add_chunk_future.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_future[0]));
-        EXPECT_OK(futures.value().add_chunk_future[0].get());
+        EXPECT_EQ(futures.value().commit_file_futures.size(), 0);
+        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
+        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
+        EXPECT_OK(futures.value().add_chunk_futures[0].get());
 
         chunk = std::make_shared<Chunk>();
         {
@@ -219,18 +219,18 @@ TEST_F(IcebergChunkSinkTest, test_partitioned_sink) {
         }
         futures = sink->add(chunk);
         EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_future.size(), 0);
-        EXPECT_EQ(futures.value().add_chunk_future.size(), 1);
-        EXPECT_TRUE(is_ready(futures.value().add_chunk_future[0]));
-        EXPECT_OK(futures.value().add_chunk_future[0].get());
+        EXPECT_EQ(futures.value().commit_file_futures.size(), 0);
+        EXPECT_EQ(futures.value().add_chunk_futures.size(), 1);
+        EXPECT_TRUE(is_ready(futures.value().add_chunk_futures[0]));
+        EXPECT_OK(futures.value().add_chunk_futures[0].get());
 
         futures = sink->finish();
         EXPECT_TRUE(futures.ok());
-        EXPECT_EQ(futures.value().commit_file_future.size(), 2);
-        EXPECT_TRUE(is_ready(futures.value().commit_file_future[0]));
-        EXPECT_TRUE(is_ready(futures.value().commit_file_future[1]));
-        EXPECT_OK(futures.value().commit_file_future[0].get().io_status);
-        EXPECT_OK(futures.value().commit_file_future[1].get().io_status);
+        EXPECT_EQ(futures.value().commit_file_futures.size(), 2);
+        EXPECT_TRUE(is_ready(futures.value().commit_file_futures[0]));
+        EXPECT_TRUE(is_ready(futures.value().commit_file_futures[1]));
+        EXPECT_OK(futures.value().commit_file_futures[0].get().io_status);
+        EXPECT_OK(futures.value().commit_file_futures[1].get().io_status);
     }
 }
 
