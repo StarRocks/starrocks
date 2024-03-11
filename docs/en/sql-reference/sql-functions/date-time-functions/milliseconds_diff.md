@@ -8,6 +8,8 @@ displayed_sidebar: "English"
 
 Returns the time difference between the start date and end date in milliseconds.
 
+This function is supported from v3.2.4.
+
 ## Syntax
 
 ```Haskell
@@ -23,8 +25,6 @@ BIGINT milliseconds_diff(DATETIME expr1, DATETIME expr2);
 ## Return value
 
 Returns a value of the BIGINT type. NULL is returned if the input date does not exist.
-
-This function is supported from v3.2.4.
 
 ## Examples
 
