@@ -38,9 +38,7 @@ public:
         auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
         state->set_processed_rows(arg0->size());
         Columns result;
-        if (arg0->has_null()) {
-            auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
-
+        if (arg0->has_null() || state->get_is_left_join()) {
             auto offset_column = col_array->offsets_column();
             auto copy_count_column = UInt32Column::create();
             copy_count_column->append(0);
@@ -90,6 +88,10 @@ public:
 
     Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
+        const auto& table_fn = fn.table_fn;
+        if (table_fn.__isset.is_left_join) {
+            (*state)->set_is_left_join(table_fn.is_left_join);
+        }
         return Status::OK();
     }
 

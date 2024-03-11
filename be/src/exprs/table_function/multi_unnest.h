@@ -118,6 +118,10 @@ public:
 
     Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
+        const auto& table_fn = fn.table_fn;
+        if (table_fn.__isset.is_left_join) {
+            (*state)->set_is_left_join(table_fn.is_left_join);
+        }
         return Status::OK();
     }
 
