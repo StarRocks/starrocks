@@ -131,10 +131,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     // In replay phase, the check of storage volume existence can be skipped.
     // Because it has been checked when creating db.
     private boolean bindDbToStorageVolume(String svId, long dbId, boolean isReplay) {
+        if (svId == null) {
+            return false;
+        }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (svId == null) {
-                return false;
-            }
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
                 return false;
             }
@@ -231,10 +231,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     // In replay phase, the check of storage volume existence can be skipped.
     // Because it has been checked when creating table.
     private boolean bindTableToStorageVolume(String svId, long tableId, boolean isReplay) {
+        if (svId == null) {
+            return false;
+        }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (svId == null) {
-                return false;
-            }
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) &&
                     !storageVolumeToTables.containsKey(svId) &&
                     getStorageVolume(svId) == null) {
