@@ -70,9 +70,7 @@ class UnknownFileWriterFactory : public FileWriterFactory {
 public:
     UnknownFileWriterFactory(std::string format) : _format(std::move(format)) {}
 
-    Status init() override {
-        return Status::NotSupported(fmt::format("got unsupported file format: {}", _format));
-    }
+    Status init() override { return Status::NotSupported(fmt::format("got unsupported file format: {}", _format)); }
 
     StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override {
         return Status::NotSupported(fmt::format("got unsupported file format: {}", _format));
