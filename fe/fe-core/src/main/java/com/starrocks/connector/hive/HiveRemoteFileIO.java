@@ -188,7 +188,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
             return false;
         }
         String dirName = fileStatus.getPath().getName();
-        return !(dirName.startsWith("."));
+        return !(dirName.startsWith(".") || dirName.startsWith("_"));
     }
 
     protected List<RemoteFileBlockDesc> getRemoteFileBlockDesc(BlockLocation[] blockLocations) throws IOException {
