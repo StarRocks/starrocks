@@ -384,17 +384,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 引入版本：v3.1
 -->
 
-<!--
-##### log_register_and_unregister_query_id
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ### Server
 
 ##### frontend_address
@@ -659,17 +648,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 是否动态：否
 - 描述：MySQL 服务器中用于处理任务的最大线程数。
 - 引入版本：-
-
-<!--
-##### max_http_sql_service_task_threads_num
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
 
 ##### mysql_server_version
 
@@ -1144,37 +1122,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 引入版本：-
 -->
 
-##### enable_backup_materialized_view
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：在数据库的备份操作中，是否对数据库中的异步物化视图进行备份。如果设置为 `false`，将跳过对异步物化视图的备份。
-- 引入版本：v3.2.0
-
-<!--
-##### enable_show_materialized_views_include_all_task_runs
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### materialized_view_min_refresh_interval
-
-- 默认值：60
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 <!--
 ##### skip_whole_phase_lock_mv_limit
 
@@ -1194,24 +1141,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 是否动态：是
 - 描述：是否开启异步物化视图功能。`TRUE` 表示开启。从 2.5.2 版本开始，该功能默认开启。2.5.2 版本之前默认值为 `FALSE`。
 - 引入版本：v2.4
-
-##### enable_colocate_mv_index
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。
-- 引入版本：v3.2.0
-
-##### default_mv_refresh_immediate
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
-- 引入版本：v3.2.3
 
 ##### enable_mv_automatic_active_check
 
@@ -1627,15 +1556,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 引入版本：-
 -->
 
-##### statistic_auto_collect_small_table_rows
-
-- 默认值：10000000
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限。
-- 引入版本：v3.2
-
 <!--
 ##### statistic_auto_collect_small_table_interval
 
@@ -1843,17 +1763,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 默认值：100
 - 类型：Int
 - 单位：MB
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### stream_load_max_txn_num_per_be
-
-- 默认值：-1
-- 类型：Int
-- Unit:
 - 是否动态：是
 - 描述：
 - 引入版本：-
@@ -2183,39 +2092,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 描述：发布写事务到 StarRocks 外表的超时时长，单位为毫秒。默认值 `10000` 表示超时时长为 10 秒。
 - 引入版本：-
 
-##### enable_sync_publish
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否在导入事务 publish 阶段同步执行 apply 任务，仅适用于主键表。有效值：
-  - `TRUE`：导入事务 publish 阶段同步执行 apply 任务，即 apply 任务完成后才会返回导入事务 publish 成功，此时所导入数据真正可查。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，开启该参数可以提升查询性能和稳定性，但是会增加导入耗时。
-  - `FALSE`：在导入事务 publish 阶段异步执行 apply 任务，即在导入事务 publish 阶段 apply 任务提交之后立即返回导入事务 publish 成功，然而此时导入数据并不真正可查。这时并发的查询需要等到 apply 任务完成或者超时，才能继续执行。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，关闭该参数会影响查询性能和稳定性。
-- 引入版本：v3.2.0
-
-<!--
-##### stream_load_task_keep_max_num
-
-- 默认值：1000
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### stream_load_task_keep_max_second
-
-- 默认值：3 * 24 * 3600
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### label_clean_interval_second
 
 - 默认值：4 * 3600
@@ -2376,20 +2252,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 是否动态：是
 - 描述：Schema Change 超时时间。
 - 引入版本：-
-
-##### enable_fast_schema_evolution
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`。开启后增删列时可以提高 Schema Change 速度并降低资源使用。
-- 引入版本：v3.2.0
-
-> **说明**
->
-> - StarRocks 存算分离集群不支持该参数。
-> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
 
 ##### recover_with_empty_tablet
 
@@ -2865,17 +2727,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 描述：访问 Azure Blob Storage 的共享访问签名（SAS）。
 - 引入版本：v3.1
 
-<!--
-##### starmgr_grpc_timeout_seconds
-
-- 默认值：5
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### lake_compaction_score_selector_min_score
 
 - 默认值：10.0
@@ -2913,37 +2764,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：存算分离集群下在 Leader FE 节点内存中保留多少条最近失败的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近失败的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
 - 引入版本：v3.1.0
-
-##### lake_publish_version_max_threads
-
-- 默认值：512
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：存算分离集群下发送生效版本（Publish Version）任务的最大线程数。
-- 引入版本：v3.2.0
-
-<!--
-##### lake_publish_delete_txnlog_max_threads
-
-- 默认值：16
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_compaction_default_timeout_second
-
-- 默认值：86400
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 <!--
 ##### lake_autovacuum_max_previous_versions
@@ -2991,55 +2811,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：存算分离集群下，如果某个表分区在该阈值范围内没有任何更新操作(导入、删除或 Compaction)，将不再触发该分区的自动垃圾数据清理操作。
 - 引入版本：v3.1.0
-
-##### lake_enable_ingest_slowdown
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否为存算分离集群开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。
-- 引入版本：v3.2.0
-
-##### lake_ingest_slowdown_threshold
-
-- 默认值：100
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：触发导入限速的 Compaction Score 阈值。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。
-- 引入版本：v3.2.0
-
-> **说明**
->
-> 当 `lake_ingest_slowdown_threshold` 比配置项 `lake_compaction_score_selector_min_score` 小时，实际生效的阈值会是 `lake_compaction_score_selector_min_score`。
-
-##### lake_ingest_slowdown_ratio
-
-- 默认值：0.1
-- 类型：Double
-- 单位：-
-- 是否动态：是
-- 描述：导入限速比例。
-
-  数据导入任务可以分为数据写入和数据提交（COMMIT）两个阶段，导入限速是通过延迟数据提交来达到限速的目的的，延迟比例计算公式为：`(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`。例如，数据写入阶段耗时为 5 分钟，`lake_ingest_slowdown_ratio` 为 0.1，Compaction Score 比 `lake_ingest_slowdown_threshold` 多 10，那么延迟提交的时间为 `5 * 10 * 0.1 = 5` 分钟，相当于写入阶段的耗时由 5 分钟增加到了 10 分钟，平均导入速度下降了一倍。
-
-- 引入版本：v3.2.0
-
-> **说明**
->
-> - 如果一个导入任务同时向多个分区写入，那么会取所有分区的 Compaction Score 的最大值来计算延迟提交时间。
-> - 延迟提交的时间是在第一次尝试提交时计算的，一旦确定便不会更改，延迟时间一到，只要 Compaction Score 不超过 `lake_compaction_score_upper_bound`，系统都会执行数据提交（COMMIT）操作。
-> - 如果延迟之后的提交时间超过了导入任务的超时时间，那么导入任务会直接失败。
-
-##### lake_compaction_score_upper_bound
-
-- 默认值：0
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到 Compaction Score 降到该值以下或者任务超时。
-- 引入版本：v3.2.0
 
 ### 其他
 
@@ -3127,39 +2898,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：3600
 - 类型：Int
 - 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_enable_batch_publish_version 
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_batch_publish_max_version_num
-
-- 默认值：10
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lake_batch_publish_min_version_num
-
-- 默认值：1
-- 类型：Int
-- 单位：-
 - 是否动态：是
 - 描述：
 - 引入版本：-
@@ -3403,17 +3141,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### authorization_enable_column_level_privilege
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### authentication_chain
 
 - 默认值：{AUTHENTICATION_CHAIN_MECHANISM_NATIVE}
@@ -3559,28 +3286,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 默认值：4096
 - 类型：Long
 - 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_automatic_bucket
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### default_automatic_bucket_size
-
-- 默认值：4 * 1024 * 1024 * 1024
-- 类型：Long
-- Unit:
 - 是否动态：是
 - 描述：
 - 引入版本：-
@@ -4619,92 +4324,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
-##### json_file_size_limit
-
-- 默认值：4294967296
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-##### allow_system_reserved_names
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。
-- 引入版本：v3.2.0
-
-<!--
-##### use_lock_manager
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lock_table_num
-
-- 默认值：32
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lock_manager_enable_resolve_deadlock
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lock_manager_enable_loading_using_fine_granularity_lock
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### lock_manager_dead_lock_detection_delay_time_ms
-
-- 默认值：3000
-- 类型：Long
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### refresh_dictionary_cache_thread_num
-
-- 默认值：2
-- 类型：Int
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### replication_max_parallel_table_count
 
 - 默认值：100
@@ -4755,28 +4374,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
 - 引入版本：-
 
-<!--
-##### black_host_history_sec
-
-- 默认值：2 * 60
-- 类型：Long
-- 单位：Seconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### black_host_connect_failures_within_time
-
-- 默认值：5
-- 类型：Long
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
 ##### jdbc_connection_pool_size
 
 - 默认值：8
@@ -4803,14 +4400,3 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
-
-<!--
-##### max_varchar_length
-
-- 默认值：1048576
-- 类型：Int
-- Unit:
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
