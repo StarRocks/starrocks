@@ -234,12 +234,14 @@ public:
     // new rowset.
     // Before calling it, please confirm if you need a complete `rowset_meta` that includes `tablet_schema_pb`.
     // If not, perhaps `get_meta_pb_without_schema()` is enough.
-    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb) const {
+    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb, const TabletSchemaCSPtr& tablet_schema = nullptr) const {
         *rs_meta_pb = *_rowset_meta_pb;
-        if (_schema != nullptr) {
+        const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
+
+        if (target_schema != nullptr) {
             rs_meta_pb->clear_tablet_schema();
             TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
-            _schema->to_schema_pb(ts_pb);
+            target_schema->to_schema_pb(ts_pb);
         }
     }
 

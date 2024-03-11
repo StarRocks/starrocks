@@ -1018,3 +1018,63 @@ PROPERTIES (
 DROP DATABASE test_schema_change_for_after;
 -- result:
 -- !result
+-- name: test_compaction_after_adding_generated_column
+CREATE DATABASE test_compaction_after_adding_generated_column;
+-- result:
+-- !result
+USE test_compaction_after_adding_generated_column;
+-- result:
+-- !result
+CREATE TABLE `t` (
+  `c1` BIGINT NOT NULL COMMENT "",
+  `c2` BIGINT NOT NULL COMMENT "",
+  `c3` BIGINT as `c1` + `c2`
+) ENGINE=OLAP 
+PRIMARY KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t values (1,1),(2,2),(3,3),(4,4);
+-- result:
+-- !result
+ALTER TABLE t drop column c3;
+-- result:
+-- !result
+INSERT INTO t values (1,1),(2,2),(3,3),(4,4);
+-- result:
+-- !result
+ALTER TABLE t add column c4 BIGINT as c1 + c2 + 10;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT sleep(10);
+-- result:
+1
+-- !result
+[UC]ALTER TABLE t COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT * FROM t;
+-- result:
+1	1	12
+2	2	14
+3	3	16
+4	4	18
+-- !result
+DROP DATABASE test_compaction_after_adding_generated_column;
+-- result:
+-- !result

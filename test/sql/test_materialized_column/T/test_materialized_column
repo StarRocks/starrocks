@@ -378,3 +378,37 @@ function: wait_alter_table_finish()
 SHOW CREATE TABLE t0;
 
 DROP DATABASE test_schema_change_for_after;
+
+-- name: test_compaction_after_adding_generated_column
+CREATE DATABASE test_compaction_after_adding_generated_column;
+USE test_compaction_after_adding_generated_column;
+
+CREATE TABLE `t` (
+  `c1` BIGINT NOT NULL COMMENT "",
+  `c2` BIGINT NOT NULL COMMENT "",
+  `c3` BIGINT as `c1` + `c2`
+) ENGINE=OLAP 
+PRIMARY KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+INSERT INTO t values (1,1),(2,2),(3,3),(4,4);
+ALTER TABLE t drop column c3;
+
+INSERT INTO t values (1,1),(2,2),(3,3),(4,4);
+ALTER TABLE t add column c4 BIGINT as c1 + c2 + 10;
+function: wait_alter_table_finish()
+
+SELECT sleep(10);
+
+[UC]ALTER TABLE t COMPACT;
+SELECT sleep(30);
+
+SELECT * FROM t;
+
+DROP DATABASE test_compaction_after_adding_generated_column;
