@@ -168,7 +168,7 @@ Whether to enable low cardinality optimization. After this feature is enabled, t
 
 ### cbo_eq_base_type (2.5.14 and later)
 
-Specifies the data type used for data comparison between DECIMAL-type data and STRING-type data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
+Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
 
 ### character_set_database (global)
 
