@@ -1615,28 +1615,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 -->
 
 <!--
-##### dictionary_page_size
-
-- 默认值：1048576
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### dictionary_encoding_ratio_for_non_string_column
-
-- 默认值：0
-- 类型：Double
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### dictionary_speculate_min_chunk_size
 
 - 默认值：10000
@@ -3365,39 +3343,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 -->
 
 <!--
-##### starlet_fslib_s3client_nonread_max_retries
-
-- 默认值：5
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### starlet_fslib_s3client_nonread_retry_scale_factor
-
-- 默认值：200
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### starlet_fslib_s3client_connect_timeout_ms
-
-- 默认值：1000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### lake_metadata_cache_limit
 
 - 默认值：2147483648
@@ -3687,28 +3632,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 -->
 
 <!--
-##### spill_max_partition_level
-
-- 默认值：7
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### spill_max_partition_size
-
-- 默认值：1024
-- 类型：Int
-- 单位：
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### spill_max_log_block_container_bytes
 
 - 默认值：10737418240
@@ -3903,17 +3826,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### report_datacache_metrics_interval_ms
-
-- 默认值：60000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
 - 描述：
 - 引入版本：-
 -->
@@ -4388,83 +4300,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 引入版本：v3.1.7, v3.2.3
 
 <!--
-##### dictionary_cache_refresh_timeout_ms
-
-- 默认值：60000
-- 类型：Int
-- 单位：Milliseconds
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### dictionary_cache_refresh_threadpool_size
-
-- 默认值：8
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### enable_json_flat
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_null_factor
-
-- 默认值：0.3
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_sparsity_factor
-
-- 默认值：0.9
-- 类型：Double
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_internal_column_min_limit
-
-- 默认值：5
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### json_flat_column_max
-
-- 默认值：20
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
 ##### pk_dump_interval_seconds
 
 - 默认值：3600
@@ -4490,17 +4325,6 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 ##### olap_string_max_length
 
 - 默认值：1048576
-- 类型：Int
-- 单位：
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### jit_lru_cache_size
-
-- 默认值：0
 - 类型：Int
 - 单位：
 - 是否动态：是
