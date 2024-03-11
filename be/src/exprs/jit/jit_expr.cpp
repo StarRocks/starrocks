@@ -82,13 +82,16 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
 
         auto st = jit_engine->compile_scalar_function(context, _jit_obj_cache.get(), _expr, _children);
         auto elapsed = MonotonicNanos() - start;
-        state->fragment_ctx()->update_jit_profile(elapsed);
+        if (state->fragment_ctx() != nullptr) {
+            state->fragment_ctx()->update_jit_profile(elapsed);
+        }
         if (!st.ok()) {
             LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
                       << " Reason: " << st;
         } else {
-            LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0
-                      << " ms :" << _jit_obj_cache->get_func_name();
+            VLOG_QUERY << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0
+                       << " ms :" << _jit_obj_cache->get_func_name()
+                       << " , mem cost: " << _jit_obj_cache->get_code_size();
             _jit_function = _jit_obj_cache->get_func();
             if (_jit_function == nullptr) {
                 return Status::RuntimeError("JIT func must be not null");
