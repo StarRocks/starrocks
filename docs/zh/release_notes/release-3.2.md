@@ -11,8 +11,8 @@ displayed_sidebar: "Chinese"
 ### 新增特性
 
 - 存算分离集群中的云原生主键表支持 Size-tiered 模式 Compaction，以减轻导入较多小文件时 Compaction 的写放大问题。[#41034](https://github.com/StarRocks/starrocks/pull/41034)
-- Storage Volume 支持 HDFS 的参数化配置，包括支持 Simple 认证方式支持配置 username，Kerberos 认证，NameNode HA，以及 ViewFS。 
-- 新增日期函数 `milliseconds_dff`。[#38171](https://github.com/StarRocks/starrocks/pull/38171)
+- Storage Volume 支持 HDFS 的参数化配置，包括 Simple 认证方式支持配置 username，Kerberos 认证，NameNode HA，以及 ViewFS。 
+- 新增日期函数 `milliseconds_diff`。[#38171](https://github.com/StarRocks/starrocks/pull/38171)
 - 新增 Session 变量 `catalog`，用于指定当前会话所在的 Catalog。[#41329](https://github.com/StarRocks/starrocks/pull/41329)
 - Hint 中支持设置用户自定义变量。[#40746](https://github.com/StarRocks/starrocks/pull/40746)
 - Hive Catalog 支持 CREATE TABLE LIKE。[#37685](https://github.com/StarRocks/starrocks/pull/37685) 
@@ -23,12 +23,12 @@ displayed_sidebar: "Chinese"
 
 - `cbo_decimal_cast_string_strict` 用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。默认值是 `true`，即执行严格转换（按 Scale 截断补 `0`）。在历史版本中没有严格按照 DECIMAL 类型进行补齐，从而在 DECIMAL 与 STRING 类型进行比等时会产生不同效果。[#40619](https://github.com/StarRocks/starrocks/pull/40619)
 - Iceberg Catalog 的参数 `enable_iceberg_metadata_cache` 默认值改为 `false`。在 v3.2.1 到 v3.2.3 版本中，此参数统一默认为 `true`，即默认缓存 Iceberg 的元数据信息。在 v3.2.4 及以上版本中，如果 Iceberg Catalog 元数据服务为 HMS，此参数默认值变更为 `false`，如果元数据服务为 Glue，此参数默认值仍为 `true`。[#41826](https://github.com/StarRocks/starrocks/pull/41826)
-- 修改发起物化视图刷新任务的用户，从原本的 `root` 用户变成创建物化视图的用户，已有的物化视图不受影响。[#40670](https://github.com/StarRocks/starrocks/pull/40670)  
+- 修改能发起物化视图刷新任务的用户，从原本的 `root` 用户变成创建物化视图的用户，已有的物化视图不受影响。[#40670](https://github.com/StarRocks/starrocks/pull/40670)  
 - 常量和字符串类型的列进行比较时，默认按字符串进行比较，用户可以通过设置变量 `cbo_eq_base_type` 来调整默认行为。将 `cbo_eq_base_type` 设置为 `decimal` 可以改为按数值进行比较。[#40619](https://github.com/StarRocks/starrocks/pull/40619)
 
 ### 功能优化
 
-- 存算分离架构中，支持将数据分区存储于 S3 存储桶中的不同路径中，分区路径使用统一前缀。此举可以提升 StarRocks 对 S3 的文件的读写访问效率。[#41627](https://github.com/StarRocks/starrocks/pull/41627)
+- 存算分离架构中，支持将数据分区存储于 S3 存储桶中的不同路径中，分区路径使用统一前缀。此举可以提升 StarRocks 对 S3 文件的读写访问效率。[#41627](https://github.com/StarRocks/starrocks/pull/41627)
 - 支持通过 `s3_compatible_fs_list` 参数设置可以使用 AWS SDK 接入的 S3 兼容对象存储。同时支持通过 `fallback_to_hadoop_fs_list` 参数配置需要通过 HDFS 的 Schema 接入的非 S3 兼容对象存储（该方法需要使用厂商提供的 JAR 包）。[#41123](https://github.com/StarRocks/starrocks/pull/41123)
 - 优化 Trino 语法兼容性，支持 Trino 的 `current_catalog`、`current_schema`、`to_char`、`from_hex`、`to_date`、`to_timestamp` 以及 `index` 函数的语法转换。[#41217](https://github.com/StarRocks/starrocks/pull/41217) [#41319](https://github.com/StarRocks/starrocks/pull/41319)[ ](https://github.com/StarRocks/starrocks/pull/40837)[#40803](https://github.com/StarRocks/starrocks/pull/40803)
 - 优化物化视图改写，支持基于逻辑视图创建的物化视图的改写。[#42173](https://github.com/StarRocks/starrocks/pull/42173)
