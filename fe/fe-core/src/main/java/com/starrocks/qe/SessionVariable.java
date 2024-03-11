@@ -586,6 +586,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
+    public static final String ENABLE_AGGREGATION_RUNTIME_LIMIT = "enable_aggregation_runtime_limit";
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
@@ -1202,6 +1203,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 128;
 
+    @VarAttr(name = ENABLE_AGGREGATION_RUNTIME_LIMIT, flag = VariableMgr.INVISIBLE)
+    private boolean enableAggregationRuntimeLimit = false;
+
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = false;
 
@@ -1283,6 +1287,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
         this.cboPushDownTopNLimit = cboPushDownTopNLimit;
+    }
+
+    public boolean getEnableAggregationRuntimeLimit() {
+        return enableAggregationRuntimeLimit;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
