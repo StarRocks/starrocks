@@ -143,6 +143,15 @@ public class Alter {
         schemaChangeHandler.start();
         materializedViewHandler.start();
         clusterHandler.start();
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/alter/Alter.java
+=======
+    }
+
+    public void stop() {
+        schemaChangeHandler.setStop();
+        materializedViewHandler.setStop();
+        clusterHandler.setStop();
+>>>>>>> 4fc9849514 ([UT] Fix colocate balancer unstable ut (#42421)):fe/fe-core/src/main/java/com/starrocks/alter/AlterJobMgr.java
     }
 
     public void processCreateMaterializedView(CreateMaterializedViewStmt stmt)
