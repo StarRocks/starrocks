@@ -16,7 +16,7 @@ You can find a function based on the following categories:
   - [Bitmap functions](#bitmap-functions)
   - [Conditional functions](#conditional-functions)
   - [Cryptographic functions](#cryptographic-functions)
-  - [Date functions](#date-functions)
+  - [Date and time functions](#date-and-time-functions)
   - [Geographic functions](#geographic-functions)
   - [Hash functions](#hash-functions)
   - [JSON functions](#json-functions)
@@ -167,7 +167,7 @@ You can find a function based on the following categories:
 - [sm3](../sql-functions/crytographic-functions/sm3.md)
 - [to_base64](../sql-functions/crytographic-functions/from_base64.md)
 
-## Date functions
+## Date and time functions
 
 - [add_months](./date-time-functions/add_months.md)
 - [adddate, days_ad](./date-time-functions/adddate.md)
@@ -385,6 +385,7 @@ You can find a function based on the following categories:
 - [like](./like-predicate-functions/like.md)
 - [regexp](./like-predicate-functions/regexp.md)
 - [regexp_extract](./like-predicate-functions/regexp_extract.md)
+- [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md)
 - [regexp_replace](./like-predicate-functions/regexp_replace.md)
 
 ## Percentile functions
