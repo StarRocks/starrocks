@@ -295,6 +295,7 @@ jobs:
 
       - name: Analyse Self Build Artifact
         id: analyse_artifact
+        if: github.event_name == 'schedule' || inputs.IS_REBUILD
         run: |
           if [[ -e "./outputs/BUILD-RESULT-Release/tar.txt" ]]; then
             build_result=$(cat "./outputs/BUILD-RESULT-Release/tar.txt")
