@@ -408,7 +408,8 @@ StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* conte
     hs_scratch_t* scratch = nullptr;
     hs_error_t status;
     if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
-        return Status::InternalError(fmt::format("unable to clone scratch space, status: {}", status));
+        CHECK(false) << "ERROR: Unable to clone scratch space."
+                     << " status: " << status;
     }
 
     for (int row = 0; row < value_viewer.size(); ++row) {
@@ -435,7 +436,8 @@ StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* conte
     }
 
     if ((status = hs_free_scratch(scratch)) != HS_SUCCESS) {
-        return Status::InternalError(fmt::format("unable to free scratch space, status: {}", status));
+        CHECK(false) << "ERROR: free scratch space failure"
+                     << " status: " << status;
     }
     return result->build(value_column->is_constant());
 }
