@@ -183,8 +183,8 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
     RdKafka::ErrorCode err = _k_consumer->assign(topic_partitions);
     if (err) {
         LOG(WARNING) << "failed to assign topic partitions: " << ctx->brief(true) << ", err: " << RdKafka::err2str(err);
-        return Status::InternalError(fmt::format("failed to assign topic {} partitions, err: {}, {}",
-                                                 topic, RdKafka::err2str(err), _k_event_cb.get_error_msg()));
+        return Status::InternalError(fmt::format("failed to assign partitions of topic: {}, err: {}, {}", topic,
+                                                 RdKafka::err2str(err), _k_event_cb.get_error_msg()));
     }
 
     return Status::OK();
@@ -241,7 +241,8 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         case RdKafka::ERR_OFFSET_OUT_OF_RANGE: {
             done = true;
             std::stringstream ss;
-            ss << msg->errstr() << ", partition " << msg->partition() << " offset " << msg->offset() << " has no data";
+            ss << msg->errstr() << ", this is no data in partition: " << msg->partition()
+               << " at offset: " << msg->offset();
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << ss.str();
             st = Status::InternalError(fmt::format(
                     "{}. you can modify kafka_offsets by alter routine load, then resume the job", ss.str()));
@@ -305,10 +306,10 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         RdKafka::ErrorCode err =
                 _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
         if (err != RdKafka::ERR_NO_ERROR) {
-            LOG(WARNING) << "failed to get kafka topic " << _topic << " partition " << p_id << " offset"
+            LOG(WARNING) << "failed to get offset of partition: " << p_id << " in topic: " << _topic
                          << ", err: " << RdKafka::err2str(err);
-            return Status::InternalError(fmt::format("failed to get kafka topic {} partition {} offset, err: {}, {}",
-                                                     _topic, p_id, RdKafka::err2str(err), _k_event_cb.get_error_msg()));
+            return Status::InternalError(fmt::format("failed to get offset of partition: {} in topic: {}, err: {}, {}",
+                                                     p_id, _topic, RdKafka::err2str(err), _k_event_cb.get_error_msg()));
         }
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);
@@ -341,7 +342,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     RdKafka::ErrorCode err = _k_consumer->metadata(false /* all_topics */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
-        ss << "failed to get kafka topic " << _topic << " meta, err: " << RdKafka::err2str(err) << ", "
+        ss << "failed to get kafka topic: " << _topic << " meta, err: " << RdKafka::err2str(err) << ", "
            << _k_event_cb.get_error_msg();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
@@ -357,8 +358,8 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
         }
 
         if ((*it)->err() == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART) {
-            LOG(WARNING) << "unknown topic " << _topic;
-            return Status::InternalError(fmt::format("unknown topic {}", _topic));
+            LOG(WARNING) << "unknown topic: " << _topic;
+            return Status::InternalError(fmt::format("unknown topic: {}", _topic));
         } else if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
             std::stringstream ss;
             ss << "err: " << err2str((*it)->err());
@@ -376,7 +377,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     }
 
     if (partition_ids->empty()) {
-        return Status::InternalError(fmt::format("no partition in this topic {}", _topic));
+        return Status::InternalError(fmt::format("there is no partition in topic: {}", _topic));
     }
 
     return Status::OK();

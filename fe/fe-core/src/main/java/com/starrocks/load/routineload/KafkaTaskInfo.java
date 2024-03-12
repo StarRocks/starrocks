@@ -144,7 +144,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                     return true;
                 } else if (latestOffset < consumeOffset) {
                     throw new RoutineLoadPauseException(
-                            "partition " + partitionId + " offset " + consumeOffset + " has no data. " +
+                            "there is no data in partition: " + partitionId + " at offset: " + consumeOffset + ". " +
                                     "you can modify kafka_offsets by alter routine load, then resume the job");
                 }
             }
