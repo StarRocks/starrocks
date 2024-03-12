@@ -73,9 +73,9 @@ public:
 
     bool is_compilable(RuntimeState* state) const override {
         if (_has_case_expr) {
-            return state->is_jit_case_op() && IRHelper::support_jit(WhenType) && IRHelper::support_jit(ResultType);
+            return state->can_jit_expr(8) && IRHelper::support_jit(WhenType) && IRHelper::support_jit(ResultType);
         } else {
-            return state->is_jit_case_op() && IRHelper::support_jit(ResultType);
+            return state->can_jit_expr(8) && IRHelper::support_jit(ResultType);
         }
     }
 

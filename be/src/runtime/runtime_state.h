@@ -444,20 +444,16 @@ public:
 
     void set_jit_level(const int level) { _query_options.__set_jit_level(level); }
 
-    // except /, %
-    bool is_jit_arithmetic_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 2)); }
-
-    bool is_jit_cast_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 4)); }
-
-    bool is_jit_case_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 8)); }
-
-    bool is_jit_comparison_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 16)); }
-
-    bool is_jit_logical_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 32)); }
-
-    bool is_jit_div_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 64)); }
-
-    bool is_jit_mod_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 128)); }
+    // arithmetic -> 2, except /, %
+    // cast -> 4
+    // case -> 8
+    // cmp -> 16
+    // logical -> 32
+    // div -> 64
+    // mod -> 128
+    bool can_jit_expr(const int jit_label) {
+        return (_query_options.jit_level == 1) || ((_query_options.jit_level & jit_label));
+    }
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 

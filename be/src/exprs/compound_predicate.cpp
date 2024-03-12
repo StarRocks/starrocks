@@ -60,7 +60,7 @@ public:
         return VectorizedLogicPredicateBinaryFunction<AndNullImpl, AndImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
-    bool is_compilable(RuntimeState* state) const override { return state->is_jit_logical_op(); }
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(32); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};
@@ -137,7 +137,7 @@ public:
         return VectorizedLogicPredicateBinaryFunction<OrNullImpl, OrImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
-    bool is_compilable(RuntimeState* state) const override { return state->is_jit_logical_op(); }
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(32); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};
@@ -196,7 +196,7 @@ public:
         return VectorizedStrictUnaryFunction<CompoundPredNot>::template evaluate<TYPE_BOOLEAN>(l);
     }
 
-    bool is_compilable(RuntimeState* state) const override { return state->is_jit_logical_op(); }
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(32); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};
