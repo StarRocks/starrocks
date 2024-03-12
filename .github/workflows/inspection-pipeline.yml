@@ -286,14 +286,14 @@ jobs:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
 
-      - name: Download Build Tar Result
+      - name: Download Build Artifact
         if: github.event_name == 'schedule' || inputs.IS_REBUILD
         uses: actions/download-artifact@v4
         with:
           pattern: BUILD-RESULT-*
           path: outputs
 
-      - name: Analyse Self Build Artifact
+      - name: Analyse Build Artifact
         id: analyse_artifact
         if: github.event_name == 'schedule' || inputs.IS_REBUILD
         run: |
