@@ -237,11 +237,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
 
         int32_t delete_column_index = slots.size();
-        auto* delete_column_tuple_desc =
-                state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
+        _delete_column_tuple_desc = state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
 
-        std::vector<SlotDescriptor*> equality_delete_slots;
-        for (SlotDescriptor* d_slot_desc : delete_column_tuple_desc->slots()) {
+        for (SlotDescriptor* d_slot_desc : _delete_column_tuple_desc->slots()) {
             _equality_delete_slots.emplace_back(d_slot_desc);
             if (id_to_slots.find(d_slot_desc->id()) == id_to_slots.end()) {
                 _materialize_slots.push_back(d_slot_desc);
@@ -622,6 +620,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         MORParams& mor_params = scanner_params.mor_params;
         mor_params.tuple_desc = _tuple_desc;
         mor_params.equality_slots = _equality_delete_slots;
+        mor_params.delete_column_tuple_desc = _delete_column_tuple_desc;
         mor_params.mor_tuple_id = _provider->_hdfs_scan_node.mor_tuple_id;
         mor_params.runtime_profile = _runtime_profile;
     }
@@ -632,6 +631,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
+        scanner_params.iceberg_equal_delete_schema = tbl->get_iceberg_equal_delete_schema();
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
