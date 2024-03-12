@@ -12,7 +12,7 @@ The CN heartbeat service port for the StarRocks shared-data cluster. Default val
 
 #### storage_root_path
 
-The storage volume directory that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`.
+The storage volume directory that the local cached data depends on. Multiple volumes are separated by semicolon (;). Example: `/data1;/data2`.
 
 The default value for `storage_root_path` is `${STARROCKS_HOME}/storage`.
 
