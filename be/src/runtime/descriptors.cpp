@@ -241,6 +241,7 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
     _columns = tdesc.icebergTable.columns;
     _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
     _partition_column_names = tdesc.icebergTable.partition_column_names;
+    _t_iceberg_equal_delete_schema = tdesc.icebergTable.iceberg_equal_delete_schema;
 }
 
 std::vector<int32_t> IcebergTableDescriptor::partition_index_in_schema() {
