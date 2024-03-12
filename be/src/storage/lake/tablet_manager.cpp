@@ -596,7 +596,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
                                                  const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                                  TabletSchemaPtr tablet_schema) {
     size_t footer_size_hint = 16 * 1024;
-    return load_segment(segemnt_info, segemnt_id, &footer_size_hint, lake_io_opts, fill_metadata_cache, tablet_schema);
+    return load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts, fill_metadata_cache, tablet_schema);
 }
 
 } // namespace starrocks::lake
