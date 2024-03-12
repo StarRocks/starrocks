@@ -79,7 +79,7 @@ public class ColumnFilterConverter {
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
     // replaces a field in an expression with a constant
-    private static class ExprRewriter extends AstVisitor<Boolean, Void> {
+    private static class ExprRewriter implements AstVisitor<Boolean, Void> {
 
         private final ColumnRefOperator columnRef;
         private final ConstantOperator constant;

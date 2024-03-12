@@ -39,7 +39,7 @@ public class ShowLoadWarningsStmtAnalyzer {
         new ShowLoadWarningsStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowLoadWarningsStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ShowLoadWarningsStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private String label;
         private long jobId;

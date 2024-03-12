@@ -27,7 +27,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ConnectorAlterTableExecutor extends AstVisitor<Void, ConnectContext> {
+public class ConnectorAlterTableExecutor implements AstVisitor<Void, ConnectContext> {
     protected AlterTableStmt stmt;
     protected final TableName tableName;
     protected List<Runnable> actions;
@@ -62,7 +62,7 @@ public class ConnectorAlterTableExecutor extends AstVisitor<Void, ConnectContext
 
     @Override
     public Void visit(ParseNode node, ConnectContext context) {
-        super.visit(node, context);
+        node.accept(this, context);
         for (Runnable r : actions) {
             r.run();
         }

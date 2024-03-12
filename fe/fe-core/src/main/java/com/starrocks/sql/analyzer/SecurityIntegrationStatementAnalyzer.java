@@ -35,7 +35,7 @@ public class SecurityIntegrationStatementAnalyzer {
         new SecurityIntegrationStatementAnalyzerVisitor().analyze(statement, context);
     }
 
-    public static class SecurityIntegrationStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class SecurityIntegrationStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         final Set<String> supportedAuthMechanism =
                 new HashSet<>(Collections.singletonList(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP));
         final Set<String> requiredProperties = new HashSet<>(Arrays.asList(
