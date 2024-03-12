@@ -108,6 +108,8 @@ import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
+import org.apache.iceberg.rest.auth.OAuth2Properties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -122,6 +124,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.catalog.Table.TableType.*;
 import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
@@ -131,6 +134,9 @@ public class InsertPlanner {
     private boolean forceReplicatedStorage = false;
     private Map<String, Database> dbs;
     private boolean useOptimisticLock;
+
+    private static final List<Table.TableType> SUPPORTED_INSERT_TABLE_TYPES =
+            ImmutableList.of(MYSQL, OLAP, ICEBERG, HIVE, TABLE_FUNCTION, BLACKHOLE);
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
@@ -144,9 +150,13 @@ public class InsertPlanner {
     }
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
+        Table targetTable = insertStmt.getTargetTable();
+        Table.TableType type = targetTable.getType();
+        if (!SUPPORTED_INSERT_TABLE_TYPES.contains(type)) {
+            throw new SemanticException(insertStmt.getTargetTable().getType() + " type table not support insert statements");
+        }
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
-        Table targetTable = insertStmt.getTargetTable();
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {

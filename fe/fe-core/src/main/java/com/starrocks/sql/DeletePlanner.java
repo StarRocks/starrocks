@@ -92,8 +92,6 @@ public class DeletePlanner {
                     slotDescriptor.setType(column.getType());
                     slotDescriptor.setColumn(column);
                     slotDescriptor.setIsNullable(column.isAllowNull());
-                } else {
-                    continue;
                 }
             }
             SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
