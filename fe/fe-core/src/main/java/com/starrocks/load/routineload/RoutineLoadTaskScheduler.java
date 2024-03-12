@@ -184,8 +184,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             // for kafka/pulsar routine load, readyToExecute means there is new data in kafka/pulsar stream
             if (!routineLoadTaskInfo.readyToExecute()) {
                 String msg = "";
-                if (routineLoadTaskInfo instanceof KafkaTaskInfo || routineLoadTaskInfo instanceof PulsarTaskInfo) {
-                    msg = String.format("there is no new data in kafka/pulsar, wait for %d seconds to schedule again",
+                if (routineLoadTaskInfo instanceof KafkaTaskInfo) {
+                    msg = String.format("there is no new data in kafka, wait for %d seconds to schedule again",
+                            routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
+                } else if (routineLoadTaskInfo instanceof PulsarTaskInfo) {
+                    msg = String.format("there is no new data in pulsar, wait for %d seconds to schedule again",
                             routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
                 }
                 // The job keeps up with source.

@@ -183,8 +183,8 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
     RdKafka::ErrorCode err = _k_consumer->assign(topic_partitions);
     if (err) {
         LOG(WARNING) << "failed to assign topic partitions: " << ctx->brief(true) << ", err: " << RdKafka::err2str(err);
-        return Status::InternalError(fmt::format("failed to assign topic partitions, err: {}, {}",
-                                                 RdKafka::err2str(err), _k_event_cb.get_error_msg()));
+        return Status::InternalError(fmt::format("failed to assign topic {} partitions, err: {}, {}",
+                                                 topic, RdKafka::err2str(err), _k_event_cb.get_error_msg()));
     }
 
     return Status::OK();
@@ -243,7 +243,8 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             std::stringstream ss;
             ss << msg->errstr() << ", partition " << msg->partition() << " offset " << msg->offset() << " has no data";
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << ss.str();
-            st = Status::InternalError(ss.str());
+            st = Status::InternalError(fmt::format(
+                    "{}. you can modify kafka_offsets by alter routine load, then resume the job", ss.str()));
             break;
         }
         case RdKafka::ERR__PARTITION_EOF: {
@@ -306,8 +307,8 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         if (err != RdKafka::ERR_NO_ERROR) {
             LOG(WARNING) << "failed to get kafka topic " << _topic << " partition " << p_id << " offset"
                          << ", err: " << RdKafka::err2str(err);
-            return Status::InternalError(fmt::format("failed to get kafka partition offset, err: {}, {}",
-                                                     RdKafka::err2str(err), _k_event_cb.get_error_msg()));
+            return Status::InternalError(fmt::format("failed to get kafka topic {} partition {} offset, err: {}, {}",
+                                                     _topic, p_id, RdKafka::err2str(err), _k_event_cb.get_error_msg()));
         }
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);
@@ -340,7 +341,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     RdKafka::ErrorCode err = _k_consumer->metadata(false /* all_topics */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
-        ss << "failed to get kafka partition meta, err: " << RdKafka::err2str(err) << ", "
+        ss << "failed to get kafka topic " << _topic << " meta, err: " << RdKafka::err2str(err) << ", "
            << _k_event_cb.get_error_msg();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
@@ -355,9 +356,12 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
             continue;
         }
 
-        if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
+        if ((*it)->err() == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART) {
+            LOG(WARNING) << "unknown topic " << _topic;
+            return Status::InternalError(fmt::format("unknown topic {}", _topic));
+        } else if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
             std::stringstream ss;
-            ss << "error: " << err2str((*it)->err());
+            ss << "err: " << err2str((*it)->err());
             if ((*it)->err() == RdKafka::ERR_LEADER_NOT_AVAILABLE) {
                 ss << ", try again";
             }
@@ -372,7 +376,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     }
 
     if (partition_ids->empty()) {
-        return Status::InternalError("no partition in this topic");
+        return Status::InternalError(fmt::format("no partition in this topic {}", _topic));
     }
 
     return Status::OK();

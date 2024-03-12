@@ -119,18 +119,26 @@ public:
         }
     }
 
-    std::string get_error_msg() const { return _error_msg; }
+    std::string get_error_msg() const {
+        std::unique_lock l(_lock);
+        return _error_msg;
+    }
 
-    void reset_error_msg() { _error_msg.clear(); }
+    void reset_error_msg() {
+        std::unique_lock l(_lock);
+        _error_msg.clear();
+    }
 
 private:
     void log_event_msg(const RdKafka::Event& event) {
+        std::unique_lock l(_lock);
         if (_error_msg.empty() && event.str().size() > 0) {
             _error_msg = "event: " + event.str();
         }
     }
 
     std::string _error_msg;
+    mutable std::mutex _lock;
 };
 
 class KafkaDataConsumer : public DataConsumer {
