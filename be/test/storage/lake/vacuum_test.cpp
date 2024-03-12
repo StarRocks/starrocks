@@ -1225,6 +1225,12 @@ TEST_P(LakeVacuumTest, test_thread_pool_full) {
 
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_datafile_gc) {
+    WritableFileOptions options;
+    options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto f, fs::new_writable_file(options, join_path(kTestDir, "test_datafile_gc.txt")));
+    ASSERT_OK(f->append("111"));
+    ASSERT_OK(f->close());
+
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
     create_data_file("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
 
