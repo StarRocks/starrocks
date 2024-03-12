@@ -304,7 +304,7 @@ public class IcebergTable extends Table {
         Preconditions.checkNotNull(partitions);
 
         TIcebergTable tIcebergTable = new TIcebergTable();
-        tIcebergTable.setLocation(nativeTable.location());
+        tIcebergTable.setLocation(getNativeTable().location());
 
         List<TColumn> tColumns = Lists.newArrayList();
         for (Column column : getBaseSchema()) {
@@ -314,6 +314,12 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
+        if (nativeTable.schema().identifierFieldIds().size() > 0) {
+            tIcebergTable.setIceberg_equal_delete_schema(IcebergApiConverter.getTIcebergSchema(
+                    new Schema(nativeTable.schema().identifierFieldIds().stream()
+                            .map(id -> nativeTable.schema().findField(id)).collect(Collectors.toList()))));
+        }
+
 
         if (!partitions.isEmpty()) {
             TPartitionMap tPartitionMap = new TPartitionMap();
