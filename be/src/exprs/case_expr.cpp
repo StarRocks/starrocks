@@ -79,6 +79,8 @@ public:
         }
     }
 
+    // It considers the proportion of valuable children, rather than the total score, so it can't depend on an
+    // expensive branch. The magic values are resulted from experiments.
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};
         if (!is_compilable(state)) {

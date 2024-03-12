@@ -319,8 +319,8 @@ void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val)
 
 void FragmentContext::init_jit_profile() {
     if (runtime_state() && runtime_state()->is_jit_enabled() && runtime_state()->runtime_profile()) {
-        _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "jit_cost_time");
-        _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "jit_counter", TUnit::UNIT);
+        _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
+        _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
     }
 }
 

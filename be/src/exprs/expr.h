@@ -240,8 +240,12 @@ public:
     Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced);
 
     // Establishes whether the current expression should undergo compilation.
+    // if adaptive, the valuable expressions should take the majority, i.e., `jit_score_ratio` of all expressions,
+    // but case_when expr is especial, refer to its `compute_jit_score()`.
     bool should_compile(RuntimeState* state) const;
 
+    // The valuable expressions get 1 score per expression, others get 0 score per expression, including
+    // comparison expr, logical expr, branch expr, div and mod.
     virtual JitScore compute_jit_score(RuntimeState* state) const;
 
     // Return true if this expr or any of its children support ngram bloom filter, otherwise return flase
