@@ -846,9 +846,12 @@ static StatusOr<std::pair<int64_t, int64_t>> path_datafile_gc(std::string_view r
             ignore_not_found(fs->iterate_dir2(
                     std::string(root_location),
                     [&](DirEntry entry) {
-                        if (entry.is_dir.has_value() && entry.is_dir.value() &&
-                            (entry.name == kSegmentDirectoryName || entry.name == kMetadataDirectoryName ||
-                             entry.name == kTxnLogDirectoryName)) {
+                        if (!entry.is_dir.value_or(false)) {
+                            return true;
+                        }
+
+                        if (entry.name == kSegmentDirectoryName || entry.name == kMetadataDirectoryName ||
+                            entry.name == kTxnLogDirectoryName) {
                             auto pair_or =
                                     partition_datafile_gc(root_location, audit_file_path, expired_seconds, do_delete);
                             if (!pair_or.ok()) {
@@ -872,7 +875,6 @@ static StatusOr<std::pair<int64_t, int64_t>> path_datafile_gc(std::string_view r
 
                         total.first += pair_or.value().first;
                         total.second += pair_or.value().second;
-
                         return true;
                     })),
             "Failed to list " + std::string(root_location));
