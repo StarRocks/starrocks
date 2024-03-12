@@ -6,24 +6,40 @@ displayed_sidebar: "English"
 
 ## Description
 
-Submits an ETL statement as an asynchronous task. This feature has been supported since StarRocks v2.5.
 
-StarRocks v3.0 supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md).
+SUBMIT TASK is used to create long-running background tasks, as well as tasks that are executed periodically.
 
-You can drop an asynchronous task using [DROP TASK](./DROP_TASK.md).
+Related operations:
+- [SUBMIT TASK](./SUBMIT_TASK.md): Create a task
+- [DROP TASK](./DROP_TASK.md): Delete a task
+- INFORMATION_SCHEMA.tasks: Query the list of tasks
+- INFORMATION_SCHEMA.task_runs: Query the execution history of tasks
+
+Versions and feature support:
+- This feature is supported starting from version 2.5.
+- As of version 3.0, support for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md) has been added
+- Scheduled tasks are supported starting from version 3.3.
 
 ## Syntax
 
 ```SQL
-SUBMIT TASK [task_name] AS <etl_statement>
+SUBMIT TASK <task_name> 
+[SCHEDULE [START(<schedule_start>)] EVERY(INTERVAL <schedule_interval>) ]
+[PROPERTIES(<properties>)]
+AS <etl_statement>
+
 ```
 
 ## Parameters
 
-| **Parameter** | **Description**                                              |
-| ------------- | ------------------------------------------------------------ |
-| task_name     | The task name.                                               |
-| etl_statement | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md). |
+| **Parameter**      | **Optional** | **Description**                                                                                     |
+| -------------      | ------------ | ---------------------------------------------------------------------------------------------------- |
+| task_name          | Required     | The name of the task.                                                                               |
+| schedule_start     | Required     | The start time for scheduled tasks.                                                                 |
+| schedule_interval  | Required     | The interval at which scheduled tasks are executed, with a minimum interval of 10 seconds.          |
+| etl_statement      | Optional     | The ETL statement for creating asynchronous tasks. StarRocks currently supports creating asynchronous tasks using [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md). |
+
+
 
 ## Usage notes
 
@@ -60,6 +76,7 @@ You can configure asynchronous ETL tasks using the following FE configuration it
 | task_runs_concurrency        | 4                 | The maximum number of TaskRuns that can be run in parallel.  |
 | task_runs_queue_length       | 500               | The maximum number of TaskRuns that are pending for running. If the number exceeds the default value, the incoming tasks will be suspended. |
 | task_runs_max_history_number | 10000      | The maximum number of TaskRun records to retain. |
+| task_min_schedule_interval_s | 10 |  The mininum interval of task execution，the default value is 10s. |
 
 ## Examples
 
@@ -87,4 +104,15 @@ Example 4: Submit an asynchronous task for `INSERT OVERWRITE insert_wiki_edit SE
 SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
 INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
+```
+
+Example 5: Create a periodical task to write the sql result into a table
+```SQL
+SUBMIT TASK
+SCHEDULE EVERY(INTERVAL 1 MINUTE)
+AS
+INSERT OVERWRITE insert_wiki_edit
+    SELECT dt, user_id, count(*) 
+    FROM source_wiki_edit 
+    GROUP BY dt, user_id;
 ```
