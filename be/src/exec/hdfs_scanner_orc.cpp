@@ -542,7 +542,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
 
             // we need to append none existed column before do eval, just for count(*) optimization
-            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, rows_read);
+            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read);
 
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;
