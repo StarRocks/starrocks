@@ -490,9 +490,7 @@ public class OperationType {
     // Replication job
     public static final short OP_REPLICATION_JOB = 13500;
 
-    @IgnorableOnReplayFailed
     public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
-    @IgnorableOnReplayFailed
     public static final short OP_DISABLE_PARTITION_RECOVERY = 13511;
 
     /**

@@ -86,13 +86,7 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
-<<<<<<< HEAD
-=======
-import com.starrocks.persist.DecommissionDiskInfo;
-import com.starrocks.persist.DictionaryMgrInfo;
-import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DisablePartitionRecoveryInfo;
->>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;

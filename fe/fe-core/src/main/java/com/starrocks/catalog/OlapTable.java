@@ -969,47 +969,6 @@ public class OlapTable extends Table {
     // This is a private method.
     // Call public "dropPartitionAndReserveTablet" and "dropPartition"
     private void dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
-<<<<<<< HEAD
-        // 1. If "isForceDrop" is false, the partition will be added to the GlobalStateMgr Recyle bin, and all tablets of this
-        //    partition will not be deleted.
-        // 2. If "ifForceDrop" is true, the partition will be dropped the immediately, but whether to drop the tablets
-        //    of this partition depends on "reserveTablets"
-        //    If "reserveTablets" is true, the tablets of this partition will not to delete.
-        //    Otherwise, the tablets of this partition will be deleted immediately.
-        Partition partition = nameToPartition.get(partitionName);
-        if (partition != null) {
-            if (partitionInfo.isRangePartition()) {
-                idToPartition.remove(partition.getId());
-                nameToPartition.remove(partitionName);
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                if (!isForceDrop) {
-                    // recycle range partition
-                    GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
-                            rangePartitionInfo.getRange(partition.getId()),
-                            rangePartitionInfo.getDataProperty(partition.getId()),
-                            rangePartitionInfo.getReplicationNum(partition.getId()),
-                            rangePartitionInfo.getIsInMemory(partition.getId()),
-                            rangePartitionInfo.getDataCacheInfo(partition.getId()));
-                } else if (!reserveTablets) {
-                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
-                }
-                // drop partition info
-                rangePartitionInfo.dropPartition(partition.getId());
-            } else if (partitionInfo.getType() == PartitionType.LIST) {
-                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                if (!isForceDrop) {
-                    throw new SemanticException("List partition does not support recycle bin, " +
-                            "you can use force drop to drop it.");
-                } else if (!reserveTablets) {
-                    idToPartition.remove(partition.getId());
-                    nameToPartition.remove(partitionName);
-                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
-                }
-                // drop partition info
-                listPartitionInfo.dropPartition(partition.getId());
-            }
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropPartition(partition.getId());
-=======
         Partition partition = nameToPartition.get(partitionName);
         if (partition == null) {
             return;
@@ -1024,9 +983,6 @@ public class OlapTable extends Table {
         partitionInfo.dropPartition(partition.getId());
         idToPartition.remove(partition.getId());
         nameToPartition.remove(partitionName);
-        physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
-                .stream().map(PhysicalPartition::getId)
-                .collect(Collectors.toList()));
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
     }
@@ -1048,7 +1004,6 @@ public class OlapTable extends Table {
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else {
             throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
->>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
         }
     }
 

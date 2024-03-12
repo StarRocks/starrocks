@@ -22,7 +22,6 @@ import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
@@ -98,7 +97,7 @@ public class LakeTableHelper {
         }
     }
 
-    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition) throws StarClientException {
+    static Optional<ShardInfo> getAssociatedShardInfo(Partition partition) throws StarClientException {
         List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();
@@ -112,26 +111,20 @@ public class LakeTableHelper {
     }
 
     static boolean removePartitionDirectory(Partition partition) throws StarClientException {
-        boolean ret = true;
-        for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            ShardInfo shardInfo = getAssociatedShardInfo(subPartition).orElse(null);
-            if (shardInfo == null) {
-                LOG.info("Skipped remove directory of empty partition {}", subPartition.getId());
-                continue;
-            }
-            if (isSharedDirectory(shardInfo.getFilePath().getFullPath(), subPartition.getId())) {
-                LOG.info("Skipped remove possible directory shared by multiple partitions: {}",
-                        shardInfo.getFilePath().getFullPath());
-                continue;
-            }
-            if (!removeShardRootDirectory(shardInfo)) {
-                ret = false;
-            }
+        ShardInfo shardInfo = getAssociatedShardInfo(partition).orElse(null);
+        if (shardInfo == null) {
+            LOG.info("Skipped remove directory of empty partition {}", partition.getId());
+            return true;
         }
-        return ret;
+        if (isSharedDirectory(shardInfo.getFilePath().getFullPath(), partition.getId())) {
+            LOG.info("Skipped remove possible directory shared by multiple partitions: {}",
+                    shardInfo.getFilePath().getFullPath());
+            return true;
+        }
+        return removeShardRootDirectory(shardInfo);
     }
 
-    public static boolean isSharedPartitionDirectory(PhysicalPartition partition) throws StarClientException {
+    public static boolean isSharedPartitionDirectory(Partition partition) throws StarClientException {
         ShardInfo shardInfo = getAssociatedShardInfo(partition).orElse(null);
         if (shardInfo == null) {
             return false;

@@ -210,17 +210,12 @@ public class DropPartitionTest {
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-<<<<<<< HEAD
-                "No partition named p20210202 in table tbl1",
-                () -> GlobalStateMgr.getCurrentState().recoverPartition(recoverPartitionStmt));
-=======
                 "No partition named 'p20210202' in recycle bin that belongs to table 'tbl1'",
                 () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
 
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
         replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Assert.assertTrue(replicaList.isEmpty());
->>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
     }
 
     @Test
