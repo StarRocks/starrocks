@@ -88,6 +88,8 @@ public:
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
 
+    const static bool enable_multi_version = false;
+
 private:
     void flush_to_immutable_memtable();
 

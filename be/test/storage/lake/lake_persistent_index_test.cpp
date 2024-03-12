@@ -84,7 +84,10 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
         values.emplace_back(i * 2);
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
-    auto index = std::make_unique<LakePersistentIndex>("");
+    // auto index = std::make_unique<LakePersistentIndex>("");
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id,
+                                                       _tablet_metadata->pindex_sstable_meta());
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
     // insert duplicate should return error
     ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), false).ok());
@@ -169,7 +172,10 @@ TEST_F(LakePersistentIndexTest, test_replace) {
         replace_idxes.emplace_back(i);
     }
 
-    auto index = std::make_unique<LakePersistentIndex>("");
+    // auto index = std::make_unique<LakePersistentIndex>("");
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id,
+                                                       _tablet_metadata->pindex_sstable_meta());
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
 
     //replace

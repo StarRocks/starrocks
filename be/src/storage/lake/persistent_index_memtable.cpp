@@ -19,6 +19,7 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/sstable/lake_persistent_index_sst.h"
 #include "util/trace.h"
 
@@ -45,7 +46,14 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
             auto old_value = index_value_infos.front().second;
             old_values[i] = old_value;
             nfound += old_value.get_value() != NullIndexValue;
-            index_value_infos.emplace_front(version, value);
+            if (LakePersistentIndex::enable_multi_version) {
+                index_value_infos.emplace_front(version, value);
+            } else {
+                std::list<IndexValueInfo> new_index_value_infos;
+                new_index_value_infos.emplace_front(version, value);
+                index_value_infos.swap(new_index_value_infos);
+            }
+            // index_value_infos.emplace_front(version, value);
         }
     }
     *num_found = nfound;
@@ -70,7 +78,14 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
                                                       hexdump((const char*)key.data(), size));
                 return Status::AlreadyExist(msg);
             }
-            index_value_infos.emplace_front(version, value);
+            if (LakePersistentIndex::enable_multi_version) {
+                index_value_infos.emplace_front(version, value);
+            } else {
+                std::list<IndexValueInfo> new_index_value_infos;
+                new_index_value_infos.emplace_front(version, value);
+                index_value_infos.swap(new_index_value_infos);
+            }
+            // index_value_infos.emplace_front(version, value);
         }
     }
     return Status::OK();
@@ -94,7 +109,14 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
             auto old_index_value = index_value_infos.front().second;
             old_values[i] = old_index_value;
             nfound += old_index_value.get_value() != NullIndexValue;
-            index_value_infos.emplace_front(version, IndexValue(NullIndexValue));
+            if (LakePersistentIndex::enable_multi_version) {
+                index_value_infos.emplace_front(version, IndexValue(NullIndexValue));
+            } else {
+                std::list<IndexValueInfo> new_index_value_infos;
+                new_index_value_infos.emplace_front(version, NullIndexValue);
+                index_value_infos.swap(new_index_value_infos);
+            }
+            // index_value_infos.emplace_front(version, IndexValue(NullIndexValue));
         }
     }
     *num_found = nfound;
@@ -114,7 +136,14 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
             _map.emplace(key, index_value_infos);
         } else {
             auto& index_value_infos = it->second;
-            index_value_infos.emplace_front(version, value);
+            if (LakePersistentIndex::enable_multi_version) {
+                index_value_infos.emplace_front(version, value);
+            } else {
+                std::list<IndexValueInfo> new_index_value_infos;
+                new_index_value_infos.emplace_front(version, value);
+                index_value_infos.swap(new_index_value_infos);
+            }
+            // index_value_infos.emplace_front(version, value);
         }
     }
     return Status::OK();

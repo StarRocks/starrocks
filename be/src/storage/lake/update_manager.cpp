@@ -202,14 +202,29 @@ Status UpdateManager::compact_ssts(Tablet* tablet, const std::vector<PersistentI
         auto it = map.find(key);
         if (it == map.end()) {
             phmap::btree_map<int64_t, int64_t, std::greater<>> index_value_infos;
+            if (!LakePersistentIndex::enable_multi_version) {
+                DCHECK(index_value_info.versions_size() == 1);
+            }
             for (int i = 0; i < index_value_info.versions_size(); ++i) {
                 index_value_infos.emplace(index_value_info.versions(i), index_value_info.values(i));
             }
             map.emplace(key, index_value_infos);
         } else {
             auto& index_value_infos = it->second;
-            for (int i = 0; i < index_value_info.versions_size(); ++i) {
-                index_value_infos.emplace(index_value_info.versions(i), index_value_info.values(i));
+            if (LakePersistentIndex::enable_multi_version) {
+                for (int i = 0; i < index_value_info.versions_size(); ++i) {
+                    index_value_infos.emplace(index_value_info.versions(i), index_value_info.values(i));
+                }
+            } else {
+                DCHECK(index_value_info.versions_size() == 1);
+                DCHECK(index_value_infos.size() == 1);
+                auto version = index_value_info.versions(0);
+                auto value = index_value_info.values(0);
+                auto it = index_value_infos.begin();
+                if (it->first < version) {
+                    index_value_infos.erase(it);
+                    index_value_infos.emplace(version, value);
+                }
             }
         }
         iter_ptr->Next();

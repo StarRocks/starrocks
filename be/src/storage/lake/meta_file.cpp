@@ -159,6 +159,12 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
                     ++it;
                 }
             }
+            for (auto sstable : input_sst.sstables()) {
+                FileMetaPB file_meta;
+                file_meta.set_name(sstable.filename());
+                file_meta.set_size(sstable.filesz());
+                _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+            }
         }
         PersistentIndexSstableMetaPB new_sst_meta;
         auto sst_meta = new_sst_meta.add_sstables();
