@@ -697,6 +697,14 @@ public class OffHeapColumnVector {
             }
             for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
+                if (type.isStruct()) {
+                    if (numNulls != c.numNulls || elementsAppended != c.elementsAppended) {
+                        throw new RuntimeException(
+                                "struct type check failed, root numNulls=" + numNulls + ", elementsAppended=" +
+                                elementsAppended + "; however, child " + c.type.name + " numNulls=" + c.numNulls +
+                                ", elementsAppended=" + c.elementsAppended);
+                    }
+                }
             }
         } else {
             checker.check(context + "#data", data);
