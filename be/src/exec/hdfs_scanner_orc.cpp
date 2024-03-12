@@ -467,16 +467,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 *chunk = std::move(ret.value());
             }
 
-<<<<<<< HEAD
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
-            _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
-=======
-            // we need to append none existed column before do eval, just for count(*) optimization
-            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read);
-
->>>>>>> c7f5207d76 ([Refactor] refactor hdfs scanner apppend_or_update column (#42248))
+            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);

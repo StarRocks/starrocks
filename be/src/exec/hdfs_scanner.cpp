@@ -450,34 +450,8 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
     return !(chunk->has_rows());
 }
 
-<<<<<<< HEAD
-void HdfsScannerContext::update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.empty() || row_count <= 0) return;
-
-    ChunkPtr& ck = (*chunk);
-    for (size_t i = 0; i < partition_columns.size(); i++) {
-        SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
-        DCHECK(partition_values[i]->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
-        ColumnPtr data_column = const_column->data_column();
-        auto chunk_part_column = ck->get_column_by_slot_id(slot_desc->id());
-
-        if (data_column->is_nullable()) {
-            chunk_part_column->append_nulls(1);
-        } else {
-            chunk_part_column->append(*data_column, 0, 1);
-        }
-        chunk_part_column->assign(row_count, 0);
-    }
-}
-
-void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0) return;
-
-=======
 void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
     if (partition_columns.size() == 0 || row_count < 0) return;
->>>>>>> c7f5207d76 ([Refactor] refactor hdfs scanner apppend_or_update column (#42248))
     ChunkPtr& ck = (*chunk);
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
@@ -494,11 +468,7 @@ void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* ch
             }
             chunk_part_column->assign(row_count, 0);
         }
-<<<<<<< HEAD
-        ck->append_column(std::move(chunk_part_column), slot_desc->id());
-=======
         ck->append_or_update_column(std::move(chunk_part_column), slot_desc->id());
->>>>>>> c7f5207d76 ([Refactor] refactor hdfs scanner apppend_or_update column (#42248))
     }
     ck->set_num_rows(row_count);
 }
