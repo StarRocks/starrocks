@@ -208,6 +208,7 @@ struct AggregatorParams {
     bool needs_finalize;
     bool has_outer_join_child;
     int64_t limit;
+    bool enable_runtime_limit;
     TStreamingPreaggregationMode::type streaming_preaggregation_mode;
     TupleId intermediate_tuple_id;
     TupleId output_tuple_id;
@@ -499,7 +500,8 @@ protected:
     SpillProcessChannelPtr _spill_channel;
 
 public:
-    void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
+    void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false,
+                        std::atomic<int64_t>* runtime_limit = nullptr);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk, bool* use_intermediate_as_output = nullptr);
@@ -510,6 +512,8 @@ public:
 
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+
+    void _build_hash_map_with_runtime_limit(size_t chunk_size, std::atomic<int64_t>* runtime_limit);
 
     bool _use_intermediate_as_input() {
         if (is_pending_reset_state()) {
