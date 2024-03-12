@@ -387,4 +387,11 @@ public class TypeTest {
         tp = Type.fromProtobuf(pTypeDesc);
         Assert.assertTrue(tp.isStructType());
     }
+
+    @Test
+    public void testExtendedPrecision() {
+        ScalarType type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 10, 4);
+        Assert.assertTrue(type == AggregateType.extendedPrecision(type, true));
+        Assert.assertTrue(type != AggregateType.extendedPrecision(type, false));
+    }
 }
