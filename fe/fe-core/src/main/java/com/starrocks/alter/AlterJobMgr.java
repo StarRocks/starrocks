@@ -179,6 +179,12 @@ public class AlterJobMgr {
         clusterHandler.start();
     }
 
+    public void stop() {
+        schemaChangeHandler.setStop();
+        materializedViewHandler.setStop();
+        clusterHandler.setStop();
+    }
+
     public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
             throws DdlException, AnalysisException {
         String tableName = stmt.getBaseIndexName();
