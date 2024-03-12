@@ -199,6 +199,8 @@ struct HdfsScannerParams {
 
     const TIcebergSchema* iceberg_schema = nullptr;
 
+    const TIcebergSchema* iceberg_equal_delete_schema = nullptr;
+
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     bool use_datacache = false;
