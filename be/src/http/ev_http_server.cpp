@@ -50,8 +50,8 @@
 #include "http/http_handler.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "service/brpc.h"
 #include "service/backend_options.h"
+#include "service/brpc.h"
 #include "util/debug_util.h"
 #include "util/errno.h"
 #include "util/thread.h"
@@ -90,8 +90,7 @@ static int on_connection(struct evhttp_request* req, void* param) {
     return 0;
 }
 
-EvHttpServer::EvHttpServer(int port, int num_workers)
-        : _port(port), _num_workers(num_workers), _real_port(0) {
+EvHttpServer::EvHttpServer(int port, int num_workers) : _port(port), _num_workers(num_workers), _real_port(0) {
     _host = BackendOptions::get_service_bind_address();
     DCHECK_GT(_num_workers, 0);
     auto res = pthread_rwlock_init(&_rw_lock, nullptr);

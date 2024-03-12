@@ -60,6 +60,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
 #include "util/misc.h"
+#include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -67,7 +68,6 @@
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
-#include "util/network_util.h"
 
 namespace starrocks {
 

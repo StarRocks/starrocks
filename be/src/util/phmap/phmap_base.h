@@ -1523,7 +1523,9 @@ namespace memory_internal {
 template <typename Allocator, typename Iterator, typename... Args>
 void ConstructRange(Allocator& alloc, Iterator first, Iterator last, const Args&... args) {
     for (Iterator cur = first; cur != last; ++cur) {
-        PHMAP_INTERNAL_TRY { std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur), args...); }
+        PHMAP_INTERNAL_TRY {
+            std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur), args...);
+        }
         PHMAP_INTERNAL_CATCH_ANY {
             while (cur != first) {
                 --cur;
@@ -1537,7 +1539,9 @@ void ConstructRange(Allocator& alloc, Iterator first, Iterator last, const Args&
 template <typename Allocator, typename Iterator, typename InputIterator>
 void CopyRange(Allocator& alloc, Iterator destination, InputIterator first, InputIterator last) {
     for (Iterator cur = destination; first != last; static_cast<void>(++cur), static_cast<void>(++first)) {
-        PHMAP_INTERNAL_TRY { std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur), *first); }
+        PHMAP_INTERNAL_TRY {
+            std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur), *first);
+        }
         PHMAP_INTERNAL_CATCH_ANY {
             while (cur != destination) {
                 --cur;
@@ -1706,9 +1710,9 @@ protected:
 // have trivial move but nontrivial copy.
 // Also, we should be checking is_trivially_copyable here, which is not
 // supported now, so we use is_trivially_* traits instead.
-template <typename T,
-          bool unused = phmap::is_trivially_copy_constructible<T>::value&& phmap::is_trivially_copy_assignable<
-                  typename std::remove_cv<T>::type>::value&& std::is_trivially_destructible<T>::value>
+template <typename T, bool unused = phmap::is_trivially_copy_constructible<T>::value &&
+                                    phmap::is_trivially_copy_assignable<typename std::remove_cv<T>::type>::value &&
+                                    std::is_trivially_destructible<T>::value>
 class optional_data;
 
 // Trivially copyable types
@@ -1762,8 +1766,8 @@ protected:
         return *this;
     }
 
-    optional_data& operator=(optional_data&& rhs) noexcept(
-            std::is_nothrow_move_assignable<T>::value&& std::is_nothrow_move_constructible<T>::value) {
+    optional_data& operator=(optional_data&& rhs) noexcept(std::is_nothrow_move_assignable<T>::value &&
+                                                           std::is_nothrow_move_constructible<T>::value) {
         if (rhs.engaged_) {
             this->assign(std::move(rhs.data_));
         } else {
@@ -2150,7 +2154,7 @@ public:
     // Swaps
 
     // Swap, standard semantics
-    void swap(optional& rhs) noexcept(std::is_nothrow_move_constructible<T>::value&& std::is_trivial<T>::value) {
+    void swap(optional& rhs) noexcept(std::is_nothrow_move_constructible<T>::value && std::is_trivial<T>::value) {
         if (*this) {
             if (rhs) {
                 using std::swap;

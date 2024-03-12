@@ -34,9 +34,11 @@
 
 #pragma once
 
-#include <vector>
 #include <sys/un.h>
+
 #include <string>
+#include <vector>
+
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 
@@ -45,7 +47,7 @@ namespace starrocks {
 class InetAddress {
 public:
     InetAddress(std::string ip, sa_family_t family, bool is_loopback);
-    bool is_loopback()  const;
+    bool is_loopback() const;
     std::string get_host_address() const;
     bool is_ipv6() const;
 

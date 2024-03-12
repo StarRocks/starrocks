@@ -34,9 +34,9 @@
 
 #include "util/network_util.h"
 
-#include <errno.h>
 #include <arpa/inet.h>
 #include <common/logging.h>
+#include <errno.h>
 #include <ifaddrs.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -89,12 +89,12 @@ Status get_hosts(std::vector<InetAddress>* hosts) {
         return Status::InternalError(ss.str());
     }
 
-    for(ifaddrs* if_addr = if_addrs; if_addr != nullptr; if_addr = if_addr->ifa_next) {
-        if(!if_addr->ifa_addr) {
+    for (ifaddrs* if_addr = if_addrs; if_addr != nullptr; if_addr = if_addr->ifa_next) {
+        if (!if_addr->ifa_addr) {
             continue;
         }
         auto addr = if_addr->ifa_addr;
-        if(addr->sa_family == AF_INET) {
+        if (addr->sa_family == AF_INET) {
             //check legitimacy of IPv4 Addresses
             char addr_buf[INET_ADDRSTRLEN];
             auto tmp_addr = &((struct sockaddr_in*)if_addr->ifa_addr)->sin_addr;
@@ -103,7 +103,7 @@ Status get_hosts(std::vector<InetAddress>* hosts) {
             in_addr_t s_addr = ((struct sockaddr_in*)if_addr->ifa_addr)->sin_addr.s_addr;
             bool is_loopback = (ntohl(s_addr) & 0xFF000000) == 0x7F000000;
             hosts->emplace_back(std::string(addr_buf), AF_INET, is_loopback);
-        }else if (addr->sa_family == AF_INET6) {
+        } else if (addr->sa_family == AF_INET6) {
             //check legitimacy of IPv6 Address
             auto tmp_addr = &((struct sockaddr_in6*)if_addr->ifa_addr)->sin6_addr;
             char addr_buf[INET6_ADDRSTRLEN];
@@ -116,7 +116,7 @@ Status get_hosts(std::vector<InetAddress>* hosts) {
         }
     }
 
-    if(if_addrs != nullptr) {
+    if (if_addrs != nullptr) {
         freeifaddrs(if_addrs);
     }
 
@@ -238,7 +238,7 @@ Status get_inet_interfaces(std::vector<std::string>* interfaces, bool include_ip
 std::string get_host_port(const std::string& host, int port) {
     std::stringstream ss;
     if (host.find(':') == std::string::npos) {
-        ss << host <<  ":" << port;
+        ss << host << ":" << port;
     } else {
         ss << "[" << host << "]"
            << ":" << port;

@@ -846,14 +846,18 @@ TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
 }
 
-#define DEFINE_TIME_ADD_FN(FN, UNIT)                                                                               \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, value); } \
-                                                                                                                   \
+#define DEFINE_TIME_ADD_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, value);              \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-#define DEFINE_TIME_SUB_FN(FN, UNIT)                                                                                \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, -value); } \
-                                                                                                                    \
+#define DEFINE_TIME_SUB_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, -value);             \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
 #define DEFINE_TIME_ADD_AND_SUB_FN(FN_PREFIX, UNIT) \
@@ -1042,7 +1046,7 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     StatusOr<ColumnPtr> time_slice_function_##UNIT(FunctionContext* context, const Columns& columns) { \
         auto time_viewer = ColumnViewer<LType>(columns[0]);                                            \
         auto period_viewer = ColumnViewer<RType>(columns[1]);                                          \
-        auto size = columns[0]->size();                                                                \
+        auto size = columns[0] -> size();                                                              \
         ColumnBuilder<ResultType> results(size);                                                       \
         for (int row = 0; row < size; row++) {                                                         \
             if (time_viewer.is_null(row) || period_viewer.is_null(row)) {                              \

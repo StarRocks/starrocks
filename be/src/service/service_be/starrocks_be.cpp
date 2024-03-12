@@ -227,8 +227,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         shutdown_logging();
         exit(1);
     }
-    LOG(INFO) << "BRPC server bind to host: " << BackendOptions::get_service_bind_address()
-              << ", port: " << brpc_port;
+    LOG(INFO) << "BRPC server bind to host: " << BackendOptions::get_service_bind_address() << ", port: " << brpc_port;
     if (auto ret = brpc_server->Start(point, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         shutdown_logging();

@@ -168,11 +168,11 @@ LOGIC128(^)
 
 #undef LOGIC128
 
-#define LOGICASSIGN128(op)                                       \
-    inline uint128& uint128::operator op(const uint128& other) { \
-        hi_ op other.hi_;                                        \
-        lo_ op other.lo_;                                        \
-        return *this;                                            \
+#define LOGICASSIGN128(op)                                        \
+    inline uint128& uint128::operator op(const uint128 & other) { \
+        hi_ op other.hi_;                                         \
+        lo_ op other.lo_;                                         \
+        return *this;                                             \
     }
 
 LOGICASSIGN128(|=)
