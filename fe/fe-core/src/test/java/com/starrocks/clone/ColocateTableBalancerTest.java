@@ -88,7 +88,7 @@ public class ColocateTableBalancerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         balancer.setStop();
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
+        GlobalStateMgr.getCurrentState().getAlterInstance().stop();
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
