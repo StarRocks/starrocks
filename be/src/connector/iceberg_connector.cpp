@@ -12,22 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "iceberg_connector.h"
 
-#include "column/vectorized_fwd.h"
-#include "connector/connector.h"
-#include "exec/connector_scan_node.h"
-#include "exec/hdfs_scanner.h"
+#include "connector_sink/iceberg_chunk_sink.h"
 
 namespace starrocks::connector {
 
-class IcebergConnector final : public Connector {
-public:
-    ~IcebergConnector() override = default;
-
-    ConnectorType connector_type() const override { return ConnectorType::ICEBERG; }
-
-    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
-};
+std::unique_ptr<ConnectorChunkSinkProvider> IcebergConnector::create_data_sink_provider() const {
+    return std::make_unique<IcebergChunkSinkProvider>();
+}
 
 } // namespace starrocks::connector
