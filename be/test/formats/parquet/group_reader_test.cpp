@@ -155,7 +155,7 @@ ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     for (auto& column : param->read_cols) {
         auto c = ColumnHelper::create_column(column.slot_type(), true);
-        chunk->append_column(c, column.idx_in_chunk);
+        chunk->append_column(c, column.slot_id());
     }
     return chunk;
 }
@@ -320,7 +320,6 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tp
             new SlotDescriptor(idx, fmt::format("col{}", idx), TypeDescriptor::from_logical_type(prim_type));
     GroupReaderParam::Column c;
     c.idx_in_parquet = idx;
-    c.idx_in_chunk = idx;
     c.type_in_parquet = par_type;
     c.slot_desc = slot;
     return c;
