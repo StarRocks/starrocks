@@ -123,56 +123,12 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
         RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
 
-<<<<<<< HEAD
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
         // read data into lazy chunk
         _column_reader_opts.context->filter = has_filter ? &chunk_filter : nullptr;
         Status st = _read(_lazy_column_indices, &count, &lazy_chunk);
         if (!st.ok() && !st.is_end_of_file()) {
             return st;
-=======
-Status GroupReader::_read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range,
-                                const Filter* filter, ChunkPtr* chunk) {
-    if (read_columns.empty()) {
-        return Status::OK();
-    }
-
-    for (int col_idx : read_columns) {
-        auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id();
-        RETURN_IF_ERROR(
-                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
-    }
-
-    return Status::OK();
-}
-
-StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& range, Filter* filter,
-                                                         ChunkPtr* chunk) {
-    const std::vector<int>& read_order = _column_read_order_ctx->get_column_read_order();
-    size_t round_cost = 0;
-    DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost); });
-    size_t hit_count = 0;
-    for (int col_idx : read_order) {
-        auto& column = _param.read_cols[col_idx];
-        round_cost += _column_read_order_ctx->get_column_cost(col_idx);
-        SlotId slot_id = column.slot_id();
-        RETURN_IF_ERROR(
-                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
-
-        if (std::find(_dict_column_indices.begin(), _dict_column_indices.end(), col_idx) !=
-            _dict_column_indices.end()) {
-            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-            SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
-            for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-                RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id),
-                                                                             filter, sub_field_path, 0));
-                hit_count = SIMD::count_nonzero(*filter);
-                if (hit_count == 0) {
-                    return hit_count;
-                }
-            }
->>>>>>> 712adb44dc ([Refactor] reduce column info fields and group reader params (#42085))
         }
         if (has_filter) {
             lazy_chunk->filter_range(chunk_filter, 0, lazy_chunk->num_rows());
@@ -273,19 +229,6 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         ++read_col_idx;
     }
 
-<<<<<<< HEAD
-=======
-    std::unordered_map<int, size_t> col_cost;
-    size_t all_cost = 0;
-    for (int col_idx : _active_column_indices) {
-        size_t flat_size = _param.read_cols[col_idx].slot_type().get_flat_size();
-        col_cost.insert({col_idx, flat_size});
-        all_cost += flat_size;
-    }
-    _column_read_order_ctx =
-            std::make_unique<ColumnReadOrderCtx>(_active_column_indices, all_cost, std::move(col_cost));
-
->>>>>>> 712adb44dc ([Refactor] reduce column info fields and group reader params (#42085))
     if (_active_column_indices.empty()) {
         _active_column_indices.swap(_lazy_column_indices);
     }
@@ -328,29 +271,14 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
 
 void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
-<<<<<<< HEAD
     for (const auto& column : _param.read_cols) {
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
         if (column.t_iceberg_schema_field == nullptr) {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, ranges, &end);
+            _collect_field_io_range(*schema_node, column.slot_type(), ranges, &end);
         } else {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, ranges,
+            _collect_field_io_range(*schema_node, column.slot_type(), column.t_iceberg_schema_field, ranges,
                                     &end);
         }
-=======
-    // collect io of active column
-    for (const auto& index : _active_column_indices) {
-        const auto& column = _param.read_cols[index];
-        SlotId slot_id = column.slot_id();
-        _column_readers[slot_id]->collect_column_io_range(ranges, &end, type, true);
-    }
-
-    // collect io of lazy column
-    for (const auto& index : _lazy_column_indices) {
-        const auto& column = _param.read_cols[index];
-        SlotId slot_id = column.slot_id();
-        _column_readers[slot_id]->collect_column_io_range(ranges, &end, type, false);
->>>>>>> 712adb44dc ([Refactor] reduce column info fields and group reader params (#42085))
     }
     *end_offset = end;
 }

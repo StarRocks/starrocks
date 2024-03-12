@@ -367,19 +367,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
-<<<<<<< HEAD
-=======
-
-        // put materialized columns' conjunctions into _eval_conjunct_ctxs_by_materialized_slot
-        // for example, partition column's conjunctions will not put into _eval_conjunct_ctxs_by_materialized_slot
-        {
-            auto it = _scanner_params.conjunct_ctxs_by_slot.find(column.slot_id());
-            if (it != _scanner_params.conjunct_ctxs_by_slot.end()) {
-                _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
-            }
-        }
-
->>>>>>> 712adb44dc ([Refactor] reduce column info fields and group reader params (#42085))
         _src_slot_descriptors.emplace_back(column.slot_desc);
         src_slot_index++;
     }
