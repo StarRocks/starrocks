@@ -53,7 +53,7 @@ inline size_t count_zero(const int8_t* data, size_t size) {
     return count;
 }
 
-inline size_t count_zero_int32(const uint32_t* data, size_t size) {
+inline size_t count_zero(const uint32_t* data, size_t size) {
     size_t count = 0;
     const uint32_t* end = data + size;
 
@@ -83,12 +83,12 @@ inline size_t count_zero_int32(const uint32_t* data, size_t size) {
     return count;
 }
 
-inline size_t count_zero_int32(const std::vector<uint32_t>& nums) {
-    return count_zero_int32(nums.data(), nums.size());
+inline size_t count_zero(const std::vector<uint32_t>& nums) {
+    return count_zero(nums.data(), nums.size());
 }
 
-inline size_t count_nonzero_int32(const std::vector<uint32_t>& nums) {
-    return nums.size() - count_zero_int32(nums.data(), nums.size());
+inline size_t count_nonzero(const std::vector<uint32_t>& nums) {
+    return nums.size() - count_zero(nums.data(), nums.size());
 }
 
 // Count the number of zeros of 8-bit unsigned integers.
