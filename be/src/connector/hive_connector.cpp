@@ -837,6 +837,25 @@ void HiveDataSource::close(RuntimeState* state) {
     }
 }
 
+void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
+    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+
+    if (!_equality_delete_slots.empty()) {
+        std::map<SlotId, SlotDescriptor*> id_to_slots;
+        for (const auto& slot : _tuple_desc->slots()) {
+            id_to_slots.emplace(slot->id(), slot);
+        }
+
+        for (const auto& slot : _equality_delete_slots) {
+            if (!id_to_slots.contains(slot->id())) {
+                const auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+                column->reserve(n);
+                (*chunk)->append_column(column, slot->id());
+            }
+        }
+    }
+}
+
 Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_no_data) {
         return Status::EndOfFile("no data");
