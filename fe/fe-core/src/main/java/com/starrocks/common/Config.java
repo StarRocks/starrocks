@@ -614,6 +614,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static String priority_networks = "";
 
+    @ConfField
+    public static boolean net_use_ipv6_when_priority_networks_empty = false;
+
     /**
      * Fe http port
      * Currently, all FEs' http port must be same.

@@ -39,7 +39,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.net.InetAddresses;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.Storage;
 import inet.ipaddr.IPAddressString;
@@ -50,6 +49,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -73,7 +73,7 @@ public class FrontendOptions {
 
     @VisibleForTesting
     static final List<String> PRIORITY_CIDRS = Lists.newArrayList();
-    private static InetAddress localAddr = InetAddress.getLoopbackAddress();
+    private static InetAddress localAddr;
     private static boolean useFqdn = false;
 
     public static void init(String[] args) throws UnknownHostException {
@@ -218,26 +218,46 @@ public class FrontendOptions {
     static void initAddrUseIp(List<InetAddress> hosts) {
         useFqdn = false;
         analyzePriorityCidrs();
-        // if not set frontend_address, get a non-loopback ip
 
         InetAddress loopBack = null;
         boolean hasMatchedIp = false;
-        for (InetAddress addr : hosts) {
-            LOG.debug("check ip address: {}", addr);
-            if (addr.isLoopbackAddress()) {
-                loopBack = addr;
-            } else if (!PRIORITY_CIDRS.isEmpty()) {
+
+        // If `priority_networks` is configured, find a possible ip matching the configuration first.
+        // Otherwise, find other usable ip as if `priority_networks` is not configured.
+        if (!PRIORITY_CIDRS.isEmpty()) {
+            for (InetAddress addr : hosts) {
+                LOG.info("check ip address: {}", addr);
+                // Whether to use IPv4 or IPv6, it's configured by CIDR format.
+                // If both IPv4 and IPv6 are configured, the config order decides priority.
                 if (isInPriorNetwork(addr.getHostAddress())) {
                     localAddr = addr;
                     hasMatchedIp = true;
                     break;
                 }
-            } else {
-                localAddr = addr;
-                break;
+                LOG.info("skip ip not belonged to priority networks: {}", addr);
+            }
+        } else if (localAddr == null) {
+            for (InetAddress addr : hosts) {
+                LOG.info("check ip address: {}", addr);
+                if (addr.isLoopbackAddress()) {
+                    loopBack = addr;
+                } else {
+                    if (Config.net_use_ipv6_when_priority_networks_empty) {
+                        if (addr instanceof Inet6Address) {
+                            localAddr = addr;
+                        }
+                    } else if (addr instanceof Inet4Address) {
+                        localAddr = addr;
+                    }
+                    if (localAddr != null) {
+                        // Use the first one found.
+                        break;
+                    }
+                }
             }
         }
-        //if all ips not match the priority_networks then print the warning log
+
+        // If all ips not match the priority_networks then print the warning log
         if (!PRIORITY_CIDRS.isEmpty() && !hasMatchedIp) {
             LOG.warn("ip address range configured for priority_networks does not include the current IP address");
         }
@@ -259,10 +279,6 @@ public class FrontendOptions {
         }
     }
 
-    public static InetAddress getLocalHost() {
-        return localAddr;
-    }
-
     public static boolean isUseFqdn() {
         return useFqdn;
     }
@@ -276,18 +292,6 @@ public class FrontendOptions {
 
     public static String getHostname() {
         return localAddr.getHostName();
-    }
-
-    public static String getHostnameByIp(String ip) {
-        String hostName = FeConstants.NULL_STRING;
-        try {
-            InetAddress address = InetAddress.getByName(ip);
-            hostName = address.getHostName();
-        } catch (UnknownHostException e) {
-            LOG.info("unknown host for {}", ip, e);
-            hostName = "unknown";
-        }
-        return hostName;
     }
 
     private static void analyzePriorityCidrs() {
