@@ -30,7 +30,7 @@ Bitmap 索引一般适用于高基数列，基于列构建的 Bitmap 索引的�
 - 主键表和明细表中所有列都可以创建 Bitmap 索引；聚合表和更新表中，只有维度列（即 Key 列）支持创建 bitmap 索引。
 - 支持为如下类型的列创建 Bitmap 索引：
   - 日期类型：DATE、DATETIME。
-  - 数值类型：TINYINT、SMALLINT、INT、BITGINT、LARGEINT、DECIMAL 和 BOOLEAN。
+  - 数值类型：TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DECIMAL 和 BOOLEAN。
   - 字符串类型：CHAR、STRING 和 VARCHAR。
   - 其他类型：HLL。
 - 如要了解一个查询是否命中了 Bitmap 索引，可查看该查询的 Profile 中的 `BitmapIndexFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../../administration/Query_planning.md#查看分析-profile)。

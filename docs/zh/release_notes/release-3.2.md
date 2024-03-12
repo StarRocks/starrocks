@@ -302,7 +302,7 @@ displayed_sidebar: "Chinese"
 #### 系统变量
 
 - 新增以下会话变量：
-  - `enable_per_bucket_optmize`
+  - `enable_per_bucket_optimize`
   - `enable_write_hive_external_table`
   - `hive_temp_staging_dir`
   - `spill_revocable_max_bytes`
