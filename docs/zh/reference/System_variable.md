@@ -155,6 +155,10 @@ SELECT /*+ SET_VAR
 
 是否开启低基数全局字典优化。开启后，查询 STRING 列时查询速度会有 3 倍左右提升。默认值：true。
 
+### cbo_eq_base_type （2.5.14 及以后）
+
+用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
