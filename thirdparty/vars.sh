@@ -360,10 +360,10 @@ LIBUNISTRING_SOURCE="libunistring-1.2"
 LIBUNISTRING_MD5SUM="71ddadc6482184d5936c4afd5d712ec0"
 
 # gmp
-GMP_DOWNLOAD="https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz"
-GMP_NAME="gmp-6.3.0.tar.xz"
+GMP_DOWNLOAD="https://gmplib.org/download/gmp-6.3.0/gmp-6.3.0.tar.gz"
+GMP_NAME="gmp-6.3.0.tar.gz"
 GMP_SOURCE="gmp-6.3.0"
-GMP_MD5SUM="956dc04e864001a9c22429f761f2c283"
+GMP_MD5SUM="3390cf8cc96bbec5a9123f2fb22480db"
 
 # libfpe
 LIBFPE_DOWNLOAD="https://github.com/ubiqsecurity/ubiq-fpe-c/archive/refs/tags/0.1.1.tar.gz"
