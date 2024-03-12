@@ -155,6 +155,10 @@ SELECT /*+ SET_VAR
 
 是否开启低基数全局字典优化。开启后，查询 STRING 列时查询速度会有 3 倍左右提升。默认值：true。
 
+### cbo_eq_base_type （2.5.14 及以后）
+
+用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
@@ -400,11 +404,11 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 ### max_pushdown_conditions_per_column
 
-该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### max_scan_key_num
 
-该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### nested_mv_rewrite_max_level
 

@@ -186,7 +186,12 @@ public class AlterJobMgr {
         schemaChangeHandler.start();
         materializedViewHandler.start();
         clusterHandler.start();
-        compactionHandler = new CompactionHandler();
+    }
+
+    public void stop() {
+        schemaChangeHandler.setStop();
+        materializedViewHandler.setStop();
+        clusterHandler.setStop();
     }
 
     public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
