@@ -174,11 +174,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         this.cteContext = context.getCteContext();
         this.inlineView = context.isInlineView();
         this.enableViewBasedMvRewrite = context.isEnableViewBasedMvRewrite();
-        if (session.getSessionVariable().isEnableForceRuleBasedMvRewrite()) {
-            this.optToAstMap = context.getOptToAstMap();
-        } else {
-            this.optToAstMap = null;
-        }
+        this.optToAstMap = context.getOptToAstMap();
     }
 
     // transform relation to plan with session variable sql_select_limit

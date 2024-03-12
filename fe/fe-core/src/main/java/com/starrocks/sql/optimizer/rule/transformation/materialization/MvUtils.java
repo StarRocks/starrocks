@@ -433,9 +433,8 @@ public class MvUtils {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
-        Map<Operator, ParseNode> optToAstMap = Maps.newHashMap();
         TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, inlineView, optToAstMap);
+                new TransformerContext(columnRefFactory, connectContext, inlineView, null);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(

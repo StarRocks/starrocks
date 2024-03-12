@@ -40,6 +40,7 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -172,6 +173,16 @@ public class StatementPlanner {
                 && !session.getSessionVariable().isCboUseDBLock();
     }
 
+    /**
+     * Create a map from opt expression to parse node for the optimizer to use which only used in text match rewrite for mv.
+     */
+    private static Map<Operator, ParseNode> makeOptToAstMap(SessionVariable sessionVariable) {
+        if (sessionVariable.isEnableMaterializedViewTextMatchRewrite()) {
+            return Maps.newHashMap();
+        }
+        return null;
+    }
+
     private static ExecPlan createQueryPlan(StatementBase stmt,
                                             ConnectContext session,
                                             TResultSinkType resultSinkType) {
@@ -181,7 +192,7 @@ public class StatementPlanner {
         // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
-        Map<Operator, ParseNode> optToAstMap = Maps.newHashMap();
+        Map<Operator, ParseNode> optToAstMap = makeOptToAstMap(session.getSessionVariable());
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
             // get a logicalPlan without inlining views
@@ -242,7 +253,7 @@ public class StatementPlanner {
             }
 
             LogicalPlan logicalPlan;
-            Map<Operator, ParseNode> optToAstMap = Maps.newHashMap();
+            Map<Operator, ParseNode> optToAstMap = makeOptToAstMap(session.getSessionVariable());
             try (Timer ignored = Tracers.watchScope("Transformer")) {
                 // get a logicalPlan without inlining views
                 TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, optToAstMap);
