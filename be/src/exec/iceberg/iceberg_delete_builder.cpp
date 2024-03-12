@@ -231,7 +231,7 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
 
         RETURN_IF_ERROR(status);
         ChunkPtr& result = chunk;
-        RETURN_IF_ERROR(mor_processor->append_chunk_to_hashtable(result));
+        RETURN_IF_ERROR(mor_processor->append_chunk_to_hashtable(state, result));
     }
     return Status::OK();
 }
