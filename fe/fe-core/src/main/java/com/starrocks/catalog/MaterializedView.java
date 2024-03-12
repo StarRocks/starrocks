@@ -896,11 +896,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
-    public void onCreate(Database db) {
-        super.onCreate(db);
-    }
-
-    @Override
     public void onReload() {
         try {
             boolean desiredActive = active;
