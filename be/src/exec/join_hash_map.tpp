@@ -668,7 +668,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, Chun
     if (!_probe_state->has_remain) {
         _probe_state->probe_row_count = (*probe_chunk)->num_rows();
         _probe_state->active_coroutines = state->query_options().interleaving_group_size;
-        if (state->query_options().interleaving_group_size > 0 && !_table_items->ht_cache_miss_serious()) {
+        auto dop = state->query_options().pipeline_dop;
+        // disable interleaving for concurrent queries with lower dop if adaptively interleaving.
+        if (state->query_options().interleaving_group_size > 0 &&
+            ((dop > 0 && dop < 4) || !_table_items->ht_cache_miss_serious())) {
             _probe_state->active_coroutines = 0;
         }
         ProbeFunc().lookup_init(*_table_items, _probe_state);
