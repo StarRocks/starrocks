@@ -276,8 +276,7 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
         if (column.t_iceberg_schema_field == nullptr) {
             _collect_field_io_range(*schema_node, column.slot_type(), ranges, &end);
         } else {
-            _collect_field_io_range(*schema_node, column.slot_type(), column.t_iceberg_schema_field, ranges,
-                                    &end);
+            _collect_field_io_range(*schema_node, column.slot_type(), column.t_iceberg_schema_field, ranges, &end);
         }
     }
     *end_offset = end;
