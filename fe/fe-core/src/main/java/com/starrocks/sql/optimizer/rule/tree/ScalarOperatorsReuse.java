@@ -314,7 +314,7 @@ public class ScalarOperatorsReuse {
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
             isLambdaDependent = false;
             lambdaArguments.clear();
-            if (!isNonDeterministicFuncOrLambdaDependent(operator) && operators.contains(operator)) {
+            if (!isLambdaDependent(operator) && operators.contains(operator)) {
                 Set<ScalarOperator> commonOperators = getOperatorsByDepth(depth, commonOperatorsByDepth);
                 commonOperators.add(operator);
             }
@@ -349,6 +349,23 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
+        public Integer visitCall(CallOperator scalarOperator, Void context) {
+            CallOperator callOperator = scalarOperator.cast();
+            if (FunctionSet.nonDeterministicFunctions.contains(callOperator.getFnName())) {
+                // try to reuse non deterministic function
+                // for example:
+                // select (rnd + 1) as rnd1, (rnd + 2) as rnd2 from (select rand() as rnd) sub
+                return collectCommonOperatorsByDepth(1, scalarOperator);
+            } else if (scalarOperator.getChildren().isEmpty()) {
+                // to keep the same logic as origin
+                return 0;
+            } else {
+                return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
+                        argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator);
+            }
+        }
+
+        @Override
         public Integer visitDictMappingOperator(DictMappingOperator scalarOperator, Void context) {
             return collectCommonOperatorsByDepth(1, scalarOperator);
         }
@@ -358,7 +375,7 @@ public class ScalarOperatorsReuse {
         // a lambda-dependent expressions also can't be reused if reuseLambdaDependentExpr is false.
         // For example, array_map(x->2x+1+2x,array),2x is lambda-dependent, so it can't be reused if
         // reuseLambdaDependentExpr is false, but array_map(x->2x+1+2x,array) can be reused if needed.
-        private boolean isNonDeterministicFuncOrLambdaDependent(ScalarOperator scalarOperator) {
+        private boolean isLambdaDependent(ScalarOperator scalarOperator) {
 
             if (hasLambdaFunction && !reuseLambdaDependentExpr) {
                 if (scalarOperator instanceof LambdaFunctionOperator) {
@@ -372,14 +389,8 @@ public class ScalarOperatorsReuse {
                 }
             }
 
-            if (scalarOperator instanceof CallOperator) {
-                String fnName = ((CallOperator) scalarOperator).getFnName();
-                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
-                    return true;
-                }
-            }
             for (ScalarOperator child : scalarOperator.getChildren()) {
-                if (isNonDeterministicFuncOrLambdaDependent(child)) {
+                if (isLambdaDependent(child)) {
                     return true;
                 }
             }
