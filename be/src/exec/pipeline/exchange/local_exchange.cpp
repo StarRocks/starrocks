@@ -273,6 +273,18 @@ KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMe
     }
 }
 
+Status KeyPartitionExchanger::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(LocalExchanger::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+    return Status::OK();
+}
+
+void KeyPartitionExchanger::close(RuntimeState* state) {
+    Expr::close(_partition_expr_ctxs, state);
+    LocalExchanger::close(state);
+}
+
 Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     size_t num_rows = chunk->num_rows();
     size_t source_op_cnt = _source->get_sources().size();

@@ -27,4 +27,5 @@ add_library(Connector STATIC
     mysql_connector.cpp
     file_connector.cpp
     binlog_connector.cpp
+    iceberg_connector.cpp
 )
