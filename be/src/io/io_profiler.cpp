@@ -308,6 +308,7 @@ std::string IOProfiler::profile_and_get_topn_stats_str(const std::string& mode, 
             ss << it << "\n";
         }
     }
+    IOProfiler::reset();
     return ss.str();
 }
 
