@@ -699,6 +699,15 @@ public class UtFrameUtils {
             UtFrameUtils.dropMockBackend(backendId++);
         }
 
+        // mock be num
+        backendId = 10002;
+        int beNumToAdd = Math.min(3, replayDumpInfo.getBeNum());
+        for (int i = 1; i < beNumToAdd; ++i) {
+            //UtFrameUtils.addMockBackend(backendId++);
+            String host = String.format("127.0.0.%s", i + 1);
+            UtFrameUtils.addMockBackend(backendId++, host, 9060);
+        }
+
         Set<String> dbSet = replayDumpInfo.getCreateTableStmtMap().keySet().stream().map(key -> key.split("\\.")[0])
                 .collect(Collectors.toSet());
         dbSet.forEach(db -> {
@@ -719,7 +728,7 @@ public class UtFrameUtils {
                 starRocksAssert.withDatabase(dbName);
             }
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withSingleReplicaTable(entry.getValue());
+            starRocksAssert.withTable(entry.getValue());
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
@@ -745,12 +754,7 @@ public class UtFrameUtils {
                 starRocksAssert.withDatabase(dbName);
             }
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withSingleReplicaAsyncMv(entry.getValue());
-        }
-        // mock be num
-        backendId = 10002;
-        for (int i = 1; i < replayDumpInfo.getBeNum(); ++i) {
-            UtFrameUtils.addMockBackend(backendId++);
+            starRocksAssert.withAsyncMvAndRefresh(entry.getValue());
         }
 
         // mock be core stat

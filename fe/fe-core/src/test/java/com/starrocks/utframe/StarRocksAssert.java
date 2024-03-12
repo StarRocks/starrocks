@@ -447,14 +447,14 @@ public class StarRocksAssert {
         return this;
     }
 
-    public StarRocksAssert withSingleReplicaAsyncMv(String sql) throws Exception {
+    public StarRocksAssert withAsyncMvAndRefresh(String sql) throws Exception {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             if (!(statementBase instanceof CreateMaterializedViewStatement)) {
                 return this;
             }
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) statementBase;
-            withAsyncMv(createMaterializedViewStatement, true, true);
+            withAsyncMv(createMaterializedViewStatement, false, true);
         } catch (Exception e) {
             LOG.warn("create mv failed, sql:{}", sql, e);
             throw e;
