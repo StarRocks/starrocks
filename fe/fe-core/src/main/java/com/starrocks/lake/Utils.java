@@ -52,18 +52,6 @@ public class Utils {
     // Returns null if no backend available.
     public static Long chooseNodeId(LakeTablet tablet) {
         try {
-<<<<<<< HEAD
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-            return tablet.getPrimaryComputeNodeId(workerGroupId);
-        } catch (UserException ex) {
-            LOG.info("Ignored error {}", ex.getMessage());
-            try {
-                return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
-            } catch (UserException e) {
-                return null;
-            }
-=======
             ShardInfo shardInfo = tablet.getShardInfo();
             return chooseNodeId(shardInfo);
         } catch (Exception e) {
@@ -78,11 +66,9 @@ public class Utils {
             return ids.iterator().next();
         }
         try {
-            return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                    .getNodeSelector().seqChooseBackendOrComputeId();
+            return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
         } catch (UserException e) {
             return null;
->>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
         }
     }
 

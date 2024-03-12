@@ -65,6 +65,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -539,16 +540,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Partition partition = partitionInfo.getPartition();
 
             long partitionId = entry.getKey();
-<<<<<<< HEAD
-            if (canErasePartition(partitionInfo, currentTimeMs)) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
-                // erase partition
-=======
             if (!canErasePartition(partitionInfo, currentTimeMs)) {
                 continue;
             }
             if (partitionInfo.delete()) {
->>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
                 iterator.remove();
                 removeRecycleMarkers(partitionId);
 
@@ -574,21 +569,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     !partitionInfo.getPartition().getName().equalsIgnoreCase(partitionName)) {
                 continue;
             }
-<<<<<<< HEAD
-
-            Partition partition = partitionInfo.getPartition();
-            if (partition.getName().equals(partitionName)) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
-                iterator.remove();
-                removeRecycleMarkers(entry.getKey());
-                LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
-                        partition.getId(), partitionName);
-            }
-=======
             partitionInfo.setRecoverable(false);
             idToRecycleTime.replace(partitionInfo.getPartition().getId(), 0L);
             break;
->>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
         }
     }
 
@@ -1101,7 +1084,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return Lists.newArrayList(idToDatabase.keySet());
     }
 
-<<<<<<< HEAD
     public long loadRecycleBin(DataInputStream dis, long checksum) throws IOException {
         readFields(dis);
         if (!isCheckpointThread()) {
@@ -1122,8 +1104,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return checksum;
     }
 
-=======
->>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
                 + 1 + idToPartition.size() + 1;
