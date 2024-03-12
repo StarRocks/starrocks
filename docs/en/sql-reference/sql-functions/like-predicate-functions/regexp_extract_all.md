@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # regexp_extract_all
 
 ## Description
@@ -13,12 +17,25 @@ This function is supported from v2.5.19.
 ## Syntax
 
 ```Haskell
-ARRAY<VARCHAR> regexp_extract_all(VARCHAR str, VARCHAR pattern, int pos)
+ARRAY<VARCHAR> regexp_extract_all(VARCHAR str, VARCHAR pattern, BIGINT pos)
 ```
+
+## Parameters
+
+- `str`: the string to be matched.
+
+- `pattern`: the regular expression pattern used to match substrings.
+
+- `pos`: `pattern` may contain multiple groups. `pos` indicates which regex group to extract.
+
+## Return value
+
+Returns an ARRAY that consists of VARCHAR elements.
 
 ## Examples
 
 ```Plain Text
+-- Return all the letters that match group 1 in the pattern.
 MySQL > SELECT regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1);
 +-------------------------------------------------------------------+
 | regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1)   |
@@ -26,6 +43,7 @@ MySQL > SELECT regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1);
 | ['b']                                                             |
 +-------------------------------------------------------------------+
 
+-- Return all the letters that match group 2 in the pattern.
 MySQL > SELECT regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 2);
 +---------------------------------------------------------------------+
 | regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 2) |
@@ -34,6 +52,6 @@ MySQL > SELECT regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 
 +---------------------------------------------------------------------+
 ```
 
-## keyword
+## Keywords
 
-REGEXP_EXTRACT_ALL,REGEXP,EXTRACT
+REGEXP_EXTRACT_ALL, REGEXP, EXTRACT
