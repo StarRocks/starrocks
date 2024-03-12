@@ -440,7 +440,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "queryOutputIndices")
     protected List<Integer> queryOutputIndices = Lists.newArrayList();
 
-    protected ParseNode defineQueryParseNode = null;
+    protected volatile ParseNode defineQueryParseNode = null;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -2018,7 +2018,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * Used for text based materialized view rewrite.
      */
-    public void initDefineQueryParseNode() {
+    public synchronized void initDefineQueryParseNode() {
         // cache by ast
         defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql);
     }
@@ -2026,7 +2026,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     /**
      * `defineQueryParseNode` is safe for multi threads since it is only initialized when mv becomes to active.
      */
-    public ParseNode getDefineQueryParseNode() {
+    public synchronized ParseNode getDefineQueryParseNode() {
         return defineQueryParseNode;
     }
 }

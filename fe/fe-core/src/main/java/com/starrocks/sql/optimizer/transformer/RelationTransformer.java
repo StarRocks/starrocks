@@ -174,7 +174,11 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         this.cteContext = context.getCteContext();
         this.inlineView = context.isInlineView();
         this.enableViewBasedMvRewrite = context.isEnableViewBasedMvRewrite();
-        this.optToAstMap = context.getOptToAstMap();
+        if (session.getSessionVariable().isEnableForceRuleBasedMvRewrite()) {
+            this.optToAstMap = context.getOptToAstMap();
+        } else {
+            this.optToAstMap = null;
+        }
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -923,7 +927,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         // aggregate
         List<Expr> groupKeys = node.getGroupByKeys();
         List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
-        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView);
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap);
         OptExprBuilder builder = queryTransformer.aggregate(
                 queryPlan.getRootBuilder(), groupKeys, aggFunctions, null, ImmutableList.of());
 
