@@ -79,9 +79,9 @@ public:
     };
 
     DEFINE_VECTORIZED_FN(fpe_ff1_encrypt);
-    DEFINE_VECTORIZED_FN(fpe_encrypt_num);
+    DEFINE_VECTORIZED_FN(fpe_encrypt);
     DEFINE_VECTORIZED_FN(fpe_ff1_decrypt);
-    DEFINE_VECTORIZED_FN(fpe_decrypt_num);
+    DEFINE_VECTORIZED_FN(fpe_decrypt);
 };
 
 } // namespace vectorized
