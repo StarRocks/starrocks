@@ -82,9 +82,17 @@ select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unparti
 1	tianjing
 2	guangzhou
 -- !result
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table order by k2;
+-- result:
+guangzhou
+tianjing
+-- !result
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table;
 -- result:
 2
+-- !result
+select k1 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table group by k1 having count(1) > 1;
+-- result:
 -- !result
 /*
 CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_parquet_partitioned_table` (
@@ -103,6 +111,23 @@ select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partiti
 -- result:
 1	beijing	zhangsan
 2	shanghai	lisi
+-- !result
+select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table order by k2;
+-- result:
+beijing
+shanghai
+-- !result
+select k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table order by k1;
+-- result:
+zhangsan
+lisi
+-- !result
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+2
+-- !result
+select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table group by k1,k3 having count(1) > 1;
+-- result:
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
