@@ -34,7 +34,6 @@
 
 #pragma once
 
-#include <bvar/bvar.h>
 #include <fmt/format.h>
 
 #include <atomic>
@@ -54,6 +53,7 @@
 #include "util/bthreads/semaphore.h"
 // resolve `barrier` macro conflicts with boost/thread.hpp header file
 #undef barrier
+#include "util/metrics.h"
 #include "util/monotime.h"
 #include "util/priority_queue.h"
 
@@ -249,14 +249,11 @@ public:
 
     int max_threads() const { return _max_threads.load(std::memory_order_acquire); }
 
-    // Use bvar as the counter, and should not be called frequently.
-    int64_t total_executed_tasks() const { return _total_executed_tasks.get_value(); }
+    int64_t total_executed_tasks() const { return _total_executed_tasks.value(); }
 
-    // Use bvar as the counter, and should not be called frequently.
-    int64_t total_pending_time_ns() const { return _total_pending_time_ns.get_value(); }
+    int64_t total_pending_time_ns() const { return _total_pending_time_ns.value(); }
 
-    // Use bvar as the counter, and should not be called frequently.
-    int64_t total_execute_time_ns() const { return _total_execute_time_ns.get_value(); }
+    int64_t total_execute_time_ns() const { return _total_execute_time_ns.value(); }
 
 private:
     friend class ThreadPoolBuilder;
@@ -383,13 +380,13 @@ private:
     std::unique_ptr<ThreadPoolToken> _tokenless;
 
     // Total number of tasks that have finished
-    bvar::Adder<int64_t> _total_executed_tasks;
+    CoreLocalCounter<int64_t> _total_executed_tasks{MetricUnit::NOUNIT};
 
     // Total time in nanoseconds that tasks pending in the queue.
-    bvar::Adder<int64_t> _total_pending_time_ns;
+    CoreLocalCounter<int64_t> _total_pending_time_ns{MetricUnit::NOUNIT};
 
     // Total time in nanoseconds to execute tasks.
-    bvar::Adder<int64_t> _total_execute_time_ns;
+    CoreLocalCounter<int64_t> _total_execute_time_ns{MetricUnit::NOUNIT};
 
     ThreadPool(const ThreadPool&) = delete;
     const ThreadPool& operator=(const ThreadPool&) = delete;
