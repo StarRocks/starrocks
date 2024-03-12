@@ -182,26 +182,24 @@ Status GroupReader::_init_column_readers() {
 
 Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
     std::unique_ptr<ColumnReader> column_reader = nullptr;
-    const auto* schema_node =
-            _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
+    const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
         SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
         if (column.t_iceberg_schema_field == nullptr) {
-            RETURN_IF_ERROR(
-                    ColumnReader::create(_column_reader_opts, schema_node, column.col_type_in_chunk, &column_reader));
+            RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.slot_type(), &column_reader));
         } else {
-            RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.col_type_in_chunk,
+            RETURN_IF_ERROR(ColumnReader::create(_column_reader_opts, schema_node, column.slot_type(),
                                                  column.t_iceberg_schema_field, &column_reader));
         }
 
-        if (column.col_type_in_chunk.is_complex_type()) {
+        if (column.slot_type().is_complex_type()) {
             // For complex type columns, we need parse def & rep levels.
             // For OptionalColumnReader, by default, we will not parse it's def level for performance. But if
             // column is a complex type, we have to parse def level to calculate nullability.
             column_reader->set_need_parse_levels(true);
         }
     }
-    _column_readers[column.slot_id] = std::move(column_reader);
+    _column_readers[column.slot_id()] = std::move(column_reader);
     return Status::OK();
 }
 
@@ -210,7 +208,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     int read_col_idx = 0;
 
     for (auto& column : _param.read_cols) {
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
             for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
                 std::vector<std::string> sub_field_path;
@@ -252,8 +250,8 @@ bool GroupReader::_try_to_use_dict_filter(const GroupReaderParam::Column& column
         sub_field_path = subfields[0];
     }
 
-    if (_column_readers[column.slot_id]->try_to_use_dict_filter(ctx, is_decode_needed, column.slot_id, sub_field_path,
-                                                                0)) {
+    if (_column_readers[column.slot_id()]->try_to_use_dict_filter(ctx, is_decode_needed, column.slot_id(),
+                                                                  sub_field_path, 0)) {
         return true;
     } else {
         return false;
@@ -264,7 +262,7 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
     auto chunk = std::make_shared<Chunk>();
     chunk->columns().reserve(column_indices.size());
     for (auto col_idx : column_indices) {
-        SlotId slot_id = _param.read_cols[col_idx].slot_id;
+        SlotId slot_id = _param.read_cols[col_idx].slot_id();
         ColumnPtr& column = _read_chunk->get_column_by_slot_id(slot_id);
         chunk->append_column(column, slot_id);
     }
@@ -274,12 +272,11 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
 void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
-        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
         if (column.t_iceberg_schema_field == nullptr) {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, ranges, &end);
+            _collect_field_io_range(*schema_node, column.slot_type(), ranges, &end);
         } else {
-            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, ranges,
-                                    &end);
+            _collect_field_io_range(*schema_node, column.slot_type(), column.t_iceberg_schema_field, ranges, &end);
         }
     }
     *end_offset = end;
@@ -380,7 +377,7 @@ void GroupReader::_init_read_chunk() {
     const auto& slots = _param.tuple_desc->slots();
     std::vector<SlotDescriptor*> read_slots;
     for (const auto& column : _param.read_cols) {
-        int chunk_index = column.col_idx_in_chunk;
+        int chunk_index = column.idx_in_chunk;
         read_slots.emplace_back(slots[chunk_index]);
     }
     size_t chunk_size = _param.chunk_size;
@@ -398,7 +395,7 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     size_t real_count = count;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         _column_reader_opts.context->next_row = 0;
         count = *row_count;
         Status status = _column_readers[slot_id]->next_batch(&count, (*chunk)->get_column_by_slot_id(slot_id).get());
@@ -431,7 +428,7 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const 
     ctx->filter = &empty_filter;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         _column_reader_opts.context->next_row = 0;
 
         ctx->rows_to_skip = rows_to_skip;
@@ -461,7 +458,7 @@ void GroupReader::_use_as_dict_filter_column(int col_idx, SlotId slot_id, std::v
 Status GroupReader::_rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered) {
     for (int col_idx : _dict_column_indices) {
         const auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
             RETURN_IF_ERROR(
                     _column_readers[slot_id]->rewrite_conjunct_ctxs_to_predicate(is_group_filtered, sub_field_path, 0));
@@ -475,7 +472,7 @@ void GroupReader::_init_chunk_dict_column(ChunkPtr* chunk) {
     // replace dict filter column
     for (int col_idx : _dict_column_indices) {
         const auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
             _column_readers[slot_id]->init_dict_column((*chunk)->get_column_by_slot_id(slot_id), sub_field_path, 0);
         }
@@ -488,7 +485,7 @@ bool GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter
     }
     for (int col_idx : _dict_column_indices) {
         const auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
             _column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id), filter,
                                                          sub_field_path, 0);
@@ -500,7 +497,7 @@ bool GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter
 Status GroupReader::_fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk) {
     read_chunk->check_or_die();
     for (const auto& column : _param.read_cols) {
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         RETURN_IF_ERROR(_column_readers[slot_id]->fill_dst_column((*chunk)->get_column_by_slot_id(slot_id),
                                                                   read_chunk->get_column_by_slot_id(slot_id)));
     }
