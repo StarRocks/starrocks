@@ -237,6 +237,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         return result.toString();
     }
 
+    @Override
+    String dataSourceType() {
+        return "kafka";
+    }
+
     public Map<Integer, Long> getLatestOffset() {
         return latestPartOffset;
     }

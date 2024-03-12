@@ -279,6 +279,8 @@ public abstract class RoutineLoadTaskInfo {
 
     abstract String getTaskDataSourceProperties();
 
+    abstract String dataSourceType();
+
     @Override
     public int hashCode() {
         return Objects.hashCode(id);

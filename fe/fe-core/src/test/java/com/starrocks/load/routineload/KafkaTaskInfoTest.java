@@ -62,6 +62,7 @@ public class KafkaTaskInfoTest {
                 System.currentTimeMillis(),
                 offset1,
                 Config.routine_load_task_timeout_second * 1000);
+        Assert.assertEquals("kafka", kafkaTaskInfo1.dataSourceType());
         Assert.assertTrue(kafkaTaskInfo1.readyToExecute());
 
         Map<Integer, Long> offset2 = Maps.newHashMap();
