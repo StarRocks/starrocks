@@ -3630,7 +3630,7 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
 void PersistentIndex::_get_indexes_stat(const std::vector<std::shared_ptr<ImmutableIndex>>& immu_indexes,
                                         std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat) {
     std::for_each(immu_indexes.begin(), immu_indexes.end(),
-                  [&usage_and_size_stat](const std::shared_ptr<ImmutableIndex> immu_index) {
+                  [&usage_and_size_stat](const std::shared_ptr<ImmutableIndex>& immu_index) {
                       for (const auto& [key_size, shard_info] : immu_index->_shard_info_by_length) {
                           auto [shard_offset, shard_size] = shard_info;
                           const auto size =
@@ -4001,7 +4001,7 @@ bool PersistentIndex::_need_flush_advance() {
 MergeCandidate PersistentIndex::_get_merge_candidate() {
     DCHECK(_l1_merged_num.size() == _l1_vec.size());
     if (_l1_merged_num.empty() || _merge_compaction_running) {
-        return MergeCandidate(-1, -1);
+        return {MergeCandidate(-1, -1)};
     }
     int32_t merge_num = _l1_merged_num[0];
     int32_t merged_candidate_num = 1;
