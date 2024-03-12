@@ -272,7 +272,7 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
 void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
-        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
         if (column.t_iceberg_schema_field == nullptr) {
             _collect_field_io_range(*schema_node, column.slot_type(), ranges, &end);
         } else {
@@ -395,7 +395,7 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     size_t real_count = count;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         _column_reader_opts.context->next_row = 0;
         count = *row_count;
         Status status = _column_readers[slot_id]->next_batch(&count, (*chunk)->get_column_by_slot_id(slot_id).get());
@@ -428,7 +428,7 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const 
     ctx->filter = &empty_filter;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
-        SlotId slot_id = column.slot_id;
+        SlotId slot_id = column.slot_id();
         _column_reader_opts.context->next_row = 0;
 
         ctx->rows_to_skip = rows_to_skip;
