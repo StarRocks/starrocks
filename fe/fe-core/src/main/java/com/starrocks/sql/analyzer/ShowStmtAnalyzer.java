@@ -93,7 +93,7 @@ public class ShowStmtAnalyzer {
         new ShowStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ShowStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private static final Logger LOGGER = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
 

@@ -48,7 +48,7 @@ public class ShowAlterStmtAnalyzer {
         new ShowAlterStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowAlterStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ShowAlterStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 

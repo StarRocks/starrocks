@@ -140,7 +140,7 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMapping> {
+public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMapping> {
     private static final Logger LOG = LogManager.getLogger(RelationTransformer.class);
 
     private final ColumnRefFactory columnRefFactory;
