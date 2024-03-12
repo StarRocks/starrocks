@@ -51,6 +51,9 @@ public class CallOperator extends ScalarOperator {
     // Ignore nulls.
     private boolean ignoreNulls = false;
 
+    // for nonDeterministicFunctions, to reuse it in common exprs
+    private int id = 0;
+
     public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments) {
         this(fnName, returnType, arguments, null);
     }
@@ -104,6 +107,42 @@ public class CallOperator extends ScalarOperator {
         return fn != null && fn instanceof AggregateFunction;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isRemovedDistinct() {
+        return removedDistinct;
+    }
+
+    public void setRemovedDistinct(boolean removedDistinct) {
+        this.removedDistinct = removedDistinct;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public List<ScalarOperator> getDistinctChildren() {
+        if (!isDistinct) {
+            throw new IllegalArgumentException("callOperator: " + this + " should be a distinct function.");
+        }
+        List<ScalarOperator> res = Lists.newArrayList();
+        if (FunctionSet.GROUP_CONCAT.equals(fnName)) {
+            AggregateFunction aggFunc = (AggregateFunction) fn;
+            int idx = arguments.size() - aggFunc.getIsAscOrder().size() - 1;
+            for (int i = 0; i < arguments.size(); i++) {
+                if (idx == i) {
+                    // skip the separator argument
+                    continue;
+                }
+                res.add(arguments.get(i));
+            }
+        } else {
+            res = arguments;
+        }
+        return res;
+    }
+
+>>>>>>> d8fa77acea ([BugFix] Support nondeterministic function reuse (#39904))
     @Override
     public String toString() {
         return fnName + "(" + (isDistinct ? "distinct " : "") +
@@ -180,7 +219,7 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(fnName, arguments, isDistinct);
+        return Objects.hash(fnName, arguments, isDistinct, id);
     }
 
     @Override
@@ -196,7 +235,8 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
                 Objects.equals(arguments, other.arguments) &&
-                Objects.equals(fn, other.fn);
+                Objects.equals(fn, other.fn) &&
+                id == other.id;
     }
 
     @Override
@@ -213,6 +253,7 @@ public class CallOperator extends ScalarOperator {
         operator.fnName = this.fnName;
         operator.isDistinct = this.isDistinct;
         operator.ignoreNulls = this.ignoreNulls;
+        operator.id = this.id;
         return operator;
     }
 
