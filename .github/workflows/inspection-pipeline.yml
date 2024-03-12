@@ -277,6 +277,7 @@ jobs:
     needs:
       - info
       - build
+    if: always() && needs.info.result == 'success'
     outputs:
       RELEASE_TAR_PATH: ${{ steps.set_output.outputs.RELEASE_TAR_PATH }}
       ASAN_TAR_PATH: ${{ steps.set_output.outputs.ASAN_TAR_PATH }}
@@ -285,15 +286,16 @@ jobs:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
 
-      - name: Download Build Tar Result
+      - name: Download Build Artifact
         if: github.event_name == 'schedule' || inputs.IS_REBUILD
         uses: actions/download-artifact@v4
         with:
           pattern: BUILD-RESULT-*
           path: outputs
 
-      - name: Analyse Self Build Artifact
+      - name: Analyse Build Artifact
         id: analyse_artifact
+        if: github.event_name == 'schedule' || inputs.IS_REBUILD
         run: |
           if [[ -e "./outputs/BUILD-RESULT-Release/tar.txt" ]]; then
             build_result=$(cat "./outputs/BUILD-RESULT-Release/tar.txt")
@@ -332,7 +334,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: needs.test_filter.outputs.RELEASE_TAR_PATH != ''
+    if: always() && needs.test_filter.outputs.RELEASE_TAR_PATH != ''
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -347,7 +349,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: needs.test_filter.outputs.ASAN_TAR_PATH != ''
+    if: always() && needs.test_filter.outputs.ASAN_TAR_PATH != ''
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
