@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## 3.2.4
 
-Release date: March 8, 2024
+Release date: March 12, 2024
 
 ### New Features
 
@@ -27,7 +27,7 @@ Release date: March 8, 2024
 
 ### Improvements
 
-- Shared-data StarRocks clusters with an AWS S3 Storage Volume support partitioning data to different paths of an S3 bucket. These paths use a uniform prefix. This improves the read and write efficiency on data files in S3. [#41627](https://github.com/StarRocks/starrocks/pull/41627)
+- Shared-data StarRocks clusters support the Partitioned Prefix feature for S3-compatible object storage systems. When this feature is enabled, StarRocks stores the data into multiple, uniformly prefixed partitions (sub-paths) under the bucket. This improves the read and write efficiency on data files in S3-compatible object storages. [#41627](https://github.com/StarRocks/starrocks/pull/41627)
 - StarRocks supports using the parameter `s3_compatible_fs_list` to specify which S3-compatible object storage can be accessed via AWS SDK, and supports using the parameter `fallback_to_hadoop_fs_list` to specify non-S3-compatible object storages that require access via HDFS Schema (this method requires the use of vendor-provided JAR packages). [#41123](https://github.com/StarRocks/starrocks/pull/41123)
 - Optimized compatibility with Trino. Supports syntax conversion from the following Trino functions: current_catalog, current_schema, to_char, from_hex, to_date, to_timestamp, and index. [#41217](https://github.com/StarRocks/starrocks/pull/41217) [#41319](https://github.com/StarRocks/starrocks/pull/41319) [#40803](https://github.com/StarRocks/starrocks/pull/40803)
 - Optimized the query rewrite logic of materialized views. StarRocks can rewrite queries with materialized views created upon logical views. [#42173](https://github.com/StarRocks/starrocks/pull/42173)
