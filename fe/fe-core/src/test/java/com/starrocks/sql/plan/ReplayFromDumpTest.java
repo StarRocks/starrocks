@@ -297,7 +297,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("35:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(plan, plan.contains("AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
                 " multi_distinct_count(128: case), max(103: count)\n" +
@@ -769,6 +769,24 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testNestedViewWithCTE() throws Exception {
+
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("Project\n" +
+                "  |  <slot 7363> : 7363: count\n" +
+                "  |  limit: 100\n"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7363: count)\n" +
+                "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2133: case\n" +
+                "  |  limit: 100"));
+    }
+
+    @Test
+>>>>>>> e8dd399f0f ([Enhancement] optimize query dump replay to support replication_num and shared_data run mode (#42497))
     public void testMvOnView() throws Exception {
         String dumpInfo = getDumpInfoFromFile("query_dump/mv_on_view");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
