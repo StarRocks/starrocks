@@ -191,7 +191,7 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
 
     std::unique_ptr<parquet::FileReader> reader;
     try {
-        reader = std::make_unique<parquet::FileReader>(state->chunk_size(), file.get(), file->get_size().value(), 0);
+        reader = std::make_unique<parquet::FileReader>(state->chunk_size(), file.get(), file->get_size().value(), nullptr, nullptr);
     } catch (std::exception& e) {
         const auto s = strings::Substitute(
                 "ParquetEqualityDeleteBuilder::build create parquet::FileReader failed. reason = $0", e.what());
@@ -205,11 +205,15 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
     THdfsScanRange scan_range;
     scan_range.offset = 0;
     scan_range.length = file_length;
+    std::vector<const THdfsScanRange*> scan_ranges = {&scan_range};
     for (size_t i = 0; i < slot_descs.size(); i++) {
         auto* slot = slot_descs[i];
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-        column.idx_in_chunk = i;
+        column.col_idx = i;
+        column.col_type = slot->type();
+        column.slot_id = slot->id();
+        column.col_name = slot->col_name();
         column.decode_needed = true;
         columns.emplace_back(column);
     }
@@ -218,7 +222,7 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
     scanner_ctx->tuple_desc = delete_column_tuple_desc;
     scanner_ctx->iceberg_schema = iceberg_equal_delete_schema;
     scanner_ctx->materialized_columns = std::move(columns);
-    scanner_ctx->scan_range = &scan_range;
+    scanner_ctx->scan_range = scan_ranges;
     scanner_ctx->lazy_column_coalesce_counter = new std::atomic<int32_t>(0);
     RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
 
@@ -231,7 +235,7 @@ Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const st
 
         RETURN_IF_ERROR(status);
         ChunkPtr& result = chunk;
-        RETURN_IF_ERROR(mor_processor->append_chunk_to_hashtable(result));
+        RETURN_IF_ERROR(mor_processor->append_chunk_to_hashtable(state, result));
     }
     return Status::OK();
 }
