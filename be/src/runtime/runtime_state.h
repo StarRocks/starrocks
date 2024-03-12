@@ -444,6 +444,7 @@ public:
 
     void set_jit_level(const int level) { _query_options.__set_jit_level(level); }
 
+    // CompilableExprType
     // arithmetic -> 2, except /, %
     // cast -> 4
     // case -> 8

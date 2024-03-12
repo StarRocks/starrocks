@@ -126,7 +126,7 @@ public:
     }
 
     bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(2) && IRHelper::support_jit(Type);
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
@@ -197,7 +197,7 @@ public:
     }
 
     bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(64) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+        return state->can_jit_expr(CompilableExprType::DIV) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
@@ -292,7 +292,7 @@ public:
     }
 
     bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(128) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+        return state->can_jit_expr(CompilableExprType::MOD) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
@@ -352,7 +352,7 @@ public:
     }
 
     bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(2) && IRHelper::support_jit(Type);
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
     }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
@@ -405,7 +405,7 @@ public:
     }
 
     bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(2) && IRHelper::support_jit(Type);
+        return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
     }
 
     JitScore compute_jit_score(RuntimeState* state) const override {

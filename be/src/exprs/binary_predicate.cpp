@@ -133,7 +133,7 @@ public:
     }
 
     bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(16) && IRHelper::support_jit(Type);
+        return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
     }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
@@ -428,7 +428,7 @@ public:
     }
 
     bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(16) && IRHelper::support_jit(Type);
+        return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {

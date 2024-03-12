@@ -1172,8 +1172,8 @@ public:
     };
 
     bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(4) && !AllowThrowException && FromType != TYPE_LARGEINT && ToType != TYPE_LARGEINT &&
-               IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
+        return state->can_jit_expr(CompilableExprType::CAST) && !AllowThrowException && FromType != TYPE_LARGEINT &&
+               ToType != TYPE_LARGEINT && IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
