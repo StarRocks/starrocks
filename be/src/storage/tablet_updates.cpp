@@ -2397,8 +2397,9 @@ struct CompactionEntry {
     bool operator<(const CompactionEntry& rhs) const { return score_per_row > rhs.score_per_row; }
 };
 
-static string int_list_to_string(const vector<uint32_t>& l) {
-    string ret;
+template <typename T>
+static std::string int_list_to_string(const std::vector<T>& l) {
+    std::string ret;
     for (size_t i = 0; i < l.size(); i++) {
         if (i > 0) {
             ret.append(",");
@@ -2409,6 +2410,9 @@ static string int_list_to_string(const vector<uint32_t>& l) {
 }
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
+    if (config::enable_pk_size_tiered_compaction_strategy) {
+        return compaction_for_size_tiered(mem_tracker);
+    }
     if (_error) {
         return Status::InternalError(strings::Substitute(
                 "compaction failed, tablet updates is in error state: tablet:$0 $1", _tablet.tablet_id(), _error_msg));
@@ -2516,6 +2520,174 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
               << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->"
               << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
               << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
+
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    Status st = _do_compaction(&info);
+    if (!st.ok()) {
+        _compaction_running = false;
+        _last_compaction_failure_millis = UnixMillis();
+    } else {
+        _last_compaction_success_millis = UnixMillis();
+    }
+    return st;
+}
+
+Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
+    if (_error) {
+        return Status::InternalError(strings::Substitute(
+                "compaction failed, tablet updates is in error state: tablet:$0 $1", _tablet.tablet_id(), _error_msg));
+    }
+    bool was_runing = false;
+    if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
+        return Status::InternalError("illegal state: another compaction is running");
+    }
+    vector<uint32_t> rowsets;
+    std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = strings::Substitute("tablet deleted when compaction tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        // 1. start compaction at current apply version
+        info->start_version = _edit_version_infos[_apply_version_idx]->version;
+        rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
+    }
+
+    size_t total_valid_rowsets = 0;
+    size_t total_valid_segments = 0;
+    // level -1 keep empty rowsets and have no IO overhead, so we can merge them with any level
+    std::map<int, vector<CompactionEntry>> candidates_by_level;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (auto rowsetid : rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr == _rowset_stats.end()) {
+                // should not happen
+                string msg = strings::Substitute("rowset not found in rowset stats tablet=$0 rowset=$1",
+                                                 _tablet.tablet_id(), rowsetid);
+                DCHECK(false) << msg;
+                LOG(WARNING) << msg;
+            } else if (itr->second->compaction_score > 0) {
+                auto& stat = *itr->second;
+                total_valid_rowsets++;
+                total_valid_segments += stat.num_segments;
+                int32_t level = _calc_compaction_level(&stat);
+                candidates_by_level[level].emplace_back();
+                auto& e = candidates_by_level[level].back();
+                e.rowsetid = itr->first;
+                e.score_per_row =
+                        (level == -1) ? 0 : (float)((double)stat.compaction_score / (stat.num_rows - stat.num_dels));
+                e.num_rows = stat.num_rows;
+                e.num_dels = stat.num_dels;
+                e.bytes = stat.byte_size;
+                e.num_segments = stat.num_segments;
+            }
+        }
+    }
+
+    int64_t total_rows = 0;
+    int64_t total_bytes = 0;
+    int32_t compaction_level = -1;
+    int64_t max_score = 0;
+    for (auto& [level, candidates] : candidates_by_level) {
+        if (level == -1) {
+            continue;
+        }
+        int64_t total_segments = 0;
+        int64_t del_rows = 0;
+        int64_t level_score = 0;
+        for (auto& e : candidates) {
+            level_score += e.score_per_row * (e.num_rows - e.num_dels);
+            total_segments += e.num_segments;
+            del_rows += e.num_dels;
+        }
+        if (level_score > max_score && (total_segments > 1 || del_rows > 0)) {
+            compaction_level = level;
+            max_score = level_score;
+        }
+    }
+
+    int64_t total_merged_segments = 0;
+    RowsetStats stat;
+    std::set<int32_t> compaction_level_candidate;
+    max_score = 0;
+    do {
+        auto iter = candidates_by_level.find(compaction_level);
+        if (iter == candidates_by_level.end()) {
+            break;
+        }
+        for (auto& e : iter->second) {
+            size_t new_rows = stat.num_rows + e.num_rows - e.num_dels;
+            size_t new_bytes = stat.byte_size;
+            if (e.num_rows != 0) {
+                new_bytes += e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
+            }
+            if ((stat.byte_size > 0 && new_bytes > config::update_compaction_result_bytes * 2) ||
+                info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
+                break;
+            }
+            max_score += e.score_per_row * (e.num_rows - e.num_dels);
+            info->inputs.emplace_back(e.rowsetid);
+            stat.num_rows = new_rows;
+            stat.byte_size = new_bytes;
+            total_rows += e.num_rows;
+            total_bytes += e.bytes;
+            total_merged_segments += e.num_segments;
+        }
+        compaction_level_candidate.insert(compaction_level);
+        compaction_level = _calc_compaction_level(&stat);
+        stat.num_segments = stat.byte_size > 0 ? (stat.byte_size - 1) / config::max_segment_file_size + 1 : 0;
+        _calc_compaction_score(&stat);
+    } while (stat.byte_size <= config::update_compaction_result_bytes * 2 &&
+             info->inputs.size() < config::max_update_compaction_num_singleton_deltas &&
+             compaction_level_candidate.find(compaction_level) == compaction_level_candidate.end() &&
+             candidates_by_level.find(compaction_level) != candidates_by_level.end() && stat.compaction_score > 0);
+
+    if (compaction_level_candidate.find(-1) == compaction_level_candidate.end()) {
+        if (candidates_by_level[-1].size() > 0) {
+            for (auto& e : candidates_by_level[-1]) {
+                info->inputs.emplace_back(e.rowsetid);
+                total_merged_segments += e.num_segments;
+            }
+            compaction_level_candidate.insert(-1);
+        }
+    }
+
+    size_t version_count = rowsets.size() - info->inputs.size() + _pending_commits.size();
+    // too many rowsets, try to trigger compaction again
+    if (version_count >= config::tablet_max_versions * 80 / 100) {
+        LOG(INFO) << strings::Substitute(
+                "tablet:$0 will try to trigger compaction again because of too many compaction version_count:$1, "
+                "pending:$2",
+                _tablet.tablet_id(), version_count, _pending_commits.size());
+    } else {
+        // give 10s time gitter, so same table's compaction don't start at same time
+        _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+    }
+
+    int64_t del_rows = total_rows - stat.num_rows;
+    // 1. no candidate rowsets, skip compaction
+    // 2. only an empty rowset, skip compaction
+    if (info->inputs.empty() || (info->inputs.size() <= 1 && compaction_level == -1 && del_rows == 0)) {
+        LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        _compaction_running = false;
+        return Status::OK();
+    }
+
+    std::sort(info->inputs.begin(), info->inputs.end());
+    std::vector<int32_t> levels(compaction_level_candidate.begin(), compaction_level_candidate.end());
+    LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
+              << " version:" << info->start_version.to_string() << " score:" << max_score
+              << " merge levels:" << int_list_to_string(levels) << " pick:" << info->inputs.size()
+              << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
+              << int_list_to_string(info->inputs) << " #pick_segments:" << total_merged_segments
+              << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->" << stat.num_rows
+              << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
+              << PrettyPrinter::print(stat.byte_size, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -2815,6 +2987,30 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     *json_result = std::string(strbuf.GetString());
 }
 
+int32_t TabletUpdates::_calc_compaction_level(RowsetStats* stats) {
+    if (stats->num_rows == 0) {
+        return -1;
+    }
+    size_t new_rows = stats->num_rows - stats->num_dels;
+    size_t new_bytes = stats->byte_size * new_rows / stats->num_rows;
+
+    int64_t level_multiple = config::size_tiered_level_multiple;
+    int64_t min_level_size = config::size_tiered_min_level_size;
+    int64_t level_num = config::size_tiered_level_num;
+    int64_t max_level_size = min_level_size * pow(level_multiple, level_num);
+
+    if (new_bytes == 0) {
+        return -1;
+    } else if (new_bytes <= min_level_size) {
+        return 0;
+    } else if (new_bytes >= max_level_size) {
+        return level_num;
+    } else {
+        auto x = (double)new_bytes / min_level_size;
+        return log(x) / log((double)level_multiple);
+    }
+}
+
 void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
     if (stats->num_rows == 0) {
         stats->compaction_score = config::update_compaction_size_threshold;
@@ -2980,9 +3176,11 @@ int64_t TabletUpdates::get_average_row_size() {
 }
 
 std::string TabletUpdates::RowsetStats::to_string() const {
-    return strings::Substitute("[seg:$0 row:$1 del:$2 bytes:$3 row_size:$4 compaction:$5 partial_update_by_column:$6]",
-                               num_segments, num_rows, num_dels, byte_size, row_size, compaction_score,
-                               partial_update_by_column);
+    return strings::Substitute(
+            "[seg:$0 row:$1 del:$2 bytes:$3 row_size:$4 compaction_score:$5 compaction_level:$6 "
+            "partial_update_by_column:$7]",
+            num_segments, num_rows, num_dels, byte_size, row_size, compaction_score, compaction_level,
+            partial_update_by_column);
 }
 
 std::string TabletUpdates::debug_string() const {
