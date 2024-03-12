@@ -30,6 +30,7 @@ StatusOr<ColumnPtr> VectorizedCastArrayExpr::evaluate_checked(ExprContext* conte
     ColumnPtr cast_column = column->clone_shared();
     ArrayColumn::Ptr array_col = nullptr;
     NullableColumn::Ptr nullable_col = nullptr;
+    cast_column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), cast_column);
     ColumnPtr src_col = cast_column;
 
     if (src_col->is_nullable()) {
