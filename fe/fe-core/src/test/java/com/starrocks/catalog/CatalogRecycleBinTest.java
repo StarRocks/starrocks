@@ -86,25 +86,45 @@ public class CatalogRecycleBinTest {
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
-        bin.recyclePartition(11L, 22L, partition, range, dataProperty, (short) 1, false, null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
         Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
-        bin.recyclePartition(11L, 22L, partition2, range, dataProperty, (short) 1, false, null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty, (short) 1, false, null));
 
         Partition recycledPart = bin.getPartition(1L);
-        Assert.assertNull(recycledPart);
+        Assert.assertNotNull(recycledPart);
         recycledPart = bin.getPartition(2L);
         Assert.assertEquals(2L, recycledPart.getId());
         Assert.assertEquals(range, bin.getPartitionRange(2L));
         Assert.assertEquals(dataProperty, bin.getPartitionDataProperty(2L));
         Assert.assertEquals((short) 1, bin.getPartitionReplicationNum(2L));
         Assert.assertFalse(bin.getPartitionIsInMemory(2L));
-
-        List<Partition> partitions = bin.getPartitions(22L);
-        Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(2L, partitions.get(0).getId());
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testGetPhysicalPartition() throws Exception {
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
+        Range<PartitionKey> range =
+                Range.range(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), columns),
+                        BoundType.CLOSED,
+                        PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
+                        BoundType.CLOSED);
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
+        Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty, (short) 1, false, null));
+
+        PhysicalPartition recycledPart = bin.getPhysicalPartition(1L);
+        Assert.assertNotNull(recycledPart);
+        recycledPart = bin.getPartition(2L);
+        Assert.assertEquals(2L, recycledPart.getId());
+    }
+
+    @Test
+>>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
     public void testReplayEraseTable() {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
@@ -544,9 +564,10 @@ public class CatalogRecycleBinTest {
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
-        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
-        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null);
-        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
+        recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null));
+        recycleBin.recyclePartition(
+                new RecycleRangePartitionInfo(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null));
+        recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null));
 
         Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
@@ -560,7 +581,7 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(p1.getId(), expireFromNow - 1000);
         recycleBin.erasePartition(now);
 
-        Assert.assertEquals(recycleBin.getPartition(p1.getId()), null);
+        Assert.assertNull(recycleBin.getPartition(p1.getId()));
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
 
         // 3. set recyle later, check if recycle now
@@ -587,6 +608,7 @@ public class CatalogRecycleBinTest {
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
     }
+<<<<<<< HEAD
 
     @Test
     public void testRecyclePartitionForLakeTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
@@ -633,4 +655,6 @@ public class CatalogRecycleBinTest {
         Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p1.getId()));
         Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p2.getId()));
     }
+=======
+>>>>>>> cf01b46f35 ([Enhancement] Remove partition directory with retry in shared data clusters (#41675))
 }
