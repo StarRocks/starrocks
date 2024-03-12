@@ -77,6 +77,12 @@ public:
     int64_t estimated_mem_usage() const override;
     bool can_estimate_mem_usage() const override { return true; }
 
+<<<<<<< HEAD
+=======
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
+    void _init_chunk(ChunkPtr* chunk, size_t n) override;
+
+>>>>>>> 2db313052e ([BugFix] fix query iceberg equality delete parquet file without primary key column (#42438))
 private:
     const HiveDataSourceProvider* _provider;
     const THdfsScanRange _scan_range;

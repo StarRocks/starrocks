@@ -87,7 +87,13 @@ protected:
     const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
+<<<<<<< HEAD
     void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
+=======
+    pipeline::ScanSplitContext* _split_context = nullptr;
+
+    virtual void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
+>>>>>>> 2db313052e ([BugFix] fix query iceberg equality delete parquet file without primary key column (#42438))
 };
 
 class StreamDataSource : public DataSource {
