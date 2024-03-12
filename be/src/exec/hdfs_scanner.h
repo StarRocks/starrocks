@@ -247,12 +247,18 @@ struct HdfsScannerContext {
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
     void update_materialized_columns(const std::unordered_set<std::string>& names);
+
     // "not existed columns" are materialized columns not found in file
     // this usually happens when use changes schema. for example
     // user create table with 3 fields A, B, C, and there is one file F1
     // but user change schema and add one field like D.
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
-    void update_not_existed_columns_of_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // If there is no partition column in the chunk，append partition column to chunk，
+    // otherwise update partition column in chunk
+    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
@@ -261,9 +267,6 @@ struct HdfsScannerContext {
     // other helper functions.
     void update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count);
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
-
-    void append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
 
