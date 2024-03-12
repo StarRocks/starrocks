@@ -80,7 +80,7 @@ public class AnalyzeSetVariableTest {
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
         UserVariable userVariable = (UserVariable) setStmt.getSetListItems().get(0);
         Assert.assertNotNull(userVariable.getEvaluatedExpression());
-        Assert.assertEquals("3", userVariable.getEvaluatedExpression().getStringValue());
+        Assert.assertEquals("3", userVariable.getEvaluatedExpression().toString());
 
         sql = "set @var = abs(1.2)";
         setStmt = (SetStmt) analyzeSuccess(sql);

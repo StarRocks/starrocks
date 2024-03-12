@@ -18,13 +18,13 @@ import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -336,13 +336,13 @@ public class SetStmtAnalyzer {
             var.setEvaluatedExpression(NullLiteral.create(Type.STRING));
         } else {
             Expr foldedExpression = Expr.analyzeAndCastFold(expression);
-            if (foldedExpression instanceof LiteralExpr) {
-                var.setEvaluatedExpression((LiteralExpr) foldedExpression);
+            if (foldedExpression.isLiteral()) {
+                var.setEvaluatedExpression(foldedExpression);
             } else {
                 SelectList selectList = new SelectList(Lists.newArrayList(
                         new SelectListItem(var.getUnevaluatedExpression(), null)), false);
 
-                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.NULL));
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
                 List<List<Expr>> rows = new ArrayList<>();
                 rows.add(row);
                 ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
@@ -354,15 +354,21 @@ public class SetStmtAnalyzer {
 
                 Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
 
-                //can not apply to numeric types or complex type are not supported
-                if (variableResult.getType().isOnlyMetricType() || variableResult.getType().isFunctionType()
-                        || variableResult.getType().isComplexType()) {
+                //can not apply to metric types or complex type except array type
+                if (variableResult.getType().isOnlyMetricType() || variableResult.getType().isFunctionType()) {
                     throw new SemanticException("Can't set variable with type " + variableResult.getType());
                 }
 
-                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems().set(0,
-                        new SelectListItem(new CastExpr(Type.VARCHAR, variableResult), null));
+                if (variableResult.getType().isArrayType()) {
+                    ArrayType arrayType = (ArrayType) variableResult.getType();
+                    if (!arrayType.getItemType().isScalarType()) {
+                        throw new SemanticException("Can't set variable with type " + variableResult.getType());
+                    }
+                }
 
+
+                ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems()
+                        .set(0, new SelectListItem(variableResult, null));
                 Subquery subquery = new Subquery(queryStatement);
                 subquery.setType(variableResult.getType());
                 var.setUnevaluatedExpression(subquery);

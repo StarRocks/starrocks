@@ -46,6 +46,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -745,11 +746,12 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitVariableExpr(VariableExpr node, Context context) {
-            if (node.isNull()) {
-                return ConstantOperator.createNull(node.getType());
-            } else {
-                return new ConstantOperator(node.getValue(), node.getType());
-            }
+            return new ConstantOperator(node.getValue(), node.getType());
+        }
+
+        @Override
+        public ScalarOperator visitUserVariableExpr(UserVariableExpr node, Context context) {
+            return visit(node.getValue(), context);
         }
 
         @Override
