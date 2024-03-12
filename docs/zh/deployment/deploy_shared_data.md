@@ -377,7 +377,7 @@ storage_root_path = <storage_root_path>
 | **配置项**              | **描述**                 |
 | ---------------------- | ------------------------ |
 | starlet_port | 存算分离模式下，用于 CN 心跳服务的端口。默认值：`9070`。 |
-| storage_root_path      | 本地缓存数据依赖的存储目录以及该存储介质的类型，多块盘配置使用分号（;）隔开。如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。默认值：`${STARROCKS_HOME}/storage`。 |
+| storage_root_path      | 本地缓存数据依赖的存储目录，多块盘配置使用分号（;）隔开。例如：`/data1;/data2`。默认值：`${STARROCKS_HOME}/storage`。 |
 
 > **说明**
 >
