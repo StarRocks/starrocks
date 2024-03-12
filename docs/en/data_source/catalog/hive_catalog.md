@@ -16,9 +16,11 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
 
 - Metastore like Hive metastore or AWS Glue
 
-  > **NOTE**
-  >
-  > If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+  :::note
+  
+  If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
+
+  :::
 
 ## Usage notes
 
@@ -58,9 +60,11 @@ If you choose HDFS as storage, configure your StarRocks cluster as follows:
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
   - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
 
-> **NOTE**
->
-> If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+:::note
+
+If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
+
+:::
 
 ### Kerberos authentication
 
@@ -126,9 +130,11 @@ If you choose Hive metastore as the metastore of your data source, configure `Me
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
-> **NOTE**
->
-> Before querying Hive data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+:::note
+
+Before querying Hive data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+
+:::
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
@@ -451,9 +457,11 @@ In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the
 
 However, if the frequency of data updates in Hive is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
 
-> **NOTE**
->
-> In most cases, if your Hive data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
+:::note
+
+In most cases, if your Hive data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
+
+:::
 
 | Parameter                              | Required | Description                                                  |
 |----------------------------------------| -------- | ------------------------------------------------------------ |
@@ -885,9 +893,11 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on a Hive catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create a database in that Hive catalog. This feature is supported from v3.2 onwards.
 
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+:::note
+
+You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+:::note
 
 [Switch to a Hive catalog](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following statement to create a Hive database in that catalog:
 
@@ -916,9 +926,11 @@ The `prefix` varies based on the storage system you use:
 
 Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that Hive database. This feature is supported from v3.2 onwards. You can only drop empty databases.
 
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+:::note
+
+You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+:::
 
 When you drop a Hive database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
@@ -930,11 +942,14 @@ DROP DATABASE <database_name>
 
 ## Create a Hive table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a managed table in that Hive database. This feature is supported from v3.2 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md), [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md), or [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) statement to create a managed table in that Hive database. This feature is supported from v3.2 onwards.
 
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+:::note
+
+- You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+- Hive catalogs support CREATE TABLE LIKE from v3.2.4 onwards.
+
+:::
 
 [Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following syntax to create a Hive managed table in that database.
 
@@ -947,6 +962,7 @@ partition_column_definition1,partition_column_definition2...])
 [partition_desc]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
+[LIKE [database.]<source_table_name>]
 ```
 
 ### Parameters
@@ -1032,9 +1048,11 @@ The following table describes a few key properties.
 
 Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on a Hive table (which can be a managed table or an external table), you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Hive table (currently only Parquet-formatted Hive tables are supported). This feature is supported from v3.2 onwards. Sinking data to external tables is disabled by default. To sink data to external tables, you must set the [system variable `ENABLE_WRITE_HIVE_EXTERNAL_TABLE`](../../reference/System_variable.md) to `true`.
 
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+:::note
+
+You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+:::
 
 [Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Hive table in that database.
 
@@ -1121,9 +1139,11 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on a Hive table, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that Hive table. This feature is supported from v3.1 onwards. Note that currently StarRocks supports dropping only managed tables of Hive.
 
-> **NOTE**
->
-> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+:::note
+
+You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+:::
 
 When you drop a Hive table, you must specify the `FORCE` keyword in the DROP TABLE statement. After the operation is complete, the table's file path is retained, but the table's data on your HDFS cluster or cloud storage is all dropped along with the table. Exercise caution when you perform this operation to drop a Hive table.
 
@@ -1150,9 +1170,11 @@ You need to manually update metadata in the following situations:
 - An existing Hive table is deleted by using the DROP statement, and a new Hive table with the same name as the deleted Hive table is created.
 - You have specified `"enable_cache_list_names" = "true"` in `PROPERTIES` at the creation of your Hive catalog, and you want to query new partitions that you just created on your Hive cluster.
 
-  > **NOTE**
-  >
-  > From v2.5.5 onwards, StarRocks provides the periodic Hive metadata cache refresh feature. For more information, see the below "[Periodically refresh metadata cache](#periodically-refresh-metadata-cache)" section of this topic. After you enable this feature, StarRocks refreshes your Hive metadata cache every 10 minutes by default. Therefore, manual updates are not needed in most cases. You need to perform a manual update only when you want to query new partitions immediately after the new partitions are created on your Hive cluster.
+  :::note
+  
+  From v2.5.5 onwards, StarRocks provides the periodic Hive metadata cache refresh feature. For more information, see the below "[Periodically refresh metadata cache](#periodically-refresh-metadata-cache)" section of this topic. After you enable this feature, StarRocks refreshes your Hive metadata cache every 10 minutes by default. Therefore, manual updates are not needed in most cases. You need to perform a manual update only when you want to query new partitions immediately after the new partitions are created on your Hive cluster.
+
+  :::
 
 Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
 
