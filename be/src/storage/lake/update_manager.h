@@ -145,7 +145,7 @@ public:
 
     void unload_and_remove_primary_index(int64_t tablet_id);
 
-    Status compact_ssts(Tablet* tablet, const std::vector<PersistentIndexSstablePB>& ssts,
+    Status compact_ssts(int64_t tablet, const std::vector<PersistentIndexSstablePB>& ssts,
                         std::shared_ptr<TxnLogPB>& txn_log);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }

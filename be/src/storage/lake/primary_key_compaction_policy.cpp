@@ -168,7 +168,7 @@ StatusOr<std::vector<PersistentIndexSstablePB>> PrimaryCompactionPolicy::pick_ss
     }
 
     auto sst_meta = _tablet_metadata->pindex_sstable_meta();
-    if (sst_meta.sstables_size() == 0) {
+    if (sst_meta.sstables_size() <= 1) {
         return ssts;
     }
     for (int i = 0; i < sst_meta.sstables_size() && i < config::lake_compaction_max_sstable_versions; ++i) {

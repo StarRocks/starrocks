@@ -101,8 +101,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     op_compaction->mutable_output_rowset()->set_overlapped(false);
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (!_input_ssts.empty()) {
-            Tablet t(_tablet.tablet_manager(), _tablet.id());
-            RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->compact_ssts(&t, _input_ssts, txn_log));
+            RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->compact_ssts(_tablet.id(), _input_ssts, txn_log));
         }
     }
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));

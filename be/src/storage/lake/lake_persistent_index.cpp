@@ -19,11 +19,12 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/sstable/filter_policy.h"
 #include "storage/lake/sstable/lake_persistent_index_sst.h"
+#include "storage/lake/sstable/table_builder.h"
 #include "storage/primary_key_encoder.h"
 #include "util/trace.h"
 
@@ -213,7 +214,22 @@ Status LakePersistentIndex::minor_compact() {
     return Status::OK();
 }
 
-Status LakePersistentIndex::major_compact(int64_t min_retain_version) {
+Status LakePersistentIndex::major_compact(int64_t min_retain_version, const std::vector<PersistentIndexSstablePB>& ssts,
+                                          std::shared_ptr<TxnLogPB>& txn_log) {
+    std::vector<std::pair<std::string, int64_t>> sst_metas;
+    for (auto& sst : ssts) {
+        for (auto& sst_pb : sst.sstables()) {
+            sst_metas.emplace_back(_tablet_mgr->sst_location(_tablet_id, sst_pb.filename()), sst_pb.filesz());
+        }
+        auto input_sst = txn_log->mutable_op_compaction()->add_input_sstables();
+        input_sst->CopyFrom(sst);
+    }
+    auto name = gen_sst_filename(txn_log->txn_id());
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_id, name)));
+    uint64_t filesz;
+    RETURN_IF_ERROR(LakePersistentIndexSstable::merge_ssts(min_retain_version, sst_metas, wf.get(), &filesz));
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(name);
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesz(filesz);
     return Status::OK();
 }
 

@@ -18,6 +18,8 @@
 
 #include "fs/fs.h"
 #include "storage/lake/persistent_index_memtable.h"
+#include "storage/lake/sstable/iterator.h"
+#include "storage/lake/sstable/merger.h"
 #include "storage/lake/sstable/table_builder.h"
 #include "util/trace.h"
 
@@ -63,18 +65,88 @@ Status LakePersistentIndexSstable::build_sstable(
     return Status::OK();
 }
 
-Status LakePersistentIndexSstable::build_sstable(
-        phmap::btree_map<std::string, phmap::btree_map<int64_t, int64_t, std::greater<>>, std::less<>>& map,
-        WritableFile* wf, uint64_t* filesz) {
+Status LakePersistentIndexSstable::merge_ssts(int64_t min_retain_version,
+                                              std::vector<std::pair<std::string, int64_t>>& sst_metas, WritableFile* wf,
+                                              uint64_t* filesz) {
+    bool enable_multi_version = false;
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
     options.filter_policy = filter_policy.get();
     sstable::TableBuilder builder(options, wf);
-    for (const auto& [k, m] : map) {
+    std::vector<std::unique_ptr<RandomAccessFile>> read_files;
+    read_files.reserve(sst_metas.size());
+    std::vector<sstable::Iterator*> iters;
+    iters.reserve(sst_metas.size());
+    std::vector<std::unique_ptr<sstable::Table>> tables;
+    tables.reserve(sst_metas.size());
+    sstable::ReadOptions read_options;
+    for (auto& sst_meta : sst_metas) {
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(sst_meta.first));
+        sstable::Table* table;
+        RETURN_IF_ERROR(sstable::Table::Open(options, rf.get(), sst_meta.second, &table));
+        std::unique_ptr<sstable::Table> table_ptr = nullptr;
+        table_ptr.reset(table);
+        sstable::Iterator* iter = table->NewIterator(read_options);
+        iters.emplace_back(iter);
+        read_files.emplace_back(std::move(rf));
+        tables.emplace_back(std::move(table_ptr));
+    }
+    std::unique_ptr<sstable::Iterator> iter_ptr = nullptr;
+    sstable::Iterator* iter = sstable::NewMergingIterator(options.comparator, &iters[0], iters.size());
+    iter_ptr.reset(iter);
+    iter_ptr->SeekToFirst();
+    std::string last_key;
+    if (iter_ptr->Valid()) {
+        last_key = iter_ptr->key().to_string();
+    }
+    std::list<std::pair<int64_t, IndexValue>> last_index_value_infos;
+    while (iter_ptr->Valid()) {
+        auto key = iter_ptr->key().to_string();
+        auto value = iter_ptr->value().to_string();
+        IndexValueInfoPB index_value_info;
+        if (!index_value_info.ParseFromString(value)) {
+            return Status::InternalError("parse index value info failed");
+        }
+        if (key == last_key) {
+            if (enable_multi_version) {
+                // TODO
+            } else {
+                DCHECK(index_value_info.versions_size() == 1);
+                auto version = index_value_info.versions(0);
+                auto index_value = index_value_info.values(0);
+                if (last_index_value_infos.size() == 0) {
+                    last_index_value_infos.emplace_front(version, index_value);
+                } else {
+                    DCHECK(last_index_value_infos.size() == 1);
+                    if (version > last_index_value_infos.front().first) {
+                        std::list<std::pair<int64_t, IndexValue>> new_index_value_infos;
+                        new_index_value_infos.emplace_front(version, index_value);
+                        last_index_value_infos.swap(new_index_value_infos);
+                    }
+                }
+            }
+        } else {
+            if (!last_index_value_infos.empty()) {
+                auto index_value_info_pb = std::make_unique<IndexValueInfoPB>();
+                to_protobuf(last_index_value_infos, index_value_info_pb.get());
+                builder.Add(Slice(last_key), Slice(index_value_info_pb->SerializeAsString()));
+                last_index_value_infos.clear();
+            }
+            last_key = key;
+            if (enable_multi_version) {
+                // TODO
+            } else {
+                DCHECK(index_value_info.versions_size() == 1);
+                last_index_value_infos.emplace_front(index_value_info.versions(0), index_value_info.values(0));
+            }
+        }
+        iter_ptr->Next();
+    }
+    if (!last_index_value_infos.empty()) {
         auto index_value_info_pb = std::make_unique<IndexValueInfoPB>();
-        to_protobuf(m, index_value_info_pb.get());
-        builder.Add(Slice(k), Slice(index_value_info_pb->SerializeAsString()));
+        to_protobuf(last_index_value_infos, index_value_info_pb.get());
+        builder.Add(Slice(last_key), Slice(index_value_info_pb->SerializeAsString()));
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();

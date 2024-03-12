@@ -147,35 +147,33 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 
     if (op_compaction.has_output_sstable()) {
         auto pindex_sst_meta = _tablet_meta->mutable_pindex_sstable_meta();
-        int64_t max_version = 0;
+        std::unordered_set<int64> versions;
         for (auto& input_sst : op_compaction.input_sstables()) {
-            auto it = pindex_sst_meta->mutable_sstables()->begin();
-            max_version = std::max(input_sst.version(), max_version);
-            while (it != pindex_sst_meta->mutable_sstables()->end()) {
-                if (it->version() == input_sst.version()) {
-                    pindex_sst_meta->mutable_sstables()->erase(it);
-                    break;
-                } else {
-                    ++it;
-                }
-            }
-            for (auto sstable : input_sst.sstables()) {
+            versions.insert(input_sst.version());
+            for (auto& sstable : input_sst.sstables()) {
                 FileMetaPB file_meta;
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesz());
                 _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
             }
         }
+        for (auto it = pindex_sst_meta->mutable_sstables()->begin();
+             it != pindex_sst_meta->mutable_sstables()->end();) {
+            if (versions.contains(it->version())) {
+                pindex_sst_meta->mutable_sstables()->erase(it);
+            } else {
+                ++it;
+            }
+        }
         PersistentIndexSstableMetaPB new_sst_meta;
         auto sst_meta = new_sst_meta.add_sstables();
         auto* sst = sst_meta->add_sstables();
         sst->CopyFrom(op_compaction.output_sstable());
-        sst_meta->set_version(max_version);
-        auto it = pindex_sst_meta->mutable_sstables()->begin();
-        while (it != pindex_sst_meta->mutable_sstables()->end()) {
+        sst_meta->set_version(*std::max_element(versions.begin(), versions.end()));
+        for (auto it = pindex_sst_meta->mutable_sstables()->begin(); it != pindex_sst_meta->mutable_sstables()->end();
+             ++it) {
             sst_meta = new_sst_meta.add_sstables();
             sst_meta->CopyFrom(*it);
-            ++it;
         }
         _tablet_meta->mutable_pindex_sstable_meta()->CopyFrom(new_sst_meta);
         LOG(INFO) << _tablet_meta->pindex_sstable_meta().DebugString();

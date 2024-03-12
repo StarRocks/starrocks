@@ -77,7 +77,8 @@ public:
 
     Status minor_compact();
 
-    Status major_compact(int64_t min_retain_version);
+    Status major_compact(int64_t min_retain_version, const std::vector<PersistentIndexSstablePB>& ssts,
+                         std::shared_ptr<TxnLogPB>& txn_log);
 
     void commit(MetaFileBuilder* builder);
 
