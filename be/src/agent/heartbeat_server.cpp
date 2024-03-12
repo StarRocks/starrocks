@@ -143,6 +143,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
 StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {
     static const char* LOCALHOST = "127.0.0.1";
+    static const char* LOCALHOST_IPV6 = "::1";
 
     // reject master's heartbeat when exit
     if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
@@ -166,8 +167,10 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         return Status::InternalError("Unmatched cluster id");
     }
 
-    if ((master_info.network_address.hostname == LOCALHOST) && (master_info.backend_ip != LOCALHOST)) {
-        return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
+    if ((master_info.network_address.hostname == LOCALHOST)) {
+        if (!(master_info.backend_ip == LOCALHOST || master_info.backend_ip == LOCALHOST_V6)) {
+            return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
+        }
     }
 
 #ifndef USE_STAROS
