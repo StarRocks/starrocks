@@ -74,13 +74,13 @@ struct JitScore {
 };
 
 enum CompilableExprType : int32_t {
-  ARITHMETIC = 2, // except /, %
-  CAST = 4,
-  CASE = 8,
-  CMP = 16,
-  LOGICAL = 32,
-  DIV = 64,
-  MOD = 128,
+    ARITHMETIC = 2, // except /, %
+    CAST = 4,
+    CASE = 8,
+    CMP = 16,
+    LOGICAL = 32,
+    DIV = 64,
+    MOD = 128,
 };
 
 class IRHelper {
