@@ -277,7 +277,6 @@ jobs:
     needs:
       - info
       - build
-    if: needs.info.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
     outputs:
       RELEASE_TAR_PATH: ${{ steps.set_output.outputs.RELEASE_TAR_PATH }}
       ASAN_TAR_PATH: ${{ steps.set_output.outputs.ASAN_TAR_PATH }}
@@ -333,7 +332,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: needs.test_filter.outputs.RELEASE_TAR_PATH != ''
+    if: always() && needs.test_filter.outputs.RELEASE_TAR_PATH != ''
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -348,7 +347,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: needs.test_filter.outputs.ASAN_TAR_PATH != ''
+    if: always() && needs.test_filter.outputs.ASAN_TAR_PATH != ''
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
