@@ -277,6 +277,7 @@ jobs:
     needs:
       - info
       - build
+    if: needs.info.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
     outputs:
       RELEASE_TAR_PATH: ${{ steps.set_output.outputs.RELEASE_TAR_PATH }}
       ASAN_TAR_PATH: ${{ steps.set_output.outputs.ASAN_TAR_PATH }}
