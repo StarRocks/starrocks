@@ -119,6 +119,8 @@ Status Tablet::_init_once_action() {
                          << ", version=" << version << ", res=" << st;
             return st;
         }
+        // make sure there is no dcg cache when init tablet to avoid potential unconsistent read
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*rowset);
         _rs_version_map[version] = std::move(rowset);
     }
 
@@ -134,6 +136,8 @@ Status Tablet::_init_once_action() {
                 return st;
             }
         }
+        // make sure there is no dcg cache when init tablet to avoid potential unconsistent read
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*rowset);
         _inc_rs_version_map[version] = std::move(rowset);
     }
 
@@ -1661,4 +1665,60 @@ std::string Tablet::debug_string() const {
     return string();
 }
 
+<<<<<<< HEAD
+=======
+const TabletSchemaCSPtr Tablet::tablet_schema() const {
+    std::shared_lock rdlock(_schema_lock);
+    return _max_version_schema;
+}
+
+const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
+    return _max_version_schema;
+}
+
+TabletSchemaCSPtr Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
+    std::lock_guard l0(_meta_lock);
+    std::lock_guard l1(_schema_lock);
+    // Double Check for concurrent update
+    if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
+        if (tablet_schema->id() == TabletSchema::invalid_id()) {
+            _max_version_schema = tablet_schema;
+        } else {
+            _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
+        }
+    }
+
+    _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
+    return _max_version_schema;
+}
+
+const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {
+    std::shared_lock rdlock(_schema_lock);
+    return *_max_version_schema;
+}
+
+void Tablet::remove_all_delta_column_group_cache() const {
+    // Only use for non-primary key tablet
+    if (_updates != nullptr) {
+        return;
+    }
+
+    std::shared_lock rdlock(_meta_lock);
+    return remove_all_delta_column_group_cache_unlocked();
+}
+
+void Tablet::remove_all_delta_column_group_cache_unlocked() const {
+    // Only use for non-primary key tablet
+    if (_updates != nullptr) {
+        return;
+    }
+
+    for (const auto& version_rowset : _rs_version_map) {
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*version_rowset.second);
+    }
+    for (const auto& inc_version_rowset : _inc_rs_version_map) {
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*inc_version_rowset.second);
+    }
+}
+>>>>>>> 9270e2a212 ([BugFix] Clear dcg cache for non primary key table when drop_tablet/tablet init(#42203) (#42205))
 } // namespace starrocks
