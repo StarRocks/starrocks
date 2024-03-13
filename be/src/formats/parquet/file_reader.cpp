@@ -232,7 +232,7 @@ void FileReader::_build_split_tasks() {
         _scanner_ctx->split_tasks->emplace_back(std::move(split_ctx));
     }
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->split_tasks->size() == 1)     {
+    if (_scanner_ctx->split_tasks->size() == 1) {
         _scanner_ctx->split_tasks->clear();
     }
 }
