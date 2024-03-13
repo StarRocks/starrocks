@@ -2,8 +2,7 @@
 Create table t ( int0 int not null, int1 int not null, nint0 int , nint1 int) ENGINE=OLAP DUPLICATE KEY(int0)  DISTRIBUTED BY HASH(int0) BUCKETS 4 PROPERTIES("replication_num" = "1");
 
 insert into t values (0,0,0,0),(1,1,1,1),(2,2,null,null),(3,3,30,null),(4,4,null,40),(0,1,null,null),(0,0,null,1),(10,10,null,10);
- set enable_jit = true;
--- set jit_level = -1;
+set jit_level = -1;
 -- case when
 select case when int0 is null then null when int1 >2 then 2 else 0 end as cc from t order by 1;
 select case when nint0 is null then null when nint1 >2 then 2 else int0 end as cc from t order by 1;

@@ -317,4 +317,21 @@ void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val)
     state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
 }
 
+void FragmentContext::init_jit_profile() {
+    if (runtime_state() && runtime_state()->is_jit_enabled() && runtime_state()->runtime_profile()) {
+        _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
+        _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
+    }
+}
+
+void FragmentContext::update_jit_profile(int64_t time_ns) {
+    if (_jit_counter != nullptr) {
+        COUNTER_UPDATE(_jit_counter, 1);
+    }
+
+    if (_jit_timer != nullptr) {
+        COUNTER_UPDATE(_jit_timer, time_ns);
+    }
+}
+
 } // namespace starrocks::pipeline

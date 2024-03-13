@@ -23,10 +23,12 @@
 #include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -41,8 +43,11 @@ JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
     return pool->add(new JITExpr(node, expr));
 }
 
-JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
-    _expr->get_uncompilable_exprs(_children);
+JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {}
+
+void JITExpr::set_uncompilable_children(RuntimeState* state) {
+    _children.clear();
+    _expr->get_uncompilable_exprs(_children, state);
 }
 
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
@@ -72,17 +77,21 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
         if (!jit_engine->support_jit()) {
             return Status::JitCompileError("JIT is not supported");
         }
-        auto expr_name = _expr->jit_func_name();
+        auto expr_name = _expr->jit_func_name(state);
         _jit_obj_cache = std::make_unique<JitObjectCache>(expr_name, JITEngine::get_instance()->get_func_cache());
 
         auto st = jit_engine->compile_scalar_function(context, _jit_obj_cache.get(), _expr, _children);
-
         auto elapsed = MonotonicNanos() - start;
+        if (state->fragment_ctx() != nullptr) {
+            state->fragment_ctx()->update_jit_profile(elapsed);
+        }
         if (!st.ok()) {
             LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
                       << " Reason: " << st;
         } else {
-            VLOG_QUERY << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
+            VLOG_QUERY << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0
+                       << " ms :" << _jit_obj_cache->get_func_name()
+                       << " , mem cost: " << _jit_obj_cache->get_code_size();
             _jit_function = _jit_obj_cache->get_func();
             if (_jit_function == nullptr) {
                 return Status::RuntimeError("JIT func must be not null");
@@ -147,7 +156,9 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
             column = NullableColumn::create(column, NullColumn::create(column->size(), 0));
         } else if (!child->is_nullable() && column->is_nullable()) {
             if (column->has_null()) {
-                return Status::RuntimeError("[JIT]a non-nullable column has null values");
+                return Status::RuntimeError(
+                        "[JIT] an expression comes out unexpected null values, please set jit_level = 0 to disable jit "
+                        "and retry");
             }
         }
         unfold_ptr(column);

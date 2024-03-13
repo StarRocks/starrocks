@@ -513,7 +513,8 @@ Status RuntimeState::reset_epoch() {
 }
 
 bool RuntimeState::is_jit_enabled() const {
-    return _query_options.__isset.enable_jit && _query_options.enable_jit && JITEngine::get_instance()->support_jit();
+    return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
+           _query_options.jit_level != 0;
 }
 
 } // end namespace starrocks
