@@ -1178,7 +1178,7 @@ public class EditLog {
             }
         } catch (Exception e) {
             JournalInconsistentException exception =
-                    new JournalInconsistentException("failed to load journal type " + opCode);
+                    new JournalInconsistentException(opCode, "failed to load journal type " + opCode);
             exception.initCause(e);
             throw exception;
         }
