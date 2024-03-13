@@ -8,4 +8,4 @@ displayed_sidebar: "English"
 
 BIGINT
 
-8-byte signed integer. The value range is[-9223372036854775808, 9223372036854775807].
+8-byte signed integer. The value range is [-9223372036854775808, 9223372036854775807].
