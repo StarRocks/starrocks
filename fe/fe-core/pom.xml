@@ -994,8 +994,8 @@ under the License.
                         <exclude>**/QueryDumpRegressionTest.java</exclude>
                     </excludes>
                     <parallel>suites</parallel>
-<!--                    <parallelTestsTimeoutForcedInSeconds>1</parallelTestsTimeoutForcedInSeconds>-->
-                    <parallelTestsTimeoutInSeconds>1</parallelTestsTimeoutInSeconds>
+                    <parallelTestsTimeoutForcedInSeconds>1</parallelTestsTimeoutForcedInSeconds>
+<!--                    <parallelTestsTimeoutInSeconds>1</parallelTestsTimeoutInSeconds>-->
                 </configuration>
             </plugin>
 
