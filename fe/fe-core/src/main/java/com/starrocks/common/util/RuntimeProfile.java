@@ -91,6 +91,9 @@ public class RuntimeProfile {
 
     private String name;
     private double localTimePercent;
+    // The version of this profile. It is used to prevent updating this profile
+    // from an old one.
+    private volatile long version = 0;
 
     public RuntimeProfile(String name) {
         this();
@@ -234,18 +237,37 @@ public class RuntimeProfile {
         }
     }
 
+    public long getVersion() {
+        return version;
+    }
+
     public void update(final TRuntimeProfileTree thriftProfile) {
         Reference<Integer> idx = new Reference<>(0);
-        update(thriftProfile.nodes, idx);
+        update(thriftProfile.nodes, idx, false);
         Preconditions.checkState(idx.getRef().equals(thriftProfile.nodes.size()));
     }
 
-    // preorder traversal, idx should be modified in the traversal process
-    private void update(List<TRuntimeProfileNode> nodes, Reference<Integer> idx) {
+    // Update a subtree of profiles from nodes, rooted at idx. It will do a preorder
+    // traversal, and modify idx in the traversal process. idx will point to the node
+    // immediately following this subtree after the traversal. If the version of the
+    // parent node, or the version of root node for this subtree is older, skip to update
+    // the profile of subtree, but still traverse the nodes to get the node immediately
+    // following this subtree.
+    private void update(List<TRuntimeProfileNode> nodes, Reference<Integer> idx, boolean isParentNodeOld) {
         TRuntimeProfileNode node = nodes.get(idx.getRef());
 
+        boolean isNodeOld;
+        if (isParentNodeOld || (node.isSetVersion() && node.version < version)) {
+            isNodeOld = true;
+        } else {
+            isNodeOld = false;
+            if (node.isSetVersion()) {
+                version = node.version;
+            }
+        }
+
         // update this level's counters
-        if (node.counters != null) {
+        if (!isNodeOld && node.counters != null) {
             // mapping from counterName to parentCounterName
             Map<String, String> child2ParentMap = Maps.newHashMap();
             if (node.child_counters_map != null) {
@@ -313,7 +335,7 @@ public class RuntimeProfile {
             }
         }
 
-        if (node.info_strings_display_order != null) {
+        if (!isNodeOld && node.info_strings_display_order != null) {
             Map<String, String> nodeInfoStrings = node.info_strings;
             for (String key : node.info_strings_display_order) {
                 String value = nodeInfoStrings.get(key);
@@ -332,7 +354,7 @@ public class RuntimeProfile {
                 childProfile = new RuntimeProfile(childName);
                 addChild(childProfile);
             }
-            childProfile.update(nodes, idx);
+            childProfile.update(nodes, idx, isNodeOld);
         }
     }
 
@@ -569,6 +591,7 @@ public class RuntimeProfile {
         node.setName(name);
         node.setNum_children(childMap.size());
         node.setIndent(true);
+        node.setVersion(version);
 
         for (Map.Entry<String, Pair<Counter, String>> entry : counterMap.entrySet()) {
             Counter counter = entry.getValue().first;

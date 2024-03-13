@@ -360,6 +360,7 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     }
 
     COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
+    _profile->inc_version();
 
     if (print_profile) {
         std::stringstream ss;
