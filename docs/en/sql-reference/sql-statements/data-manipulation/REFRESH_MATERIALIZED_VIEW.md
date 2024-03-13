@@ -35,7 +35,7 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 
 > **CAUTION**
 >
->  When refreshing materialized views created based on the external catalogs, StarRocks refreshes all partitions in the materialized views.
+> When refreshing materialized views created based on the external catalogs, StarRocks refreshes all partitions in the materialized views.
 
 ## Examples
 
