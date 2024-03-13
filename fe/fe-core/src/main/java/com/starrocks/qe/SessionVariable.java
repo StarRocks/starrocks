@@ -525,6 +525,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
 
+    public static final String ENABLE_CBO_VIEW_BASED_MV_REWRITE = "enable_cbo_view_based_mv_rewrite";
+
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
@@ -1469,6 +1471,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
     private boolean enableViewBasedMvRewrite = false;
+
+    @VarAttr(name = ENABLE_CBO_VIEW_BASED_MV_REWRITE)
+    private boolean enableCBOViewBasedMvRewrite = false;
 
     /**
      * Materialized view rewrite rule output limit: how many MVs would be chosen in a Rule for an OptExpr ?
@@ -2917,6 +2922,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableViewBasedMvRewrite() {
         return this.enableViewBasedMvRewrite;
+    }
+
+    public void setEnableCBOViewBasedMvRewrite(boolean enableCBOViewBasedMvRewrite) {
+        this.enableCBOViewBasedMvRewrite = enableCBOViewBasedMvRewrite;
+    }
+
+    public boolean isEnableCBOViewBasedMvRewrite() {
+        return this.enableCBOViewBasedMvRewrite;
     }
 
     public int getCboMaterializedViewRewriteRuleOutputLimit() {
