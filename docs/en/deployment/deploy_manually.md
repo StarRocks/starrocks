@@ -197,7 +197,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/BE_configuration.md#be-configuration-items) because most of CN's parameters are inherited from BE.
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/BE_configuration.md) because most of CN's parameters are inherited from BE.
 
 2. Start the CN node.
 

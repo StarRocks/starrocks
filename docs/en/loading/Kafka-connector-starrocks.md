@@ -63,7 +63,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 #### Run Kafka Connect in standalone mode
 
-1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and dsescriptions, see [Parameters](#Parameters).
+1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and descriptions, see [Parameters](#Parameters).
 
     ```yaml
     name=starrocks-kafka-connector
@@ -84,11 +84,10 @@ CREATE TABLE test_tbl (id INT, city STRING);
     starrocks.database.name=example_db
     sink.properties.strip_outer_array=true
     ```
-   
+
     > **NOTICE**
     >
     > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
-
 
 2. Configure and run the Kafka Connect.
 
@@ -107,8 +106,9 @@ CREATE TABLE test_tbl (id INT, city STRING);
         # The absolute path of the starrocks-kafka-connector after extraction. For example:
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
-    2. Run the Kafka Connect.
-        
+
+   2. Run the Kafka Connect.
+
         ```Bash
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
@@ -116,7 +116,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 #### Run Kafka Connect in distributed mode
 
 1. Configure and run the Kafka Connect.
-    
+
     1. Configure the Kafka Connect. In the configuration file `config/connect-distributed.properties` in the **config** directory, configure the following parameters. For more parameters and descriptions, refer to [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
 
         ```yaml
@@ -132,12 +132,13 @@ CREATE TABLE test_tbl (id INT, city STRING);
         # The absolute path of the starrocks-kafka-connector after extraction. For example:
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
+
     2. Run the Kafka Connect.
-        
+
         ```BASH
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
-    
+
 2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka connector through the REST API. For parameters and descriptions, see [Parameters](#Parameters).
 
       ```Shell
@@ -159,6 +160,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         }
       }'
       ```
+
       > **NOTICE**
       >
       > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
@@ -179,22 +181,24 @@ MySQL [example_db]> select * from test_tbl;
 +------+-------------+
 3 rows in set (0.01 sec)
 ```
+
 The data is successfully loaded when the above result is returned.
 
 ## Parameters
 
-### name                                
+### name
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: Name for this Kafka connector. It must be globally unique among all Kafka connectors within this Kafka Connect cluster. For example, starrocks-kafka-connector.
 
-### connector.class                     
+### connector.class
 
 **Required**: YES<br/>
 **Default value**: <br/>
 **Description**: Class used by this Kafka connector's sink. Set the value to `com.starrocks.connector.kafka.StarRocksSinkConnector`.
-### topics                              
+
+### topics
 
 **Required**: YES<br/>
 **Default value**:<br/>

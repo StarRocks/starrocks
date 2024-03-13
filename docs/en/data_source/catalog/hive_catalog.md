@@ -979,7 +979,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 
 ## Periodically refresh metadata cache
 
-From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following [FE parameters](../../administration/FE_configuration.md#fe-configuration-items):
+From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following [FE parameters](../../administration/FE_configuration.md):
 
 | Configuration item                                           | Default                              | Description                          |
 | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
