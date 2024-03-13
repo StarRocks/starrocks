@@ -18,9 +18,7 @@ DATETIME YEARS_SUB(DATETIME date, INT years)
 
 `date`: The original date time, of type DATETIME or DATE.
 
-
-`years`: The number of years to subtract. The value can be negative, but date year minus years can't exceed 10000. For example, if the year of date is 2022, then years can't be less than -7979. At the same time, the years cann't exceed the year value of date, for example, if the year value of date is 2022, then years can't be greater than 2022.
-
+`years`: The number of years to subtract. The value can be negative, but date year minus years can't exceed 10000. For example, if the year of date is 2022, then years can't be less than -7979. At the same time, the years cannot exceed the year value of date, for example, if the year value of date is 2022, then years can't be greater than 2022.
 
 ## Return value
 

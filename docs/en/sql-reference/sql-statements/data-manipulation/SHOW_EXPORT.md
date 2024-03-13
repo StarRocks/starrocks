@@ -37,7 +37,7 @@ This statement can contain the following optional clauses:
   | **Parameter** | **Required** | **Description**                                              |
   | ------------- | ------------ | ------------------------------------------------------------ |
   | QUERYID       | No           | The ID of the export job that you want to query. This parameter is used to query the execution information of a single export job. |
-  | STATE         | No           | The status of the export jobs that you want to query. Valid values:<ul><li>`PENDING`: specifies to query export jobs that are waiting to be scheduled.</li><li>`EXPORING`: specifies to query export jobs that are being executed.</li><li>`FINISHED`: specifies to query export jobs that have been successfully completed.</li><li>`CANCELLED`: specifies to query export jobs that have failed.</li></ul> |
+  | STATE         | No           | The status of the export jobs that you want to query. Valid values:<ul><li>`PENDING`: specifies to query export jobs that are waiting to be scheduled.</li><li>`EXPORTING`: specifies to query export jobs that are being executed.</li><li>`FINISHED`: specifies to query export jobs that have been successfully completed.</li><li>`CANCELLED`: specifies to query export jobs that have failed.</li></ul> |
 
 - ORDER BY
 

@@ -143,7 +143,7 @@ be_servers:
 
 ### Create deployment directory (Optional)
 
-If the paths under which StarRocks to be deployed does not exist, and you have the privilege to create such paths, you do not have create these paths, and StarGo will create them for you based on the configration file. If the the paths already exist, make sure you have the write access to them. You can also create necessary deployment directories on each node by running the following commands.
+If the paths under which StarRocks to be deployed does not exist, and you have the privilege to create such paths, you do not have create these paths, and StarGo will create them for you based on the configuration file. If the the paths already exist, make sure you have the write access to them. You can also create necessary deployment directories on each node by running the following commands.
 
 - Create **meta** directory on FE nodes.
 
@@ -168,7 +168,7 @@ Deploy StarRocks cluster by running the following command.
 ./sr-ctl cluster deploy <cluster_name> <version> <topology_file>
 ```
 
-|Prameter|Description|
+|Parameter|Description|
 |----|----|
 |cluster_name|Name of the cluster to deploy.|
 |version|StarRocks version.|

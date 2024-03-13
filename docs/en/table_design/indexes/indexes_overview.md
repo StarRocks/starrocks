@@ -29,7 +29,7 @@ ZoneMap index stores each data chunk's statistics that include Min (maximum valu
 
 <summary> More information</summary>
 
-Each data chunk can be a segment, or a data page of a column. So correspondingly, two types of ZoneMap indexes exist: one storing statistics for each Segment and the other for each data page of a column. 
+Each data chunk can be a segment, or a data page of a column. So correspondingly, two types of ZoneMap indexes exist: one storing statistics for each Segment and the other for each data page of a column.
 
 </details>
 

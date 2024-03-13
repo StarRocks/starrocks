@@ -184,9 +184,9 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 
 The various joins supported by StarRocks can be classified as equi-joins and non-equi-joins depending on the join conditions specified in the joins.
 
-| **Equi****-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
+| **Equi-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
 | -------------------------- | ------------------------------------------------------------ |
-| **Non-****equi****-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
+| **Non-equi-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
 
 - Equi-joins
   
@@ -1083,8 +1083,7 @@ select one.tiny_column, two.int_column from small_table one, <br/> big_table two
 
 ### PIVOT
 
-The PIVOT operation is an advanced feature in SQL that allows you to transform rows into columns in a table, which is particularly useful for creating pivot tables. 
-This comes in handy when dealing with database reports or analytics, especially when you need to summarize or categorize data for presentation.
+The PIVOT operation is an advanced feature in SQL that allows you to transform rows into columns in a table, which is particularly useful for creating pivot tables. This comes in handy when dealing with database reports or analytics, especially when you need to summarize or categorize data for presentation.
 
 Actually, the PIVOT is a syntax sugar, which can simplify the writing of the query statement like `sum(case when ... then ... end)`.
 
@@ -1110,6 +1109,7 @@ pivot_value:
 ```
 
 #### Parameters
+
 In a PIVOT operation, you need to specify several key components:
 
 - aggregate_function(): An aggregate function such as SUM, AVG, COUNT, etc., used to summarize the data.

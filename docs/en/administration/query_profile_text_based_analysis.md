@@ -23,7 +23,7 @@ SHOW PROFILELIST LIMIT 5;
 
 Output:
 
-```
+```plaintext
 +--------------------------------------+---------------------+-------+----------+-----------------------------------------------------------------------------------------------------------------------------------+
 | QueryId                              | StartTime           | Time  | State    | Statement                                                                                                                         |
 +--------------------------------------+---------------------+-------+----------+-----------------------------------------------------------------------------------------------------------------------------------+
@@ -31,7 +31,7 @@ Output:
 | a3fc4060-8428-11ee-8d02-6a32f8c68848 | 2023-11-16 10:34:17 | 39ms  | Finished | select TABLE_NAME, COLUMN_NAME from information_schema.columns\n                                    where table_schema = 'Non ... |
 | a3f7d38d-8428-11ee-8d02-6a32f8c68848 | 2023-11-16 10:34:17 | 15ms  | Finished | select connection_id()                                                                                                            |
 | a3efbd3b-8428-11ee-8d02-6a32f8c68848 | 2023-11-16 10:34:17 | 16ms  | Finished | select connection_id()                                                                                                            |
-| a26ec286-8428-11ee-8d02-6a32f8c68848 | 2023-11-16 10:34:15 | 269ms | Error    | EXPLAIN ANALYZE  SELECT c_nation, s_nation, year(lo_orderdate) AS year , SUM(lo_revenue) AS revenue FROM lineorder_flat WHER ...  |
+| a26ec286-8428-11ee-8d02-6a32f8c68848 | 2023-11-16 10:34:15 | 269ms | Error    | EXPLAIN ANALYZE  SELECT c_nation, s_nation, year(lo_orderdate) AS year , SUM(lo_revenue) AS revenue FROM lineorder_flat WHERE ...  |
 +--------------------------------------+---------------------+-------+----------+-----------------------------------------------------------------------------------------------------------------------------------+
 ```
 

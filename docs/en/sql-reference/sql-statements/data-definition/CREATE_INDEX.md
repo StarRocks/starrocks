@@ -17,7 +17,7 @@ This operation requires the ALTER privilege on the target table. You can follow 
 ## Syntax
 
 ```sql
-CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT'balabala']
+CREATE INDEX index_name ON table_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala']
 ```
 
 Note:

@@ -711,7 +711,7 @@ You can only set the static parameters of a BE by changing them in the correspon
 -->
 
 <!--
-##### clear_expired_replcation_snapshots_interval_seconds
+##### clear_expired_replication_snapshots_interval_seconds
 
 - Default: 3600
 - Type: Int

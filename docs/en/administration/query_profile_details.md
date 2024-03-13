@@ -473,7 +473,7 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 - Description: Time spent initializing the Segment.
 - Level: Secondary metric
-- Sub-metrics: BitmapIndexFilter, BitmapIndexFilterRows, BloomFilterFilter, BloomFilterFilterRows, ColumnIteratorInit, ShortKeyFilter, ShortKeyFilterRows, ShortKeyRangeNumber, RemainingRowsAfterShortKeyFilter, ZoneMapIndexFiter, ZoneMapIndexFilterRows, SegmentZoneMapFilterRows, SegmentRuntimeZoneMapFilterRows
+- Sub-metrics: BitmapIndexFilter, BitmapIndexFilterRows, BloomFilterFilter, BloomFilterFilterRows, ColumnIteratorInit, ShortKeyFilter, ShortKeyFilterRows, ShortKeyRangeNumber, RemainingRowsAfterShortKeyFilter, ZoneMapIndexFilter, ZoneMapIndexFilterRows, SegmentZoneMapFilterRows, SegmentRuntimeZoneMapFilterRows
 
 ##### BitmapIndexFilter
 
@@ -1198,9 +1198,9 @@ Description: Time taken to build the output sorted sequence.
 
 ### Merge Operator
 
-For ease of understanding various metrics, Merge can be represented as the following state machinism:
+For ease of understanding various metrics, Merge can be represented as the following state mechanism:
 
-```
+```plaintext
                ┌────────── PENDING ◄──────────┐
                │                              │
                │                              │

@@ -59,7 +59,7 @@ StarRocks 支持四种表类型：主键表 (PRIMARY KEY)，聚合表 (AGGREGATE
         city        CHAR(20),
         province    CHAR(20),
         ip          varchar(32),
-        brower      CHAR(20),
+        browser      CHAR(20),
         url         VARCHAR(1024)
     )
     DUPLICATE KEY(visitorid, sessionid)
@@ -100,7 +100,7 @@ CREATE TABLE colocate_table
     city        CHAR(20),
     province    CHAR(20),
     ip          varchar(32),
-    brower      CHAR(20),
+    browser      CHAR(20),
     url         VARCHAR(1024)
 )
 DUPLICATE KEY(visitorid, sessionid)
@@ -164,10 +164,10 @@ StarRocks 支持倒排索引，采用位图技术构建索引（Bitmap Index）�
     ALTER TABLE site_visit ADD ROLLUP rollup_city(city, pv);
     ```
 
-* Base table 中的前缀索引无法命中，这通常是因为 base table 的建表方式无法覆盖所有的查询模式。此时，您可以考虑调整列顺序，建立物化视图。对于上述 `session_data` 表，如果除了通过 `visitorid` 分析访问情况外，还有通过 `brower`，`province` 分析的情形，可以单独建立物化视图。
+* Base table 中的前缀索引无法命中，这通常是因为 base table 的建表方式无法覆盖所有的查询模式。此时，您可以考虑调整列顺序，建立物化视图。对于上述 `session_data` 表，如果除了通过 `visitorid` 分析访问情况外，还有通过 `browser`，`province` 分析的情形，可以单独建立物化视图。
 
     ```sql
-    ALTER TABLE session_data ADD ROLLUP rollup_brower(brower,province,ip,url) DUPLICATE KEY(brower,province);
+    ALTER TABLE session_data ADD ROLLUP rollup_browser(browser,province,ip,url) DUPLICATE KEY(browser,province);
     ```
 
 ## 优化导入性能

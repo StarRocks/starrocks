@@ -128,7 +128,7 @@ ALTER VIEW <view_name> AS <query>;
 
 -- Swap two materialized views 
 -- (by swapping the name of the two materialized views without affecting the data within).
-ALTER MATERIALIZED VIWE <mv1> SWAP WITH <mv2>;
+ALTER MATERIALIZED VIEW <mv1> SWAP WITH <mv2>;
 
 -- Re-activate a materialized view.
 ALTER MATERIALIZED VIEW <mv_name> ACTIVE;

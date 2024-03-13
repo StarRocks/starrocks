@@ -416,7 +416,7 @@ A Broker Load job can be split into one or more tasks that concurrently run. The
 
 - If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
 
-Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](../administration/FE_configuration.md#fe-configuration-items):
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](../administration/FE_configuration.md):
 
 - `min_bytes_per_broker_scanner`: the minimum amount of data processed by each instance. The default amount is 64 MB.
 
@@ -430,7 +430,7 @@ In most cases, only one `data_desc` is declared for each load job, each load job
 
 ## Related configuration items
 
-The [FE configuration item](../administration/FE_configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
+The [FE configuration item](../administration/FE_configuration.md) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
 
 In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
 

@@ -39,9 +39,11 @@ You can use the SQL client provided in the Docker environment, or use one on you
 ## StarRocks terminology
 
 ### FE
+
 Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
 
 ### BE
+
 Backend nodes are responsible for both data storage and executing query plans in shared-nothing deployments. When using an external catalog (like the Iceberg catalog used in this guide) only local data is stored on the BE node(s).
 
 ---
@@ -64,6 +66,7 @@ There are six containers (services) used in this guide, and all are deployed wit
 In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file.  Download the compose file and dataset with curl.
 
 The Docker compose file:
+
 ```bash
 mkdir iceberg
 cd iceberg
@@ -71,6 +74,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```
 
 And the dataset:
+
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/iceberg/datasets/green_tripdata_2023-05.parquet
 ```
@@ -100,8 +104,7 @@ docker compose up -d
 
 Check the progress of the services. It should take around 30 seconds for the FE and BE to become healthy.
 
-Run `docker compose ps` until the FE and BE show a status of `healthy`. The rest of the services do not have
-healthcheck configurations, but you will be interacting with them and will know whether or not they are working:
+Run `docker compose ps` until the FE and BE show a status of `healthy`. The rest of the services do not have healthcheck configurations, but you will be interacting with them and will know whether or not they are working:
 
 :::tip
 If you have `jq` installed and prefer a shorter list from `docker compose ps` try:
@@ -205,11 +208,13 @@ root
 
 >>>
 ```
+
 Examine the first few (seven) columns of the first few (three) rows of data:
 
 ```python
 df.select(df.columns[:7]).show(3)
 ```
+
 ```plaintext
 +--------+--------------------+---------------------+------------------+----------+------------+------------+
 |VendorID|lpep_pickup_datetime|lpep_dropoff_datetime|store_and_fwd_flag|RatecodeID|PULocationID|DOLocationID|
@@ -220,6 +225,7 @@ df.select(df.columns[:7]).show(3)
 +--------+--------------------+---------------------+------------------+----------+------------+------------+
 only showing top 3 rows
 ```
+
 ### Write to a table
 
 The table created in this step will be in the catalog that will be made available in StarRocks in the next step.
@@ -252,7 +258,6 @@ Run this command from the directory containing the `docker-compose.yml` file.
 
 If you are using a client other than the mysql CLI, open that now.
 :::
-
 
 ```bash
 docker compose exec starrocks-fe \
@@ -320,6 +325,7 @@ SET CATALOG iceberg;
 ```sql
 SHOW DATABASES;
 ```
+
 :::tip
 The database that you see was created in your PySpark
 session. When you added the CATALOG `iceberg`, the 
@@ -364,7 +370,7 @@ DESCRIBE greentaxis;
 ```
 
 :::tip
-Compare the schema that StarRocks uses with the output of `df.printSchema()` from the earlier PySpark session. The Spark `timestamp_ntz` datatypes are represented as StarRocks `DATETIME` etc.
+Compare the schema that StarRocks uses with the output of `df.printSchema()` from the earlier PySpark session. The Spark `timestamp_ntz` data types are represented as StarRocks `DATETIME` etc.
 :::
 
 ```plaintext

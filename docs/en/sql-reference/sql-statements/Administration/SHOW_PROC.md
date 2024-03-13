@@ -392,7 +392,7 @@ mysql> SHOW PROC '/cluster_balance';
 
 | **Return** | **Description**                                  |
 | ---------- | ------------------------------------------------ |
-| Item       | Sub-command item in `cluster_balance `.          |
+| Item       | Sub-command item in `cluster_balance`.          |
 | Number     | Number of each sub-command in `cluster_balance`. |
 
 Example 12: Shows the information of Colocate Join groups in the cluster.

@@ -112,17 +112,17 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 
 ### Configuration items
 
-####  enable_background_refresh_connector_metadata                 
+#### enable_background_refresh_connector_metadata
 
 **Default**: true in v3.0 false in v2.5<br/>
 **Description**: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. True indicates to enable the Hive metadata cache refresh, and false indicates to disable it.<br/>
 
-####  background_refresh_metadata_interval_millis                  
+#### background_refresh_metadata_interval_millis
 
 **Default**: 600000 (10 minutes)<br/>
 **Description**: The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond.<br/>
 
-#### background_refresh_metadata_time_secs_since_last_access_secs 
+#### background_refresh_metadata_time_secs_since_last_access_secs
 
 **Default**: 86400 (24 hours)<br/>
 **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second.

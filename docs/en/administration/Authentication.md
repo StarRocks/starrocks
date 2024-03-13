@@ -63,7 +63,7 @@ Once connected, configure the custom plugin into the property.
 
 ~~~java
 ...
-Properties properties = new Properties();// replace xxx.xxx.xxx to your pacakage name
+Properties properties = new Properties();// replace xxx.xxx.xxx to your package name
 properties.put("authenticationPlugins", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
 properties.put("defaultAuthenticationPlugin", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
 properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");DriverManager.getConnection(url, properties);

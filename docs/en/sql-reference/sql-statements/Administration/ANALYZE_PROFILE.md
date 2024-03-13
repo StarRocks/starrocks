@@ -41,4 +41,3 @@ Example 2: Querying the Query Profile and specifying node ID as `0`. StarRocks r
 
 - [SHOW PROFILELIST](./SHOW_PROFILELIST.md)
 - [EXPLAIN ANALYZE](./EXPLAIN_ANALYZE.md)
-

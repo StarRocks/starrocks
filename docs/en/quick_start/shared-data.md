@@ -5,11 +5,11 @@ description: Separate compute and storage
 ---
 
 # Separate storage and compute
+
 import DDL from '../assets/quick-start/_DDL.mdx'
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
-
 
 In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
 
@@ -55,12 +55,15 @@ You can use the SQL client provided in the Docker environment, or use one on you
 ## Terminology
 
 ### FE
+
 Frontend nodes are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs.
 
 ### CN
+
 Compute Nodes are responsible for executing query plans in shared-data deployments.
 
 ### BE
+
 Backend nodes are responsible for both data storage and executing query plans in shared-nothing deployments.
 
 :::note
@@ -79,7 +82,7 @@ To run StarRocks with shared-data using Object Storage we need:
 
 This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
 
-In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file. 
+In order to provide an environment with the three necessary containers StarRocks provides a Docker compose file.
 
 ```bash
 mkdir quickstart

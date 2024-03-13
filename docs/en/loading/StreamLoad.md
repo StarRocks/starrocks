@@ -399,13 +399,13 @@ In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/data-ma
 In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../reference/information_schema/loads.md) view:
 
 ```SQL
-SELECT * FROMinformation_schema.loads;
+SELECT * FROM information_schema.loads;
 ```
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
 ```SQL
-SELECT * FROMinformation_schema.loadsWHERELABEL= 'label_local';
+SELECT * FROM information_schema.loads WHERE LABEL = 'label_local';
 ```
 
 After you confirm that the load job has finished, you can query table to see if the data has been successfully loaded. Example:

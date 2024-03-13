@@ -61,7 +61,7 @@ Example 2: Create a user using a plaintext password and allow the user to log in
 CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
 ```
 
-Example 3: Create a user with a cyphertext password and allow the user to log in from  `'172.10.1.10'`.
+Example 3: Create a user with a ciphertext password and allow the user to log in from  `'172.10.1.10'`.
 
 ```SQL
 CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';

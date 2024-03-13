@@ -120,7 +120,7 @@ The following example unloads all data rows from `sales_records` into MinIO.
 ```SQL
 INSERT INTO 
 FILES(
-    "path" = "s3://huditest/ubload/data3",
+    "path" = "s3://huditest/unload/data3",
     "format" = "parquet",
     "aws.s3.access_key" = "admin",
     "aws.s3.secret_key" = "password",

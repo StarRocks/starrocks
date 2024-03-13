@@ -647,7 +647,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
 ### Load data
 
-Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `verion` value in each of the two records is greater or equal to their current `version` values.
+Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `version` value in each of the two records is greater or equal to their current `version` values.
 
 - Run a Stream Load job:
 
