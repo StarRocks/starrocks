@@ -146,7 +146,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
-public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+public class AnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
     public void analyze(StatementBase statement, ConnectContext session) {
         visit(statement, session);
     }

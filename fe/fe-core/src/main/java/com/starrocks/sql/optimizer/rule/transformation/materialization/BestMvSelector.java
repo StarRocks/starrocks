@@ -17,29 +17,36 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 public class BestMvSelector {
     private final List<OptExpression> expressions;
     private final OptimizerContext context;
+    private final OptExpression queryPlan;
     private final boolean isAggQuery;
 
-    public BestMvSelector(List<OptExpression> expressions, OptimizerContext context, boolean isAggQuery) {
+    public BestMvSelector(List<OptExpression> expressions, OptimizerContext context, OptExpression queryPlan) {
         this.expressions = expressions;
         this.context = context;
-        this.isAggQuery = isAggQuery;
+        this.queryPlan = queryPlan;
+        this.isAggQuery = queryPlan.getOp() instanceof LogicalAggregationOperator;
     }
 
     public OptExpression selectBest() {
@@ -50,10 +57,19 @@ public class BestMvSelector {
         for (OptExpression expression : expressions) {
             calculateStatistics(expression, context);
         }
+
+        // collect original table scans
+        List<Table> originalTables = MvUtils.getAllTables(queryPlan);
+        Set<ScalarOperator> predicates = MvUtils.getAllValidPredicatesFromScans(queryPlan);
+        Set<String> equivalenceColumns = Sets.newHashSet();
+        Set<String> nonEquivalenceColumns = Sets.newHashSet();
+        MvUtils.splitPredicate(predicates, equivalenceColumns, nonEquivalenceColumns);
         List<CandidateContext> contexts = Lists.newArrayList();
         for (int i = 0; i < expressions.size(); i++) {
-            CandidateContext mvContext =
-                    getMVContext(expressions.get(i), isAggQuery, context);
+            List<Table> expressionTables = MvUtils.getAllTables(expressions.get(i));
+            originalTables.stream().forEach(originalTable -> expressionTables.remove(originalTable));
+            CandidateContext mvContext = getMVContext(
+                    expressions.get(i), isAggQuery, context, expressionTables, equivalenceColumns, nonEquivalenceColumns);
             Preconditions.checkState(mvContext != null);
             mvContext.setIndex(i);
             contexts.add(mvContext);
@@ -72,15 +88,17 @@ public class BestMvSelector {
         // else set it to Integer.MAX_VALUE
         private int groupbyColumnNum;
         private int index;
+        private final int sortScore;
 
-        public CandidateContext(Statistics mvStatistics, int schemaColumnNum) {
-            this(mvStatistics, schemaColumnNum, 0);
+        public CandidateContext(Statistics mvStatistics, int schemaColumnNum, int sortScore) {
+            this(mvStatistics, schemaColumnNum, sortScore, 0);
         }
 
-        public CandidateContext(Statistics mvStatistics, int schemaColumnNum, int index) {
+        public CandidateContext(Statistics mvStatistics, int schemaColumnNum, int sortScore, int index) {
             this.mvStatistics = mvStatistics;
             this.schemaColumnNum = schemaColumnNum;
             this.index = index;
+            this.sortScore = sortScore;
             this.groupbyColumnNum = Integer.MAX_VALUE;
         }
 
@@ -118,12 +136,20 @@ public class BestMvSelector {
             if (ret != 0) {
                 return ret;
             }
+
+            // larger is better
+            ret = Integer.compare(context2.sortScore, context1.sortScore);
+            if (ret != 0) {
+                return ret;
+            }
+
             // compare by row number
             ret = Double.compare(context1.getMvStatistics().getOutputRowCount(),
                     context2.getMvStatistics().getOutputRowCount());
             if (ret != 0) {
                 return ret;
             }
+
             // compare by schema column num
             ret = Integer.compare(context1.getSchemaColumnNum(), context2.getSchemaColumnNum());
             if (ret != 0) {
@@ -152,15 +178,38 @@ public class BestMvSelector {
         expr.setStatistics(expressionContext.getStatistics());
     }
 
+    private int calcSortScore(MaterializedView mv, Set<String> equivalenceColumns, Set<String> nonEquivalenceColumns) {
+        List<Column> keyColumns = mv.getKeyColumnsByIndexId(mv.getBaseIndexId());
+        int score = 0;
+        for (Column col : keyColumns) {
+            String columName = col.getName().toLowerCase();
+            if (equivalenceColumns.contains(columName)) {
+                score++;
+            } else if (nonEquivalenceColumns.contains(columName)) {
+                // UnEquivalence predicate's columns can only match first columns in rollup.
+                score++;
+                break;
+            } else {
+                break;
+            }
+        }
+        return score;
+    }
+
     private CandidateContext getMVContext(
-            OptExpression expression, boolean isAggregate, OptimizerContext optimizerContext) {
+            OptExpression expression, boolean isAggregate, OptimizerContext optimizerContext,
+            List<Table> diffTables, Set<String> equivalenceColumns, Set<String> nonEquivalenceColumns) {
         if (expression.getOp() instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator scanOperator = expression.getOp().cast();
             if (scanOperator.getTable().isMaterializedView()) {
-                CandidateContext candidateContext =
-                        new CandidateContext(expression.getStatistics(), scanOperator.getTable().getBaseSchema().size());
+                MaterializedView mv = (MaterializedView) scanOperator.getTable();
+                if (!diffTables.contains(mv)) {
+                    return null;
+                }
+                int sortScore = calcSortScore(mv, equivalenceColumns, nonEquivalenceColumns);
+                CandidateContext candidateContext = new CandidateContext(
+                        expression.getStatistics(), scanOperator.getTable().getBaseSchema().size(), sortScore);
                 if (isAggregate) {
-                    MaterializedView mv = (MaterializedView) scanOperator.getTable();
                     List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
                             mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
                     for (MvPlanContext planContext : planContexts) {
@@ -174,7 +223,8 @@ public class BestMvSelector {
             }
         }
         for (OptExpression child : expression.getInputs()) {
-            CandidateContext context = getMVContext(child, isAggregate, optimizerContext);
+            CandidateContext context = getMVContext(
+                    child, isAggregate, optimizerContext, diffTables, equivalenceColumns, nonEquivalenceColumns);
             if (context != null) {
                 return context;
             }

@@ -45,6 +45,11 @@ public class ColumnRefFactory {
     private final Map<ColumnRefOperator, Column> columnRefToColumns = Maps.newHashMap();
     private final Map<ColumnRefOperator, Table> columnRefToTable = Maps.newHashMap();
 
+    // introduced to used to get unique id for query,
+    // now used to identify nondeterministic function.
+    // do not reuse nextId because it will affect many UTs.
+    private int id = 1;
+
     public Map<ColumnRefOperator, Column> getColumnRefToColumns() {
         return columnRefToColumns;
     }
@@ -140,5 +145,9 @@ public class ColumnRefFactory {
 
     public Table getTableForColumn(int columnId) {
         return columnRefToTable.get(getColumnRef(columnId));
+    }
+
+    public int getNextUniqueId() {
+        return id++;
     }
 }

@@ -15,11 +15,14 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 
 #include "column/vectorized_fwd.h"
+#include "exec/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
+#include "formats/parquet/file_reader.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -132,7 +135,9 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
 
 Status ORCEqualityDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
                                        int64_t file_length, const std::shared_ptr<DefaultMORProcessor> mor_processor,
-                                       std::vector<SlotDescriptor*> slot_descs, RuntimeState* state) {
+                                       std::vector<SlotDescriptor*> slot_descs,
+                                       TupleDescriptor* delete_column_tuple_desc,
+                                       const TIcebergSchema* iceberg_equal_delete_schema, RuntimeState* state) {
     std::unique_ptr<RandomAccessFile> file;
     ASSIGN_OR_RETURN(file, _fs->new_random_access_file(delete_file_path));
 
@@ -171,6 +176,62 @@ Status ORCEqualityDeleteBuilder::build(const std::string& timezone, const std::s
 
         ChunkPtr chunk = ret.value();
         RETURN_IF_ERROR(mor_processor->append_chunk_to_hashtable(chunk));
+    }
+    return Status::OK();
+}
+
+Status ParquetEqualityDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
+                                           int64_t file_length,
+                                           const std::shared_ptr<DefaultMORProcessor> mor_processor,
+                                           std::vector<SlotDescriptor*> slot_descs,
+                                           TupleDescriptor* delete_column_tuple_desc,
+                                           const TIcebergSchema* iceberg_equal_delete_schema, RuntimeState* state) {
+    std::unique_ptr<RandomAccessFile> file;
+    ASSIGN_OR_RETURN(file, _fs->new_random_access_file(delete_file_path));
+
+    std::unique_ptr<parquet::FileReader> reader;
+    try {
+        reader = std::make_unique<parquet::FileReader>(state->chunk_size(), file.get(), file->get_size().value(), 0);
+    } catch (std::exception& e) {
+        const auto s = strings::Substitute(
+                "ParquetEqualityDeleteBuilder::build create parquet::FileReader failed. reason = $0", e.what());
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+
+    auto scanner_ctx = std::make_unique<HdfsScannerContext>();
+    auto scan_stats = std::make_unique<HdfsScanStats>();
+    std::vector<HdfsScannerContext::ColumnInfo> columns;
+    THdfsScanRange scan_range;
+    scan_range.offset = 0;
+    scan_range.length = file_length;
+    for (size_t i = 0; i < slot_descs.size(); i++) {
+        auto* slot = slot_descs[i];
+        HdfsScannerContext::ColumnInfo column;
+        column.slot_desc = slot;
+        column.idx_in_chunk = i;
+        column.decode_needed = true;
+        columns.emplace_back(column);
+    }
+    scanner_ctx->timezone = timezone;
+    scanner_ctx->stats = scan_stats.get();
+    scanner_ctx->tuple_desc = delete_column_tuple_desc;
+    scanner_ctx->iceberg_schema = iceberg_equal_delete_schema;
+    scanner_ctx->materialized_columns = std::move(columns);
+    scanner_ctx->scan_range = &scan_range;
+    scanner_ctx->lazy_column_coalesce_counter = new std::atomic<int32_t>(0);
+    RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
+
+    while (true) {
+        ChunkPtr chunk = ChunkHelper::new_chunk(*delete_column_tuple_desc, state->chunk_size());
+        Status status = reader->get_next(&chunk);
+        if (status.is_end_of_file()) {
+            break;
+        }
+
+        RETURN_IF_ERROR(status);
+        ChunkPtr& result = chunk;
+        RETURN_IF_ERROR(mor_processor->append_chunk_to_hashtable(result));
     }
     return Status::OK();
 }

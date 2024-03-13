@@ -31,7 +31,7 @@ public class CancelCompactionStmtAnalyzer {
         new CancelCompactionStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class CancelCompactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class CancelCompactionStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         public void analyze(CancelCompactionStmt statement, ConnectContext context) {
             visit(statement, context);

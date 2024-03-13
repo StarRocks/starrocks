@@ -58,7 +58,6 @@ import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
-import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -263,9 +262,6 @@ public class IcebergScanNode extends ScanNode {
             for (DeleteFile deleteFile : task.deletes()) {
                 FileContent content = deleteFile.content();
                 if (content == FileContent.EQUALITY_DELETES) {
-                    if (deleteFile.format() != FileFormat.ORC) {
-                        throw new StarRocksConnectorException("Only support reading equality delete file of orc format");
-                    }
                     List<Integer> taskEqualityFieldIds = deleteFile.equalityFieldIds();
                     if (taskEqualityFieldIds.isEmpty()) {
                         continue;

@@ -165,11 +165,15 @@ StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Ch
     return column;
 }
 
-bool VectorizedLiteral::is_compilable() const {
+bool VectorizedLiteral::is_compilable(RuntimeState* state) const {
     return IRHelper::support_jit(_type.type);
 }
 
-std::string VectorizedLiteral::jit_func_name_impl() const {
+JitScore VectorizedLiteral::compute_jit_score(RuntimeState* state) const {
+    return {0, 0};
+}
+
+std::string VectorizedLiteral::jit_func_name_impl(RuntimeState* state) const {
     return "{" + type().debug_string() + "[" + _value->debug_string() + "]}";
 }
 

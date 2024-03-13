@@ -26,8 +26,8 @@ on:
         default: ci-admit
       IS_SELF_BUILD:
         description: 'IS SELF BUILD'
-        type: 'boolean'
-        default: false
+        type: string
+        default: 'false'
 
     outputs:
       CONF_FILE:

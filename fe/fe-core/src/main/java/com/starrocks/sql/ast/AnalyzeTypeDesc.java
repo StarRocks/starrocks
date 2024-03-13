@@ -29,4 +29,8 @@ public abstract class AnalyzeTypeDesc implements ParseNode {
     public NodePosition getPos() {
         return pos;
     }
+
+    public boolean isHistogram() {
+        return false;
+    }
 }
