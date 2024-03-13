@@ -46,10 +46,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/GlobalStateMgrTest.java
-=======
 import com.starrocks.journal.JournalInconsistentException;
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091)):fe/fe-core/src/test/java/com/starrocks/server/GlobalStateMgrTest.java
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
@@ -197,7 +194,6 @@ public class GlobalStateMgrTest {
         globalStateMgr.addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
     }
 
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/GlobalStateMgrTest.java
     private static class MyGlobalStateMgr extends GlobalStateMgr {
         public static final String ERROR_MESSAGE = "Create Exception here.";
         private final boolean throwException;
@@ -267,7 +263,8 @@ public class GlobalStateMgrTest {
             Assert.assertTrue(suppressedExceptions[0] instanceof RuntimeException);
             Assert.assertEquals(removeFileErrorMessage, suppressedExceptions[0].getMessage());
         }
-=======
+    }
+
     @Test
     public void testCanSkipBadReplayedJournal() {
         boolean originVal = Config.metadata_journal_ignore_replay_failure;
@@ -295,6 +292,5 @@ public class GlobalStateMgrTest {
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
 
         Config.metadata_journal_ignore_replay_failure = originVal;
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091)):fe/fe-core/src/test/java/com/starrocks/server/GlobalStateMgrTest.java
     }
 }

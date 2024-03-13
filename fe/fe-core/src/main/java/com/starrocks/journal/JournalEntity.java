@@ -453,14 +453,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-<<<<<<< HEAD
-=======
-            case OperationType.OP_BATCH_DELETE_REPLICA: {
-                data = GsonUtils.GSON.fromJson(Text.readString(in), BatchDeleteReplicaInfo.class);
-                isRead = true;
-                break;
-            }
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
             case OperationType.OP_ADD_REPLICA_V2:
             case OperationType.OP_UPDATE_REPLICA_V2:
             case OperationType.OP_DELETE_REPLICA_V2: {

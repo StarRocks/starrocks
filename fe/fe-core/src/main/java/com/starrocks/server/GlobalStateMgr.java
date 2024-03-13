@@ -317,6 +317,7 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1758,11 +1759,7 @@ public class GlobalStateMgr {
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
     }
 
-<<<<<<< HEAD
     public long loadVersion(DataInputStream dis, long checksum) throws IOException {
-=======
-    public void loadHeader(DataInputStream dis) throws IOException {
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
         // for new format, version schema is [starrocksMetaVersion], and the int value must be positive
         // for old format, version schema is [-1, metaVersion, starrocksMetaVersion]
         // so we can check the first int to determine the version schema
@@ -1785,7 +1782,6 @@ public class GlobalStateMgr {
         }
 
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
-<<<<<<< HEAD
 
         return checksum;
     }
@@ -1805,8 +1801,6 @@ public class GlobalStateMgr {
     }
 
     public void loadHeaderV2(DataInputStream dis) throws IOException {
-=======
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
         isDefaultClusterCreated = header.isDefaultClusterCreated();

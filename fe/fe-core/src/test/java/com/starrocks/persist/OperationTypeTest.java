@@ -146,13 +146,6 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ALTER_LOAD_JOB));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ALTER_TABLE_PROPERTIES));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_BUCKET_SIZE));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ALTER_DB_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_DB_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_LOAD_JOB_V2));
@@ -173,7 +166,6 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_TABLE_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_TABLE_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_PARTITION_V2));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_COLUMN_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_ROLLUP_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_ROLLUP_V2));
@@ -185,10 +177,6 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_FRONTEND_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_BROKER_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_BROKER_V2));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DECOMMISSION_DISK));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CANCEL_DECOMMISSION_DISK));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DISABLE_DISK));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CANCEL_DISABLE_DISK));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_TIMESTAMP_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_FUNCTION_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_FUNCTION_V2));
@@ -198,13 +186,7 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_STORAGE_VOLUME));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_STORAGE_VOLUME));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_STORAGE_VOLUME));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_PIPE));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(
-                OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ALTER_CATALOG));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_DICTIONARY));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_DICTIONARY));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_DICTIONARY_MGR));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REPLICATION_JOB));
     }
 
@@ -222,13 +204,11 @@ public class OperationTypeTest {
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_PARTITION_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_REPLICA));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_REPLICA_V2));
-        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_SUB_PARTITIONS_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_UNUSED_SHARD));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ALTER_JOB_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_AUTH_UPGRADE_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_BACKEND_TABLETS_INFO));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_BACKEND_TABLETS_INFO_V2));
-        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_BATCH_DELETE_REPLICA));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CANCEL_ROLLUP));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CANCEL_SCHEMA_CHANGE));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_CLUSTER));
@@ -256,7 +236,6 @@ public class OperationTypeTest {
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_LEADER_INFO_CHANGE_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_META_VERSION));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_META_VERSION_V2));
-        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RECOVER_DB));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RECOVER_DB_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RECOVER_PARTITION));

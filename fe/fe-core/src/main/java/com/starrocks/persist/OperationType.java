@@ -355,40 +355,24 @@ public class OperationType {
     //real time load 100 -108
     @Deprecated
     public static final short OP_UPSERT_TRANSACTION_STATE = 100;
-<<<<<<< HEAD
-    @Deprecated
-    public static final short OP_DELETE_TRANSACTION_STATE = 101;
-=======
 
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_TRANSACTION_STATE = 101;
 
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     @Deprecated
     public static final short OP_FINISHING_ROLLUP = 102;
 
     @Deprecated
     public static final short OP_FINISHING_SCHEMA_CHANGE = 103;
-<<<<<<< HEAD
-    @Deprecated
-    public static final short OP_SAVE_TRANSACTION_ID = 104;
-=======
 
     @Deprecated
     public static final short OP_SAVE_TRANSACTION_ID = 104;
 
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
 
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
-<<<<<<< HEAD
-=======
-
-    // light schema change for add and drop columns
-    public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
     @Deprecated
     @IgnorableOnReplayFailed
@@ -689,33 +673,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 
-<<<<<<< HEAD
-=======
-    // modify table property bucket size
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_BUCKET_SIZE = 11140;
-
-    // external table analyze
-
-    @IgnorableOnReplayFailed
-    public static final short OP_ADD_EXTERNAL_ANALYZE_STATUS = 11200;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_REMOVE_EXTERNAL_ANALYZE_STATUS = 11201;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_ADD_EXTERNAL_ANALYZER_JOB = 11202;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_REMOVE_EXTERNAL_ANALYZER_JOB = 11203;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_ADD_EXTERNAL_BASIC_STATS_META = 11204;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_REMOVE_EXTERNAL_BASIC_STATS_META = 11205;
-
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
     @IgnorableOnReplayFailed
@@ -801,12 +758,6 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_RENAME_PARTITION_V2 = 13005;
-<<<<<<< HEAD
-=======
-
-    @IgnorableOnReplayFailed
-    public static final short OP_RENAME_COLUMN_V2 = 13006;
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_ROLLUP_V2 = 13010;
@@ -824,21 +775,6 @@ public class OperationType {
     public static final short OP_BATCH_ADD_ROLLUP_V2 = 13015;
 
     public static final short OP_ADD_REPLICA_V2 = 13020;
-<<<<<<< HEAD
-    public static final short OP_DELETE_REPLICA_V2 = 13021;
-    public static final short OP_UPDATE_REPLICA_V2 = 13022;
-    public static final short OP_BACKEND_TABLETS_INFO_V2 = 13023;
-    public static final short OP_ADD_BACKEND_V2 = 13024;
-    public static final short OP_DROP_BACKEND_V2 = 13025;
-    public static final short OP_BACKEND_STATE_CHANGE_V2 = 13026;
-    public static final short OP_ADD_FRONTEND_V2 = 13027;
-    public static final short OP_ADD_FIRST_FRONTEND_V2 = 13028;
-    public static final short OP_REMOVE_FRONTEND_V2 = 13029;
-    public static final short OP_UPDATE_FRONTEND_V2 = 13030;
-    public static final short OP_ADD_BROKER_V2 = 13031;
-    public static final short OP_DROP_BROKER_V2 = 13032;
-=======
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_REPLICA_V2 = 13021;
@@ -869,20 +805,6 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_BROKER_V2 = 13032;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_DECOMMISSION_DISK = 13033;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_CANCEL_DECOMMISSION_DISK = 13034;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_DISABLE_DISK = 13035;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_CANCEL_DISABLE_DISK = 13036;
-
-    public static final short OP_BATCH_DELETE_REPLICA = 13037;
 
     @IgnorableOnReplayFailed
     public static final short OP_TIMESTAMP_V2 = 13040;
@@ -917,35 +839,10 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_STORAGE_VOLUME = 13103;
 
-<<<<<<< HEAD
-=======
-    // Pipe operations log
-    @IgnorableOnReplayFailed
-    public static final short OP_PIPE = 12200;
-
-    // Primary key
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC = 13200;
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
-
     // alter catalog
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_CATALOG = 13300;
 
-<<<<<<< HEAD
-=======
-    // Dictionary
-
-    @IgnorableOnReplayFailed
-    public static final short OP_CREATE_DICTIONARY = 13400;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_DROP_DICTIONARY = 13401;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
-
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;

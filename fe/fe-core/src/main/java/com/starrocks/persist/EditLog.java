@@ -472,14 +472,6 @@ public class EditLog {
                     globalStateMgr.replayDeleteReplica(info);
                     break;
                 }
-<<<<<<< HEAD
-=======
-                case OperationType.OP_BATCH_DELETE_REPLICA : {
-                    BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
-                    globalStateMgr.replayBatchDeleteReplica(info);
-                    break;
-                }
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
                 case OperationType.OP_ADD_COMPUTE_NODE: {
                     ComputeNode computeNode = (ComputeNode) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
@@ -1450,13 +1442,6 @@ public class EditLog {
         }
     }
 
-<<<<<<< HEAD
-=======
-    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
-        logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
-    }
-
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     public void logTimestamp(Timestamp stamp) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
