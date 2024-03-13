@@ -173,6 +173,10 @@ public:
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
+    void init_jit_profile();
+
+    void update_jit_profile(int64_t time_ns);
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -224,6 +228,9 @@ private:
     size_t _expired_log_count = 0;
 
     std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
+
+    RuntimeProfile::Counter* _jit_counter = nullptr;
+    RuntimeProfile::Counter* _jit_timer = nullptr;
 };
 
 class FragmentContextManager {

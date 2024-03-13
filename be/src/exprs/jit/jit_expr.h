@@ -38,6 +38,8 @@ public:
 
     bool is_jit_compiled() { return _jit_function != nullptr; }
 
+    void set_uncompilable_children(RuntimeState* state);
+
     Status prepare_impl(RuntimeState* state, ExprContext* context);
 
 protected:

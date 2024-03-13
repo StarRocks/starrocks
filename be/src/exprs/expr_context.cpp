@@ -207,7 +207,7 @@ Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
         return Status::OK();
     }
     bool replaced = false;
-    auto st = _root->replace_compilable_exprs(&_root, pool, replaced);
+    auto st = _root->replace_compilable_exprs(&_root, pool, _runtime_state, replaced);
     if (!st.ok()) {
         LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (root())->debug_string();
         // Fall back to the non-JIT path.

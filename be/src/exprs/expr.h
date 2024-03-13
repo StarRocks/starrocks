@@ -64,6 +64,7 @@ class ColumnRef;
 class ColumnPredicateRewriter;
 class JITContext;
 class JITExpr;
+struct JitScore;
 struct LLVMDatum;
 
 // This is the superclass of all expr evaluation nodes.
@@ -102,15 +103,6 @@ public:
     void clear_children() { _children.clear(); }
     Expr* get_child(int i) const { return _children[i]; }
     int get_num_children() const { return _children.size(); }
-    int get_num_jit_children() const {
-        int num = 0;
-        if (is_compilable()) {
-            for (auto& child : _children) {
-                num += child->get_num_jit_children();
-            }
-        }
-        return num + 1;
-    };
 
     const TypeDescriptor& type() const { return _type; }
     const std::vector<Expr*>& children() const { return _children; }
@@ -229,24 +221,32 @@ public:
     virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
 
     // Return true if this expression supports JIT compilation.
-    virtual bool is_compilable() const { return false; }
+    virtual bool is_compilable(RuntimeState* state) const { return false; }
+
+    std::string jit_func_name(RuntimeState* state) const;
+
+    virtual std::string jit_func_name_impl(RuntimeState* state) const;
 
     std::string jit_func_name() const;
 
-    virtual std::string jit_func_name_impl() const;
-
     // This function will collect all uncompiled expressions in this expression tree.
     // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
-    void get_uncompilable_exprs(std::vector<Expr*>& exprs);
+    void get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state);
 
     // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
     // This method searches from top to bottom for compilable expressions.
     // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
     // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
-    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, bool& replaced);
+    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced);
 
     // Establishes whether the current expression should undergo compilation.
-    bool should_compile() const;
+    // if adaptive, the valuable expressions should take the majority, i.e., `jit_score_ratio` of all expressions,
+    // but case_when expr is especial, refer to its `compute_jit_score()`.
+    bool should_compile(RuntimeState* state) const;
+
+    // The valuable expressions get 1 score per expression, others get 0 score per expression, including
+    // comparison expr, logical expr, branch expr, div and mod.
+    virtual JitScore compute_jit_score(RuntimeState* state) const;
 
     // Return true if this expr or any of its children support ngram bloom filter, otherwise return flase
     virtual bool support_ngram_bloom_filter(ExprContext* context) const;

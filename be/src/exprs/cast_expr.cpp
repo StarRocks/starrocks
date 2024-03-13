@@ -1171,13 +1171,13 @@ public:
         return result_column;
     };
 
-    bool is_compilable() const override {
-        return !AllowThrowException && FromType != TYPE_LARGEINT && ToType != TYPE_LARGEINT &&
-               IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::CAST) && !AllowThrowException && FromType != TYPE_LARGEINT &&
+               ToType != TYPE_LARGEINT && IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
-    std::string jit_func_name_impl() const override {
-        return "{cast(" + _children[0]->jit_func_name() + ")}" + (is_constant() ? "c:" : "") +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{cast(" + _children[0]->jit_func_name(state) + ")}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
