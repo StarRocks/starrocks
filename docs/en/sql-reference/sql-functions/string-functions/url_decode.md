@@ -11,7 +11,11 @@ Converts an url to a decode string.
 ## Syntax
 
 ```haskell
+<<<<<<< HEAD
 url_decode(str)
+=======
+VARCHAR url_decode(VARCHAR str)
+>>>>>>> 9983aa0b8e ([Doc] fix spelling errors (backport #42490) (#42526))
 ```
 
 ## Parameters
