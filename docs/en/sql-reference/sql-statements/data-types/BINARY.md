@@ -10,7 +10,7 @@ BINARY(M)
 
 VARBINARY(M)
 
-Since v3.0, StarRocks supports the BINARY/VARBINARY data type, which is used to store binary data. The maximum supported length is the same as VARCHAR (1~1048576). The unit is byte. If `M` is not specified, 1048576 is used by default. Binary data types contain byte strings while character data types contain character strings.
+Since v3.0, StarRocks supports the BINARY/VARBINARY data type, which is used to store binary data. The maximum supported length is the same as VARCHAR [1, 1048576]. Unit: bytes. If `M` is not specified, 1048576 is used by default. Binary data types contain byte strings while character data types contain character strings.
 
 BINARY is an alias of VARBINARY. The usage is the same as VARBINARY.
 

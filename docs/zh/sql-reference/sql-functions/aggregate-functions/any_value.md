@@ -16,7 +16,7 @@ ANY_VALUE(expr)
 
 ## 参数说明
 
-`expr`: 被选取的表达式.
+`expr`: 选取的表达式。从 3.2 版本起，`expr` 支持 ARRAY/MAP/STRUCT 类型。
 
 ## 返回值说明
 
@@ -24,25 +24,47 @@ ANY_VALUE(expr)
 
 ## 示例
 
-假设表中有如下数据。
+假设有如下表。
+
+```sql
+CREATE TABLE t0(
+  a INT,
+  b BIGINT,
+  c SMALLINT,
+  d ARRAY<INT>,
+  e JSON,
+  f MAP<INT, INT>,
+  g STRUCT<a STRING, b INT>
+)
+DUPLICATE KEY(a)
+DISTRIBUTED BY HASH(a);
+
+INSERT INTO t0 VALUES
+(1, 1, 1, [2,3,4],parse_json('{"a":1, "b":true}'), map{1:1,3:4}, row(1, 2)),
+(1, 2, 1, [2,3,5],parse_json('{"a":2, "b":true}'), map{1:2,3:3},row(2, 2)),
+(2, 1, 1, [2,3,6],parse_json('{"a":3, "b":true}'), map{2:1,3:2},row(3, 2)),
+(2, 2, 2, [2,4,5],parse_json('{"a":4, "b":false}'),map{1:3,3:1},row(4, 2)),
+(3, 1, 1, [3,3,5],parse_json('{"a":5, "b":false}'),map{2:1,3:3},row(1, 2));
+```
 
 ```plain text
-mysql> select * from any_value_test;
-+------+------+------+
-| a    | b    | c    |
-+------+------+------+
-|    1 |    1 |    1 |
-|    1 |    2 |    1 |
-|    2 |    1 |    1 |
-|    2 |    2 |    2 |
-|    3 |    1 |    1 |
-+------+------+------+
+mysql> select * from t0 order by a;
++------+------+------+---------+----------------------+-----------+-----------------+
+| a    | b    | c    | d       | e                    | f         | g               |
++------+------+------+---------+----------------------+-----------+-----------------+
+|    1 |    1 |    1 | [2,3,4] | {"a": 1, "b": true}  | {1:1,3:4} | {"a":"1","b":2} |
+|    1 |    2 |    1 | [2,3,5] | {"a": 2, "b": true}  | {1:2,3:3} | {"a":"2","b":2} |
+|    2 |    1 |    1 | [2,3,6] | {"a": 3, "b": true}  | {2:1,3:2} | {"a":"3","b":2} |
+|    2 |    2 |    2 | [2,4,5] | {"a": 4, "b": false} | {1:3,3:1} | {"a":"4","b":2} |
+|    3 |    1 |    1 | [3,3,5] | {"a": 5, "b": false} | {2:1,3:3} | {"a":"1","b":2} |
++------+------+------+---------+----------------------+-----------+-----------------+
 5 rows in set (0.01 sec)
+```
 
-使用 ANY_VALUE 后的结果。
+使用 ANY_VALUE 后的结果。可以看到对于 `a=1` 和 `a=2`，随机返回了一条 `b` 记录。
 
 ```plain text
-mysql> select a,any_value(b),sum(c) from any_value_test group by a;
+mysql> select a,any_value(b),sum(c) from t0 group by a;
 +------+----------------+----------+
 | a    | any_value(`b`) | sum(`c`) |
 +------+----------------+----------+
@@ -52,13 +74,13 @@ mysql> select a,any_value(b),sum(c) from any_value_test group by a;
 +------+----------------+----------+
 3 rows in set (0.01 sec)
 
-mysql> select c,any_value(a),sum(b) from any_value_test group by c;
-+------+----------------+----------+
-| c    | any_value(`a`) | sum(`b`) |
-+------+----------------+----------+
-|    1 |              1 |        5 |
-|    2 |              2 |        2 |
-+------+----------------+----------+
+mysql> select a,any_value(d),sum(b) from t0 group by a;
++------+--------------+--------+
+| a    | any_value(d) | sum(b) |
++------+--------------+--------+
+|    3 | [3,3,5]      |      1 |
+|    1 | [2,3,4]      |      3 |
+|    2 | [2,3,6]      |      3 |
++------+--------------+--------+
 2 rows in set (0.01 sec)
-
 ```
