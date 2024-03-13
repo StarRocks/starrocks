@@ -26,7 +26,7 @@ ANY_VALUE(expr)
 
 假设有如下表。
 
-``sql
+```sql
 CREATE TABLE t0(
   a INT,
   b BIGINT,
