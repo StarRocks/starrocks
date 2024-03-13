@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.commons.lang3.StringUtils;
 import org.threeten.extra.PeriodDuration;
@@ -229,6 +230,21 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
             isChanged = true;
         }
+<<<<<<< HEAD
+=======
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+            materializedView.getTableProperty().getProperties()
+                    .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
+            materializedView.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
+            if (!materializedView.isEnableRewrite()) {
+                // invalidate caches for mv rewrite when disable mv rewrite.
+                CachingMvPlanContextBuilder.getInstance().invalidateFromCache(materializedView, false);
+            } else {
+                CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(materializedView);
+            }
+            isChanged = true;
+        }
+>>>>>>> fb483fdb72 ([Feature] Support text based mv rewrite (#41271))
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
         if (!properties.isEmpty()) {
             // set properties if there are no exceptions
