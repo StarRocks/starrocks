@@ -981,9 +981,8 @@ under the License.
                     <forkCount>${fe_ut_parallel}</forkCount>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
-<!--                    <parallelTestsTimeoutForcedInSeconds>1</parallelTestsTimeoutForcedInSeconds>-->
-<!--                    <parallelTestsTimeoutInSeconds>1</parallelTestsTimeoutInSeconds>-->
-                    <forkedProcessTimeoutInSeconds>35</forkedProcessTimeoutInSeconds>
+
+<!--                    <forkedProcessTimeoutInSeconds>35</forkedProcessTimeoutInSeconds>-->
 <!--                    <forkedProcessExitTimeoutInSeconds>5</forkedProcessExitTimeoutInSeconds>-->
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar -Xmx4096m
@@ -994,6 +993,9 @@ under the License.
                     <excludes>
                         <exclude>**/QueryDumpRegressionTest.java</exclude>
                     </excludes>
+                    <parallel>suites</parallel>
+<!--                    <parallelTestsTimeoutForcedInSeconds>1</parallelTestsTimeoutForcedInSeconds>-->
+                    <parallelTestsTimeoutInSeconds>1</parallelTestsTimeoutInSeconds>
                 </configuration>
             </plugin>
 
