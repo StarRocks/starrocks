@@ -614,7 +614,7 @@ Follow these procedures to configure alerts for **Frontends Status**:
 
    ![MA-37](../assets/monitor/monitor37.jpeg)
 
-   3.  In the **Choose** drop-down list, select **Description**, and add the descriptive content for the alert email, for example, "FE node in your StarRocks production cluster failed, please check!"
+   In the **Choose** drop-down list, select **Description**, and add the descriptive content for the alert email, for example, "FE node in your StarRocks production cluster failed, please check!"
 
 7. Match notification policies.
 

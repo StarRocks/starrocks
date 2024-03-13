@@ -25,7 +25,6 @@ MySQL > select utc_time();
 +----------------+
 ```
 
-
 ## keyword
 
 UTC_TIME,UTC,TIME

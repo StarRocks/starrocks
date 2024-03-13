@@ -46,6 +46,7 @@ alter_clause1[, alter_clause2, ...]
 - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
 - Schema change and rollup are asynchronous operations. A success message is returned immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
 - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
+
 :::
 
 ### Rename
@@ -275,8 +276,8 @@ Note:
 5. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
    - Convert TINYINT/SMALLINT/INT/BIGINT to TINYINT/SMALLINT/INT/BIGINT/DOUBLE.
-   - Convert TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
-   - Convert VARCHAR to TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE.
+   - Convert TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
+   - Convert VARCHAR to TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE.
    - Convert VARCHAR to DATE (currently support six formats: "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d")
    - Convert DATETIME to DATE(only year-month-day information is retained, i.e.  `2019-12-09 21:47:05` `<-->` `2019-12-09`)
    - Convert DATE to DATETIME (set hour, minute, second to zero, For example: `2019-12-09` `<-->` `2019-12-09 00:00:00`)
@@ -464,8 +465,9 @@ Before v3.1, compaction is performed in two ways:
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
 Syntax:
+
 ```SQL
-ALTER TABLE <tbl_name> [ BASE | COMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
+ALTER TABLE <tbl_name> [ BASE | CUMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
 ```
 
 That is:
