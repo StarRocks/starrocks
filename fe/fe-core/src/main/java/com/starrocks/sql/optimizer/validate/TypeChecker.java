@@ -165,7 +165,11 @@ public class TypeChecker implements PlanValidator.Checker {
                         isMergeAggFn = isSplit && hasRemoveDistinctFunc && !aggCall.isRemovedDistinct();
                         break;
                     case GLOBAL:
-                        isMergeAggFn = isSplit && (!hasRemoveDistinctFunc || !aggCall.isRemovedDistinct());
+                        if (hasRemoveDistinctFunc) {
+                            isMergeAggFn = !aggCall.isRemovedDistinct();
+                        } else if (isSplit) {
+                            isMergeAggFn = true;
+                        }
                         break;
                     case DISTINCT_GLOBAL:
                         isMergeAggFn = true;
