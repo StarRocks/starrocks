@@ -256,6 +256,30 @@ ParquetFileWriter::ParquetFileWriter(const std::string& location,
           _rollback_action(std::move(rollback_action)),
           _executors(executors) {}
 
+StatusOr<::parquet::Compression::type> ParquetFileWriter::_compression_type(const std::string& compression_codec) {
+    ::parquet::Compression::type type;
+    if (boost::iequals(compression_codec, "uncompressed")) {
+        type = ::parquet::Compression::UNCOMPRESSED;
+    } else if (boost::iequals(compression_codec, "snappy")) {
+        type = ::parquet::Compression::SNAPPY;
+    } else if (boost::iequals(compression_codec, "gzip")) {
+        type = ::parquet::Compression::GZIP;
+    } else if (boost::iequals(compression_codec, "zstd")) {
+        type = ::parquet::Compression::ZSTD;
+    } else if (boost::iequals(compression_codec, "lz4")) {
+        type = ::parquet::Compression::LZ4;
+    } else {
+        return Status::NotSupported(fmt::format("not supported compression type {}", compression_codec));
+    }
+
+    // Check if arrow supports indicated compression type
+    if (!::parquet::IsCodecSupported(type)) {
+        return Status::NotSupported(fmt::format("not supported compression codec {}", compression_codec));
+    }
+
+    return type;
+}
+
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::_make_schema(
         const vector<std::string>& column_names, const vector<TypeDescriptor>& type_descs,
         const std::vector<FileColumnId>& file_column_ids) {
@@ -407,10 +431,12 @@ Status ParquetFileWriter::init() {
         return Status::NotSupported(status.message());
     }
 
+    ASSIGN_OR_RETURN(auto compression, _compression_type(_writer_options->compression_codec));
     _properties = std::make_unique<::parquet::WriterProperties::Builder>()
                           ->data_pagesize(_writer_options->page_size)
                           ->write_batch_size(_writer_options->write_batch_size)
                           ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
+                          ->compression(compression)
                           ->build();
 
     _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);
@@ -442,6 +468,9 @@ Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
     _parsed_options->column_ids = _field_ids;
+    if (_options.contains(COMPRESSION_CODEC)) {
+        _parsed_options->compression_codec = _options[COMPRESSION_CODEC];
+    }
     return Status::OK();
 }
 

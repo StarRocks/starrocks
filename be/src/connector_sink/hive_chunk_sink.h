@@ -71,7 +71,7 @@ struct HiveChunkSinkContext : public ConnectorChunkSinkContext {
     std::vector<std::unique_ptr<ColumnEvaluator>> data_column_evaluators;
     std::vector<std::string> partition_column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators;
-    int64_t max_file_size;
+    int64_t max_file_size = 1 << 30;
     std::string format;
     std::map<std::string, std::string> options;
     PriorityThreadPool* executor;

@@ -62,14 +62,10 @@ public class FileTable extends Table {
     public static final String JSON_KEY_COLLECTION_DELIMITER = "collection_delimiter";
     public static final String JSON_KEY_MAP_DELIMITER = "map_delimiter";
 
-    private static final ImmutableMap<String, RemoteFileInputFormat> SUPPORTED_FORMAT = ImmutableMap.of(
-            "parquet", RemoteFileInputFormat.PARQUET,
-            "orc", RemoteFileInputFormat.ORC,
-            "text", RemoteFileInputFormat.TEXT,
-            "avro", RemoteFileInputFormat.AVRO,
-            "rctext", RemoteFileInputFormat.RCTEXT,
-            "rcbinary", RemoteFileInputFormat.RCBINARY,
-            "sequence", RemoteFileInputFormat.SEQUENCE);
+    private static final ImmutableMap<String, RemoteFileInputFormat> SUPPORTED_FORMAT = ImmutableMap.of("parquet",
+            RemoteFileInputFormat.PARQUET, "orc", RemoteFileInputFormat.ORC, "text", RemoteFileInputFormat.TEXTFILE,
+            "avro", RemoteFileInputFormat.AVRO, "rctext", RemoteFileInputFormat.RCTEXT, "rcbinary",
+            RemoteFileInputFormat.RCBINARY, "sequence", RemoteFileInputFormat.SEQUENCE);
 
     @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
@@ -157,7 +153,7 @@ public class FileTable extends Table {
 
         RemoteFileInputFormat format = getFileFormat();
         TextFileFormatDesc textFileFormatDesc = null;
-        if (format.equals(RemoteFileInputFormat.TEXT)) {
+        if (format.equals(RemoteFileInputFormat.TEXTFILE)) {
             textFileFormatDesc = new TextFileFormatDesc(
                     fileProperties.getOrDefault(JSON_KEY_COLUMN_SEPARATOR, "\t"),
                     fileProperties.getOrDefault(JSON_KEY_ROW_DELIMITER, "\n"),

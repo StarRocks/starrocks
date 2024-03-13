@@ -122,7 +122,7 @@ std::unique_ptr<ConnectorChunkSink> HiveChunkSinkProvider::create_chunk_sink(
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
                 std::move(fs), ctx->options, ctx->data_column_names, std::move(data_column_evaluators), ctx->executor);
-    } else if (boost::iequals(ctx->format, formats::CSV)) {
+    } else if (boost::iequals(ctx->format, formats::TEXTFILE)) {
         file_writer_factory = std::make_unique<formats::CSVFileWriterFactory>(
                 std::move(fs), ctx->options, ctx->data_column_names, std::move(data_column_evaluators), ctx->executor);
     } else {

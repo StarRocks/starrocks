@@ -23,6 +23,9 @@ namespace starrocks::formats {
 struct CSVWriterOptions : FileWriterOptions {
     std::string column_terminated_by = ",";
     std::string line_terminated_by = "\n";
+
+    inline static std::string COLUMN_TERMINATED_BY = "column_terminated_by";
+    inline static std::string LINE_TERMINATED_BY = "line_terminated_by";
 };
 
 // The primary purpose of this class is to support hive + csv. Use with caution in other cases.

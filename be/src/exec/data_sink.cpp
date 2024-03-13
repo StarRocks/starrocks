@@ -46,6 +46,7 @@
 #include "connector_sink/iceberg_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
+#include "exec/hdfs_scanner_text.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -64,6 +65,7 @@
 #include "exec/pipeline/sink/table_function_table_sink_operator.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
+#include "formats/csv/csv_file_writer.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_sender.h"
@@ -402,18 +404,23 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         TableDescriptor* table_desc =
                 runtime_state->desc_tbl().get_table_descriptor(thrift_sink.iceberg_table_sink.target_table_id);
         auto* iceberg_table_desc = down_cast<IcebergTableDescriptor*>(table_desc);
+        auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
         auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
-        sink_ctx->path = thrift_sink.iceberg_table_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
-        sink_ctx->cloud_conf = thrift_sink.iceberg_table_sink.cloud_configuration;
+        sink_ctx->path = t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
+        sink_ctx->cloud_conf = t_iceberg_sink.cloud_configuration;
         sink_ctx->column_names = iceberg_table_desc->full_column_names();
         sink_ctx->partition_column_indices = iceberg_table_desc->partition_index_in_schema();
         sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
-        sink_ctx->format = formats::PARQUET; // iceberg sink only supports parquet
-        sink_ctx->options = {};              // default for now
+        sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
+        if (t_iceberg_sink.__isset.compression_codec) {
+            sink_ctx->options[formats::COMPRESSION_CODEC] = t_iceberg_sink.compression_codec;
+        }
+        if (t_iceberg_sink.__isset.target_max_file_size) {
+            sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
+        }
         sink_ctx->parquet_field_ids =
                 connector::IcebergUtils::generate_parquet_field_ids(iceberg_table_desc->get_iceberg_schema()->fields);
-        sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
         sink_ctx->fragment_context = fragment_ctx;
 
@@ -423,7 +430,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
                                                                  sink_ctx, fragment_ctx);
         size_t sink_dop = context->data_sink_dop();
 
-        if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
+        if (iceberg_table_desc->is_unpartitioned_table() || t_iceberg_sink.is_static_partition_sink) {
             auto ops = context->maybe_interpolate_local_passthrough_exchange(
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop);
             ops.emplace_back(std::move(op));
@@ -462,8 +469,27 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         sink_ctx->partition_column_evaluators = ColumnExprEvaluator::from_exprs(partition_exprs, runtime_state);
         sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
         sink_ctx->format = t_hive_sink.file_format;
-        sink_ctx->options = {}; // default for now
-        sink_ctx->max_file_size = 1 << 30;
+        if (t_hive_sink.__isset.compression_codec) {
+            sink_ctx->options[formats::COMPRESSION_CODEC] = t_hive_sink.compression_codec;
+        }
+        if (t_hive_sink.__isset.target_max_file_size) {
+            sink_ctx->max_file_size = t_hive_sink.target_max_file_size;
+        }
+        if (t_hive_sink.__isset.text_file_desc) {
+            DCHECK(boost::iequals(t_hive_sink.file_format, formats::TEXTFILE));
+            sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = DEFAULT_FIELD_DELIM;
+            sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] = DEFAULT_LINE_DELIM;
+
+            // use customized value if specified
+            if (t_hive_sink.text_file_desc.__isset.field_delim) {
+                sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] =
+                        t_hive_sink.text_file_desc.field_delim;
+            }
+            if (t_hive_sink.text_file_desc.__isset.line_delim) {
+                sink_ctx->options[formats::CSVWriterOptions::LINE_TERMINATED_BY] =
+                        t_hive_sink.text_file_desc.line_delim;
+            }
+        }
         sink_ctx->fragment_context = fragment_ctx;
 
         auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::HIVE);
@@ -512,8 +538,15 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         }
         sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
         sink_ctx->format = target_table.file_format;
-        sink_ctx->options = {}; // default for now
-        sink_ctx->max_file_size = target_table.write_single_file ? INT64_MAX : 1 << 30;
+        if (target_table.__isset.target_max_file_size) {
+            sink_ctx->max_file_size = target_table.target_max_file_size;
+        }
+        if (target_table.__isset.write_single_file && target_table.write_single_file) {
+            sink_ctx->max_file_size = INT64_MAX;
+        }
+        if (target_table.__isset.compression_codec) {
+            sink_ctx->options[formats::COMPRESSION_CODEC] = target_table.compression_codec;
+        }
         sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
         sink_ctx->fragment_context = fragment_ctx;
 

@@ -49,7 +49,8 @@ struct ParquetWriterOptions : FileWriterOptions {
     int64_t dictionary_pagesize = 1024 * 1024; // 1MB
     int64_t page_size = 1024 * 1024;           // 1MB
     int64_t write_batch_size = 4096;
-    int64_t rowgroup_size = 1 << 27; // 128MB
+    int64_t rowgroup_size = 128 * 1024 * 1024; // 128MB
+    std::string compression_codec = "uncompressed";
     std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
 };
 
@@ -72,6 +73,8 @@ public:
     std::future<CommitResult> commit() override;
 
 private:
+    static StatusOr<::parquet::Compression::type> _compression_type(const std::string& compression_codec);
+
     static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
             const std::vector<FileColumnId>& file_column_ids);

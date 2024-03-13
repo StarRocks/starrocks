@@ -86,7 +86,10 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::unique_ptr<OrcOut
 Status ORCFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     ASSIGN_OR_RETURN(_schema, _make_schema(_column_names, _type_descs));
-    _writer = orc::createWriter(*_schema, _output_stream.get(), orc::WriterOptions());
+    auto options = orc::WriterOptions();
+    ASSIGN_OR_RETURN(auto compression, _compression_type(_writer_options->compression_codec));
+    options.setCompression(compression);
+    _writer = orc::createWriter(*_schema, _output_stream.get(), options);
     return Status::OK();
 }
 
@@ -471,6 +474,25 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
     _write_column(values_orc_column, values, type.children[1]);
 }
 
+StatusOr<orc::CompressionKind> ORCFileWriter::_compression_type(const string& compression_codec) {
+    orc::CompressionKind type;
+    if (boost::iequals(compression_codec, "uncompressed")) {
+        type = orc::CompressionKind_NONE;
+    } else if (boost::iequals(compression_codec, "snappy")) {
+        type = orc::CompressionKind_SNAPPY;
+    } else if (boost::iequals(compression_codec, "gzip")) {
+        type = orc::CompressionKind_ZLIB;
+    } else if (boost::iequals(compression_codec, "zstd")) {
+        type = orc::CompressionKind_ZSTD;
+    } else if (boost::iequals(compression_codec, "lz4")) {
+        type = orc::CompressionKind_ZLIB;
+    } else {
+        return Status::NotSupported(fmt::format("not supported compression type {}", compression_codec));
+    }
+
+    return type;
+}
+
 StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema(const std::vector<std::string>& column_names,
                                                                  const std::vector<TypeDescriptor>& type_descs) {
     auto schema = orc::createStructType();
@@ -569,6 +591,9 @@ Status ORCFileWriterFactory::init() {
         RETURN_IF_ERROR(e->init());
     }
     _parsed_options = std::make_shared<ORCWriterOptions>();
+    if (_options.contains(COMPRESSION_CODEC)) {
+        _parsed_options->compression_codec = _options[COMPRESSION_CODEC];
+    }
     return Status::OK();
 }
 

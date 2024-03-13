@@ -43,7 +43,9 @@ private:
     bool _is_closed = false;
 };
 
-class ORCWriterOptions : public FileWriterOptions {};
+struct ORCWriterOptions : public FileWriterOptions {
+    std::string compression_codec = "uncompressed";
+};
 
 class ORCFileWriter final : public FileWriter {
 public:
@@ -64,6 +66,8 @@ public:
     std::future<CommitResult> commit() override;
 
 private:
+    static StatusOr<orc::CompressionKind> _compression_type(const std::string& compression_codec);
+
     static StatusOr<std::unique_ptr<orc::Type>> _make_schema(const std::vector<std::string>& column_names,
                                                              const std::vector<TypeDescriptor>& type_descs);
 
@@ -77,8 +81,6 @@ private:
     void _write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
 
     void _write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
-
-    void _write_decimal(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision, int scale);
 
     template <LogicalType DecimalType, typename VectorBatchType, typename T>
     void _write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision, int scale);

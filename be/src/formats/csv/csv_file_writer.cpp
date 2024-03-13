@@ -39,6 +39,10 @@ Status CSVFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _column_converters.reserve(_types.size());
     for (auto& type : _types) {
+        // TODO: support nested type of hive
+        if (type.is_complex_type()) {
+            return Status::InternalError(fmt::format("Type {} is not supported yet", type.debug_string()));
+        }
         auto nullable_conv = csv::get_converter(type, true);
         if (nullable_conv == nullptr) {
             return Status::InternalError(fmt::format("No CSV converter for type: {}", type.debug_string()));
@@ -143,6 +147,12 @@ Status CSVFileWriterFactory::init() {
         RETURN_IF_ERROR(e->init());
     }
     _parsed_options = std::make_shared<CSVWriterOptions>();
+    if (_options.contains("column_terminated_by")) {
+        _parsed_options->column_terminated_by = _options["column_terminated_by"];
+    }
+    if (_options.contains("line_terminated_by")) {
+        _parsed_options->line_terminated_by = _options["line_terminated_by"];
+    }
     return Status::OK();
 }
 

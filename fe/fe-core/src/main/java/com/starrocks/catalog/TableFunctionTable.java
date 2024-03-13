@@ -14,6 +14,8 @@
 
 package com.starrocks.catalog;
 
+import static com.google.common.base.Verify.verify;
+
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -46,11 +48,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
-import org.apache.commons.collections4.ListUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -60,9 +57,10 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
-
-import static com.google.common.base.Verify.verify;
-import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 public class TableFunctionTable extends Table {
     private static final Set<String> SUPPORTED_FORMATS;
@@ -106,6 +104,7 @@ public class TableFunctionTable extends Table {
     @Nullable
     private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
+    private long targetMaxFileSize;
 
     // CSV format options
     private String csvColumnSeparator = "\t";
@@ -142,8 +141,8 @@ public class TableFunctionTable extends Table {
 
     // Ctor for unload data via table function
     public TableFunctionTable(String path, String format, String compressionType, List<Column> columns,
-                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile,
-                              Map<String, String> properties) {
+            @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile, long targetMaxFileSize,
+            Map<String, String> properties) {
         super(TableType.TABLE_FUNCTION);
         verify(!Strings.isNullOrEmpty(path), "path is null or empty");
         verify(!(partitionColumnIDs != null && writeSingleFile));
@@ -153,6 +152,7 @@ public class TableFunctionTable extends Table {
         this.partitionColumnIDs = partitionColumnIDs;
         this.writeSingleFile = writeSingleFile;
         this.properties = properties;
+        this.targetMaxFileSize = targetMaxFileSize;
         super.setNewFullSchema(columns);
     }
 
@@ -187,7 +187,8 @@ public class TableFunctionTable extends Table {
         tTableFunctionTable.setColumns(tColumns);
         tTableFunctionTable.setFile_format(format);
         tTableFunctionTable.setWrite_single_file(writeSingleFile);
-        tTableFunctionTable.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(compressionType));
+        tTableFunctionTable.setCompression_codec(compressionType);
+        tTableFunctionTable.setTarget_max_file_size(targetMaxFileSize);
         if (partitionColumnIDs != null) {
             tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
         }

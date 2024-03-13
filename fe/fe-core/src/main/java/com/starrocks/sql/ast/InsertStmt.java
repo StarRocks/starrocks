@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.ast;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -29,7 +31,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -37,9 +38,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import static com.google.common.base.Preconditions.checkState;
-import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 /**
  * Insert into is performed to load data from the result of query stmt.
@@ -59,8 +57,6 @@ import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
  */
 public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
-
-    private static final String PARQUET_FORMAT = "parquet";
 
     private final TableName tblName;
     private PartitionNames targetPartitionNames;
@@ -350,8 +346,10 @@ public class InsertStmt extends DmlStmt {
                     "Use \"format\" = \"parquet\" as only parquet format is supported now");
         }
 
-        if (!PARQUET_FORMAT.equalsIgnoreCase(format)) {
-            throw new SemanticException("use \"format\" = \"parquet\", as only parquet format is supported now");
+        // if max_file_size is not specified, use target max file size
+        long targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+        if (props.get("target_max_file_size") != null) {
+            targetMaxFileSize = Long.parseLong(props.get("target_max_file_size"));
         }
 
         // if compression codec is not specified, use compression codec from session
@@ -359,25 +357,17 @@ public class InsertStmt extends DmlStmt {
             compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         }
 
-        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
-            throw new SemanticException("compression type " + compressionType + " is not supported. " +
-                    "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
-        }
-
         if (writeSingleFile && partitionBy != null) {
             throw new SemanticException("cannot use partition_by and single simultaneously.");
         }
 
         if (writeSingleFile) {
-            return new TableFunctionTable(path, format, compressionType, columns, null, true, props);
+            return new TableFunctionTable(path, format, compressionType, columns, null, true, targetMaxFileSize, props);
         }
 
         if (partitionBy == null) {
-            // prepend `data_` if path ends with forward slash
-            if (path.endsWith("/")) {
-                path += "data_";
-            }
-            return new TableFunctionTable(path, format, compressionType, columns, null, false, props);
+            return new TableFunctionTable(
+                    path, format, compressionType, columns, null, false, targetMaxFileSize, props);
         }
 
         // extra validation for using partitionBy
@@ -410,6 +400,7 @@ public class InsertStmt extends DmlStmt {
             throw new SemanticException("partition column does not support type of " + type);
         }
 
-        return new TableFunctionTable(path, format, compressionType, columns, partitionColumnIDs, false, props);
+        return new TableFunctionTable(
+                path, format, compressionType, columns, partitionColumnIDs, false, targetMaxFileSize, props);
     }
 }
