@@ -76,7 +76,7 @@ displayed_sidebar: "Chinese"
 
 **问题修复**
 
-- 解析 CSV 相关参数 `column_seperator` 和`row_delimiter` 中的转义字符。[#85](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/85)
+- 解析 CSV 相关参数 `column_separator` 和`row_delimiter` 中的转义字符。[#85](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/85)
 
 **文档**
 

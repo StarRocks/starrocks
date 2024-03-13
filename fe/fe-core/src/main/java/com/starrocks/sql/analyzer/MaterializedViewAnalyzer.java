@@ -224,7 +224,7 @@ public class MaterializedViewAnalyzer {
                 .collect(Collectors.toList());
     }
 
-    static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class MaterializedViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
             DAY,

@@ -72,7 +72,7 @@ public class SimpleQueryAnalyzer {
         new Visitor().process(node);
     }
 
-    private static class Visitor extends AstVisitor<Void, Void> {
+    private static class Visitor implements AstVisitor<Void, Void> {
         public Void process(ParseNode node) {
             return node.accept(this, null);
         }

@@ -75,7 +75,7 @@ public class AnalyzeStmtAnalyzer {
                     StatsConstants.HISTOGRAM_MCV_SIZE,
                     StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
 
-    static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class AnalyzeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

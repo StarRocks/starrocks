@@ -281,7 +281,7 @@ public class AnalyzerUtils {
         return null;
     }
 
-    private static class DBCollector extends AstVisitor<Void, Void> {
+    private static class DBCollector implements AstVisitor<Void, Void> {
         private final Map<String, Database> dbs;
         private final ConnectContext session;
 

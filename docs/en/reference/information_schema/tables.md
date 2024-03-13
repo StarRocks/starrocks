@@ -14,7 +14,7 @@ The following fields are provided in `tables`:
 | TABLE_SCHEMA    | Name of the database that stores the table.                  |
 | TABLE_NAME      | Name of the table.                                           |
 | TABLE_TYPE      | Type of the table. Valid values: `BASE TABLE` or `VIEW`.     |
-| ENGINE          | Engine type of the table. Valid values: `StarRocks`, "MySQL`, `MEMORY` or an empty string. |
+| ENGINE          | Engine type of the table. Valid values: `StarRocks`, `MySQL`, `MEMORY` or an empty string. |
 | VERSION         | Applies to a feature not available in StarRocks.             |
 | ROW_FORMAT      | Applies to a feature not available in StarRocks.             |
 | TABLE_ROWS      | Row count of the table.                                      |

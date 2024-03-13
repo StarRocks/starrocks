@@ -498,6 +498,8 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", true, 1);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
+        GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+
         checkTabletExists(tempPartitionTabletIds2.values(), true);
         checkTabletExists(Lists.newArrayList(originPartitionTabletIds2.get("p3")), true);
         checkTabletExists(Lists.newArrayList(originPartitionTabletIds2.get("p1"), originPartitionTabletIds2.get("p2")),

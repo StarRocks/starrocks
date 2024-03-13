@@ -276,7 +276,7 @@ public class ShowExecutor {
         return statement.accept(ShowExecutorVisitor.getInstance(), context);
     }
 
-    protected static class ShowExecutorVisitor extends AstVisitor<ShowResultSet, ConnectContext> {
+    protected static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
 
         private static final Logger LOG = LogManager.getLogger(ShowExecutor.ShowExecutorVisitor.class);
 

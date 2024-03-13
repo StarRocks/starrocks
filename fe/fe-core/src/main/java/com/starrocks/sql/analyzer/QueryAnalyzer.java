@@ -121,7 +121,7 @@ public class QueryAnalyzer {
         new Visitor().process(node, parent);
     }
 
-    private class Visitor extends AstVisitor<Scope, Scope> {
+    private class Visitor implements AstVisitor<Scope, Scope> {
         public Visitor() {
         }
 

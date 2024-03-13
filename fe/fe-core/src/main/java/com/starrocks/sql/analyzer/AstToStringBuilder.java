@@ -175,7 +175,7 @@ public class AstToStringBuilder {
         return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote).visit(expr);
     }
 
-    public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+    public static class AST2StringBuilderVisitor implements AstVisitor<String, Void> {
 
         // when you want to get the full string of a functionCallExpr set it true
         // when you just want to a function name as its alias set it false

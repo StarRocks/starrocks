@@ -34,7 +34,7 @@ public class ResourceAnalyzer {
         new ResourceAnalyzer.ResourceAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class ResourceAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ResourceAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

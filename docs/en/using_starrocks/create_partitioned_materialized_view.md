@@ -119,6 +119,7 @@ You can create a materialized view whose partitions correspond to the partitions
   FROM par_tbl1 
   GROUP BY datekey, k1;
   ```
+
 - If the Partitioning Key of the base table is the STRING type, you can use the [str2date](../sql-reference/sql-functions/date-time-functions/str2date.md) function to convert the date string into the DATE or DATETIME type.
 
   ```SQL

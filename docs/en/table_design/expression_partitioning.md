@@ -10,7 +10,7 @@ You only need to specify a simple partition expression (either a time function e
 
 ## Partitioning based on a time function expression
 
-If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetimes based on the loaded data and partition expression.
+If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
 
 However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
 
@@ -218,7 +218,7 @@ PROPERTIES(
 
 ### Load data into partitions
 
-During data loading, StarRocks will automatically create partitions based on the loaded data and partition rule defined bythe partition expression.
+During data loading, StarRocks will automatically create partitions based on the loaded data and partition rule defined by the partition expression.
 
 Note that if you use expression partitioning at table creation and need to use [INSERT OVERWRITE](../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) to overwrite data in a specific partition, whether the partition has been created or not, you currently need to explicitly provide an partition range in `PARTITION()`. This is different from [Range Partitioning](./Data_distribution.md#range-partitioning) or [List Partitioning](./list_partitioning.md), which allow you only to provide the partition name in `PARTITION (<partition_name>)`.
 
