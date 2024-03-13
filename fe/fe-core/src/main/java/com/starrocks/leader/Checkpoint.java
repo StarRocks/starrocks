@@ -169,7 +169,8 @@ public class Checkpoint extends FrontendDaemon {
             }
 
             String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
-                    + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir;
+                    + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir
+                    + "&for_global_state=" + belongToGlobalStateMgr;
             try {
                 MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
                 successPushedCnt++;
