@@ -810,8 +810,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request_version, sc_params.chunk_changer.get());
         } else if (sc_params.sc_sorting) {
-            status = new_tablet->updates()->reorder_from(base_tablet, request_version,
-                                                         sc_params.chunk_changer.get());
+            status = new_tablet->updates()->reorder_from(base_tablet, request_version, sc_params.chunk_changer.get());
         } else {
             status = new_tablet->updates()->link_from(base_tablet.get(), request_version);
         }
