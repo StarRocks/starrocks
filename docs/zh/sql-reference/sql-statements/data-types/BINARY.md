@@ -12,7 +12,7 @@ VARBINARY(M)
 
 自 3.0 版本起，StarRocks 支持 BINARY/VARBINARY 数据类型，用于存储二进制数据，单位为字节。
 
-支持的最大长度与 VARCHAR 类型相同，`M` 的取值范围为 1~1048576。如果未指定 `M`，默认为最大值 1048576。
+支持的最大长度与 VARCHAR 类型相同，`M` 的取值范围为 [1,1048576]。如果未指定 `M`，默认为最大值 1048576。
 
 BINARY 是 VARBINARY 的别名，用法与 VARBINARY 相同。
 
