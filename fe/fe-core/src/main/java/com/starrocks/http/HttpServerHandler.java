@@ -34,6 +34,7 @@
 
 package com.starrocks.http;
 
+import com.starrocks.common.Config;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
 import io.netty.buffer.Unpooled;
@@ -104,11 +105,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                     long latency = System.currentTimeMillis() - startTime;
                     metrics.handlingRequestsNum.increase(-1L);
                     metrics.requestHandleLatencyMs.update(latency);
-                    LOG.info("receive http request. url: {}, thread id: {}, startTime: {}, latency: {} ms",
-                            req.getRequest().uri(), Thread.currentThread().getId(), startTime, latency);
-                    LOG.info("receive http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
-                            WebUtils.sanitizeHttpReqUri(req.getRequest().uri()), Thread.currentThread().getId(),
-                            startTime, latency);
+                    if (latency >= Config.http_slow_request_threshold_ms) {
+                        LOG.warn("receive slow http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
+                                WebUtils.sanitizeHttpReqUri(req.getRequest().uri()), Thread.currentThread().getId(),
+                                startTime, latency);
+                    }
                 }
             }
         } else {
