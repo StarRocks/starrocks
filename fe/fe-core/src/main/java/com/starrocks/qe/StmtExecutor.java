@@ -1526,8 +1526,8 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
-        ShowExecutor executor = new ShowExecutor(context, (ShowStmt) parsedStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute((ShowStmt) parsedStmt, context);
         if (resultSet == null) {
             // state changed in execute
             return;
@@ -1672,8 +1672,8 @@ public class StmtExecutor {
                 com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
         ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
         showExportStmt.setQueryId(queryId);
-        ShowExecutor executor = new ShowExecutor(context, showExportStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(showExportStmt, context);
         if (resultSet == null) {
             // state changed in execute
             return;

@@ -136,36 +136,6 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    // ---------------------------------------- Show Statement ---------------------------------------------------------
-
-    default R visitShowStatement(ShowStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    default R visitShowBackendsStatement(ShowBackendsStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowBrokerStatement(ShowBrokerStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowDeleteStatement(ShowDeleteStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowFrontendsStatement(ShowFrontendsStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowTransactionStatement(ShowTransactionStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     // ---------------------------------------- Table Statement --------------------------------------------------------
 
     default R visitCreateTableStatement(CreateTableStmt statement, C context) {
@@ -544,6 +514,46 @@ public interface AstVisitor<R, C> {
 
     // ---------------------------------------- Show Statement ---------------------------------------------------------
 
+    default R visitShowStatement(ShowStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowAuthorStatement(ShowAuthorStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowBackendsStatement(ShowBackendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowBrokerStatement(ShowBrokerStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDeleteStatement(ShowDeleteStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowFrontendsStatement(ShowFrontendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTransactionStatement(ShowTransactionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitHelpStatement(HelpStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowEnginesStatement(ShowEnginesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowWarningStatement(ShowWarningStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -593,6 +603,22 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowOpenTableStatement(ShowOpenTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCollationStatement(ShowCollationStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowRepositoriesStatement(ShowRepositoriesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCharsetStatement(ShowCharsetStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowFailPointStatement(ShowFailPointStatement statement, C context) {
         return visitShowStatement(statement, context);
     }
 
