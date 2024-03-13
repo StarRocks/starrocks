@@ -64,6 +64,16 @@ public class FrontendOptionsTest {
         Assert.assertTrue(inPriorNetwork);
     }
 
+    @Test
+    public void cidrTest2() {
+        List<String> priorityCidrs = FrontendOptions.PRIORITY_CIDRS;
+        priorityCidrs.add("2408:4001:258::/48");
+
+        FrontendOptions frontendOptions = new FrontendOptions();
+        boolean inPriorNetwork = frontendOptions.isInPriorNetwork("2408:4001:258:3780:f3f4:5acd:d53d:fa23");
+        Assert.assertEquals(true, inPriorNetwork);
+    }
+
     private void mockNet() {
         new MockUp<Inet4Address>() {
             @Mock
