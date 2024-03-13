@@ -983,8 +983,8 @@ under the License.
                     <reuseForks>false</reuseForks>
 <!--                    <parallelTestsTimeoutForcedInSeconds>1</parallelTestsTimeoutForcedInSeconds>-->
 <!--                    <parallelTestsTimeoutInSeconds>1</parallelTestsTimeoutInSeconds>-->
-<!--                    <forkedProcessTimeoutInSeconds>1</forkedProcessTimeoutInSeconds>-->
-                    <forkedProcessExitTimeoutInSeconds>1</forkedProcessExitTimeoutInSeconds>
+                    <forkedProcessTimeoutInSeconds>10</forkedProcessTimeoutInSeconds>
+<!--                    <forkedProcessExitTimeoutInSeconds>5</forkedProcessExitTimeoutInSeconds>-->
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar -Xmx4096m
                         -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
