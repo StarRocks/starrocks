@@ -37,8 +37,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableForceRuleBasedMvRewrite(true);
-        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(30000000);
-        sessionVariable.setOptimizerExecuteTimeout(300000000);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"), sessionVariable);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks_dates"));
@@ -799,8 +797,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_drinks"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableForceRuleBasedMvRewrite(false);
-        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(30000000);
-        sessionVariable.setOptimizerExecuteTimeout(30000000);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_drinks"), sessionVariable);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks"));
@@ -811,8 +807,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableForceRuleBasedMvRewrite(false);
-        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(30000000);
-        sessionVariable.setOptimizerExecuteTimeout(30000000);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"), sessionVariable);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks_dates"));
@@ -823,8 +817,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableForceRuleBasedMvRewrite(false);
-        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(30000000);
-        sessionVariable.setOptimizerExecuteTimeout(30000000);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"), sessionVariable);
         Assert.assertTrue(replayPair.second,
@@ -836,8 +828,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableForceRuleBasedMvRewrite(false);
-        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(30000000);
-        sessionVariable.setOptimizerExecuteTimeout(30000000);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"));
