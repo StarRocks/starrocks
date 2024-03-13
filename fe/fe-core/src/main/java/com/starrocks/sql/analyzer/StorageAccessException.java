@@ -16,7 +16,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.starrocks.common.DdlException;
 import org.apache.commons.lang.exception.ExceptionUtils;
 
 /**
@@ -40,10 +39,8 @@ public class StorageAccessException extends RuntimeException {
             AmazonS3Exception s3Exception = (AmazonS3Exception) rootCause;
             builder.append("Error code: ").append(s3Exception.getErrorCode()).append(". ");
             builder.append("Error message: ").append(s3Exception.getErrorMessage()).append(". ");
-        } else if (rootCause instanceof DdlException) {
-            builder.append("Error message: ").append(rootCause.getMessage());
         } else {
-            builder.append("Unknown error");
+            builder.append("Error message: ").append(rootCause.getMessage());
         }
         // TODO: translate error message of other storage systems
         return builder.toString();
