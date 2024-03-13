@@ -43,6 +43,16 @@ public:
         TAG_MIGRATE,
         TAG_SIZE,
     };
+
+    struct IOStat {
+        uint64_t read_ops;
+        uint64_t read_bytes;
+        uint64_t read_time_ns;
+        uint64_t write_ops;
+        uint64_t write_bytes;
+        uint64_t write_time_ns;
+    };
+
     static const char* tag_to_string(uint32_t tag);
 
     static Status start(IOMode op);
@@ -54,40 +64,52 @@ public:
     static IOStatEntry* get_context();
     static void clear_context();
 
+    static void take_tls_io_snapshot(IOStat* snapshot);
+    static IOStat calculate_scoped_tls_io(const IOStat& snapshot);
+
     class Scope {
     public:
         Scope() = delete;
         Scope(const Scope&) = delete;
         Scope(Scope&& other) {
             _old = other._old;
+            _tls_io_snapshot = other._tls_io_snapshot;
             other._old = nullptr;
         }
         Scope(uint32_t tag, uint64_t tablet_id) {
             _old = get_context();
             set_context(tag, tablet_id);
+            take_tls_io_snapshot(&_tls_io_snapshot);
         }
         Scope(IOStatEntry* entry) {
             _old = get_context();
             set_context(entry);
+            take_tls_io_snapshot(&_tls_io_snapshot);
         }
         ~Scope() { set_context(_old); }
 
+        IOStat current_scoped_tls_io() { return calculate_scoped_tls_io(_tls_io_snapshot); }
+
     private:
         IOStatEntry* _old{nullptr};
+        // A snapshot of the thread local io stat when this scope is created
+        IOStat _tls_io_snapshot;
     };
 
     static Scope scope(uint32_t tag, uint64_t tablet_id) { return Scope(tag, tablet_id); }
     static Scope scope(IOStatEntry* entry) { return Scope(entry); }
 
-    static inline void add_read(int64_t bytes) {
-        if (_mode & IOMode::IOMODE_READ) {
-            _add_read(bytes);
+    static inline void add_read(int64_t bytes, int64_t latency_ns) {
+        _add_tls_read(bytes, latency_ns);
+        if (_context_io_mode & IOMode::IOMODE_WRITE) {
+            _add_context_write(bytes);
         }
     }
 
-    static inline void add_write(int64_t bytes) {
-        if (_mode & IOMode::IOMODE_WRITE) {
-            _add_write(bytes);
+    static inline void add_write(int64_t bytes, int64_t latency_ns) {
+        _add_tls_write(bytes, latency_ns);
+        if (_context_io_mode & IOMode::IOMODE_READ) {
+            _add_context_read(bytes);
         }
     }
 
@@ -108,10 +130,15 @@ protected:
     static StatusOr<std::vector<std::string>> get_topn_stats(size_t n,
                                                              const std::function<int64_t(const IOStatEntry&)>& func);
 
-    static void _add_read(int64_t bytes);
-    static void _add_write(int64_t bytes);
+    // Update thread local io statistics
+    static void _add_tls_read(int64_t bytes, int64_t latency_ns);
+    static void _add_tls_write(int64_t bytes, int64_t latency_ns);
 
-    static std::atomic<uint32_t> _mode;
+    // Update io statistics associated with a context, such as tag + tablet_id
+    static void _add_context_read(int64_t bytes);
+    static void _add_context_write(int64_t bytes);
+
+    static std::atomic<uint32_t> _context_io_mode;
 };
 
 } // namespace starrocks
