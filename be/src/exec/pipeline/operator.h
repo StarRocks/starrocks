@@ -156,14 +156,14 @@ public:
 
     std::string get_raw_name() const { return _name; }
 
-    const LocalRFWaitingSet& rf_waiting_set() const;
+    virtual const LocalRFWaitingSet& rf_waiting_set() const;
 
     RuntimeFilterHub* runtime_filter_hub();
 
     std::vector<ExprContext*>& runtime_in_filters();
 
-    RuntimeFilterProbeCollector* runtime_bloom_filters();
-    const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
+    virtual RuntimeFilterProbeCollector* runtime_bloom_filters();
+    virtual const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
 
     virtual int64_t global_rf_wait_timeout_ns() const;
 
