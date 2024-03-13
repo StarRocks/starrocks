@@ -1592,6 +1592,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testDecreaseNodesInPipeline() throws Exception {
         ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
@@ -1630,5 +1631,20 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertEquals(3, params2.instanceExecParams.size());
         Assert.assertEquals(1, params2.instanceExecParams.stream().map(e -> e.getHost()).collect(Collectors.toSet()).size());
         Assert.assertEquals(1, params2.perExchNumSenders.size());
+=======
+    public void testOneTabletDistinctAgg() throws Exception {
+        String sql = "select sum(id), group_concat(distinct name) from skew_table where id = 1 group by id";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: sum), group_concat(2: name, ',')\n" +
+                "  |  group by: 1: id\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(1: id)\n" +
+                "  |  group by: 1: id, 2: name\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: skew_table");
+>>>>>>> 48e7bec5b8 ([BugFix] fix incorrect argument type check (#42454))
     }
 }
