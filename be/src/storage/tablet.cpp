@@ -133,6 +133,8 @@ Status Tablet::_init_once_action() {
                          << ", version=" << version << ", res=" << st;
             return st;
         }
+        // make sure there is no dcg cache when init tablet to avoid potential unconsistent read
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*rowset);
         _rs_version_map[version] = std::move(rowset);
     }
 
@@ -149,6 +151,8 @@ Status Tablet::_init_once_action() {
                 return st;
             }
         }
+        // make sure there is no dcg cache when init tablet to avoid potential unconsistent read
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*rowset);
         _inc_rs_version_map[version] = std::move(rowset);
     }
 
@@ -1751,5 +1755,29 @@ TabletSchemaCSPtr Tablet::update_max_version_schema(const TabletSchemaCSPtr& tab
 const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {
     std::shared_lock rdlock(_schema_lock);
     return *_max_version_schema;
+}
+
+void Tablet::remove_all_delta_column_group_cache() const {
+    // Only use for non-primary key tablet
+    if (_updates != nullptr) {
+        return;
+    }
+
+    std::shared_lock rdlock(_meta_lock);
+    return remove_all_delta_column_group_cache_unlocked();
+}
+
+void Tablet::remove_all_delta_column_group_cache_unlocked() const {
+    // Only use for non-primary key tablet
+    if (_updates != nullptr) {
+        return;
+    }
+
+    for (const auto& version_rowset : _rs_version_map) {
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*version_rowset.second);
+    }
+    for (const auto& inc_version_rowset : _inc_rs_version_map) {
+        StorageEngine::instance()->clear_rowset_delta_column_group_cache(*inc_version_rowset.second);
+    }
 }
 } // namespace starrocks
