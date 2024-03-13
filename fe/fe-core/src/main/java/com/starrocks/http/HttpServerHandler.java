@@ -105,8 +105,8 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                     long latency = System.currentTimeMillis() - startTime;
                     metrics.handlingRequestsNum.increase(-1L);
                     metrics.requestHandleLatencyMs.update(latency);
-                    if (latency > Config.http_slow_request_threshold_ms) {
-                        LOG.info("receive http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
+                    if (latency >= Config.http_slow_request_threshold_ms) {
+                        LOG.warn("receive slow http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
                                 WebUtils.sanitizeHttpReqUri(req.getRequest().uri()), Thread.currentThread().getId(),
                                 startTime, latency);
                     }
