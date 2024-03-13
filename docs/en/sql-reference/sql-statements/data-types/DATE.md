@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-DATE type. The current value range is ['0000-01-01','9999-12-31'] and the default format is `YYYY-MM-DD`.
+DATE type. The value range is ['0000-01-01', '9999-12-31'] and the default format is `YYYY-MM-DD`.
 
 ## Examples
 
