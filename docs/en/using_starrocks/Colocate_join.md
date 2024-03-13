@@ -66,7 +66,7 @@ A Colocation Group belongs to a database. The name of a Colocation Group is uniq
 
 ### Delete
 
- A complete deletion is a deletion from the Recycle Bin. Normally, after a table is deleted with the `DROP TABLE` command, by default it will stay in the recycle bin for a day before being deleted). When the last table in a Group is completely deleted, the Group will also be deleted automatically.
+ A complete deletion is a deletion from the Recycle Bin. Normally, after a table is deleted with the `DROP TABLE` command, by default it will stay in the recycle bin for a day before being deleted. When the last table in a Group is completely deleted, the Group will also be deleted automatically.
 
 ### View group information
 
@@ -112,7 +112,7 @@ SHOW PROC '/colocation_group/10005.10008';
 * **BucketIndex**: Subscript of the sequence of buckets.
 * **BackendIds**: The ids of BE nodes where the bucketing data slices t are located.
 
-> Note: The above command requires AMDIN privilege. Regular users cannot access it.
+> Note: The above command requires the NODE privilege or the `cluster_admin` role. Regular users cannot access it.
 
 ### Modifying Table Group Properties
 

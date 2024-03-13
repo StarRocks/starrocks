@@ -16,12 +16,12 @@ APPROX_TOP_K(<expr> [ , <k> [ , <counter_num> ] ] )
 
 ## Arguments
 
-* `expr`: An expression of STRING, BOOLEAN, DATE, DATETIME, or numeric type.
-* `k`: An optional INTEGER literal greater than 0. If `k` is not specified, it defaults to `5`.
-    * The maximum value is `100000`
-* `counter_num`: An optional INTEGER literal greater than or equal to `k`, The larger the `counter_num` is, the more accurate the result will be. However, this also comes with increased CPU and memory costs. 
-    * The maximum value is `100000`
-    * If `counter_num` is not specified, it defaults to `max(min(2 * k, 100), 100000)`.
+- `expr`: An expression of STRING, BOOLEAN, DATE, DATETIME, or numeric type.
+- `k`: An optional INTEGER literal greater than 0. If `k` is not specified, it defaults to `5`. The maximum value is `100000`.
+- `counter_num`: An optional INTEGER literal greater than or equal to `k`, The larger the `counter_num` is, the more accurate the result will be. However, this also comes with increased CPU and memory costs.
+
+  - The maximum value is `100000`
+  - If `counter_num` is not specified, it defaults to `max(min(2 * k, 100), 100000)`.
 
 ## Returns
 

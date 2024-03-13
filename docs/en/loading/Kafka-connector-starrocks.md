@@ -63,7 +63,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 #### Run Kafka Connect in standalone mode
 
-1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and dsescriptions, see [Parameters](#Parameters).
+1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and descriptions, see [Parameters](#Parameters).
 
     ```yaml
     name=starrocks-kafka-connector
@@ -84,11 +84,10 @@ CREATE TABLE test_tbl (id INT, city STRING);
     starrocks.database.name=example_db
     sink.properties.strip_outer_array=true
     ```
-   
+
     > **NOTICE**
     >
     > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
-
 
 2. Configure and run the Kafka Connect.
 
@@ -107,8 +106,9 @@ CREATE TABLE test_tbl (id INT, city STRING);
         # The absolute path of the starrocks-kafka-connector after extraction. For example:
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
-    2. Run the Kafka Connect.
-        
+
+   2. Run the Kafka Connect.
+
         ```Bash
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
@@ -116,7 +116,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 #### Run Kafka Connect in distributed mode
 
 1. Configure and run the Kafka Connect.
-    
+
     1. Configure the Kafka Connect. In the configuration file `config/connect-distributed.properties` in the **config** directory, configure the following parameters. For more parameters and descriptions, refer to [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
 
         ```yaml
@@ -132,12 +132,13 @@ CREATE TABLE test_tbl (id INT, city STRING);
         # The absolute path of the starrocks-kafka-connector after extraction. For example:
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
+
     2. Run the Kafka Connect.
-        
+
         ```BASH
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
-    
+
 2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka connector through the REST API. For parameters and descriptions, see [Parameters](#Parameters).
 
       ```Shell
@@ -159,6 +160,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         }
       }'
       ```
+
       > **NOTICE**
       >
       > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
@@ -179,94 +181,96 @@ MySQL [example_db]> select * from test_tbl;
 +------+-------------+
 3 rows in set (0.01 sec)
 ```
+
 The data is successfully loaded when the above result is returned.
 
 ## Parameters
 
-### name                                
+### name
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: Name for this Kafka connector. It must be globally unique among all Kafka connectors within this Kafka Connect cluster. For example, starrocks-kafka-connector.
 
-### connector.class                     
+### connector.class
 
 **Required**: YES<br/>
 **Default value**: <br/>
 **Description**: Class used by this Kafka connector's sink. Set the value to `com.starrocks.connector.kafka.StarRocksSinkConnector`.
-### topics                              
+
+### topics
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: One or more topics to subscribe to, where each topic corresponds to a StarRocks table. By default, StarRocks assumes that the topic name matches the name of the StarRocks table. So StarRocks determines the target StarRocks table by using the topic name. Please choose either to fill in `topics` or `topics.regex` (below), but not both.However, if the StarRocks table name is not the same as the topic name, then use the optional `starrocks.topic2table.map` parameter (below) to specify the mapping from topic name to table name.
 
-### topics.regex                        
+### topics.regex
 
 **Required**:<br/>
 **Default value**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in  `topics.regex`or `topics` (above), but not both. <br/>
 **Description**:
 
-### starrocks.topic2table.map           
+### starrocks.topic2table.map
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: The mapping of the StarRocks table name and the topic name when the topic name is different from the StarRocks table name. The format is `<topic-1>:<table-1>,<topic-2>:<table-2>,...`.
 
-### starrocks.http.url                  
+### starrocks.http.url
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The HTTP URL of the FE in your StarRocks cluster. The format is `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>,...`. Multiple addresses are separated by commas (,). For example, `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`.
 
-### starrocks.database.name             
+### starrocks.database.name
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The name of StarRocks database.
 
-### starrocks.username                  
+### starrocks.username
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The username of your StarRocks cluster account. The user needs the [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) privilege on the StarRocks table.
 
-### starrocks.password                  
+### starrocks.password
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The password of your StarRocks cluster account.
 
-### key.converter                       
+### key.converter
 
 **Required**: NO<br/>
 **Default value**: Key converter used by Kafka Connect cluster<br/>
 **Description**: This parameter specifies the key converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the keys of Kafka data. The default key converter is the one used by Kafka Connect cluster.
 
-### value.converter                     
+### value.converter
 
 **Required**: NO<br/>
 **Default value**: Value converter used by Kafka Connect cluster<br/>
 **Description**: This parameter specifies the value converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the values of Kafka data. The default value converter is the one used by Kafka Connect cluster.
 
-### key.converter.schema.registry.url   
+### key.converter.schema.registry.url
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: Schema registry URL for the key converter.
 
-### value.converter.schema.registry.url 
+### value.converter.schema.registry.url
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: Schema registry URL for the value converter.
 
-### tasks.max                           
+### tasks.max
 
 **Required**: NO<br/>
 **Default value**: 1<br/>
 **Description**: The upper limit for the number of task threads that the Kafka connector can create, which is usually the same as the number of CPU cores on the worker nodes in the Kafka Connect cluster. You can tune this parameter to control load performance.
 
-### bufferflush.maxbytes                
+### bufferflush.maxbytes
 
 **Required**: NO<br/>
 **Default value**: 94371840(90M)<br/>

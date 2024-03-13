@@ -108,7 +108,7 @@ DISTRIBUTED BY HASH(`id`);
 
 ## Limits
 
-- List partitioning does support dynamic partitoning and creating multiple partitions at a time.
+- List partitioning does support dynamic partitioning and creating multiple partitions at a time.
 - Currently, StarRocks's [shared-data mode](../deployment/shared_data/s3.md) does not support this feature.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` statement is used to delete a partition created by using list partitioning, data in the partition is directly removed and cannot be recovered.
 - Currently you cannot [backup and restore](../administration/Backup_and_restore.md) partitions created by the list partitioning.
