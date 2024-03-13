@@ -12,7 +12,7 @@ Extracts the host section from a URL.
 ## Syntax
 
 ```haskell
-VARCHAR url_extract_host(VARACHR str)
+VARCHAR url_extract_host(VARCHAR str)
 ```
 
 ## Parameters

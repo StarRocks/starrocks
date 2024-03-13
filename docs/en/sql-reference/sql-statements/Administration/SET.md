@@ -44,7 +44,7 @@ mysql> SET GLOBAL exec_mem_limit = 2147483648;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-Example 3: Set multiple global variables. The `GLOBAL` keyword needs to be preposed for each variable.
+Example 3: Set multiple global variables. Add the `GLOBAL` keyword before each variable.
 
 ```Plain
 mysql> SET 

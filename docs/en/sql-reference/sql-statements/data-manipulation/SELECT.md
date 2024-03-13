@@ -184,9 +184,9 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 
 The various joins supported by StarRocks can be classified as equi-joins and non-equi-joins depending on the join conditions specified in the joins.
 
-| **Equi****-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
+| **Equi-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
 | -------------------------- | ------------------------------------------------------------ |
-| **Non-****equi****-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
+| **Non-equi-joins** | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |
 
 - Equi-joins
   

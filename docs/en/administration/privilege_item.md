@@ -37,7 +37,7 @@ This section describes privileges that are available on different objects.
 | --------- | ------------------------------------------------- |
 | ALTER     | Adds or deletes classifiers for a resource group. |
 | DROP      | Deletes a resource group.                         |
-| ALL       | Has all the above privileges on a resource grup.  |
+| ALL       | Has all the above privileges on a resource group.  |
 
 ### RESOURCE
 
@@ -46,7 +46,7 @@ This section describes privileges that are available on different objects.
 | USAGE     | Uses a resource.                           |
 | ALTER     | Alters a resource.                         |
 | DROP      | Deletes a resource.                        |
-| ALL       | Has all the above privileges on a resoure. |
+| ALL       | Has all the above privileges on a resource. |
 
 ### USER
 

@@ -102,7 +102,7 @@ If you do not have the permissions to operate the Ranger cluster or do not need 
 
    ![home](../assets/ranger_home.png)
 
-4. Click the plus sign (`+`) after **STARROKCS** to configure StarRocks Service.
+4. Click the plus sign (`+`) after **STARROCKS** to configure StarRocks Service.
 
    ![service detail](../assets/ranger_service_details.png)
 

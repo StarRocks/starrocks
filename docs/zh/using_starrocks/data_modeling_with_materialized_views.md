@@ -127,7 +127,7 @@ ALTER TABLE <table1> SWAP WITH <table2>;
 ALTER VIEW <view_name> AS <query>;
 
 -- 原子替换物化视图（替换两个物化视图的名字，并不修改其中数据）。
-ALTER MATERIALIZED VIWE <mv1> SWAP WITH <mv2>;
+ALTER MATERIALIZED VIEW <mv1> SWAP WITH <mv2>;
 
 -- 重新启用物化视图。
 ALTER MATERIALIZED VIEW <mv_name> ACTIVE;

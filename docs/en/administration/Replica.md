@@ -93,7 +93,7 @@ For different states, we use different methods to repair.
    * The BE where the replica is located is already offline
    * The replica is corrupted
    * The BE where the replica is located is out of connection or in the process of being taken offline
-   * The replica is in CLONE state, which is an intermediate state during clone task execution)
+   * The replica is in CLONE state, which is an intermediate state during clone task execution
    * The replica has a missing version
    * The cluster where the replica is located is incorrect
    * The BE node where the replica is located is heavily loaded
