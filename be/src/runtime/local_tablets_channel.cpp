@@ -77,6 +77,7 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
     _wait_flush_timer = ADD_CHILD_TIMER(_profile, "WaitFlushTime", "AddChunkTime");
     _wait_writer_timer = ADD_CHILD_TIMER(_profile, "WaitWriterTime", "AddChunkTime");
     _wait_replica_timer = ADD_CHILD_TIMER(_profile, "WaitReplicaTime", "AddChunkTime");
+    _wait_txn_persist_timer = ADD_CHILD_TIMER(_profile, "WaitTxnPersistTime", "AddChunkTime");
 }
 
 LocalTabletsChannel::~LocalTabletsChannel() {
@@ -387,7 +388,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                 tablets.emplace_back(std::move(tablet));
             }
         }
+        auto persist_start = watch.elapsed_time();
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
+        COUNTER_UPDATE(_wait_txn_persist_timer, watch.elapsed_time() - persist_start);
         LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
     } else if (request.wait_all_sender_close()) {
         _num_initial_senders.fetch_sub(1);

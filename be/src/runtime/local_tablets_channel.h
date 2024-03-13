@@ -246,6 +246,8 @@ private:
     RuntimeProfile::Counter* _wait_writer_timer = nullptr;
     // Accumulated time to wait for secondary replicas in add_chunk()
     RuntimeProfile::Counter* _wait_replica_timer = nullptr;
+    // Accumulated time to wait for txn persist in add_chunk()
+    RuntimeProfile::Counter* _wait_txn_persist_timer = nullptr;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
