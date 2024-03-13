@@ -995,7 +995,7 @@ under the License.
                     </excludes>
                     <parallel>suites</parallel>
                     <parallelTestsTimeoutForcedInSeconds>1</parallelTestsTimeoutForcedInSeconds>
-<!--                    <parallelTestsTimeoutInSeconds>1</parallelTestsTimeoutInSeconds>-->
+                    <parallelTestsTimeoutInSeconds>1</parallelTestsTimeoutInSeconds>
                 </configuration>
             </plugin>
 
