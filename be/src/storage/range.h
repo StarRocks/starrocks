@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "column/datum.h"
+#include "column/vectorized_fwd.h"
 #include "storage/rowset/common.h"
 #include "util/logging.h"
 
@@ -56,6 +57,8 @@ public:
     // return a new range that represent the intersection of |this| and |r|.
     Range intersection(const Range& r) const;
 
+    Range filter(const Filter* const filter) const;
+
     bool has_intersection(const Range& rhs) const { return !(_end <= rhs.begin() || rhs.end() <= _begin); }
 
     bool contains(rowid_t row) const { return row < _end; }
@@ -81,6 +84,18 @@ inline Range<T> Range<T>::intersection(const Range& r) const {
         return {};
     }
     return {std::max(_begin, r._begin), std::min(_end, r._end)};
+}
+
+template <typename T>
+inline Range<T> Range<T>::filter(const Filter* const filter) const {
+    DCHECK(span_size() == filter->size());
+    int32_t start = filter->size();
+    int32_t end = -1;
+    for (int32_t i = 0; i < filter->size(); i++) {
+        start = start > i && filter->data()[i] == 1 ? i : start;
+        end = end < i && filter->data()[i] == 1 ? i : end;
+    }
+    return start <= end ? Range<T>(_begin + start, _begin + end + 1) : Range<T>(_begin, _begin);
 }
 
 template <typename T>
