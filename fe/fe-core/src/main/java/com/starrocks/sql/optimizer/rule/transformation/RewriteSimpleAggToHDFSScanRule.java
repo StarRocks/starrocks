@@ -74,13 +74,13 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             if (tableRelationId == -1) {
                 tableRelationId = relationId;
             } else {
-                Preconditions.checkState(tableRelationId == relationId);
+                Preconditions.checkState(tableRelationId == relationId, "Table relation id is different across columns");
             }
             if (scanOperator.getPartitionColumns().contains(c.getName())) {
                 newScanColumnRefs.put(c, scanOperator.getColRefToColumnMetaMap().get(c));
             }
         }
-        Preconditions.checkState(tableRelationId != -1);
+        Preconditions.checkState(tableRelationId != -1, "Can not find table relation id in scan operator");
 
         ColumnRefOperator placeholderColumn = null;
 
