@@ -128,7 +128,6 @@ TEST(IOProfilerTest, test_profile_and_get_topn_stats) {
     IOProfiler::stop();
     ASSERT_FALSE(IOProfiler::is_empty());
     auto ret = IOProfiler::profile_and_get_topn_stats_str("all", 1, 1);
-    LOG(INFO) << ret;
     ASSERT_TRUE(IOProfiler::is_empty());
 }
 
