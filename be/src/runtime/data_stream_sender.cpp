@@ -179,7 +179,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    PInternalService_Stub* _brpc_stub = nullptr;
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
@@ -342,7 +342,7 @@ Status DataStreamSender::Channel::close_internal() {
 }
 
 void DataStreamSender::Channel::close(RuntimeState* state) {
-    state->log_error(close_internal().get_error_msg());
+    state->log_error(close_internal().message());
 }
 
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {

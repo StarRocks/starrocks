@@ -48,7 +48,7 @@ ARG MAVEN_INSTALL_HOME
 LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
 
 RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
-        libtool which git ccache binutils-devel python3 file java-1.8.0-openjdk java-1.8.0-openjdk-devel && \
+        libtool which git ccache binutils-devel python3 file java-11-openjdk java-11-openjdk-devel java-11-openjdk-jmods less psmisc && \
         yum clean all && rm -rf /var/cache/yum
 
 # install gcc
@@ -67,5 +67,5 @@ RUN mkdir -p ${MAVEN_INSTALL_HOME} && cd ${MAVEN_INSTALL_HOME} && \
 RUN ARCH=`uname -m` ; if [[ $ARCH == "aarch64" ]] ; then DOWNLOAD_URL=http://cdn-thirdparty.starrocks.com/aarch64/clang-format ; else DOWNLOAD_URL=http://cdn-thirdparty.starrocks.com/clang-format ; fi ; curl -s $DOWNLOAD_URL -o /usr/bin/clang-format && chmod +x /usr/bin/clang-format
 
 ENV STARROCKS_GCC_HOME=${GCC_INSTALL_HOME}
-ENV JAVA_HOME=/usr/lib/jvm/java
+ENV JAVA_HOME=/usr/lib/jvm/java-11
 ENV MAVEN_HOME=${MAVEN_INSTALL_HOME}

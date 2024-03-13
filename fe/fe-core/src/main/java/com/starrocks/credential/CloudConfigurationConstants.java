@@ -25,11 +25,20 @@ public class CloudConfigurationConstants {
     public static final String AWS_S3_SECRET_KEY = "aws.s3.secret_key";
     public static final String AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
     public static final String AWS_S3_IAM_ROLE_ARN = "aws.s3.iam_role_arn";
+    public static final String AWS_S3_STS_REGION = "aws.s3.sts.region";
+    public static final String AWS_S3_STS_ENDPOINT = "aws.s3.sts.endpoint";
     public static final String AWS_S3_EXTERNAL_ID = "aws.s3.external_id";
     public static final String AWS_S3_REGION = "aws.s3.region";
     public static final String AWS_S3_ENDPOINT = "aws.s3.endpoint";
 
     // Configuration for AWS s3
+    /**
+     * Storage Volume specific parameters
+     */
+    // whether enable partitioned prefix layout on s3 storage
+    public static final String AWS_S3_ENABLE_PARTITIONED_PREFIX = "aws.s3.enable_partitioned_prefix";
+    // how many partitions to be created as the prefix.
+    public static final String AWS_S3_NUM_PARTITIONED_PREFIX = "aws.s3.num_partitioned_prefix";
 
     /**
      * Enable S3 path style access ie disabling the default virtual hosting behaviour.
@@ -51,6 +60,8 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_SECRET_KEY = "aws.glue.secret_key";
     public static final String AWS_GLUE_SESSION_TOKEN = "aws.glue.session_token";
     public static final String AWS_GLUE_IAM_ROLE_ARN = "aws.glue.iam_role_arn";
+    public static final String AWS_GLUE_STS_REGION = "aws.glue.sts.region";
+    public static final String AWS_GLUE_STS_ENDPOINT = "aws.glue.sts.endpoint";
     public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
     public static final String AWS_GLUE_REGION = "aws.glue.region";
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";

@@ -21,9 +21,9 @@ import org.junit.Test;
 
 public class MaterializedViewUniqueKeySSBTest extends MaterializedViewTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
-        MaterializedViewTestBase.setUp();
+        MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 

@@ -111,6 +111,8 @@ public:
     void update_column(ColumnPtr column, SlotId slot_id);
     void update_column_by_index(ColumnPtr column, size_t idx);
 
+    void append_or_update_column(ColumnPtr column, SlotId slot_id);
+
     void update_rows(const Chunk& src, const uint32_t* indexes);
 
     void append_default();
@@ -136,6 +138,8 @@ public:
     // Must ensure the slot_id exist
     const ColumnPtr& get_column_by_slot_id(SlotId slot_id) const;
     ColumnPtr& get_column_by_slot_id(SlotId slot_id);
+
+    bool is_column_nullable(SlotId slot_id) const;
 
     void set_slot_id_to_index(SlotId slot_id, size_t idx) { _slot_id_to_index[slot_id] = idx; }
     bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
@@ -311,6 +315,10 @@ inline ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) {
     DCHECK(is_slot_exist(slot_id)) << slot_id;
     size_t idx = _slot_id_to_index[slot_id];
     return _columns[idx];
+}
+
+inline bool Chunk::is_column_nullable(SlotId slot_id) const {
+    return get_column_by_slot_id(slot_id)->is_nullable();
 }
 
 inline const ColumnPtr& Chunk::get_column_by_index(size_t idx) const {

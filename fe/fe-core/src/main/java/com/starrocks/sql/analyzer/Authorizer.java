@@ -15,15 +15,19 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.privilege.AccessControlProvider;
+import com.starrocks.privilege.AccessController;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.ObjectType;
@@ -36,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
+import org.apache.commons.collections4.ListUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -139,6 +144,13 @@ public class Authorizer {
         getInstance().getAccessControlOrDefault(catalog).checkAnyActionOnTable(currentUser, roleIds, tableName);
     }
 
+    public static void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
+                                          TableName tableName, Set<String> columns,
+                                          PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkColumnsAction(currentUser, roleIds,
+                tableName, columns, privilegeType);
+    }
+
     public static void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                        PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
@@ -172,12 +184,12 @@ public class Authorizer {
     }
 
     public static void checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                                       Table tbl) throws AccessDeniedException {
-        doCheckTableLikeObject(currentUser, roleIds, dbName, tbl, null);
+                                                       BasicTable tableBasicInfo) throws AccessDeniedException {
+        doCheckTableLikeObject(currentUser, roleIds, dbName, tableBasicInfo, null);
     }
 
     private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                               Table tbl, PrivilegeType privilegeType) throws AccessDeniedException {
+                                               BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
@@ -193,9 +205,10 @@ public class Authorizer {
             case FILE:
             case SCHEMA:
             case PAIMON:
+            case ODPS:
                 // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
-                    checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                    checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 } else {
                     checkTableAction(currentUser, roleIds, dbName, tbl.getName(), privilegeType);
                 }
@@ -279,37 +292,46 @@ public class Authorizer {
     }
 
     /**
+     * A lambda function that throws AccessDeniedException
+     */
+    @FunctionalInterface
+    public interface AccessControlChecker {
+        void check() throws AccessDeniedException;
+    }
+
+    /**
      * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
      * Currently, it's used by `show databases` or `use database`.
      */
     public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
             throws AccessDeniedException {
         Preconditions.checkNotNull(db, "db should not null");
+        AccessController controller = getInstance().getAccessControlOrDefault(catalogName);
 
-        try {
-            getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
-        } catch (AccessDeniedException e1) {
+        List<AccessControlChecker> basicCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnDb(currentUser, roleIds, catalogName, db),
+                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db)
+        );
+        List<AccessControlChecker> extraCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyFunction(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnPipe(currentUser, roleIds, new PipeName("*", "*"))
+        );
+        List<AccessControlChecker> appliedCheckers = CatalogMgr.isInternalCatalog(catalogName) ?
+                ListUtils.union(basicCheckers, extraCheckers) : basicCheckers;
+
+        AccessDeniedException lastExcepton = null;
+        for (AccessControlChecker checker : appliedCheckers) {
             try {
-                getInstance().getAccessControlOrDefault(catalogName)
-                        .checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db);
-            } catch (AccessDeniedException e2) {
-                if (CatalogMgr.isInternalCatalog(catalogName)) {
-                    try {
-                        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                .checkAnyActionOnAnyView(currentUser, roleIds, db);
-                    } catch (AccessDeniedException e3) {
-                        try {
-                            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                    .checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db);
-                        } catch (AccessDeniedException e4) {
-                            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                    .checkAnyActionOnAnyFunction(currentUser, roleIds, db);
-                        }
-                    }
-                } else {
-                    throw new AccessDeniedException();
-                }
+                checker.check();
+                return;
+            } catch (AccessDeniedException e) {
+                lastExcepton = e;
             }
+        }
+        if (lastExcepton != null) {
+            throw lastExcepton;
         }
     }
 
@@ -371,5 +393,29 @@ public class Authorizer {
     public static Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         return getInstance().getAccessControlOrDefault(catalog).getRowAccessPolicy(currentUser, tableName);
+    }
+
+    /**
+     * check privilege for `show tablet` statement
+     * if current user has 'OPERATE' privilege, it will result all the result
+     * otherwise it will only return to the user on which it has any privilege on the corresponding table
+     *
+     * @return `Pair.first` means that whether user can see this tablet, `Pair.second` means
+     * whether we need to hide the ip and port in the returned result
+     */
+    public static Pair<Boolean, Boolean> checkPrivForShowTablet(ConnectContext context, String dbName, Table table) {
+        UserIdentity currentUser = context.getCurrentUserIdentity();
+        // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+        try {
+            Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+            return new Pair<>(true, false);
+        } catch (AccessDeniedException ae) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, dbName, table);
+                return new Pair<>(true, true);
+            } catch (AccessDeniedException e) {
+                return new Pair<>(false, true);
+            }
+        }
     }
 }

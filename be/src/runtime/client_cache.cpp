@@ -111,7 +111,13 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
         _opened_clients->increment(-1);
     }
 
-    RETURN_IF_ERROR(create_client(make_network_address(ipaddress, port), factory_method, client_key, timeout_ms));
+    Status status = create_client(make_network_address(ipaddress, port), factory_method, client_key, timeout_ms);
+    if (!status.ok()) {
+        if (_metrics_enabled) {
+            _used_clients->increment(-1);
+        }
+        return status;
+    }
 
     _client_map[*client_key]->set_send_timeout(timeout_ms);
     _client_map[*client_key]->set_recv_timeout(timeout_ms);

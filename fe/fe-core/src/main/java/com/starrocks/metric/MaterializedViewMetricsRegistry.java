@@ -63,46 +63,43 @@ public class MaterializedViewMetricsRegistry {
     // collect materialized-view-level metrics
     public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null == db) {
                 continue;
             }
-            db.readLock();
-            try {
-                for (MaterializedView mv : db.getMaterializedViews()) {
-                    MaterializedViewMetricsEntity mvEntity =
-                            MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                MaterializedViewMetricsEntity mvEntity =
+                        MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
 
-                    for (Metric m : mvEntity.getMetrics()) {
-                        // minify metrics if needed
-                        if (minifyMetrics) {
-                            if (null == m.getValue()) {
-                                continue;
-                            }
-                            // GAUGE metrics is a bit heavy, skip it when in mini mode.
-                            if (Metric.MetricType.GAUGE == m.type) {
-                                continue;
-                            }
-                            if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
-                                continue;
-                            }
+                for (Metric m : mvEntity.getMetrics()) {
+                    // minify metrics if needed
+                    if (minifyMetrics) {
+                        if (null == m.getValue()) {
+                            continue;
                         }
-                        m.addLabel(new MetricLabel("db_name", dbName))
-                                .addLabel(new MetricLabel("mv_name", mv.getName()))
-                                .addLabel(new MetricLabel("mv_id", String.valueOf(mv.getId())));
-                        visitor.visit(m);
+                        if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
+                            continue;
+                        }
                     }
+                    m.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("mv_name", mv.getName()))
+                            .addLabel(new MetricLabel("mv_id", String.valueOf(mv.getId())));
+                    visitor.visit(m);
                 }
-
-                for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
-                        .metricRegistry.getHistograms().entrySet()) {
-                    visitor.visitHistogram(e.getKey(), e.getValue());
-                }
-            } finally {
-                db.readUnlock();
             }
+        }
+
+        // Histogram metrics should only output once
+        for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
+                .metricRegistry.getHistograms().entrySet()) {
+            if (minifyMetrics) {
+                if (e.getValue().getCount() == 0) {
+                    continue;
+                }
+            }
+            visitor.visitHistogram(e.getKey(), e.getValue());
         }
     }
 }

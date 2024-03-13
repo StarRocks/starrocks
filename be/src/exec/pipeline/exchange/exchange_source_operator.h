@@ -27,7 +27,7 @@ public:
     ExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
             : SourceOperator(factory, id, "exchange_source", plan_node_id, false, driver_sequence) {}
 
-    ~ExchangeSourceOperator() override = default;
+    virtual ~ExchangeSourceOperator() = default;
 
     Status prepare(RuntimeState* state) override;
 
@@ -47,18 +47,21 @@ private:
 class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     ExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, const TExchangeNode& texchange_node,
-                                  int32_t num_sender, const RowDescriptor& row_desc)
+                                  int32_t num_sender, const RowDescriptor& row_desc, bool enable_pipeline_level_shuffle)
             : SourceOperatorFactory(id, "exchange_source", plan_node_id),
               _texchange_node(texchange_node),
               _num_sender(num_sender),
-              _row_desc(row_desc) {}
+              _row_desc(row_desc),
+              _enable_pipeline_level_shuffle(enable_pipeline_level_shuffle) {}
 
-    ~ExchangeSourceOperatorFactory() override = default;
+    virtual ~ExchangeSourceOperatorFactory();
 
     const TExchangeNode& texchange_node() { return _texchange_node; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ++_stream_recvr_cnt;
+        // FIXME: it is unsafe to pass the raw `this` pointer to construct a shared_ptr object.
+        // The shared_ptr object may live longer than the object `this` pointed to.
         return std::make_shared<ExchangeSourceOperator>(this, _id, _plan_node_id, driver_sequence);
     }
 
@@ -68,12 +71,13 @@ public:
     std::shared_ptr<DataStreamRecvr> create_stream_recvr(RuntimeState* state);
     void close_stream_recvr();
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 private:
     const TExchangeNode& _texchange_node;
     const int32_t _num_sender;
     const RowDescriptor& _row_desc;
+    const bool _enable_pipeline_level_shuffle;
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
     std::atomic<int64_t> _stream_recvr_cnt = 0;
 };

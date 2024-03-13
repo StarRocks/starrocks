@@ -186,6 +186,8 @@ vectorized_functions = [
 
     [10322, "square", "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
 
+    [10330, "cbrt", "DOUBLE", ["DOUBLE"], "MathFunctions::cbrt"],
+
     # 20xxx: bit functions
     [20010, 'bitand', 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
@@ -290,11 +292,14 @@ vectorized_functions = [
     [30250, 'concat', 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::concat', 'StringFunctions::concat_prepare', 'StringFunctions::concat_close'],
 
     [30260, 'concat_ws', 'VARCHAR', ['VARCHAR', 'VARCHAR', '...'], 'StringFunctions::concat_ws'],
+    [30261, 'concat_ws', 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR'], 'ArrayFunctions::array_concat_ws'],
     [30270, 'find_in_set', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::find_in_set'],
     [30310, 'split_part', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::split_part'],
     [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
     [30312, 'substring_index', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::substring_index'],
-    [30316, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map'],
+    # v1 is deprecated
+    [30316, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map_v1'],
+    [30317, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map'],
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
@@ -326,6 +331,10 @@ vectorized_functions = [
 
     [30430, 'translate', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::translate',
      'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
+    [30431, 'crc32', 'BIGINT', ['VARCHAR'], 'StringFunctions::crc32'],
+
+    [30440, 'ngram_search', 'DOUBLE', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::ngram_search','StringFunctions::ngram_search_prepare','StringFunctions::ngram_search_close'],
+    [30441, 'ngram_search_case_insensitive', 'DOUBLE', ['VARCHAR', 'VARCHAR','INT'], 'StringFunctions::ngram_search_case_insensitive','StringFunctions::ngram_search_case_insensitive_prepare','StringFunctions::ngram_search_close'],
 
     # Binary Functions
     # to_binary
@@ -426,18 +435,19 @@ vectorized_functions = [
     [50231, 'to_days', 'INT', ['DATE'], 'TimeFunctions::to_days'],
     [50241, 'date_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
     [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
-     
+    [50245, 'milliseconds_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::milliseconds_diff'],
+
     # From string to DATE/DATETIME
     # the function will call by FE getStrToDateFunction, and is invisible to user
     [50240, 'str_to_date', 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str_to_date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
-    
+
     # Joda Time parse & format
-    [50244, 'str_to_jodatime', 'DATETIME', ['VARCHAR', 'VARCHAR'], 
-            'TimeFunctions::parse_jodatime', 
-            'TimeFunctions::parse_joda_prepare', 
+    [50244, 'str_to_jodatime', 'DATETIME', ['VARCHAR', 'VARCHAR'],
+            'TimeFunctions::parse_jodatime',
+            'TimeFunctions::parse_joda_prepare',
             'TimeFunctions::parse_joda_close'],
-            
+
     [50260, 'jodatime_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::jodadatetime_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
     [50261, 'jodatime_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::jodadate_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
 
@@ -453,6 +463,7 @@ vectorized_functions = [
     [50287, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
     [50288, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
     [50289, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    [50290, 'from_unixtime_ms', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_ms_64'],
 
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now_32'],
     [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_32'],
@@ -630,6 +641,8 @@ vectorized_functions = [
     [91000, 'sub_bitmap', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap', False],
     [91001, 'bitmap_subset_limit', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_limit', False],
     [91002, 'bitmap_subset_in_range', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_in_range', False],
+    [91003, 'bitmap_to_binary', 'VARBINARY', ['BITMAP'], 'BitmapFunctions::bitmap_to_binary', False],
+    [91004, 'bitmap_from_binary', 'BITMAP', ['VARBINARY'], 'BitmapFunctions::bitmap_from_binary', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],

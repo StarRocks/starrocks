@@ -15,15 +15,26 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableScan;
+import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+
+import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 
 public interface IcebergCatalog {
 
@@ -54,10 +65,53 @@ public interface IcebergCatalog {
         throw new StarRocksConnectorException("This catalog doesn't support dropping tables");
     }
 
+    void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException;
+
     Table getTable(String dbName, String tableName) throws StarRocksConnectorException;
 
+    default boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        try {
+            getTable(dbName, tableName);
+            return true;
+        } catch (NoSuchTableException e) {
+            return false;
+        }
+    }
+
+    default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
+        org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
+        List<String> partitionNames = Lists.newArrayList();
+
+        if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
+            return partitionNames;
+        }
+
+        TableScan tableScan = icebergTable.newScan().planWith(executorService);
+        try (CloseableIterable<FileScanTask> fileScanTaskIterable = tableScan.planFiles();
+                CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator()) {
+
+            while (fileScanTaskIterator.hasNext()) {
+                FileScanTask scanTask = fileScanTaskIterator.next();
+                StructLike partition = scanTask.file().partition();
+                partitionNames.add(convertIcebergPartitionToPartitionName(scanTask.spec(), partition));
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException(String.format("Failed to list iceberg partition names %s.%s",
+                    dbName, tableName), e);
+        }
+
+        return partitionNames;
+    }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
 
+    default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
+    }
+
+    default void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
+
+    default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
 }

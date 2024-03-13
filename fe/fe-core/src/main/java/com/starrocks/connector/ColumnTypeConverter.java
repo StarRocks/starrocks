@@ -46,10 +46,12 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.ArrayList;
@@ -497,6 +499,10 @@ public class ColumnTypeConverter {
             return ScalarType.createType(PrimitiveType.VARBINARY);
         }
 
+        public Type visit(VarBinaryType varBinaryType) {
+            return ScalarType.createType(PrimitiveType.VARBINARY);
+        }
+
         public Type visit(CharType charType) {
             return ScalarType.createCharType(charType.getLength());
         }
@@ -542,6 +548,10 @@ public class ColumnTypeConverter {
         }
 
         public Type visit(TimestampType timestampType) {
+            return ScalarType.createType(PrimitiveType.DATETIME);
+        }
+
+        public Type visit(LocalZonedTimestampType timestampType) {
             return ScalarType.createType(PrimitiveType.DATETIME);
         }
 
@@ -636,6 +646,7 @@ public class ColumnTypeConverter {
             case BINARY:
                 return Type.VARBINARY;
             case TIME:
+                return Type.TIME;
             case FIXED:
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
@@ -724,13 +735,14 @@ public class ColumnTypeConverter {
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
-            if (fromHiveTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
+            Type innerType = fromHiveType(matcher.group(1));
+            if (Type.UNKNOWN_TYPE.equals(innerType)) {
                 itemType = Type.UNKNOWN_TYPE;
             } else {
-                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)));
+                itemType = new ArrayType(innerType);
             }
         } else {
-            itemType = fromHiveType(typeStr);
+            throw new StarRocksConnectorException("Failed to get ArrayType at " + typeStr);
         }
         return itemType;
     }

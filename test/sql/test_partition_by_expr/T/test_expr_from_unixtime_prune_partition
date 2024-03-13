@@ -1,0 +1,36 @@
+-- name: test_expr_from_unixtime_prune_partition
+CREATE TABLE partition_unixtime (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_unixtime values(unix_timestamp('2021-01-04'),'1',1.1,1);
+insert into partition_unixtime values(unix_timestamp('2021-01-05'),'1',1.1,1);
+insert into partition_unixtime values(unix_timestamp('2021-01-06'),'1',1.1,1);
+select * from partition_unixtime;
+select * from partition_unixtime where create_time=1609776000;
+explain select * from partition_unixtime where create_time=1609776000;
+select * from partition_unixtime where 1609776000=create_time;
+select * from partition_unixtime where create_time>1609776000;
+
+CREATE TABLE partition_unixtime_ms (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime_ms(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_unixtime_ms values(unix_timestamp('2021-01-04')*1000,'1',1.1,1);
+insert into partition_unixtime_ms values(unix_timestamp('2021-01-05')*1000,'1',1.1,1);
+insert into partition_unixtime_ms values(unix_timestamp('2021-01-06')*1000,'1',1.1,1);
+select * from partition_unixtime_ms;
+select * from partition_unixtime_ms where create_time=1609776000000;
+explain select * from partition_unixtime_ms where create_time=1609776000000;
+select * from partition_unixtime_ms where 1609776000000=create_time;
+select * from partition_unixtime_ms where create_time>1609776000000;

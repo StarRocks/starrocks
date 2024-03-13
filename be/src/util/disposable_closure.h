@@ -17,6 +17,7 @@
 #include <google/protobuf/stubs/common.h>
 
 #include <atomic>
+#include <string_view>
 #include <utility>
 
 #include "service/brpc.h"
@@ -30,7 +31,7 @@ class MemTracker;
 template <typename T, typename C = void>
 class DisposableClosure : public google::protobuf::Closure {
 public:
-    using FailedFunc = std::function<void(const C&)>;
+    using FailedFunc = std::function<void(const C&, std::string_view)>;
     using SuccessFunc = std::function<void(const C&, const T&)>;
 
     DisposableClosure(const C& ctx) : _ctx(ctx) {}
@@ -47,9 +48,9 @@ public:
 
         try {
             if (cntl.Failed()) {
-                LOG(WARNING) << "brpc failed, error=" << berror(cntl.ErrorCode())
-                             << ", error_text=" << cntl.ErrorText();
-                _failed_handler(_ctx);
+                auto rpc_err =
+                        fmt::format("brpc failed, error={}, error_text={}", berror(cntl.ErrorCode()), cntl.ErrorText());
+                _failed_handler(_ctx, rpc_err);
             } else {
                 _success_handler(_ctx, result);
             }

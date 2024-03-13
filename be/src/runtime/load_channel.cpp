@@ -45,6 +45,7 @@
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
 #include "util/lru_cache.h"
+#include "util/starrocks_metrics.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -118,7 +119,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     }
     LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();
     response->mutable_status()->set_status_code(st.code());
-    response->mutable_status()->add_error_msgs(st.get_error_msg());
+    response->mutable_status()->add_error_msgs(std::string(st.message()));
 
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
@@ -158,6 +159,8 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
         response->mutable_status()->add_error_msgs("server not support repeated chunk");
         return;
     }
+    MonotonicStopWatch watch;
+    watch.start();
     faststring uncompressed_buffer;
     std::unique_ptr<Chunk> chunk;
     for (int i = 0; i < req.requests_size(); i++) {
@@ -181,6 +184,8 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
             return;
         }
     }
+    StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
+    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,

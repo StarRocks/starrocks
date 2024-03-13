@@ -39,8 +39,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.Expr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -64,6 +66,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -96,7 +99,7 @@ public class RangePartitionInfo extends PartitionInfo {
 
     public RangePartitionInfo(List<Column> partitionColumns) {
         super(PartitionType.RANGE);
-        this.partitionColumns = partitionColumns;
+        this.partitionColumns = Objects.requireNonNull(partitionColumns, "partitionColumns is null");
         this.isMultiColumnPartition = partitionColumns.size() > 1;
     }
 
@@ -247,17 +250,18 @@ public class RangePartitionInfo extends PartitionInfo {
         idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
     }
 
-    public void handleNewRangePartitionDescs(Map<Partition, PartitionDesc> partitionMap,
+    public void handleNewRangePartitionDescs(List<Pair<Partition, PartitionDesc>> partitionList,
                                              Set<String> existPartitionNameSet,
                                              boolean isTemp) throws DdlException {
-        for (Partition partition : partitionMap.keySet()) {
+        for (Pair<Partition, PartitionDesc> entry : partitionList) {
+            Partition partition = entry.first;
             if (!existPartitionNameSet.contains(partition.getName())) {
                 long partitionId = partition.getId();
-                SingleRangePartitionDesc desc = (SingleRangePartitionDesc) partitionMap.get(partition);
+                SingleRangePartitionDesc desc = (SingleRangePartitionDesc) entry.second;
                 Preconditions.checkArgument(desc.isAnalyzed());
                 Range<PartitionKey> range;
                 try {
-                    range = checkAndCreateRange((SingleRangePartitionDesc) partitionMap.get(partition), isTemp);
+                    range = checkAndCreateRange((SingleRangePartitionDesc) entry.second, isTemp);
                     setRangeInternal(partitionId, isTemp, range);
                 } catch (IllegalArgumentException e) {
                     // Range.closedOpen may throw this if (lower > upper)
@@ -318,6 +322,14 @@ public class RangePartitionInfo extends PartitionInfo {
         PrimitiveType type = column.getPrimitiveType();
         if (!type.isFixedPointType() && !type.isDateType()) {
             throw new AnalysisException("Column[" + column.getName() + "] type[" + type
+                    + "] cannot be a range partition key.");
+        }
+    }
+
+    public static void checkExpressionRangeColumnType(Column column, Expr expr) throws AnalysisException {
+        PrimitiveType type = column.getPrimitiveType();
+        if (!type.isFixedPointType() && !type.isDateType()) {
+            throw new AnalysisException("Expr[" + expr.toSql() + "] type[" + type
                     + "] cannot be a range partition key.");
         }
     }

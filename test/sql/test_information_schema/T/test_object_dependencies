@@ -1,0 +1,41 @@
+-- name: test_object_dependencies
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- mv on table
+create table t1 (c1 int, c2 string);
+create materialized view mv1 refresh async as select * from t1;
+select 
+    object_name,
+    object_catalog,
+    object_type,
+    ref_object_name,
+    ref_object_catalog,
+    ref_object_type
+from sys.object_dependencies where object_database = 'db_${uuid0}';
+
+-- mv on view
+create view v1 as select * from t1;
+create materialized view mv2 refresh async as select * from t1;
+select 
+    object_name,
+    object_catalog,
+    object_type,
+    ref_object_name,
+    ref_object_catalog,
+    ref_object_type
+from sys.object_dependencies where object_database = 'db_${uuid0}';
+
+-- mv on mv
+create materialized view mv3 refresh async as select * from mv2;
+select 
+    object_name,
+    object_catalog,
+    object_type,
+    ref_object_name,
+    ref_object_catalog,
+    ref_object_type
+from sys.object_dependencies where object_database = 'db_${uuid0}';
+
+drop database db_${uuid0};

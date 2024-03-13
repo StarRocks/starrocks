@@ -110,6 +110,12 @@ public class HudiMetadataTest {
     }
 
     @Test
+    public void testTableExists() {
+        boolean exists = hudiMetadata.tableExists("db1", "table1");
+        Assert.assertTrue(exists);
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         Assert.assertEquals(Lists.newArrayList("col1"), hudiMetadata.listPartitionNames("db1", "tbl1"));
     }

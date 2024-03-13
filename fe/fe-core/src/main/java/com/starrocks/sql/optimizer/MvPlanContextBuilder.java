@@ -14,27 +14,34 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
-import com.starrocks.sql.optimizer.rule.RuleType;
+
+import java.util.List;
 
 public class MvPlanContextBuilder {
-    public MvPlanContext getPlanContext(MaterializedView mv) {
+    public static List<MvPlanContext> getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-        // optimize the sql by rule and disable rule based materialized view rewrite
-        OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
-        optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
-        optimizerConfig.disableRule(RuleType.TF_PRUNE_EMPTY_SCAN);
-        // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
-        if (mv.getRefreshScheme().isSync()) {
-            optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
+
+        // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
+        // NPE in the planning.
+        ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
+
+        List<MvPlanContext> results = Lists.newArrayList();
+        try (var guard = connectContext.bindScope()) {
+            MvPlanContext contextWithoutView = mvOptimizer.optimize(mv, connectContext);
+            results.add(contextWithoutView);
+
+            // TODO: Only add context with view when view rewrite is set on.
+            if (mv.getBaseTableTypes().stream().anyMatch(type -> type == TableType.VIEW)) {
+                MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false);
+                results.add(contextWithView);
+            }
         }
-        optimizerConfig.setMVRewritePlan(true);
-        return mvOptimizer.optimize(mv, new ConnectContext(), optimizerConfig);
+        return results;
     }
 }

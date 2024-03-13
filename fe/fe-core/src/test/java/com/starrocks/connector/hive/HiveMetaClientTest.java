@@ -211,6 +211,20 @@ public class HiveMetaClientTest {
     }
 
     @Test
+    public void testTableExists(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
+        new Expectations() {
+            {
+                metaStoreClient.tableExists("hive_db", "hive_table");
+                result = true;
+            }
+        };
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+        Assert.assertTrue(client.tableExists("hive_db", "hive_table"));
+    }
+
+    @Test
     public void testForCoverage(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
         Partition partition = new Partition();
         String dbName = "hive_db";

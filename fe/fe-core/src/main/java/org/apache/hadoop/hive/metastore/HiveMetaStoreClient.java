@@ -243,6 +243,8 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             this.conf = new Configuration(conf);
         }
 
+        HadoopExt.getInstance().rewriteConfiguration(this.conf);
+
         version = MetastoreConf.getBoolVar(conf, ConfVars.HIVE_IN_TEST) ? TEST_VERSION : VERSION;
 
         uriResolverHook = loadUriResolverHook();
@@ -1043,14 +1045,22 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
 
     @Override
     public boolean tableExists(String databaseName, String tableName)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        throws MetaException, TException, UnknownDBException {
+        try {
+            Table table = getTable(databaseName, tableName);
+            return table != null;
+        } catch (UnknownDBException | NoSuchObjectException e) {
+            return false;
+        } catch (TException e) {
+            LOG.warn("Failed to check table {}.{} existence", databaseName, tableName, e);
+            throw e;
+        }
     }
 
     @Override
     public boolean tableExists(String catName, String dbName, String tableName)
-            throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        throws MetaException, TException, UnknownDBException {
+        return tableExists(dbName, tableName);
     }
 
     @Override

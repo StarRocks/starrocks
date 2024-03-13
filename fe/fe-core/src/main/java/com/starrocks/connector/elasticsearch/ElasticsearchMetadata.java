@@ -49,6 +49,11 @@ public class ElasticsearchMetadata
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.ELASTICSEARCH;
+    }
+
+    @Override
     public List<String> listDbNames() {
         return Arrays.asList(DEFAULT_DB);
     }

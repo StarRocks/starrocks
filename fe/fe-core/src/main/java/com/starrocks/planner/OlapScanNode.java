@@ -46,6 +46,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -75,6 +76,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
@@ -114,7 +116,7 @@ public class OlapScanNode extends ScanNode {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private final List<Long> selectedPartitionVersions = Lists.newArrayList();
+    private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     // The column names applied dict optimization
     // used for explain
@@ -155,6 +157,8 @@ public class OlapScanNode extends ScanNode {
     private boolean isFinalized = false;
     private boolean isSortedByKeyPerTablet = false;
     private boolean isOutputChunkByBucket = false;
+    // only used in bucket agg
+    private boolean withoutColocateRequirement = false;
     private boolean outputAscHint = true;
     private boolean sortKeyAscHint = true;
     private Optional<Boolean> partitionKeyAscHint = Optional.empty();
@@ -166,6 +170,8 @@ public class OlapScanNode extends ScanNode {
     private Map<Long, List<Long>> partitionToScanTabletMap;
     // The dict id int column ids to dict string column ids
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
+
+    private List<List<LiteralExpr>> rowStoreKeyLiterals = Lists.newArrayList();
 
     private boolean usePkIndex = false;
 
@@ -197,6 +203,14 @@ public class OlapScanNode extends ScanNode {
 
     public void setIsOutputChunkByBucket(boolean isOutputChunkByBucket) {
         this.isOutputChunkByBucket = isOutputChunkByBucket;
+    }
+
+    public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
+        this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public boolean getWithoutColocateRequirement() {
+        return this.withoutColocateRequirement;
     }
 
     public void disablePhysicalPropertyOptimize() {
@@ -395,11 +409,11 @@ public class OlapScanNode extends ScanNode {
                     expectedVersion, -1, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
-                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
-                        tabletId, expectedVersion, replicaInfos);
-                throw new UserException(
-                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
-                                replicaInfos);
+                String message = String.format("Failed to get scan range, no queryable replica found in " +
+                                "tablet=%s replica=%s schemaHash=%d version=%d",
+                        tabletId, replicaInfos, schemaHash, expectedVersion);
+                LOG.error(message);
+                throw new UserException(message);
             }
 
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
@@ -412,7 +426,11 @@ public class OlapScanNode extends ScanNode {
             internalRange.setPartition_id(partition.getId());
             internalRange.setRow_count(selectedTablet.getRowCount(0));
             if (isOutputChunkByBucket) {
-                internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                if (withoutColocateRequirement) {
+                    internalRange.setBucket_sequence((int)tabletId);
+                } else {
+                    internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                }
             }
 
             List<Replica> replicas = allQueryableReplicas;
@@ -421,7 +439,7 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -476,7 +494,11 @@ public class OlapScanNode extends ScanNode {
             internalRange.setPartition_id(physicalPartition.getId());
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
-                internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                if (withoutColocateRequirement) {
+                    internalRange.setBucket_sequence((int)tabletId);
+                } else {
+                    internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                }
             }
 
             // random shuffle List && only collect one copy
@@ -489,8 +511,6 @@ public class OlapScanNode extends ScanNode {
                 if (tablet instanceof LocalTablet) {
                     replicaInfos = ((LocalTablet) tablet).getReplicaInfos();
                 }
-                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
-                        tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
                     if (olapTable.isCloudNativeTableOrMaterializedView()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
@@ -501,9 +521,11 @@ public class OlapScanNode extends ScanNode {
                         }
                     }
                 }
-                throw new UserException(
-                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
-                                replicaInfos);
+                String message = String.format("Failed to get scan range, no queryable replica found in " +
+                                "tablet=%s replica=%s schema_hash=%d version=%d",
+                        tabletId, replicaInfos, schemaHash, visibleVersion);
+                LOG.error(message);
+                throw new UserException(message);
             }
 
             List<Replica> replicas = null;
@@ -531,7 +553,7 @@ public class OlapScanNode extends ScanNode {
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -611,7 +633,7 @@ public class OlapScanNode extends ScanNode {
     private void computeTabletInfo() throws UserException {
         long localBeId = -1;
         if (Config.enable_local_replica_selection) {
-            localBeId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+            localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
         }
         /**
          * The tablet info could be computed only once.
@@ -781,6 +803,10 @@ public class OlapScanNode extends ScanNode {
 
         if (olapTable.isMaterializedView()) {
             output.append(prefix).append("MaterializedView: true\n");
+        }
+
+        if (rowStoreKeyLiterals.size() != 0 && rowStoreKeyLiterals.get(0).size() != 0) {
+            output.append(prefix).append("Short Circuit Scan: true\n");
         }
 
         return output.toString();
@@ -1263,5 +1289,46 @@ public class OlapScanNode extends ScanNode {
     @Override
     protected boolean supportTopNRuntimeFilter() {
         return true;
+    }
+
+    @Override
+    protected boolean canEliminateNull(SlotDescriptor slot) {
+        return super.canEliminateNull(slot) ||
+                prunedPartitionPredicates.stream().anyMatch(expr -> canEliminateNull(expr, slot));
+    }
+
+    public void computePointScanRangeLocations() {
+        // must order in create table
+        List<String> keyColumns = olapTable.getKeyColumnsInOrder().stream().map(Column::getName)
+                .collect(Collectors.toList());
+        Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(conjuncts, keyColumns);
+
+        if (points.isPresent()) {
+            rowStoreKeyLiterals = points.get();
+        }
+    }
+
+    public List<List<LiteralExpr>> getRowStoreKeyLiterals() {
+        return rowStoreKeyLiterals;
+    }
+
+    // clear scan node， reduce body size
+    public void clearScanNodeForThriftBuild() {
+        sortColumn = null;
+        this.selectedIndexId = -1;
+        selectedPartitionNames.clear();
+        selectedPartitionVersions.clear();
+        result.clear();
+        scanBackendIds.clear();
+        appliedDictStringColumns.clear();
+        unUsedOutputStringColumns.clear();
+        bucketSeq2locations.clear();
+        prunedPartitionPredicates.clear();
+        selectedPartitionIds.clear();
+        hintsReplicaIds.clear();
+        tabletId2BucketSeq.clear();
+        bucketExprs.clear();
+        bucketColumns.clear();
+        rowStoreKeyLiterals = Lists.newArrayList();
     }
 }

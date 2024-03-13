@@ -19,11 +19,11 @@
 #include "common/config.h"
 #include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/current_thread.h"
 #include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 
 #ifndef BE_TEST
-#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #endif
 
@@ -244,7 +244,11 @@ inline void report_large_memory_alloc(size_t size) {
     if (size > large_memory_alloc_report_threshold && !skip_report) {
         skip_report = true; // to avoid recursive output log
         try {
-            LOG(WARNING) << "large memory alloc: " << size << " bytes, stack:\n" << starrocks::get_stack_trace();
+            auto qid = starrocks::CurrentThread::current().query_id();
+            auto fid = starrocks::CurrentThread::current().fragment_instance_id();
+            LOG(WARNING) << "large memory alloc, query_id:" << print_id(qid) << " instance: " << print_id(fid)
+                         << " acquire:" << size << " bytes, stack:\n"
+                         << starrocks::get_stack_trace();
         } catch (...) {
             // do nothing
         }
@@ -490,4 +494,13 @@ void* valloc(size_t size) __THROW ALIAS(my_valloc);
 void* pvalloc(size_t size) __THROW ALIAS(my_pvalloc);
 int posix_memalign(void** r, size_t a, size_t s) __THROW ALIAS(my_posix_memalign);
 size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
+
+// This is the bug of glibc: https://sourceware.org/bugzilla/show_bug.cgi?id=17730,
+// some version of glibc will alloc thread local storage using __libc_memalign
+// If we use jemalloc, the tls memory will be allocated by __libc_memalign and
+// then released by memalign(hooked by je_aligned_alloc), so it will crash.
+// so we will hook the __libc_memalign to avoid this BUG.
+void* __libc_memalign(size_t alignment, size_t size) {
+    return memalign(alignment, size);
+}
 }

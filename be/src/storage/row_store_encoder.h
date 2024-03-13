@@ -33,6 +33,8 @@ std::unique_ptr<Schema> create_binary_schema();
 
 class RowStoreEncoder {
 public:
+    virtual ~RowStoreEncoder() = default;
+
     virtual Status encode_chunk_to_full_row_column(const Schema& schema, const Chunk& chunk,
                                                    BinaryColumn* dest_column) = 0;
     // columns only contain value column, exclude key columns
@@ -41,11 +43,11 @@ public:
     virtual Status decode_columns_from_full_row_column(const Schema& schema, const BinaryColumn& full_row_column,
                                                        const std::vector<uint32_t>& read_column_ids,
                                                        std::vector<std::unique_ptr<Column>>* dest) = 0;
+    Status is_supported(const Schema& schema);
 
 protected:
     // simple encode not support complex type
     bool is_field_supported(const Field& f);
-    Status is_supported(const Schema& schema);
 };
 
 } // namespace starrocks

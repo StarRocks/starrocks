@@ -53,16 +53,6 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> partitionByColumns;
     private final Map<ColumnRefOperator, CallOperator> aggregations;
 
-    // When generate plan fragment, we need this info.
-    // For select count(distinct id_bigint), sum(id_int) from test_basic;
-    // In the distinct local (update serialize) agg stage:
-    // |   5:AGGREGATE (update serialize)                                                      |
-    //|   |  output: count(<slot 13>), sum(<slot 16>)                                         |
-    //|   |  group by:                                                                        |
-    // count function is update function, but sum is merge function
-    // if singleDistinctFunctionPos is -1, means no single distinct function
-    private final int singleDistinctFunctionPos;
-
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
     private final boolean isSplit;
@@ -75,12 +65,13 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean usePerBucketOptmize = false;
 
+    private boolean withoutColocateRequirement = false;
+
     private DataSkewInfo distinctColumnDataSkew = null;
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
                                          Map<ColumnRefOperator, CallOperator> aggregations,
-                                         int singleDistinctFunctionPos,
                                          boolean isSplit,
                                          long limit,
                                          ScalarOperator predicate,
@@ -90,7 +81,6 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.groupBys = groupBys;
         this.partitionByColumns = partitionByColumns;
         this.aggregations = aggregations;
-        this.singleDistinctFunctionPos = singleDistinctFunctionPos;
         this.isSplit = isSplit;
         this.limit = limit;
         this.predicate = predicate;
@@ -131,12 +121,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return partitionByColumns;
     }
 
-    public boolean hasSingleDistinct() {
-        return singleDistinctFunctionPos > -1;
-    }
-
-    public int getSingleDistinctFunctionPos() {
-        return singleDistinctFunctionPos;
+    public boolean hasRemovedDistinctFunc() {
+        return aggregations.values().stream().anyMatch(CallOperator::isRemovedDistinct);
     }
 
     public boolean isSplit() {
@@ -156,7 +142,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public String getNeededPreaggregationMode() {
         String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
-        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasSingleDistinct())) {
+        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc())) {
             mode = SessionVariableConstants.FORCE_PREAGGREGATION;
         }
         return mode;
@@ -172,6 +158,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public boolean isUsePerBucketOptmize() {
         return usePerBucketOptmize;
+    }
+
+    public boolean isWithoutColocateRequirement() {
+        return withoutColocateRequirement;
+    }
+
+    public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
+        this.withoutColocateRequirement = withoutColocateRequirement;
     }
 
     public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {

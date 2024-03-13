@@ -92,9 +92,10 @@ Status CacheLibWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
-std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
-    const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
-    return navy_stats;
+const DataCacheMetrics CacheLibWrapper::cache_metrics(int level) {
+    // not implemented
+    DataCacheMetrics metrics{};
+    return metrics;
 }
 
 Status CacheLibWrapper::write_object(const std::string& key, const void* ptr, size_t size,
@@ -115,6 +116,11 @@ Status CacheLibWrapper::shutdown() {
         _dump_cache_stats();
     }
     return Status::OK();
+}
+
+std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
+    const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
+    return navy_stats;
 }
 
 void CacheLibWrapper::_dump_cache_stats() {

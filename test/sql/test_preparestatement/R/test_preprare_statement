@@ -1,13 +1,92 @@
-k1	k2	k3	k4	k5	v6	v7	v8	v9	v10	v11
-1	1	1	1	1	1	2021-02-01	1	2021-02-01 00:00:12	1	1.00
-k1	k2	k3	k4	k5	v6	v7	v8	v9	v10	v11
-2	1	1	1	1	1	2021-02-01	1	2021-02-01 00:00:12	1	1.00
-k1	k2	k3	k4	k5	v6	v7	v8	v9	v10	v11
-1	1	1	1	1	1	2021-02-01	2	2021-02-01 00:00:12	2	1.00
-2	1	1	1	1	1	2021-02-01	1	2021-02-01 00:00:12	1	1.00
-k1	k2	k3	k4	k5	v6	v7	v8	v9	v10	v11
-1	1	1	1	1	1	2021-02-01	2	2021-02-01 00:00:12	2	1.00
-2	1	1	1	1	1	2021-02-01	1	2021-02-01 00:00:12	1	1.00
-k1  k2
-2   1
-1   1
+-- name: test_prepare_statement
+CREATE TABLE IF NOT EXISTS prepare_stmt (
+    k1 INT,
+    k2 TINYINT Default '20',
+    k3 BIGINT,
+    k4 SMALLINT  Default '4',
+    k5 varchar(10) Default 'k5',
+    v6 BOOLEAN,
+    v7 DATE Default '2000-02-02',
+    v8 VARCHAR(2048) Default 'row',
+    v9 DATETIME Default '2000-02-02 00:00:12',
+    v10 STRING NULL,
+    v11 Decimal(10,2) NULL)
+    PRIMARY KEY (k1, k2, k3, k4, k5)
+    DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
+-- result:
+[]
+-- !result
+insert into prepare_stmt values (1, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
+-- result:
+[]
+-- !result
+insert into prepare_stmt values (3, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
+-- result:
+[]
+-- !result
+PREPARE stmt1 FROM select * from prepare_stmt where k1 = ? and k2 = ?;
+-- result:
+[]
+-- !result
+PREPARE stmt2 FROM 'select * from prepare_stmt order by k1';
+-- result:
+[]
+-- !result
+PREPARE stmt3 FROM select * from prepare_stmt order by k1;
+-- result:
+[]
+-- !result
+set @i = 1;
+-- result:
+[]
+-- !result
+set @i2 = 2;
+-- result:
+[]
+-- !result
+set @i3 = 3;
+-- result:
+[]
+-- !result
+set @v = '1';
+-- result:
+[]
+-- !result
+set @v2 = '2';
+-- result:
+[]
+-- !result
+set @b = true;
+-- result:
+[]
+-- !result
+set @t = '2021-02-01 00:00:12';
+-- result:
+[]
+-- !result
+execute stmt1 using @i, @i2;
+-- result:
+1	2	3	4	2	1	2021-02-01	1	2021-02-01 00:00:12	1	2.00
+-- !result
+execute stmt1 using @i3, @i2;
+-- result:
+3	2	3	4	2	1	2021-02-01	1	2021-02-01 00:00:12	1	2.00
+-- !result
+execute stmt2;
+-- result:
+1	2	3	4	2	1	2021-02-01	1	2021-02-01 00:00:12	1	2.00
+3	2	3	4	2	1	2021-02-01	1	2021-02-01 00:00:12	1	2.00
+-- !result
+drop prepare stmt1;
+-- result:
+[]
+-- !result
+deallocate prepare stmt2; -- deallocate is alias
+drop prepare stmt3;
+-- result:
+[]
+-- !result
+DROP TABLE prepare_stmt FORCE;
+-- result:
+[]
+-- !result

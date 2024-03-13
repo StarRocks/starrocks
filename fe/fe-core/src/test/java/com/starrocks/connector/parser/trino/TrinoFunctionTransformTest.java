@@ -75,12 +75,25 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice([1,2,3,4], 2, 2)");
+
+        sql = "select contains_sequence(array[1,2,3], array[1,2])";
+        assertPlanContains(sql, "array_contains_seq([1,2,3], [1,2])");
+
+        sql = "select concat_ws('_', array['1','2','3'])";
+        assertPlanContains(sql, "concat_ws('_', ['1','2','3'])");
+
+        sql = "select concat_ws('|', array_agg(event_type)) from "
+            + "(select 1 as event_type union all select 1 as event_type union all select 2 as event_type)";
+        assertPlanContains(sql, "concat_ws('|', CAST(8: array_agg AS ARRAY<VARCHAR>))");
+
+        sql = "select concat_ws('.', 5,6,'s',8,9,10)";
+        assertPlanContains(sql, "'5.6.s.8.9.10'");
     }
 
     @Test
     public void testArrayFnWithLambdaExpr() throws Exception {
         String sql = "select filter(array[], x -> true);";
-        assertPlanContains(sql, "array_filter([], array_map(<slot 2> -> TRUE, []))");
+        assertPlanContains(sql, "array_filter(CAST([] AS ARRAY<BOOLEAN>), array_map(<slot 2> -> TRUE, []))");
 
         sql = "select filter(array[5, -6, NULL, 7], x -> x > 0);";
         assertPlanContains(sql, " array_filter([5,-6,NULL,7], array_map(<slot 2> -> <slot 2> > 0, [5,-6,NULL,7]))");
@@ -96,6 +109,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     public void testDateFnTransform() throws Exception {
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
+
+        sql = "select to_unixtime(cast('2023-12-05 23:28:46' as timestamp) at time zone 'Asia/Shanghai')";
+        analyzeFail(sql, "Time zone is not supported");
 
         sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
         assertPlanContains(sql, "2022-10-20 05:00:00");
@@ -151,6 +167,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
         assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
 
+        sql = "select to_char(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss');";
+        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+
         sql = "select parse_datetime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')";
         assertPlanContains(sql, "str_to_jodatime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')");
 
@@ -168,6 +187,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select date_diff('month', timestamp '2023-07-31')";
         analyzeFail(sql, "date_diff function must have 3 arguments");
+
+        sql = "select to_date('2022-02-02', 'yyyy-mm-dd')";
+        assertPlanContains(sql, "to_tera_date('2022-02-02', 'yyyy-mm-dd')");
+
+        sql = "select to_timestamp('2022-02-02', 'yyyy-mm-dd')";
+        assertPlanContains(sql, " to_tera_timestamp('2022-02-02', 'yyyy-mm-dd')");
     }
 
     @Test
@@ -185,7 +210,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "2014-03-08 10:00:00");
 
         sql = "select date_add('week', 1, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "weeks_add('2014-03-08 09:00:00', 1)");
+        assertPlanContains(sql, "2014-03-15 09:00:00");
 
         sql = "select date_add('month', 1, TIMESTAMP '2014-03-08 09:00:00');";
         assertPlanContains(sql, "'2014-04-08 09:00:00'");
@@ -215,16 +240,16 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "years_add(8: th, 2)");
 
         sql = "select date_add('quarter', 2, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', 2)");
+        assertPlanContains(sql, "2014-09-08 09:00:00");
 
         sql = "select date_add('quarter', -1, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', -1)");
+        assertPlanContains(sql, "2013-12-08 09:00:00");
 
         sql = "select date_add('millisecond', 20, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', 20)");
+        assertPlanContains(sql, "2014-03-08 09:00:00.020000");
 
         sql = "select date_add('millisecond', -100, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', -100)");
+        assertPlanContains(sql, "2014-03-08 08:59:59.900000");
     }
 
     @Test
@@ -255,6 +280,21 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "SELECT str_to_map('a:1,b:2,c:null');";
         assertPlanContains(sql, "str_to_map(split('a:1,b:2,c:null', ','), ':')");
+
+        sql = "SELECT replace('hello-world', '-');";
+        assertPlanContains(sql, "replace('hello-world', '-', '')");
+
+        sql = "SELECT replace('hello-world', '-', '$');";
+        assertPlanContains(sql, "replace('hello-world', '-', '$')");
+
+        sql = "select index('hello', 'l')";
+        assertPlanContains(sql, "instr('hello', 'l')");
+    }
+
+    @Test
+    public void testURLFnTransform() throws Exception {
+        String sql = "select url_extract_path('https://www.starrocks.io/showcase?query=1')";
+        assertPlanContains(sql, "parse_url('https://www.starrocks.io/showcase?query=1', 'PATH')");
     }
 
     @Test
@@ -266,10 +306,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "parse_json('{\"a\": {\"b\": 1}}')");
 
         sql = "select json_extract(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b')";
-        assertPlanContains(sql, "json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
+        assertPlanContains(sql, "get_json_string(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
 
         sql = "select json_extract(JSON '{\"a\": {\"b\": 1}}', '$.a.b');";
-        assertPlanContains(sql, "json_query(CAST('{\"a\": {\"b\": 1}}' AS JSON), '$.a.b')");
+        assertPlanContains(sql, "get_json_string('{\"a\": {\"b\": 1}}', '$.a.b')");
 
         sql = "select json_format(JSON '[1, 2, 3]')";
         assertPlanContains(sql, "'[1, 2, 3]'");
@@ -340,6 +380,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select sha256(tk) from tall";
         assertPlanContains(sql, "sha2(from_binary(11: tk, 'utf8'), 256)");
         System.out.println(getFragmentPlan(sql));
+
+        sql = "select from_hex(hex('starrocks'))";
+        assertPlanContains(sql, "hex_decode_binary(hex('starrocks'))");
     }
 
     @Test
@@ -366,4 +409,39 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
     }
 
+    @Test
+    public void testIsNullFunction() throws Exception {
+        String sql = "select isnull(1)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull(null)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnull(1, 2)";
+        analyzeFail(sql, "isnull function must have 1 argument");
+
+        sql = "select isnotnull(1)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull(null)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnotnull(1, 2)";
+        analyzeFail(sql, "isnotnull function must have 1 argument");
+    }
+
+    @Test
+    public void testUtilityFunction() throws Exception {
+        String sql = "select current_catalog";
+        assertPlanContains(sql, "<slot 2> : CATALOG()");
+
+        sql = "select current_schema";
+        assertPlanContains(sql, "<slot 2> : 'test'");
+    }
 }

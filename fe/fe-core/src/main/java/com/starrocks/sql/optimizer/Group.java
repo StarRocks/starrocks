@@ -22,7 +22,9 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -383,4 +385,28 @@ public class Group {
         return sb.toString();
     }
 
+    public boolean hasMVGroupExpression() {
+        return logicalExpressions.stream().anyMatch(x -> x.hasAppliedMVRules()) ||
+                physicalExpressions.stream().anyMatch(x -> x.hasAppliedMVRules());
+    }
+
+    /**
+     * When the group expression is derived from mv-rewrite rules and force rewrite is on,
+     * force set all existed group expressions by set max cost.
+     */
+    public void forceChooseMVExpression(TaskContext taskContext) {
+        boolean hasInvalid = false;
+        for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : lowestCostExpressions
+                .entrySet()) {
+            GroupExpression groupExpression = entry.getValue().second;
+            if (groupExpression.hasAppliedMVRules()) {
+                continue;
+            }
+            lowestCostExpressions.put(entry.getKey(), Pair.create(CostModel.MAX_COST, groupExpression));
+            hasInvalid = true;
+        }
+        if (hasInvalid) {
+            taskContext.setUpperBoundCost(CostModel.MAX_COST);
+        }
+    }
 }

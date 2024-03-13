@@ -43,13 +43,9 @@
 
 namespace starrocks {
 
-// data and index page size, default is 64k
-static const size_t OLAP_PAGE_SIZE = 65536;
-
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
-// the max length supported for varchar type
-static const uint32_t OLAP_STRING_MAX_LENGTH = 1048576;
+uint32_t get_olap_string_max_length();
 
 // the max bytes for stored string length
 using StringLengthType = uint16_t;
@@ -74,6 +70,7 @@ static const std::string REJECTED_RECORD_PREFIX = "/rejected_record"; // NOLINT
 static const std::string CLONE_PREFIX = "/clone";                     // NOLINT
 static const std::string TMP_PREFIX = "/tmp";                         // NOLINT
 static const std::string PERSISTENT_INDEX_PREFIX = "/persistent";     // NOLINT
+static const std::string REPLICATION_PREFIX = "/replication";         // NOLINT
 
 static const int32_t OLAP_DATA_VERSION_APPLIED = STARROCKS_V1;
 

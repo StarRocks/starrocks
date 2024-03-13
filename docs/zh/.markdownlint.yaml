@@ -1,0 +1,8 @@
+{
+  "default": true,
+  "MD013": false,
+  "MD024": {"allow_different_nesting": true},
+  "MD033": false,
+  "MD036": false,
+  "MD051": false
+}

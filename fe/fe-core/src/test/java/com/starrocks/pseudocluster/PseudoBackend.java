@@ -34,6 +34,8 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
@@ -45,10 +47,13 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -85,6 +90,7 @@ import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
+import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
@@ -102,6 +108,7 @@ import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TCancelPlanFragmentParams;
 import com.starrocks.thrift.TCancelPlanFragmentResult;
 import com.starrocks.thrift.TCloneReq;
+import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDeleteEtlFilesRequest;
@@ -472,7 +479,6 @@ public class PseudoBackend {
         request.setTablets(tabletManager.getAllTabletInfo());
         request.setTablet_max_compaction_score(100);
         request.setBackend(tBackend);
-        reportVersion.incrementAndGet();
         request.setReport_version(reportVersion.get());
         try {
             if (!shutdown) {
@@ -573,7 +579,15 @@ public class PseudoBackend {
         if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             lakeTabletManager.createTablet(request.create_tablet_req);
         } else {
-            tabletManager.createTablet(request.create_tablet_req);
+            TCreateTabletReq createTabletReq = request.create_tablet_req;
+            tabletManager.createTablet(createTabletReq);
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setPath_hash(PATH_HASH);
+            tabletInfo.setData_size(0);
+            tabletInfo.setTablet_id(createTabletReq.tablet_id);
+            tabletInfo.setSchema_hash(createTabletReq.tablet_schema.schema_hash);
+            tabletInfo.setVersion(createTabletReq.version);
+            finish.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
         }
     }
 
@@ -608,10 +622,10 @@ public class PseudoBackend {
         if (destTablet == null) {
             destTablet = new Tablet(task.tablet_id, srcTablet.tableId, srcTablet.partitionId, srcTablet.schemaHash,
                     srcTablet.enablePersistentIndex);
-            destTablet.fullCloneFrom(srcTablet, srcBackend.getId());
+            destTablet.fullCloneFrom(srcTablet, srcBackend.getId(), getId());
             tabletManager.addClonedTablet(destTablet);
         } else {
-            destTablet.cloneFrom(srcTablet, srcBackend.getId());
+            destTablet.cloneFrom(srcTablet, srcBackend.getId(), getId());
         }
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
@@ -661,8 +675,6 @@ public class PseudoBackend {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
                 request.getTask_type(), request.getSignature(),
                 new TStatus(TStatusCode.OK));
-        long v = reportVersion.incrementAndGet();
-        finishTaskRequest.setReport_version(v);
         try {
             switch (finishTaskRequest.task_type) {
                 case CREATE:
@@ -691,6 +703,8 @@ public class PseudoBackend {
             finishTaskRequest.setTask_status(toStatus(e));
         }
         try {
+            long v = reportVersion.incrementAndGet();
+            finishTaskRequest.setReport_version(v);
             frontendService.finishTask(finishTaskRequest);
         } catch (TException e) {
             LOG.warn("error call finishTask", e);
@@ -1031,6 +1045,11 @@ public class PseudoBackend {
         }
 
         @Override
+        public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
+            return null;
+        }
+
+        @Override
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             ExecuteCommandResultPB result = new ExecuteCommandResultPB();
             StatusPB pStatus = new StatusPB();
@@ -1055,6 +1074,11 @@ public class PseudoBackend {
         public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
             return null;
         }
+
+        @Override
+        public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
+            return null;
+        }
     }
 
     private class PseudoLakeService implements LakeService {
@@ -1075,6 +1099,11 @@ public class PseudoBackend {
 
         @Override
         public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request) {
             return CompletableFuture.completedFuture(null);
         }
 

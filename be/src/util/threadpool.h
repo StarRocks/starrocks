@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <atomic>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/list_hook.hpp>
@@ -48,6 +50,10 @@
 
 #include "common/status.h"
 #include "gutil/ref_counted.h"
+#include "util/bthreads/semaphore.h"
+// resolve `barrier` macro conflicts with boost/thread.hpp header file
+#undef barrier
+#include "util/metrics.h"
 #include "util/monotime.h"
 #include "util/priority_queue.h"
 
@@ -241,6 +247,14 @@ public:
         return _active_threads;
     }
 
+    int max_threads() const { return _max_threads.load(std::memory_order_acquire); }
+
+    int64_t total_executed_tasks() const { return _total_executed_tasks.value(); }
+
+    int64_t total_pending_time_ns() const { return _total_pending_time_ns.value(); }
+
+    int64_t total_execute_time_ns() const { return _total_execute_time_ns.value(); }
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
@@ -365,6 +379,15 @@ private:
     // ExecutionMode::CONCURRENT token used by the pool for tokenless submission.
     std::unique_ptr<ThreadPoolToken> _tokenless;
 
+    // Total number of tasks that have finished
+    CoreLocalCounter<int64_t> _total_executed_tasks{MetricUnit::NOUNIT};
+
+    // Total time in nanoseconds that tasks pending in the queue.
+    CoreLocalCounter<int64_t> _total_pending_time_ns{MetricUnit::NOUNIT};
+
+    // Total time in nanoseconds to execute tasks.
+    CoreLocalCounter<int64_t> _total_execute_time_ns{MetricUnit::NOUNIT};
+
     ThreadPool(const ThreadPool&) = delete;
     const ThreadPool& operator=(const ThreadPool&) = delete;
 };
@@ -477,6 +500,38 @@ private:
 
     ThreadPoolToken(const ThreadPoolToken&) = delete;
     const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
+};
+
+// A class use to limit the number of tasks submitted to the thread pool.
+class ConcurrencyLimitedThreadPoolToken {
+public:
+    explicit ConcurrencyLimitedThreadPoolToken(ThreadPool* pool, int max_concurrency)
+            : _pool(pool), _sem(std::make_shared<bthreads::CountingSemaphore<>>(max_concurrency)) {}
+
+    DISALLOW_COPY_AND_MOVE(ConcurrencyLimitedThreadPoolToken);
+
+    Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
+        if (!_sem->try_acquire_until(deadline)) {
+            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
+            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
+        }
+        auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
+            task();
+            // The `ConcurrencyLimitedThreadPoolToken` object may have been destroyed
+            // before `release()` the semaphore, so we use `std::shared_ptr` to manage
+            // the semaphore to ensure it's still alive when calling `release()`.
+            sem->release();
+        };
+        auto st = _pool->submit_func(std::move(task_with_semaphore_release));
+        if (!st.ok()) {
+            _sem->release();
+        }
+        return st;
+    }
+
+private:
+    ThreadPool* _pool;
+    std::shared_ptr<bthreads::CountingSemaphore<>> _sem;
 };
 
 } // namespace starrocks

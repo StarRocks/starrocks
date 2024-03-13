@@ -51,4 +51,20 @@ private:
     DeferFunction _func;
 };
 
+template <class DeferFunction>
+class CancelableDefer {
+public:
+    CancelableDefer(DeferFunction func) : _func(std::move(func)) {}
+    ~CancelableDefer() noexcept {
+        if (!_cancel) {
+            (void)_func();
+        }
+    }
+    void cancel() { _cancel = true; }
+
+private:
+    bool _cancel{};
+    DeferFunction _func;
+};
+
 } // namespace starrocks

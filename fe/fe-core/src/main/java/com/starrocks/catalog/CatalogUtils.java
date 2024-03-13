@@ -23,6 +23,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -96,7 +98,8 @@ public class CatalogUtils {
             return;
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -106,7 +109,7 @@ public class CatalogUtils {
                 throw new AnalysisException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -306,21 +309,39 @@ public class CatalogUtils {
         }
     }
 
-    public static int calPhysicalPartitionBucketNum() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
-
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+    public static int divisibleBucketNum(int backendNum) {
+        while (backendNum > 7) {
+            if (backendNum % 2 == 0) {
+                backendNum = backendNum / 2;
+            } else if (backendNum % 3 == 0) {
+                backendNum = backendNum / 3;
+            } else if (backendNum % 5 == 0) {
+                backendNum = backendNum / 5;
+            } else if (backendNum % 7 == 0) {
+                backendNum = backendNum / 7;
+            } else {
+                backendNum = backendNum / 2;
+            }
         }
 
-        return Math.min(backendNum, 16);
+        return backendNum;
+    }
+
+    public static int calPhysicalPartitionBucketNum() {
+        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
+
+        if (RunMode.isSharedDataMode()) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+        }
+
+        return divisibleBucketNum(backendNum);
     }
 
     public static int calBucketNumAccordingToBackends() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        if (RunMode.isSharedDataMode()) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
         }
 
         // When POC, the backends is not greater than three most of the time.

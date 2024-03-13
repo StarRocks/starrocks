@@ -1,0 +1,62 @@
+
+StarRocks Stream Load and curl take many arguments. Only the ones used in this tutorial are described here, the rest will be linked to in the more information section.
+
+#### `--location-trusted`
+
+This configures curl to pass credentials to any redirected URLs.
+
+#### `-u root`
+
+The username used to log in to StarRocks
+
+#### `-T filename`
+
+T is for transfer, the filename to transfer.
+
+#### `label:name-num`
+
+The label to associate with this Stream Load job. The label must be unique, so if you run the job multiple times you can add a number and keep incrementing that.
+
+#### `column_separator:,`
+
+If you load a file that uses a single `,` then set it as shown above, if you use a different delimiter then set that delimiter here. Common choices are `\t`, `,`, and `|`.
+
+#### `skip_header:1`
+
+Some CSV files have a single header row with all of the column names listed, and some add a second line with datatypes. Set skip_header to `1` or `2` if you have one or two header lines, and set it to `0` if you have none.
+
+#### `enclose:\"`
+
+It is common to enclose strings that contain embedded commas with double-quotes. The sample datasets used in this tutorial have geo locations that contain commas and so the enclose setting is set to `\"`. Remember to escape the `"` with a `\`.
+
+#### `max_filter_ratio:1`
+
+This allows some errors in the data. Ideally this would be set to `0` and the job would fail with any errors. It is set to `1` to allow all rows to fail during debugging.
+
+#### `columns:`
+
+The mapping of CSV file columns to StarRocks table columns. You will notice that there are many more columns in the CSV files than columns in the table. Any columns that are not included in the table are skipped.
+
+You will also notice that there is some transformation of data included in the `columns:` line for the crash dataset. It is very common to find dates and times in CSV files that do not conform to standards. This is the logic for converting the CSV data for the time and date of the crash to a DATETIME type:
+
+##### The columns line
+
+This is the beginning of one data record. The date is in `MM/DD/YYYY` format, and the time is `HH:MI`. Since DATETIME is generally `YYYY-MM-DD HH:MI:SS` we need to transform this data.
+
+```plaintext
+08/05/2014,9:10,BRONX,10469,40.8733019,-73.8536375,"(40.8733019, -73.8536375)",
+```
+
+This is the beginning of the `columns:` parameter:
+
+```bash
+-H "columns:tmp_CRASH_DATE, tmp_CRASH_TIME, CRASH_DATE=str_to_date(concat_ws(' ', tmp_CRASH_DATE, tmp_CRASH_TIME), '%m/%d/%Y %H:%i')
+```
+
+This instructs StarRocks to:
+- Assign the content of the first column of the CSV file to `tmp_CRASH_DATE`
+- Assign the content of the second column of the CSV file to `tmp_CRASH_TIME`
+- `concat_ws()` concatenates `tmp_CRASH_DATE` and `tmp_CRASH_TIME` together with a space between them
+- `str_to_date()` creates a DATETIME from the concatenated string
+- store the resulting DATETIME in the column `CRASH_DATE`
+

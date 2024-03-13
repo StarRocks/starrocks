@@ -205,6 +205,37 @@ std::vector<std::string> Schema::field_names() const {
     return names;
 }
 
+// without _row
+std::vector<std::string> Schema::value_field_names() const {
+    std::vector<std::string> names;
+    for (const auto& field : _fields) {
+        if (!field->is_key() && Schema::FULL_ROW_COLUMN != field->name()) {
+            names.emplace_back(field->name());
+        }
+    }
+    return names;
+}
+
+std::vector<ColumnId> Schema::value_field_column_ids() const {
+    std::vector<ColumnId> column_ids;
+    for (const auto& field : _fields) {
+        if (!field->is_key() && Schema::FULL_ROW_COLUMN != field->name()) {
+            column_ids.emplace_back(field->id());
+        }
+    }
+    return column_ids;
+}
+
+std::vector<ColumnId> Schema::field_column_ids(bool use_rowstore) const {
+    std::vector<ColumnId> column_ids;
+    for (const auto& field : _fields) {
+        if (use_rowstore || Schema::FULL_ROW_COLUMN != field->name()) {
+            column_ids.emplace_back(field->id());
+        }
+    }
+    return column_ids;
+}
+
 FieldPtr Schema::get_field_by_name(const std::string& name) const {
     size_t idx = get_field_index_by_name(name);
     return idx == -1 ? nullptr : _fields[idx];

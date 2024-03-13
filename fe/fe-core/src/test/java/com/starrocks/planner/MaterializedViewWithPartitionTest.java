@@ -21,8 +21,8 @@ import org.junit.Test;
 public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase {
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        MaterializedViewTestBase.setUp();
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
@@ -144,7 +144,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
     // mv's partition columns is the same with the base table, mv table has no partition filter.
     @Test
     public void testPartitionPrune_SingleTable3() throws Exception {
-        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
 
         String partial_mv_6 = "create materialized view partial_mv_6" +
                 " partition by c3" +
@@ -175,10 +176,11 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=5/5");
 
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
-                .contains("PREDICATES: 2: c2 < 3000\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part");
-
+                .contains("partial_mv_6")
+                .contains("TABLE: test_base_part\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 9: c2 < 3000, 9: c2 >= 2000\n" +
+                        "     partitions=5/5");
         // test query delta
         sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
                 .contains("partial_mv_6")
@@ -190,12 +192,14 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=6/6");
 
         starRocksAssert.dropMaterializedView("partial_mv_6");
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
     }
 
     // MV has multi tables and partition columns.
     @Test
     public void testPartitionPrune_MultiTables1() throws Exception {
-        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
 
         // test partition prune
         String partial_mv_6 = "create materialized view partial_mv_6" +
@@ -259,30 +263,19 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=6/6");
 
-        // test union all
         // TODO: MV can be rewritten but cannot bingo(because cost?)!
-        /*
+        // test union all
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
                         " where t1.c3 < 3000")
-                .contains("TABLE: test_base_part\n" +
+                .contains("UNION")
+                .contains("7:OlapScanNode\n" +
+                        "     TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 3: c3 < 3000\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=10/10")
-                .contains("OlapScanNode\n" +
-                        "     TABLE: test_base_part2\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c3 < 3000\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part2\n" +
-                        "     tabletRatio=10/10");
-
-
-         */
+                        "     partitions=4/5");
         sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
@@ -296,6 +289,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     PREDICATES: 15: c1 IS NOT NULL, 16: c3 IS NOT NULL\n" +
                         "     partitions=1/5");
 
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
         starRocksAssert.dropMaterializedView("partial_mv_6");
     }
 
@@ -303,7 +298,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
     @Test
     public void testPartitionPrune_MultiTables2() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         // test partition prune
         String partial_mv_6 = "create materialized view partial_mv_6" +
                 " distributed by hash(c1) as" +
@@ -359,32 +354,20 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=1/1");
 
         // test union all
-        // TODO: MV can be rewritten but cannot bingo(because cost?)!
-        /*
-        sql(
-                " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
-                        " inner join test_base_part2 t2 \n" +
-                        " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
-                        " where t1.c3 < 3000")
-                .contains("TABLE: test_base_part\n" +
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        sql(" select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
+                " inner join test_base_part2 t2 \n" +
+                " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
+                " where t1.c3 < 3000")
+                .contains("UNION")
+                .contains("7:OlapScanNode\n" +
+                        "     TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 3: c3 < 3000\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=10/10")
-                .contains("TABLE: test_base_part2\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c3 < 3000\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: test_base_part2\n" +
-                        "     tabletRatio=10/10");
+                        "     partitions=1/1");
 
-         */
-
-        sql(
-                " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
-                        " inner join test_base_part2 t2 \n" +
-                        " on t1.c1=t2.c1 and t1.c3=t2.c3 ")
+        sql(" select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
+                " inner join test_base_part2 t2 \n" +
+                " on t1.c1=t2.c1 and t1.c3=t2.c3 ")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 15: c1 IS NOT NULL, 16: c3 IS NOT NULL\n" +
@@ -395,6 +378,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     PREDICATES: 19: c1 IS NOT NULL, 21: c3 IS NOT NULL\n" +
                         "     partitions=1/5");
 
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
         starRocksAssert.dropMaterializedView("partial_mv_6");
     }
 

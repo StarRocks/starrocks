@@ -22,15 +22,17 @@ const i64 IS_SET_DEFAULT_ROWSET_TO_BETA_BIT = 0x01;
 
 struct TMasterInfo {
     1: required Types.TNetworkAddress network_address
-    2: required Types.TClusterId cluster_id
+    2: optional Types.TClusterId cluster_id     //deprecated
     3: required Types.TEpoch epoch
     4: optional string token 
     5: optional string backend_ip
     6: optional Types.TPort http_port
     7: optional i64 heartbeat_flags
     8: optional i64 backend_id
-    // 9: optional i64 min_active_txn_id = 0
+    9: optional i64 min_active_txn_id = 0
     10: optional Types.TRunMode run_mode
+    11: optional list<string> disabled_disks
+    12: optional list<string> decommissioned_disks
 }
 
 struct TBackendInfo {

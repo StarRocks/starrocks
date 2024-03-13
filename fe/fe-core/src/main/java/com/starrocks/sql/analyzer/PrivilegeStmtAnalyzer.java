@@ -75,7 +75,7 @@ public class PrivilegeStmtAnalyzer {
         new PrivilegeStatementAnalyzerVisitor().analyze(statement, session);
     }
 
-    static class PrivilegeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class PrivilegeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         private AuthenticationMgr authenticationManager = null;
         private AuthorizationMgr authorizationManager = null;
 
@@ -116,14 +116,10 @@ public class PrivilegeStmtAnalyzer {
             if (Strings.isNullOrEmpty(originalPassword)) {
                 return MysqlPassword.EMPTY_PASSWORD;
             }
-            try {
-                if (isPasswordPlain) {
-                    return MysqlPassword.makeScrambledPassword(originalPassword);
-                } else {
-                    return MysqlPassword.checkPassword(originalPassword);
-                }
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+            if (isPasswordPlain) {
+                return MysqlPassword.makeScrambledPassword(originalPassword);
+            } else {
+                return MysqlPassword.checkPassword(originalPassword);
             }
         }
 

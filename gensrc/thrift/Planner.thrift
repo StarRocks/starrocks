@@ -98,6 +98,7 @@ struct TPlanFragment {
   // For insert into table select * from table, we need to distinguish the global dicts for query and load
   21: optional list<Data.TGlobalDict> load_global_dicts
   22: optional TCacheParam cache_param
+  23: optional map<i32, Exprs.TExpr> query_global_dict_exprs
 }
 
 // location information for a single scan range

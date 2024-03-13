@@ -51,6 +51,10 @@ public class Constants {
         SUCCESS,
     }
 
+    public static boolean isFinishState(TaskRunState state) {
+        return state.equals(TaskRunState.SUCCESS) || state.equals(TaskRunState.FAILED);
+    }
+
     // Used to determine the scheduling order of Pending TaskRun to Running TaskRun
     // The bigger the priority, the higher the priority, the default value is LOWEST
     public enum TaskRunPriority {

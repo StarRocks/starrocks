@@ -99,7 +99,13 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
-
+        for (uint i = 0; i < size; i++) {
+            CppType out;
+            page_decoder.at_index(i, &out);
+            if (src[i] != out) {
+                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << out;
+            }
+        }
         auto column = ChunkHelper::column_from_field_type(Type, false);
 
         status = page_decoder.next_batch(&size, column.get());
@@ -159,6 +165,15 @@ public:
             Status status = page_decoder.init();
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
+            CppType src_value = 0;
+            for (uint i = 0; i < count; i++) {
+                CppType out;
+                page_decoder.at_index(i, &out);
+                if (src_value != out) {
+                    FAIL() << "Fail at index " << i << " inserted=" << src_value << " got=" << out;
+                }
+                src_value++;
+            }
 
             auto dst = ChunkHelper::column_from_field_type(Type, false);
             dst->reserve(count);

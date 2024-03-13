@@ -119,25 +119,6 @@ public:
 };
 
 template <>
-class ReplaceAggregator<JsonColumn, JsonValue> final : public ValueColumnAggregator<JsonColumn, JsonValue> {
-public:
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        auto* data = down_cast<JsonColumn*>(src.get());
-        this->data() = *(data->get_object(row));
-    }
-
-    void aggregate_batch_impl([[maybe_unused]] int start, int end, const ColumnPtr& src) override {
-        aggregate_impl(end - 1, src);
-    }
-
-    void append_data(Column* agg) override {
-        auto* col = down_cast<JsonColumn*>(agg);
-        auto& per = const_cast<JsonValue&>(this->data());
-        col->append(std::move(per));
-    }
-};
-
-template <>
 class ReplaceAggregator<BinaryColumn, SliceState> final : public ValueColumnAggregator<BinaryColumn, SliceState> {
 public:
     void reset() override { this->data().reset(); }
@@ -171,7 +152,7 @@ struct ColumnRefState {
     }
 };
 
-// Array/Map/Struct
+// Array/Map/Struct/Json
 template <typename ColumnType>
 class ReplaceAggregator<ColumnType, ColumnRefState> final : public ValueColumnAggregator<ColumnType, ColumnRefState> {
 public:
@@ -375,7 +356,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_HLL, HyperLogLogColumn, HyperLogLog)
             CASE_REPLACE(TYPE_OBJECT, BitmapColumn, BitmapValue)
             CASE_REPLACE(TYPE_PERCENTILE, PercentileColumn, PercentileValue)
-            CASE_REPLACE(TYPE_JSON, JsonColumn, JsonValue)
+            CASE_REPLACE(TYPE_JSON, JsonColumn, ColumnRefState)
             CASE_DEFAULT_WARNING(type)
         }
     }

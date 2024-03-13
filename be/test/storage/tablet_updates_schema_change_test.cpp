@@ -50,7 +50,6 @@ TEST_F(TabletUpdatesTest, link_from_with_persistent_index) {
 }
 
 void TabletUpdatesTest::test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index) {
-    sleep(30);
     srand(GetCurrentTimeMicros());
     auto base_tablet = create_tablet(rand(), rand());
     base_tablet->set_enable_persistent_index(enable_persistent_index);

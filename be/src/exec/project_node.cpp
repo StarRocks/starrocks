@@ -66,7 +66,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (auto const& [key, val] : tnode.project_node.slot_map) {
         _slot_ids.emplace_back(key);
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
         _expr_ctxs.emplace_back(context);
         _type_is_nullable.emplace_back(slot_null_mapping[key]);
     }
@@ -77,7 +77,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (auto const& [key, val] : tnode.project_node.common_slot_map) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
         _common_sub_slot_ids.emplace_back(key);
         _common_sub_expr_ctxs.emplace_back(context);
     }
@@ -103,18 +103,12 @@ Status ProjectNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(_children[0]->open(state));
-    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+
+    DictOptimizeParser::set_output_slot_id(&_common_sub_expr_ctxs, _common_sub_slot_ids);
+    DictOptimizeParser::set_output_slot_id(&_expr_ctxs, _slot_ids);
+
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
-
-    GlobalDictMaps* mdict_maps = state->mutable_query_global_dict_map();
-    _dict_optimize_parser.set_mutable_dict_maps(state, mdict_maps);
-
-    auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<SlotId>& target_slots) {
-        return _dict_optimize_parser.rewrite_exprs(&expr_ctxs, state, target_slots);
-    };
-
-    RETURN_IF_ERROR(init_dict_optimize(_common_sub_expr_ctxs, _common_sub_slot_ids));
-    RETURN_IF_ERROR(init_dict_optimize(_expr_ctxs, _slot_ids));
+    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -198,7 +192,6 @@ void ProjectNode::close(RuntimeState* state) {
 
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);
-    _dict_optimize_parser.close(state);
 
     ExecNode::close(state);
 }

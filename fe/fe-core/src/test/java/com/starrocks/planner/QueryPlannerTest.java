@@ -34,19 +34,23 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -163,6 +167,58 @@ public class QueryPlannerTest {
         stmtExecutor2.execute();
         Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
                 connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
+
+        String sqlWithLineSeparators = "select k1 \n" +
+                " from \n" +
+                " test.baseall";
+        StatementBase statement1 = SqlParser.parse(sqlWithLineSeparators, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statement1);
+        stmtExecutor4.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
+
+        String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
+        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
+        stmtExecutor3.execute();
+        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+    }
+
+    @Test
+    public void testSqlBlackListWithLineSeparators() throws Exception {
+        String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
+        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, setEnableSqlBlacklist);
+        stmtExecutor0.execute();
+
+        String addBlackListSql = "add sqlblacklist \"select \n k1 from .+\"";
+        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, addBlackListSql);
+        stmtExecutor1.execute();
+
+        Assert.assertEquals(1, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+        long id = -1;
+        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
+            id = entry.getValue().id;
+            Assert.assertEquals("select k1 from .+", entry.getKey());
+        }
+
+        String sql = "select k1 from test.baseall";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
+        stmtExecutor2.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
+
+        String sqlWithLineSeparators = "select k1 \n" +
+                " from \n" +
+                " test.baseall";
+        StatementBase statement1 = SqlParser.parse(sqlWithLineSeparators, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statement1);
+        stmtExecutor4.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
 
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
@@ -238,5 +294,46 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
         stmtExecutor3.execute();
         Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+    }
+
+    @Test
+    public void testFollowerProxyQuery() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public FrontendNodeType getFeType() {
+                return FrontendNodeType.FOLLOWER;
+            }
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        String sql = "select k1 from test.baseall";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        {
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("default");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == false);
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("leader");
+            Assert.assertTrue(executor.isForwardToLeader() == false);
+        }
+        {
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("leader");
+            StmtExecutor executor = new StmtExecutor(connectContext, statement);
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+            connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
+            Assert.assertTrue(executor.isForwardToLeader() == true);
+        }
     }
 }

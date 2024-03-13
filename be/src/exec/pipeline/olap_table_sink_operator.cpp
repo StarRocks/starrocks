@@ -54,6 +54,11 @@ bool OlapTableSinkOperator::is_finished() const {
 }
 
 bool OlapTableSinkOperator::pending_finish() const {
+    // audit report not finish, we need check until finish
+    if (!_is_audit_report_done) {
+        return true;
+    }
+
     // sink's open not finish, we need check util finish
     if (!_is_open_done) {
         if (!_sink->is_open_done()) {
@@ -99,37 +104,6 @@ bool OlapTableSinkOperator::pending_finish() const {
     return false;
 }
 
-bool OlapTableSinkOperator::is_epoch_finishing() const {
-    return pending_finish();
-}
-
-Status OlapTableSinkOperator::set_epoch_finishing(RuntimeState* state) {
-    _is_epoch_finished = true;
-    if (_is_open_done && !_automatic_partition_chunk) {
-        // sink's open already finish, we can try_close
-        return _sink->try_close(state);
-    } else {
-        // sink's open not finish, we need check in pending_finish() before close
-        return Status::OK();
-    }
-}
-
-Status OlapTableSinkOperator::reset_epoch(RuntimeState* state) {
-    if (!_sink->is_close_done()) {
-        RETURN_IF_ERROR(_sink->close(state, Status::OK()));
-    }
-
-    _is_epoch_finished = false;
-
-    RETURN_IF_ERROR(_sink->reset_epoch(state));
-
-    RETURN_IF_ERROR(_sink->prepare(state));
-
-    RETURN_IF_ERROR(_sink->try_open(state));
-
-    return Status::OK();
-}
-
 Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
     _is_cancelled = true;
     return _sink->close(state, Status::Cancelled("Cancelled by pipeline engine"));
@@ -139,7 +113,9 @@ Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        _is_audit_report_done = false;
+        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx(),
+                                                                         &_is_audit_report_done);
     }
     if (_is_open_done && !_automatic_partition_chunk) {
         // sink's open already finish, we can try_close

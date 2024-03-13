@@ -18,9 +18,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -43,6 +46,9 @@ public class AnalyzeInsertTest {
         String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
+
+        starRocksAssert.withCatalog("create external catalog hive_catalog properties (\"type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\")");
     }
 
     @Test
@@ -79,20 +85,21 @@ public class AnalyzeInsertTest {
     }
 
     @Test
+    public void testInsertOverwriteWhenSchemaChange() throws Exception {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getDb("test").getTable("t0");
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        analyzeFail("insert overwrite t0 select * from t0;",
+                "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
+        table.setState(OlapTable.OlapTableState.NORMAL);
+    }
+
+    @Test
     public void testInsertIcebergUnpartitionedTable(@Mocked IcebergTable icebergTable) {
         analyzeFail("insert into err_catalog.db.tbl values(1)",
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadata) {
-            {
-                metadata.getDb("iceberg_catalog", "err_db");
-                result = null;
-                minTimes = 0;
-            }
-        };
-        analyzeFail("insert into iceberg_catalog.err_db.tbl values (1)",
-                "Unknown database 'err_db'");
 
         new Expectations(metadata) {
             {
@@ -215,11 +222,46 @@ public class AnalyzeInsertTest {
     }
 
     @Test
+    public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getTable(anyString, anyString, anyString);
+                result = hiveTable;
+            }
+        };
+
+        new Expectations(hiveTable) {
+            {
+                hiveTable.supportInsert();
+                result = true;
+
+                hiveTable.isHiveTable();
+                result = true;
+
+                hiveTable.isUnPartitioned();
+                result = false;
+
+                hiveTable.getHiveTableType();
+                result = HiveTable.HiveTableType.EXTERNAL_TABLE;
+            }
+        };
+
+        analyzeFail("insert into hive_catalog.db.tbl select 1, 2, 3",
+                "Only support to write hive managed table");
+    }
+
+    @Test
     public void testTableFunctionTable() {
         analyzeSuccess("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select \"abc\" as k1");
+
+        analyzeSuccess("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\" ) \n" +
                 "select \"abc\" as k1");
 
         analyzeFail("insert into files ( \n" +
@@ -233,22 +275,14 @@ public class AnalyzeInsertTest {
                         "\t\"compression\" = \"uncompressed\" ) \n" +
                         "select \"abc\" as k1",
                 "format is a mandatory property. " +
-                        "Use \"path\" = \"parquet\" as only parquet format is supported now");
+                        "Use \"format\" = \"parquet\" as only parquet format is supported now");
 
         analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"orc\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1",
-                "use \"path\" = \"parquet\", as only parquet format is supported now");
-
-        analyzeFail("insert into files ( \n" +
-                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                        "\t\"format\"=\"parquet\" ) \n" +
-                        "select \"abc\" as k1",
-                "compression is a mandatory property. " +
-                "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                "(uncompressed, gzip, brotli, zstd, lz4).");
+                "use \"format\" = \"parquet\", as only parquet format is supported now");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -318,5 +352,11 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\", \n" +
                 "\t\"partition_by\"=\"k1\" ) \n" +
                 "select 1.23 as k1", "partition column does not support type of DECIMAL32(3,2).");
+
+        analyzeFail("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\", \n" +
+                "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
     }
 }

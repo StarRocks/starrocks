@@ -37,6 +37,9 @@ public:
     bool is_constant() const override;
 
 private:
+    StatusOr<std::shared_ptr<JavaUDFContext>> _build_udf_func_desc(ExprContext* context,
+                                                                   FunctionContext::FunctionStateScope scope,
+                                                                   const std::string& libpath);
     void _call_udf_close();
     RuntimeState* _runtime_state = nullptr;
     std::shared_ptr<JavaUDFContext> _func_desc;

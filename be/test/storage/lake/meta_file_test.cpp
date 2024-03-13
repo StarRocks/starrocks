@@ -59,7 +59,8 @@ public:
         CHECK_OK(fs::create_directories(join_path(kTestDir, kSegmentDirectoryName)));
 
         s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
-        s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider.get());
+        s_mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider.get(), s_mem_tracker.get());
         s_tablet_manager =
                 std::make_unique<lake::TabletManager>(s_location_provider.get(), s_update_manager.get(), 1638400000);
     }
@@ -70,6 +71,7 @@ protected:
     constexpr static const char* const kTestDir = "./lake_meta_test";
     inline static std::unique_ptr<lake::LocationProvider> s_location_provider;
     inline static std::unique_ptr<TabletManager> s_tablet_manager;
+    inline static std::unique_ptr<MemTracker> s_mem_tracker;
     inline static std::unique_ptr<UpdateManager> s_update_manager;
 };
 

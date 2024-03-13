@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.planner.ScanNode;
-import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -31,7 +30,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
-        GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+        connectContext.changeCatalogDb("hive0.partitioned_db");
     }
 
     @Test

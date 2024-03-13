@@ -34,4 +34,5 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
     public static OnlyJoinRule getInstance() {
         return INSTANCE;
     }
+
 }

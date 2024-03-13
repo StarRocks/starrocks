@@ -16,9 +16,8 @@
 
 #include <atomic>
 #include <boost/algorithm/string.hpp>
-#include <utility>
 
-#include "column/chunk.h"
+#include "exec/mor_processor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -35,9 +34,9 @@ class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
-    // late materialization
-    int64_t skip_read_rows = 0;
-    int64_t num_rows_read = 0;
+    int64_t rows_read = 0;
+    int64_t late_materialize_skip_rows = 0;
+
     int64_t io_ns = 0;
     int64_t io_count = 0;
     int64_t bytes_read = 0;
@@ -72,12 +71,20 @@ struct HdfsScanStats {
     bool has_page_statistics = false;
     // page skip
     int64_t page_skip = 0;
+    // page index
+    int64_t rows_before_page_index = 0;
+    int64_t page_index_ns = 0;
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
 
-    // ORC only!
-    std::vector<int64_t> stripe_sizes;
+    // orc stripe information
+    std::vector<int64_t> orc_stripe_sizes{};
+    int64_t orc_total_tiny_stripe_size = 0;
+
+    // io coalesce
+    int64_t orc_stripe_active_lazy_coalesce_together = 0;
+    int64_t orc_stripe_active_lazy_coalesce_seperately = 0;
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
@@ -89,9 +96,11 @@ class HdfsParquetProfile;
 
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
+    RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
-    RuntimeProfile::Counter* rows_skip_counter = nullptr;
+    RuntimeProfile::Counter* late_materialize_skip_rows_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
+    RuntimeProfile::Counter* scan_ranges_size = nullptr;
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
@@ -116,6 +125,7 @@ struct HdfsScanProfile {
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_align_io_bytes = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_timer = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;
@@ -131,7 +141,10 @@ struct HdfsScanProfile {
 
 struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
-    std::vector<const THdfsScanRange*> scan_ranges;
+    const THdfsScanRange* scan_range = nullptr;
+
+    bool enable_split_tasks = false;
+    const pipeline::ScanSplitContext* split_context = nullptr;
 
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
@@ -141,7 +154,6 @@ struct HdfsScannerParams {
     std::unordered_set<SlotId> slots_in_conjunct;
     // slot used by conjunct_ctxs
     std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
-    bool eval_conjunct_ctxs = true;
 
     // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
@@ -183,11 +195,11 @@ struct HdfsScannerParams {
 
     HdfsScanProfile* profile = nullptr;
 
-    std::atomic<int32_t>* open_limit;
-
     std::vector<const TIcebergDeleteFile*> deletes;
 
     const TIcebergSchema* iceberg_schema = nullptr;
+
+    const TIcebergSchema* iceberg_equal_delete_schema = nullptr;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
@@ -198,20 +210,21 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool use_file_metacache = false;
+    MORParams mor_params;
 };
 
 struct HdfsScannerContext {
     struct ColumnInfo {
-        int col_idx;
-        TypeDescriptor col_type;
-        SlotId slot_id;
-        std::string col_name;
+        int idx_in_chunk;
         SlotDescriptor* slot_desc;
         bool decode_needed = true;
 
-        std::string formated_col_name(bool case_sensitive) {
-            return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+        std::string formatted_name(bool case_sensitive) const {
+            return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
+        const std::string& name() const { return slot_desc->col_name(); }
+        const SlotId slot_id() const { return slot_desc->id(); }
+        const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -226,8 +239,9 @@ struct HdfsScannerContext {
     // partition column value which read from hdfs file path
     std::vector<ColumnPtr> partition_values;
 
-    // scan ranges
-    std::vector<const THdfsScanRange*> scan_ranges;
+    // scan range
+    const THdfsScanRange* scan_range = nullptr;
+    const pipeline::ScanSplitContext* split_context = nullptr;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -260,12 +274,18 @@ struct HdfsScannerContext {
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
     void update_materialized_columns(const std::unordered_set<std::string>& names);
+
     // "not existed columns" are materialized columns not found in file
     // this usually happens when use changes schema. for example
     // user create table with 3 fields A, B, C, and there is one file F1
     // but user change schema and add one field like D.
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
-    void update_not_existed_columns_of_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // If there is no partition column in the chunk，append partition column to chunk，
+    // otherwise update partition column in chunk
+    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
@@ -273,20 +293,8 @@ struct HdfsScannerContext {
 
     // other helper functions.
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
-
-    void append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-
-    // If there is no partition column in the chunk，append partition column to chunk，otherwise update partition column in chunk
-    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
-
-// if *lvalue == expect, swap(*lvalue,*rvalue)
-inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool expect) {
-    bool res = lvalue->compare_exchange_strong(expect, *rvalue);
-    if (res) *rvalue = expect;
-    return res;
-}
 
 class HdfsScanner {
 public:
@@ -300,35 +308,13 @@ public:
 
     int64_t num_bytes_read() const { return _app_stats.bytes_read; }
     int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
-    int64_t num_rows_read() const { return _app_stats.num_rows_read; }
+    int64_t num_rows_read() const { return _app_stats.rows_read; }
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
-    int64_t estimated_mem_usage() const;
-    void set_keep_priority(bool v) { _keep_priority = v; }
-    bool keep_priority() const { return _keep_priority; }
+    virtual int64_t estimated_mem_usage() const;
     void update_counter();
 
     RuntimeState* runtime_state() { return _runtime_state; }
-
-    int32_t open_limit() { return _scanner_params.open_limit->load(std::memory_order_relaxed); }
-
-    bool is_open() { return _opened; }
-
-    bool acquire_pending_token(std::atomic_bool* token) {
-        // acquire resource
-        return atomic_cas(token, &_pending_token, true);
-    }
-
-    bool release_pending_token(std::atomic_bool* token) {
-        if (_pending_token) {
-            _pending_token = false;
-            *token = true;
-            return true;
-        }
-        return false;
-    }
-
-    bool has_pending_token() { return _pending_token; }
 
     virtual Status do_open(RuntimeState* runtime_state) = 0;
     virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
@@ -336,10 +322,9 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
-
-    void enter_pending_queue();
-    // how long it stays inside pending queue.
-    uint64_t exit_pending_queue();
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+        split_tasks->swap(_split_tasks);
+    }
 
 protected:
     Status open_random_access_file();
@@ -349,14 +334,11 @@ protected:
 private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
-    bool _keep_priority = false;
     Status _build_scanner_context();
-    MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
+    Status _init_mor_processor(RuntimeState* runtime_state, const MORParams& params);
 
 protected:
-    std::atomic_bool _pending_token = false;
-
     HdfsScannerContext _scanner_ctx;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
@@ -368,6 +350,11 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
+
+    std::shared_ptr<DefaultMORProcessor> _mor_processor;
+
+    const pipeline::ScanSplitContext* _split_context = nullptr;
+    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
 };
 
 } // namespace starrocks

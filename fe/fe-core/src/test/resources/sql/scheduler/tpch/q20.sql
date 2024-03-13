@@ -1,47 +1,9 @@
-[sql]
-select
-    s_name,
-    s_address
-from
-    supplier,
-    nation
-where
-        s_suppkey in (
-        select
-            ps_suppkey
-        from
-            partsupp
-        where
-                ps_partkey in (
-                select
-                    p_partkey
-                from
-                    part
-                where
-                        p_name like 'sienna%'
-            )
-          and ps_availqty > (
-            select
-                    0.5 * sum(l_quantity)
-            from
-                lineitem
-            where
-                    l_partkey = ps_partkey
-              and l_suppkey = ps_suppkey
-              and l_shipdate >= date '1993-01-01'
-              and l_shipdate < date '1994-01-01'
-        )
-    )
-  and s_nationkey = n_nationkey
-  and n_name = 'ARGENTINA'
-order by
-    s_name ;
 [scheduler]
 PLAN FRAGMENT 0(F09)
   DOP: 16
   INSTANCES
     INSTANCE(0-F09#0)
-      BE: 10001
+      BE: 10003
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -143,13 +105,13 @@ PLAN FRAGMENT 3(F06)
   INSTANCES
     INSTANCE(7-F06#0)
       DESTINATIONS: 6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1
-      BE: 10003
+      BE: 10001
     INSTANCE(8-F06#1)
       DESTINATIONS: 6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1
-      BE: 10002
+      BE: 10003
     INSTANCE(9-F06#2)
       DESTINATIONS: 6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1
-      BE: 10001
+      BE: 10002
 
 PLAN FRAGMENT 4(F05)
   DOP: 16
@@ -373,4 +335,3 @@ PLAN FRAGMENT 5
      cardinality=1
      avgRowSize=29.0
 [end]
-

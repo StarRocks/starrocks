@@ -21,7 +21,6 @@ import com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClient;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.JdkUtils;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,9 +32,14 @@ public class BrpcProxy {
     private final ConcurrentHashMap<TNetworkAddress, LakeService> lakeServiceMap;
 
     static {
-        int javaRuntimeVersion = JdkUtils.getJavaVersionAsInteger(System.getProperty("java.version"));
+        String javaMajorVersion = "11";
+        try {
+            javaMajorVersion = System.getProperty("java.version").split("\\.")[0];
+        } catch (Exception e) {
+            // ignore
+        }
         JDKCompilerHelper
-                .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), String.valueOf(javaRuntimeVersion)));
+                .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), javaMajorVersion));
     }
 
     public BrpcProxy() {

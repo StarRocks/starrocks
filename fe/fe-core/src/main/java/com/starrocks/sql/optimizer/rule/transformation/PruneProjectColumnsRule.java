@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -66,6 +67,11 @@ public class PruneProjectColumnsRule extends TransformationRule {
             ColumnRefOperator constCol = context.getColumnRefFactory()
                     .create("auto_fill_col", Type.TINYINT, false);
             newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
+        } else if (newMap.equals(projectOperator.getColumnRefMap()) && context.isShortCircuit()) {
+            // Change the requiredOutputColumns in context
+            requiredOutputColumns.union(requiredInputColumns);
+            // make sure this rule only executed once
+            return Collections.emptyList();
         }
 
         // Change the requiredOutputColumns in context

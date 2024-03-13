@@ -338,9 +338,6 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
 pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    bool prev_force_disable_adaptive_dop = context->force_disable_adaptive_dop();
-    context->set_force_disable_adaptive_dop(true);
-
     std::vector<OpFactories> operators_list;
     operators_list.reserve(_children.size() + 1);
     const auto num_operators_generated = _children.size() + !_const_expr_lists.empty();
@@ -424,9 +421,6 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         final_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
-
-    context->set_force_disable_adaptive_dop(prev_force_disable_adaptive_dop);
-    final_operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), final_operators);
 
     return final_operators;
 }

@@ -49,9 +49,7 @@ import java.io.File;
 
 public class MetaBaseAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(MetaBaseAction.class);
-    private static String CONTENT_DISPOSITION = "Content-disposition";
-
-    public static final String CLUSTER_ID = "cluster_id";
+    private static final String CONTENT_DISPOSITION = "Content-disposition";
     public static final String TOKEN = "token";
     public static final String RUN_MODE = "run_mode";
 
@@ -107,7 +105,7 @@ public class MetaBaseAction extends WebBaseAction {
 
     private boolean isFromValidFe(BaseRequest request) {
         String clientHost = request.getHostString();
-        Frontend fe = GlobalStateMgr.getCurrentState().getFeByHost(clientHost);
+        Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(clientHost);
         if (fe == null) {
             LOG.warn("request is not from valid FE. client: {}", clientHost);
             return false;

@@ -56,8 +56,8 @@ public:
 
 private:
     std::mutex _lock;
+    std::unordered_map<std::string, std::shared_ptr<HdfsFsClient>> _cache_clients;
     std::vector<std::string> _cache_keys;
-    std::vector<std::shared_ptr<HdfsFsClient>> _cache_clients;
     Random _rand{(uint32_t)time(nullptr)};
 
     HdfsFsCache() = default;

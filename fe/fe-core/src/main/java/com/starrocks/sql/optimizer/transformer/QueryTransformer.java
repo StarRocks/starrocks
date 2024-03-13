@@ -66,12 +66,14 @@ class QueryTransformer {
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
+    private final boolean inlineView;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext) {
+                            CTETransformerContext cteContext, boolean inlineView) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
+        this.inlineView = inlineView;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -96,16 +98,8 @@ class QueryTransformer {
         builder = window(builder, analyticExprList);
 
         if (queryBlock.hasOrderByClause()) {
-            if (!queryBlock.hasAggregation()) {
-                //requires both output and source fields to be visible if there are no aggregations
-                builder = projectForOrder(builder,
-                        Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
-                        queryBlock.getOutputExprInOrderByScope(),
-                        queryBlock.getColumnOutputNames(),
-                        builder.getFieldMappings(),
-                        queryBlock.getOrderScope(), false);
-            } else {
-                //requires output fields, groups and translated aggregations to be visible for queries with aggregation
+            if (!queryBlock.getGroupBy().isEmpty() || !queryBlock.getAggregate().isEmpty()) {
+                // requires output fields, groups and translated aggregations to be visible for queries with aggregation
                 List<String> outputNames = new ArrayList<>(queryBlock.getColumnOutputNames());
                 for (int i = 0; i < queryBlock.getOrderSourceExpressions().size(); ++i) {
                     outputNames.add(queryBlock.getOrderSourceExpressions().get(i).toString());
@@ -119,6 +113,17 @@ class QueryTransformer {
                         outputNames,
                         builder.getFieldMappings(),
                         queryBlock.getOrderScope(), true);
+
+            } else {
+                // requires both output and source fields to be visible if there is no aggregation or distinct
+                // if there is a distinct, we still no need to project the orderSourceExpressions because it must
+                // in the outputExpression.
+                builder = projectForOrder(builder,
+                        Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
+                        queryBlock.getOutputExprInOrderByScope(),
+                        queryBlock.getColumnOutputNames(),
+                        builder.getFieldMappings(),
+                        queryBlock.getOrderScope(), queryBlock.isDistinct());
             }
         }
 
@@ -151,12 +156,13 @@ class QueryTransformer {
     }
 
     private OptExprBuilder planFrom(Relation node, CTETransformerContext cteContext) {
-        // This must be a copy of the context, because the new Relation may contain cte with the same name,
-        // and the internal cte with the same name will overwrite the original mapping
-        CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
-        return new RelationTransformer(columnRefFactory, session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext)
-                .visit(node).getRootBuilder();
+        TransformerContext transformerContext = new TransformerContext(
+                columnRefFactory,
+                session,
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                cteContext,
+                inlineView);
+        return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrder(OptExprBuilder subOpt,
@@ -224,7 +230,6 @@ class QueryTransformer {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-
         for (Expr expression : expressions) {
             Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
             ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
@@ -331,7 +336,12 @@ class QueryTransformer {
         for (AnalyticExpr analyticExpr : window) {
             WindowTransformer.WindowOperator rewriteOperator = WindowTransformer.standardize(analyticExpr);
             if (windowOperators.contains(rewriteOperator)) {
-                windowOperators.get(windowOperators.indexOf(rewriteOperator)).addFunction(analyticExpr);
+                WindowTransformer.WindowOperator windowOperator =
+                        windowOperators.get(windowOperators.indexOf(rewriteOperator));
+                if (rewriteOperator.isSkewed()) {
+                    windowOperator.setSkewed();
+                }
+                windowOperator.addFunction(analyticExpr);
             } else {
                 windowOperators.add(rewriteOperator);
             }
@@ -354,7 +364,7 @@ class QueryTransformer {
         return subOpt.withNewRoot(limitOperator);
     }
 
-    private OptExprBuilder aggregate(OptExprBuilder subOpt,
+    public OptExprBuilder aggregate(OptExprBuilder subOpt,
                                      List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
         if (aggregates.size() == 0 && groupByExpressions.size() == 0) {

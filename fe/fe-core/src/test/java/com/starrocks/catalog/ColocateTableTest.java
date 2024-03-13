@@ -109,7 +109,7 @@ public class ColocateTableTest {
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
 
-        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         long tableId = db.getTable(tableName1).getId();
 
@@ -167,7 +167,7 @@ public class ColocateTableTest {
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
 
-        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         long firstTblId = db.getTable(tableName1).getId();
         long secondTblId = db.getTable(tableName2).getId();
@@ -239,7 +239,6 @@ public class ColocateTableTest {
                 " \"replication_num\" = \"1\",\n" +
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
-
     }
 
     @Test
@@ -266,7 +265,7 @@ public class ColocateTableTest {
                 return Arrays.asList(10001L, 10002L, 10003L);       
             }
         };
-        
+
         createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +

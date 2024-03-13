@@ -109,7 +109,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
-               << "broker addr: " << upload.broker_addr << ". msg: " << status.get_error_msg();
+               << "broker addr: " << upload.broker_addr << ". msg: " << status.message();
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -253,7 +253,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
-               << "broker addr: " << download.broker_addr << ". msg: " << status.get_error_msg();
+               << "broker addr: " << download.broker_addr << ". msg: " << status.message();
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -411,8 +411,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             std::string new_name;
             Status st = _replace_tablet_id(local_file, remote_tablet_id, &new_name);
             if (!st.ok()) {
-                LOG(WARNING) << "failed to replace tablet id. unknown local file: " << st.get_error_msg()
-                             << ". ignore it";
+                LOG(WARNING) << "failed to replace tablet id. unknown local file: " << st.message() << ". ignore it";
                 continue;
             }
             VLOG(2) << "new file name after replace tablet id: " << new_name;
@@ -499,6 +498,7 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     }
     snapshot_meta.tablet_meta().set_tablet_id(tablet_id);
 
+    // Do not need to copy GIN in pk table because it does not support GIN now
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path));
 
     if (overwrite) {
@@ -664,6 +664,11 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
             }
             std::string full_src_path = snapshot_path + "/" + file;
             std::string full_dest_path = tablet_path + "/" + file;
+            if (_end_with(file, "ivt")) {
+                RETURN_IF_ERROR(FileSystem::Default()->rename_file(full_src_path, full_dest_path));
+                VLOG(2) << "link file from " << full_src_path << " to " << full_dest_path;
+                continue;
+            }
             if (link(full_src_path.c_str(), full_dest_path.c_str()) != 0) {
                 LOG(WARNING) << "failed to link file from " << full_src_path << " to " << full_dest_path
                              << ", err: " << std::strerror(errno);
@@ -749,6 +754,12 @@ bool SnapshotLoader::_end_with(const std::string& str, const std::string& match)
         return true;
     }
     return false;
+}
+
+bool SnapshotLoader::_is_index_files(const std::string& str) {
+    return _end_with(str, "fdt") || _end_with(str, "fdx") || _end_with(str, "fnm") || _end_with(str, "frq") ||
+           _end_with(str, "nrm") || _end_with(str, "prx") || _end_with(str, "tii") || _end_with(str, "tis") ||
+           _end_with(str, "null_bitmap") || _end_with(str, "segments_2") || _end_with(str, "segments.gen");
 }
 
 Status SnapshotLoader::_get_tablet_id_and_schema_hash_from_file_path(const std::string& src_path, int64_t* tablet_id,
@@ -910,7 +921,7 @@ Status SnapshotLoader::_get_existing_files_from_local(const std::string& local_p
     Status status = FileSystem::Default()->get_children(local_path, local_files);
     if (!status.ok()) {
         std::stringstream ss;
-        ss << "failed to list files in local path: " << local_path << ", msg: " << status.get_error_msg();
+        ss << "failed to list files in local path: " << local_path << ", msg: " << status.message();
         LOG(WARNING) << ss.str();
         return status;
     }
@@ -1002,6 +1013,9 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
         return Status::OK();
     } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||
                _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt")) {
+        *new_file_name = file_name;
+        return Status::OK();
+    } else if (_is_index_files(file_name)) {
         *new_file_name = file_name;
         return Status::OK();
     } else {

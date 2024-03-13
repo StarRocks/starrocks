@@ -26,6 +26,7 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -96,6 +97,15 @@ public class AnalyzeMgrTest {
         };
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
                 ImmutableList.of("c1", "c2"), false);
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tableName) {
+                throw new RuntimeException("mock get table exception");
+            }
+        };
+        analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
+                ImmutableList.of("c1", "c2"), false);
     }
 
     @Test
@@ -134,7 +144,7 @@ public class AnalyzeMgrTest {
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS);
         journalEntity.setData(externalAnalyzeStatus);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
-        Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeStatusMap().size());
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().size());
 
         analyzeMgr.dropExternalAnalyzeStatus(table.getUUID());
         ExternalAnalyzeStatus removeExternalAnalyzeStatus = (ExternalAnalyzeStatus)
@@ -147,7 +157,7 @@ public class AnalyzeMgrTest {
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS);
         journalEntity.setData(removeExternalAnalyzeStatus);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
-        Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeStatusMap().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().size());
 
         // test analyze job
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(123, 1234, null,
@@ -183,7 +193,7 @@ public class AnalyzeMgrTest {
         journalEntity.setOpCode(OperationType.OP_ADD_ANALYZER_JOB);
         journalEntity.setData(nativeAnalyzeJob);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
-        Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         ExternalAnalyzeJob externalAnalyzeJob1 = (ExternalAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
                 replayNextJournal(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB);
@@ -194,7 +204,7 @@ public class AnalyzeMgrTest {
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB);
         journalEntity.setData(externalAnalyzeJob1);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
-        Assert.assertEquals(2, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+        Assert.assertEquals(2, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         analyzeMgr.removeAnalyzeJob(nativeAnalyzeJob.getId());
         NativeAnalyzeJob nativeAnalyzeJob2 = (NativeAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
@@ -216,7 +226,7 @@ public class AnalyzeMgrTest {
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB);
         journalEntity.setData(externalAnalyzeJob2);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
-        Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         // test analyze basic stats
         ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0", "hive_db",
@@ -242,7 +252,7 @@ public class AnalyzeMgrTest {
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META);
         journalEntity.setData(externalBasicStatsMeta);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
-        Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
 
         analyzeMgr.removeExternalBasicStatsMeta(externalBasicStatsMeta.getCatalogName(),
                 externalBasicStatsMeta.getDbName(), externalBasicStatsMeta.getTableName());
@@ -255,7 +265,7 @@ public class AnalyzeMgrTest {
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META);
         journalEntity.setData(externalBasicStatsMeta);
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
-        Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
     }
 
     @Test

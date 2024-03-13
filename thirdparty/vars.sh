@@ -181,7 +181,7 @@ RE2_SOURCE=re2-2022-12-01
 RE2_MD5SUM="f25d7b06a3e7747ecbb2f12d48be61cd"
 
 # boost
-BOOST_DOWNLOAD="https://boostorg.jfrog.io/artifactory/main/release/1.80.0/source/boost_1_80_0.tar.gz"
+BOOST_DOWNLOAD="https://archives.boost.io/release/1.80.0/source/boost_1_80_0.tar.gz"
 BOOST_NAME=boost_1_80_0.tar.gz
 BOOST_SOURCE=boost_1_80_0
 BOOST_MD5SUM="077f074743ea7b0cb49c6ed43953ae95"
@@ -410,10 +410,10 @@ LLVM_SOURCE="llvm-project-16.0.6.src"
 LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2023.11.10.tar.gz"
-CLUCENE_NAME="starrocks-clucene-2023.11.10.tar.gz"
-CLUCENE_SOURCE="starrocks-clucene-2023.11.10"
-CLUCENE_MD5SUM="cb641cacf05387e2f4cc1f7fab24d018"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2023.11.28.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2023.11.28.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2023.11.28"
+CLUCENE_MD5SUM="d71f8156bbcbe78e5064ec5616072a5a"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \

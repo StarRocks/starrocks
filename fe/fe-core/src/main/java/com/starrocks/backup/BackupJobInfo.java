@@ -173,7 +173,8 @@ public class BackupJobInfo implements Writable {
             Long newId = tbl.getId();
     
             if (autoIncrementId != null) {
-                GlobalStateMgr.getCurrentState().addOrReplaceAutoIncrementIdByTableId(newId, autoIncrementId);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addOrReplaceAutoIncrementIdByTableId(newId, autoIncrementId);
             }
         }
 
@@ -361,7 +362,7 @@ public class BackupJobInfo implements Writable {
             }
 
             tableInfo.autoIncrementId = null;
-            Long id = GlobalStateMgr.getCurrentState().getCurrentAutoIncrementIdByTableId(tbl.getId());
+            Long id = GlobalStateMgr.getCurrentState().getLocalMetastore().getCurrentAutoIncrementIdByTableId(tbl.getId());
             for (Column col : tbl.getBaseSchema()) {
                 if (col.isAutoIncrement() && id != null) {
                     tableInfo.autoIncrementId = id;

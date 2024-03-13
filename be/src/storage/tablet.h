@@ -159,6 +159,7 @@ public:
 
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
+    [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
     [[nodiscard]] bool has_delete_predicates(const Version& version);
 
     // meta lock
@@ -306,7 +307,7 @@ public:
 
     const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
 
-    void update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
+    TabletSchemaCSPtr update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
 
     int64_t data_size();
 

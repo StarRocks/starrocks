@@ -52,8 +52,6 @@ private:
 
     RuntimeProfile::Counter* _expr_compute_timer = nullptr;
     RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;
-
-    DictOptimizeParser _dict_optimize_parser;
 };
 
 } // namespace starrocks

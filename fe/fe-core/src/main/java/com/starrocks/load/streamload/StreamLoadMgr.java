@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -28,7 +29,10 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -52,7 +56,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class StreamLoadMgr {
+public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
 
     // label -> streamLoadTask
@@ -158,12 +162,13 @@ public class StreamLoadMgr {
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis, boolean isRoutineLoad)
             throws UserException {
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
             table = db.getTable(tableName);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // init stream load task
@@ -176,12 +181,13 @@ public class StreamLoadMgr {
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
                                          int channelNum, int channelId) throws UserException {
         Table table;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             unprotectedCheckMeta(db, tableName);
             table = db.getTable(tableName);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // init stream load task
@@ -265,7 +271,7 @@ public class StreamLoadMgr {
 
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
     }
 
     public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,
@@ -542,14 +548,19 @@ public class StreamLoadMgr {
     }
 
     // return all of stream load task named label in all of db
+    // return all tasks if label is null
     public List<StreamLoadTask> getTaskByName(String label) {
         List<StreamLoadTask> result = Lists.newArrayList();
         readLock();
         try {
-            for (Map<String, StreamLoadTask> labelToStreamLoadTask : dbToLabelToStreamLoadTask.values()) {
-                if (labelToStreamLoadTask.containsKey(label)) {
-                    result.add(labelToStreamLoadTask.get(label));
+            if (label != null) {
+                StreamLoadTask task = idToStreamLoadTask.get(label);
+                if (task != null) {
+                    result.add(task);
                 }
+            } else {
+                // return all stream load tasks
+                result.addAll(idToStreamLoadTask.values());
             }
         } finally {
             readUnlock();
@@ -633,5 +644,10 @@ public class StreamLoadMgr {
 
             addLoadTask(loadTask);
         }
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("StreamLoad", (long) idToStreamLoadTask.size());
     }
 }

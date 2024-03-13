@@ -29,17 +29,21 @@ import java.util.Set;
 public class MvTaskRunContext extends TaskRunContext {
 
     // all the RefBaseTable's partition name to its intersected materialized view names.
-    private Map<String, Set<String>> refBaseTableMVIntersectedPartitions;
+    //baseTable -> basePartition -> mvPartitions
+    private Map<Table, Map<String, Set<String>>> refBaseTableMVIntersectedPartitions;
     // all the materialized view's partition name to its intersected RefBaseTable's partition names.
-    private Map<String, Set<String>> mvRefBaseTableIntersectedPartitions;
+    //mvPartition -> baseTable -> basePartitions
+    private Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions;
     // all the RefBaseTable's partition name to its partition key range.
-    private Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap;
+    private Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap;
+    private Map<String, Range<PartitionKey>> mvRangePartitionMap;
+
     // all the RefBaseTable's partition name to its list partition keys.
     private Map<String, List<List<String>>> refBaseTableListPartitionMap;
     // the external ref base table's mv partition name to original partition names map because external
     // table supports multi partition columns, one converted partition name(mv partition name) may have
     // multi original partition names.
-    private Map<String, Set<String>> externalRefBaseTableMVPartitionMap;
+    private Map<Table, Map<String, Set<String>>> externalRefBaseTableMVPartitionMap;
 
     // The Table which materialized view' partition column comes from is called `RefBaseTable`:
     // - Materialized View's to-refresh partitions is synced from its `refBaseTable`.
@@ -55,27 +59,24 @@ public class MvTaskRunContext extends TaskRunContext {
     private int partitionTTLNumber = TableProperty.INVALID;
 
     public MvTaskRunContext(TaskRunContext context) {
-        this.ctx = context.ctx;
-        this.definition = context.definition;
-        this.remoteIp = context.remoteIp;
-        this.properties = context.properties;
-        this.type = context.type;
-        this.status = context.status;
+        super(context);
     }
 
-    public Map<String, Set<String>> getRefBaseTableMVIntersectedPartitions() {
+    public Map<Table, Map<String, Set<String>>> getRefBaseTableMVIntersectedPartitions() {
         return refBaseTableMVIntersectedPartitions;
     }
 
-    public void setRefBaseTableMVIntersectedPartitions(Map<String, Set<String>> refBaseTableMVIntersectedPartitions) {
+    public void setRefBaseTableMVIntersectedPartitions(
+            Map<Table, Map<String, Set<String>>> refBaseTableMVIntersectedPartitions) {
         this.refBaseTableMVIntersectedPartitions = refBaseTableMVIntersectedPartitions;
     }
 
-    public Map<String, Set<String>> getMvRefBaseTableIntersectedPartitions() {
+    public Map<String, Map<Table, Set<String>>> getMvRefBaseTableIntersectedPartitions() {
         return mvRefBaseTableIntersectedPartitions;
     }
 
-    public void setMvRefBaseTableIntersectedPartitions(Map<String, Set<String>> mvRefBaseTableIntersectedPartitions) {
+    public void setMvRefBaseTableIntersectedPartitions(
+            Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions) {
         this.mvRefBaseTableIntersectedPartitions = mvRefBaseTableIntersectedPartitions;
     }
 
@@ -99,11 +100,12 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
-    public Map<String, Range<PartitionKey>> getRefBaseTableRangePartitionMap() {
+    public Map<Table, Map<String, Range<PartitionKey>>> getRefBaseTableRangePartitionMap() {
         return refBaseTableRangePartitionMap;
     }
 
-    public void setRefBaseTableRangePartitionMap(Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap) {
+    public void setRefBaseTableRangePartitionMap(
+            Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap) {
         this.refBaseTableRangePartitionMap = refBaseTableRangePartitionMap;
     }
 
@@ -115,12 +117,21 @@ public class MvTaskRunContext extends TaskRunContext {
         this.refBaseTableListPartitionMap = refBaseTableListPartitionMap;
     }
 
-    public Map<String, Set<String>> getExternalRefBaseTableMVPartitionMap() {
+    public Map<Table, Map<String, Set<String>>> getExternalRefBaseTableMVPartitionMap() {
         return externalRefBaseTableMVPartitionMap;
     }
 
-    public void setExternalRefBaseTableMVPartitionMap(Map<String, Set<String>> externalRefBaseTableMVPartitionMap) {
+    public void setExternalRefBaseTableMVPartitionMap(
+            Map<Table, Map<String, Set<String>>> externalRefBaseTableMVPartitionMap) {
         this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
+    }
+
+    public Map<String, Range<PartitionKey>> getMvRangePartitionMap() {
+        return mvRangePartitionMap;
+    }
+
+    public void setMvRangePartitionMap(Map<String, Range<PartitionKey>> mvRangePartitionMap) {
+        this.mvRangePartitionMap = mvRangePartitionMap;
     }
 
     public ExecPlan getExecPlan() {

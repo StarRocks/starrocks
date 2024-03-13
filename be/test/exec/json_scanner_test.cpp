@@ -23,9 +23,11 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -45,7 +47,7 @@ protected:
         tuple_desc_builder.build(&desc_tbl_builder);
 
         DescriptorTbl* desc_tbl = nullptr;
-        Status st = DescriptorTbl::create(_state, &_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+        Status st = DescriptorTbl::create(_state.get(), &_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
                                           config::vector_chunk_size);
         CHECK(st.ok()) << st.to_string();
 
@@ -77,7 +79,7 @@ protected:
         TBrokerScanRange* broker_scan_range = _pool.add(new TBrokerScanRange());
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
-        return std::make_unique<JsonScanner>(_state, _profile, *broker_scan_range, _counter);
+        return std::make_unique<JsonScanner>(_state.get(), _profile, *broker_scan_range, _counter);
     }
 
     ChunkPtr test_whole_row_json(int columns, const std::string& input_data, std::string jsonpath,
@@ -134,11 +136,22 @@ protected:
         return chunk;
     }
 
+    std::shared_ptr<RuntimeState> create_runtime_state() {
+        TQueryOptions query_options;
+        TUniqueId fragment_id;
+        TQueryGlobals query_globals;
+        std::shared_ptr<RuntimeState> runtime_state =
+                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+        TUniqueId id;
+        runtime_state->init_mem_trackers(id);
+        return runtime_state;
+    }
+
     void SetUp() override {
         config::vector_chunk_size = 4096;
         _profile = _pool.add(new RuntimeProfile("test"));
         _counter = _pool.add(new ScannerCounter());
-        _state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _state = create_runtime_state();
         std::string starrocks_home = getenv("STARROCKS_HOME");
     }
 
@@ -147,7 +160,7 @@ protected:
 private:
     RuntimeProfile* _profile = nullptr;
     ScannerCounter* _counter = nullptr;
-    RuntimeState* _state = nullptr;
+    std::shared_ptr<RuntimeState> _state = nullptr;
     ObjectPool _pool;
 };
 
@@ -1396,6 +1409,48 @@ TEST_F(JsonScannerTest, test_null_with_jsonpath) {
 
     ASSERT_OK(scanner->open());
     ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
+}
+
+TEST_F(JsonScannerTest, file_stream) {
+    // 1. create StreamLoadPipe
+    auto load_id = UniqueId::gen_uid();
+    auto pipe = std::make_shared<StreamLoadPipe>(1024 * 1024, 64 * 1024);
+    DeferOp remove_pipe([&]() { _state->exec_env()->load_stream_mgr()->remove(load_id); });
+    ASSERT_OK(_state->exec_env()->load_stream_mgr()->put(load_id, pipe));
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_STREAM;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_load_id(load_id.to_thrift());
+    ranges.emplace_back(range);
+
+    std::string data = R"({"key1": 1, "key2": 2 }{"key1": 3, "key2": 4 })";
+    EXPECT_OK(pipe->append(data.c_str(), data.size()));
+    EXPECT_OK(pipe->finish());
+
+    auto scanner = create_json_scanner(types, ranges, {"key1", "key2"});
+    Status st;
+    st = scanner->open();
+    EXPECT_OK(st);
+
+    auto res = scanner->get_next();
+    EXPECT_OK(res.status());
+
+    ChunkPtr chunk = res.value();
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("[1, 2]", chunk->debug_row(0));
+    EXPECT_EQ("[3, 4]", chunk->debug_row(1));
 }
 
 } // namespace starrocks

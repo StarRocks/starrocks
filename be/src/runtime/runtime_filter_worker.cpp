@@ -49,7 +49,7 @@ static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query
 
 static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
                                     int64_t http_min_size, const PTransmitRuntimeFilterParams& request) {
-    doris::PBackendService_Stub* stub = nullptr;
+    PInternalService_Stub* stub = nullptr;
     bool via_http = request.data().size() >= http_min_size;
     if (via_http) {
         if (auto res = HttpBrpcStubCache::getInstance()->get_http_stub(dest); res.ok()) {
@@ -77,6 +77,7 @@ void RuntimeFilterPort::add_listener(RuntimeFilterProbeDescriptor* rf_desc) {
     auto& wait_list = _listeners.find(rf_id)->second;
     wait_list.emplace_back(rf_desc);
 }
+
 std::string RuntimeFilterPort::listeners(int32_t filter_id) {
     std::stringstream ss;
     if (!_listeners.count(filter_id)) {
@@ -520,7 +521,9 @@ RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread
     Thread::set_thread_name(_thread, "runtime_filter");
 }
 
-RuntimeFilterWorker::~RuntimeFilterWorker() {
+RuntimeFilterWorker::~RuntimeFilterWorker() = default;
+
+void RuntimeFilterWorker::close() {
     _queue.shutdown();
     _thread.join();
 }
@@ -887,7 +890,7 @@ void RuntimeFilterWorker::execute() {
             RuntimeFilterMerger merger(_exec_env, UniqueId(ev.query_id), ev.query_options, ev.is_opened_by_pipeline);
             Status st = merger.init(ev.create_rf_merger_request);
             if (!st.ok()) {
-                VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.get_error_msg();
+                VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.message();
                 break;
             }
             _mergers.insert(std::make_pair(ev.query_id, std::move(merger)));

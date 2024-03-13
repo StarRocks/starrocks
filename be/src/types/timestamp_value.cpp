@@ -99,17 +99,27 @@ int64_t TimestampValue::diff_microsecond(TimestampValue other) const {
 }
 
 bool TimestampValue::from_string(const char* date_str, size_t len) {
-    int year, month, day, hour, minute, second, microsecond;
-    if (!date::from_string_to_datetime(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond)) {
+    date::ToDatetimeResult res;
+    const auto [is_valid, is_only_date] = date::from_string_to_datetime(date_str, len, &res);
+    if (!is_valid) {
         return false;
     }
 
-    if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
-        return false;
-    }
+    auto process = [&](int year, int month, int day, int hour, int minute, int second, int microsecond) {
+        if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
+            return false;
+        }
+        from_timestamp(year, month, day, hour, minute, second, microsecond);
+        return true;
+    };
 
-    from_timestamp(year, month, day, hour, minute, second, microsecond);
-    return true;
+    // If `date_str` only contains date part, then pass constant zero for hour/minute/second/usec
+    // to make compiler eliminate some compution logic.
+    if (is_only_date) {
+        return process(res.year, res.month, res.day, 0, 0, 0, 0);
+    } else {
+        return process(res.year, res.month, res.day, res.hour, res.minute, res.second, res.microsecond);
+    }
 }
 
 // process string content based on format like "%Y-%m-%d". '-' means any char.
@@ -763,6 +773,12 @@ void TimestampValue::to_timestamp(int* year, int* month, int* day, int* hour, in
     timestamp::to_datetime(_timestamp, year, month, day, hour, minute, second, usec);
 }
 
+void TimestampValue::trunc_to_millisecond() {
+    Timestamp time = _timestamp & TIMESTAMP_BITS_TIME;
+    uint64_t microseconds = time % USECS_PER_MILLIS;
+    _timestamp -= microseconds;
+}
+
 void TimestampValue::trunc_to_second() {
     Timestamp time = _timestamp & TIMESTAMP_BITS_TIME;
     uint64_t microseconds = time % USECS_PER_SEC;
@@ -841,11 +857,11 @@ void TimestampValue::from_unixtime(int64_t second, int64_t microsecond, const cc
     return;
 }
 
-void TimestampValue::from_unix_second(int64_t second) {
+void TimestampValue::from_unix_second(int64_t second, int64_t microsecond) {
     second += timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;
     Timestamp s = second % SECS_PER_DAY;
-    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC);
+    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC + microsecond);
 }
 
 bool TimestampValue::is_valid() const {

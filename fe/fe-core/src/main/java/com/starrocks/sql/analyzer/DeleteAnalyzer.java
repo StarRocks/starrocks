@@ -23,9 +23,13 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -47,11 +51,50 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
 public class DeleteAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DeleteAnalyzer.class);
+
+    public static List<Predicate> replaceParameterInExpr(List<Predicate> deleteConditions) {
+        List<Predicate> result = Lists.newArrayList();
+        for (Predicate exprOrig : deleteConditions) {
+            Predicate expr = (Predicate) exprOrig.clone();
+            result.add(expr);
+            if (expr instanceof BinaryPredicate) {
+                BinaryPredicate binaryPredicate = (BinaryPredicate) expr;
+                Expr rightExpr = binaryPredicate.getChild(1);
+                if (rightExpr instanceof Parameter) {
+                    binaryPredicate.setChild(1, getLiteralFromParameter((Parameter) rightExpr));
+                }
+            } else if (expr instanceof InPredicate) {
+                InPredicate inPredicate = (InPredicate) expr;
+                int inElementNum = inPredicate.getInElementNum();
+                for (int i = 1; i <= inElementNum; i++) {
+                    Expr child = inPredicate.getChild(i);
+                    if (child instanceof Parameter) {
+                        inPredicate.setChild(i, getLiteralFromParameter((Parameter) child));
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    @NotNull
+    private static Expr getLiteralFromParameter(Parameter p) {
+        Expr e = p.getExpr();
+        if (e == null) {
+            throw new SemanticException("Parameter is not set", p.getPos());
+        }
+        if (e instanceof VariableExpr) {
+            Object value = ((VariableExpr) e).getValue();
+            e = value == null ? new NullLiteral() : new StringLiteral(value.toString());
+        }
+        return e;
+    }
 
     private static void analyzePredicate(Expr predicate, List<Predicate> deleteConditions) {
         if (predicate instanceof BinaryPredicate) {
@@ -61,7 +104,7 @@ public class DeleteAnalyzer {
                 throw new SemanticException("Left expr of binary predicate should be column name", leftExpr.getPos());
             }
             Expr rightExpr = binaryPredicate.getChild(1);
-            if (!(rightExpr instanceof LiteralExpr)) {
+            if (!(rightExpr instanceof LiteralExpr || rightExpr instanceof Parameter)) {
                 throw new SemanticException("Right expr of binary predicate should be value", rightExpr.getPos());
             }
             deleteConditions.add(binaryPredicate);
@@ -94,7 +137,7 @@ public class DeleteAnalyzer {
             }
             for (int i = 1; i <= inElementNum; i++) {
                 Expr expr = inPredicate.getChild(i);
-                if (!(expr instanceof LiteralExpr)) {
+                if (!(expr instanceof LiteralExpr || expr instanceof Parameter)) {
                     throw new SemanticException("Child of in predicate should be value", expr.getPos());
                 }
             }

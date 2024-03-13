@@ -34,10 +34,13 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -51,6 +54,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 
 import java.util.Iterator;
 import java.util.List;
@@ -58,7 +62,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
-public final class QeProcessorImpl implements QeProcessor {
+import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
+
+public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
     private static final long ONE_MINUTE = 60 * 1000L;
@@ -98,7 +104,9 @@ public final class QeProcessorImpl implements QeProcessor {
 
     @Override
     public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
-        LOG.info("register query id = {}", DebugUtil.printId(queryId));
+        if (needLogRegisterAndUnregisterQueryId(info)) {
+            LOG.info("register query id = {}", DebugUtil.printId(queryId));
+        }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
             throw new UserException("queryId " + queryId + " already exists");
@@ -137,7 +145,9 @@ public final class QeProcessorImpl implements QeProcessor {
             if (info.getCoord() != null) {
                 info.getCoord().onFinished();
             }
-            LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
+            if (needLogRegisterAndUnregisterQueryId(info)) {
+                LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
+            }
         }
     }
 
@@ -280,6 +290,16 @@ public final class QeProcessorImpl implements QeProcessor {
         return coordinatorMap.size();
     }
 
+    @Override
+    public long estimateSize() {
+        return SizeEstimator.estimate(coordinatorMap) + SizeEstimator.estimate(monitorQueryMap);
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryInfo", (long) coordinatorMap.size());
+    }
+
     public static final class QueryInfo {
         private final ConnectContext connectContext;
         private final Coordinator coord;
@@ -323,5 +343,13 @@ public final class QeProcessorImpl implements QeProcessor {
         public long getStartExecTime() {
             return startExecTime;
         }
+    }
+
+    private static boolean needLogRegisterAndUnregisterQueryId(QueryInfo inf) {
+        ConnectContext context = inf.getConnectContext();
+        return Config.log_register_and_unregister_query_id &&
+                context != null &&
+                (context.getCommand() != COM_STMT_EXECUTE ||
+                        context.getSessionVariable().isAuditExecuteStmt());
     }
 }

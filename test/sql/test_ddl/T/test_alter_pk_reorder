@@ -20,10 +20,13 @@ insert into tab1 values (300,300,300,300,300);
 insert into tab1 values (400,400,400,400,400);
 insert into tab1 values (500,500,500,500,500);
 insert into tab1 values (600,600,600,600,600);
+select * from tab1 where k1 = 100;
+
 alter table tab1 order by (k2,k1);
 function: wait_alter_table_finish()
 insert into tab1 values (700,700,700,700,700);
 select * from tab1;
+select * from tab1 where k2 = 100;
 
 
 -- name: test_alter_pk_reorder_column_type

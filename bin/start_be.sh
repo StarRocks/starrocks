@@ -21,4 +21,4 @@
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
-bash ${STARROCKS_HOME}/bin/start_backend.sh --be $@
+exec ${STARROCKS_HOME}/bin/start_backend.sh --be $@

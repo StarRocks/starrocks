@@ -27,7 +27,8 @@
 
 namespace starrocks {
 class TabletSchema;
-}
+class ThreadPool;
+} // namespace starrocks
 
 namespace starrocks {
 class Schema;
@@ -70,24 +71,23 @@ public:
 
     [[nodiscard]] Status delete_metadata(int64_t version);
 
-    bool get_enable_persistent_index(int64_t version);
-
-    StatusOr<PersistentIndexTypePB> get_persistent_index_type(int64_t version);
-
     [[nodiscard]] Status put_txn_log(const TxnLog& log);
 
     [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
+    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
+
+    StatusOr<TxnLogPtr> get_txn_slog(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
 
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
-                                                       uint32_t max_rows_per_segment = 0);
-
-    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, Schema schema);
+                                                       uint32_t max_rows_per_segment = 0,
+                                                       ThreadPool* flush_pool = nullptr);
 
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
@@ -96,16 +96,15 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
-    StatusOr<std::vector<RowsetPtr>> get_rowsets(const TabletMetadata& metadata);
-
-    StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
-                                      bool fill_data_cache, bool fill_metadata_cache);
+    std::vector<RowsetPtr> get_rowsets(const TabletMetadataPtr& metadata);
 
     [[nodiscard]] std::string metadata_location(int64_t version) const;
 
     [[nodiscard]] std::string metadata_root_location() const;
 
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
+
+    [[nodiscard]] std::string txn_slog_location(int64_t txn_id) const;
 
     [[nodiscard]] std::string txn_vlog_location(int64_t version) const;
 
@@ -119,9 +118,9 @@ public:
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
-    UpdateManager* update_mgr() { return _mgr->update_mgr(); }
+    UpdateManager* update_mgr() const { return _mgr->update_mgr(); }
 
-    TabletManager* tablet_mgr() { return _mgr; }
+    TabletManager* tablet_mgr() const { return _mgr; }
 
     // Many tablet operations need to fetch the tablet schema information
     // stored in the object storage, if the cache does not hit. In order to
@@ -132,8 +131,6 @@ public:
     // NOTE: set this value to a non-positive value means clear the version hint.
     // NOTE: Some methods of Tablet will internally update this value automatically.
     void set_version_hint(int64_t version_hint) { _version_hint = version_hint; }
-
-    int64_t version_hint() const { return _version_hint; }
 
     int64_t data_size();
 

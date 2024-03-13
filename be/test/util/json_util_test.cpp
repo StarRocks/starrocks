@@ -67,4 +67,27 @@ TEST_F(JsonUtilTest, normal_fail_str) {
     ASSERT_STREQ(result, str.c_str());
 }
 
+TEST_F(JsonUtilTest, properties_test) {
+    std::map<std::string, std::map<std::string, std::string>> map;
+    std::map<std::string, std::string> common;
+    std::map<std::string, std::string> index;
+    std::map<std::string, std::string> search;
+    std::map<std::string, std::string> extra;
+    common.emplace("mk1", "v1");
+    index.emplace("ik1", "v2");
+    search.emplace("sk1", "v3");
+    map.emplace("common_properties", common);
+    map.emplace("index_properties", index);
+    map.emplace("search_properties", search);
+    map.emplace("extra_properties", extra);
+    auto str = to_json(map);
+
+    LOG(INFO) << "str: " << str;
+
+    std::map<std::string, std::map<std::string, std::string>> map_result;
+    from_json(str, &map_result);
+
+    ASSERT_TRUE(map == map_result);
+}
+
 } // namespace starrocks

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
@@ -31,6 +30,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -50,10 +51,12 @@ public class PartitionUtils {
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,
                                                           List<Long> tmpPartitionIds,
-                                                          DistributionDesc distributionDesc)throws DdlException {
-        List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
-                db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds, distributionDesc);
-        if (!db.writeLockAndCheckExist()) {
+                                                          DistributionDesc distributionDesc) throws DdlException {
+        List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
+                        tmpPartitionIds, distributionDesc);
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
         boolean success = false;
@@ -139,12 +142,12 @@ public class PartitionUtils {
                     LOG.warn("clear tablets from inverted index failed", t);
                 }
             }
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
     public static void clearTabletsFromInvertedIndex(List<Partition> partitions) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Partition partition : partitions) {
             for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : materializedIndex.getTablets()) {

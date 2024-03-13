@@ -58,6 +58,7 @@ public class DistributionSpec {
         BROADCAST,
         SHUFFLE,
         GATHER,
+        ROUND_ROBIN,
         ;
 
         public TDistributionType toThrift() {

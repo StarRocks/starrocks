@@ -66,7 +66,7 @@ public:
         }
     }
 
-    doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
+    PInternalService_Stub* get_stub(const butil::EndPoint& endpoint) {
         std::lock_guard<SpinLock> l(_lock);
         auto stub_pool = _stub_map.seek(endpoint);
         if (stub_pool == nullptr) {
@@ -77,9 +77,9 @@ public:
         return (*stub_pool)->get_or_create(endpoint);
     }
 
-    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
+    PInternalService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
 
-    doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
+    PInternalService_Stub* get_stub(const std::string& host, int port) {
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = host;
@@ -110,7 +110,7 @@ private:
             }
         }
 
-        doris::PBackendService_Stub* get_or_create(const butil::EndPoint& endpoint) {
+        PInternalService_Stub* get_or_create(const butil::EndPoint& endpoint) {
             if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
                 brpc::ChannelOptions options;
                 options.connect_timeout_ms = config::rpc_connect_timeout_ms;
@@ -125,8 +125,7 @@ private:
                 if (channel->Init(endpoint, &options)) {
                     return nullptr;
                 }
-                auto stub = new doris::PBackendService_Stub(channel.release(),
-                                                            google::protobuf::Service::STUB_OWNS_CHANNEL);
+                auto stub = new PInternalService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
                 _stubs.push_back(stub);
                 return stub;
             }
@@ -136,7 +135,7 @@ private:
             return _stubs[_idx];
         }
 
-        std::vector<doris::PBackendService_Stub*> _stubs;
+        std::vector<PInternalService_Stub*> _stubs;
         int64_t _idx = -1;
     };
 
@@ -151,7 +150,7 @@ public:
         return &cache;
     }
 
-    StatusOr<doris::PBackendService_Stub*> get_http_stub(const TNetworkAddress& taddr) {
+    StatusOr<PInternalService_Stub*> get_http_stub(const TNetworkAddress& taddr) {
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = taddr.hostname;
@@ -182,7 +181,7 @@ public:
             return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
                                         std::to_string(taddr.port));
         }
-        auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+        auto stub = new PInternalService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
         _stub_map.insert(endpoint, stub);
         return stub;
     }
@@ -198,7 +197,7 @@ private:
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache& cache) = delete;
 
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;
+    butil::FlatMap<butil::EndPoint, PInternalService_Stub*> _stub_map;
 };
 
 } // namespace starrocks

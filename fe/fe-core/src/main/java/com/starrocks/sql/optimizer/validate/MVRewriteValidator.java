@@ -122,6 +122,11 @@ public class MVRewriteValidator {
         List<MaterializedView> diffMVs = mvs.stream()
                 .filter(mv -> !beforeTableIds.contains(mv.getId()))
                 .collect(Collectors.toList());
+
+        if (taskContext.getOptimizerContext().getQueryTables() != null) {
+            taskContext.getOptimizerContext().getQueryTables().addAll(diffMVs);
+        }
+
         if (diffMVs.isEmpty()) {
             boolean hasRewriteSuccess = Tracers.getAllVars().stream()
                     .anyMatch(var -> StringUtils.contains(var.getValue().toString(),

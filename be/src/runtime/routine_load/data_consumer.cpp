@@ -125,7 +125,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
             Status st = ctx->exec_env()->small_file_mgr()->get_file(file_id, parts[2], &file_path);
             if (!st.ok()) {
                 std::stringstream ss;
-                ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.get_error_msg();
+                ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.message();
                 return Status::InternalError(ss.str());
             }
             RETURN_IF_ERROR(set_conf(item.first, file_path));
@@ -442,6 +442,14 @@ Status PulsarDataConsumer::init(StreamLoadContext* ctx) {
         }
 
         _custom_properties.emplace(item.first, item.second);
+    }
+
+    std::string log_file_path = config::sys_log_dir + "/pulsar-cpp-client.log";
+    if (config::pulsar_client_log_level >= 0 && config::pulsar_client_log_level <= 3) {
+        config.setLogger(new pulsar::FileLoggerFactory(
+                static_cast<pulsar::Logger::Level>(config::pulsar_client_log_level), log_file_path));
+    } else {
+        config.setLogger(new pulsar::FileLoggerFactory(pulsar::Logger::Level::LEVEL_WARN, log_file_path));
     }
 
     _p_client = new pulsar::Client(_service_url, config);

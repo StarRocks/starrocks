@@ -15,6 +15,7 @@
 package com.starrocks.connector.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,10 @@ public class HadoopExt {
     public void rewriteConfiguration(Configuration conf) {
     }
 
+    public FileSystem bindUGIToFileSystem(FileSystem fs, UserGroupInformation ugi) {
+        return fs;
+    }
+
     public String getCloudConfString(Configuration conf) {
         return conf.get(HADOOP_CLOUD_CONFIGURATION_STRING, "");
     }
@@ -58,8 +63,8 @@ public class HadoopExt {
         return executeActionInDoAs(ugi, action);
     }
 
-    private static <R, E extends Exception> R executeActionInDoAs(UserGroupInformation userGroupInformation,
-                                                                  GenericExceptionAction<R, E> action) throws E {
+    static <R, E extends Exception> R executeActionInDoAs(UserGroupInformation userGroupInformation,
+                                                          GenericExceptionAction<R, E> action) throws E {
         return userGroupInformation.doAs((PrivilegedAction<ResultOrException<R, E>>) () -> {
             try {
                 return new ResultOrException<>(action.run(), null);

@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -87,24 +88,44 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `js0` (\n" +
+                "  `v1` bigint NULL, \n" +
+                "  `j1` JSON NULL, \n" +
+                "  `st1` struct<j1 Json, j2 Json> NULL, \n" +
+                "  `ar1` Array<Json> NULL, \n" +
+                "  `mp1` map<Int, Json> NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     @Before
     public void setUp() {
+        super.setUp();
         connectContext.getSessionVariable().setCboPruneSubfield(true);
+        connectContext.getSessionVariable().setCboPruneJsonSubfield(true);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 2;
     }
 
     @After
     public void tearDown() {
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setCboPruneSubfield(false);
+        connectContext.getSessionVariable().setCboPruneJsonSubfield(false);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
+        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 1;
     }
 
     @Test
@@ -115,8 +136,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
-                "  |  12 <-> 4: st1.s1\n" +
-                "  |  13 <-> 4: st1.s2\n" +
+                "  |  12 <-> 4: st1.s1[false]\n" +
+                "  |  13 <-> 4: st1.s2[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
@@ -132,13 +153,13 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "[/st1/s1]");
         assertContains(plan, "  5:Project\n" +
                 "  |  output columns:\n" +
-                "  |  22 <-> 9: st1.s1\n" +
+                "  |  22 <-> 9: st1.s1[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  4:OlapScanNode");
         assertContains(plan, "  2:Project\n" +
                 "  |  output columns:\n" +
-                "  |  21 <-> 2: st1.s1\n" +
+                "  |  21 <-> 2: st1.s1[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  1:OlapScanNode");
@@ -152,8 +173,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: v1, BIGINT, true]\n" +
-                "  |  26 <-> 2: st1.s1\n" +
-                "  |  27 <-> 3: st2.s2\n" +
+                "  |  26 <-> 2: st1.s1[false]\n" +
+                "  |  27 <-> 3: st2.s2[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
@@ -355,17 +376,17 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void testStructUpperCase() throws Exception {
         String sql = "select map5[1].S1, map5[2].M2[4].S3 from pc0;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "map5[1].s1");
-        assertContains(plan, "map5[2].m2[4].s3");
+        assertContains(plan, "map5[1].s1[true]");
+        assertContains(plan, "map5[2].m2[true][4].s3[true]");
 
         sql = "select st1.S2, st2.SM3[1], ST3.SA3, ST5.SS3.S32 from sc0;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "st1.s2"); 
-        assertContains(plan, "st2.sm3[1]"); 
-        assertContains(plan, "st5.ss3.s32"); 
-        assertContains(plan, "st3.sa3"); 
+        assertContains(plan, "st1.s2[false]");
+        assertContains(plan, "st2.sm3[true][1]");
+        assertContains(plan, "st5.ss3.s32[false]");
+        assertContains(plan, "st3.sa3[false]");
     }
-    
+
     @Test
     public void testCTEInlinePruneColumn() throws Exception {
         String sql =
@@ -380,14 +401,14 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  4:Project\n" +
                 "  |  output columns:\n" +
                 "  |  15 <-> [15: v1, BIGINT, true]\n" +
-                "  |  25 <-> 17: st2.s2\n" +
+                "  |  25 <-> 17: st2.s2[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:OlapScanNode");
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  8 <-> [8: v1, BIGINT, true]\n" +
-                "  |  24 <-> 9: st1.s1\n" +
+                "  |  24 <-> 9: st1.s1[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
@@ -405,7 +426,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  9:Project\n" +
                 "  |  output columns:\n" +
                 "  |  22 <-> [22: v1, BIGINT, true]\n" +
-                "  |  33 <-> 24: st2.sm3[1]\n" +
+                "  |  33 <-> 24: st2.sm3[true][1]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  8:OlapScanNode");
@@ -422,8 +443,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  5:Project\n" +
                 "  |  output columns:\n" +
                 "  |  8 <-> [8: v1, BIGINT, true]\n" +
-                "  |  37 <-> 12: st4.ss3\n" +
-                "  |  38 <-> 11: st3.sa3\n" +
+                "  |  37 <-> 12: st4.ss3[false]\n" +
+                "  |  38 <-> 11: st3.sa3[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  4:OlapScanNode");
@@ -431,8 +452,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  2:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: v1, BIGINT, true]\n" +
-                "  |  35 <-> 5: st4.ss3\n" +
-                "  |  36 <-> 4: st3.sa3\n" +
+                "  |  35 <-> 5: st4.ss3[false]\n" +
+                "  |  36 <-> 4: st3.sa3[false]\n" +
                 "  |  cardinality: 1");
         assertContains(plan, "ColumnAccessPath: [/st3/sa3, /st4/ss3]");
     }
@@ -444,7 +465,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "union all " +
                 "select v1, st1, st3, st4 from sc0 group by v1, st1, st3, st4) x1 join sc0 x2 on x1.v1 = x2.v1";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "30 <-> 21: st2.sm3[1]");
+        assertContains(plan, "30 <-> 21: st2.sm3[true][1]");
         assertContains(plan, "ColumnAccessPath: [/st2/sm3/INDEX]");
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
@@ -458,16 +479,16 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  6:Project\n" +
                 "  |  output columns:\n" +
                 "  |  8 <-> [8: v1, BIGINT, true]\n" +
-                "  |  34 <-> 11: st3.sa3\n" +
-                "  |  35 <-> 12: st4.ss3\n" +
+                "  |  34 <-> 11: st3.sa3[false]\n" +
+                "  |  35 <-> 12: st4.ss3[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  5:AGGREGATE");
         assertContains(plan, "  2:Project\n" +
                 "  |  output columns:\n" +
                 "  |  1 <-> [1: v1, BIGINT, true]\n" +
-                "  |  32 <-> 4: st3.sa3\n" +
-                "  |  33 <-> 5: st4.ss3\n" +
+                "  |  32 <-> 4: st3.sa3[false]\n" +
+                "  |  33 <-> 5: st4.ss3[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  1:OlapScanNode");
@@ -484,8 +505,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  2:Project\n" +
                 "  |  output columns:\n" +
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
-                "  |  12 <-> 4: st1.s1\n" +
-                "  |  13 <-> 4: st1.s2");
+                "  |  12 <-> 4: st1.s1[false]\n" +
+                "  |  13 <-> 4: st1.s2[false]");
     }
 
     @Test
@@ -499,12 +520,12 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  output columns:\n" +
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
                 "  |  4 <-> [4: st1, struct<s1 int(11), s2 int(11)>, true]\n" +
-                "  |  10 <-> 4: st1.s1");
+                "  |  10 <-> 4: st1.s1[true]");
         assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
-                "  |  13 <-> 4: st1.s1\n" +
-                "  |  14 <-> 4: st1.s2");
+                "  |  13 <-> 4: st1.s1[false]\n" +
+                "  |  14 <-> 4: st1.s2[false]");
     }
 
     @Test
@@ -519,7 +540,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void testCTEInlinePruneColumn2() throws Exception {
         String sql = "with t1 as (select * from sc0) " +
                 "select x1.st1.s1, x2.st2.s2 from t1 x1 join " +
-                "(select v1, st1, st2 from t1 group by v1, st1,st2) x2 on x1.v1 = x2.v1";
+                "(select v1, st1, st2 from t1 group by v1, st1, st2) x2 on x1.v1 = x2.v1";
         String plan;
         try {
             connectContext.getSessionVariable().setCboCTERuseRatio(10000000);
@@ -530,14 +551,14 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  7:Project\n" +
                 "  |  output columns:\n" +
                 "  |  15 <-> [15: v1, BIGINT, true]\n" +
-                "  |  25 <-> 17: st2.s2\n" +
+                "  |  25 <-> 17: st2.s2[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  6:AGGREGATE");
         assertContains(plan, "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  8 <-> [8: v1, BIGINT, true]\n" +
-                "  |  24 <-> 9: st1.s1\n" +
+                "  |  24 <-> 9: st1.s1[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
@@ -555,7 +576,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "  12:Project\n" +
                 "  |  output columns:\n" +
                 "  |  15 <-> [15: v1, BIGINT, true]\n" +
-                "  |  25 <-> 17: st2.s2\n" +
+                "  |  25 <-> 17: st2.s2[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  11:AGGREGATE");
@@ -567,7 +588,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  1 <-> [1: v1, BIGINT, true]\n" +
                 "  |  2 <-> [2: st1, struct<s1 int(11), s2 int(11)>, true]\n" +
                 "  |  3 <-> [3: st2, struct<s1 int(11), s2 int(11), sm3 map<int(11),int(11)>>, true]\n" +
-                "  |  26 <-> 2: st1.s1\n" +
+                "  |  26 <-> 2: st1.s1[true]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
@@ -592,7 +613,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "  |  output columns:\n" +
                 "  |  3 <-> [3: v1, BIGINT, true]\n" +
                 "  |  6 <-> [6: st3, struct<s1 int(11), s2 int(11), sa3 array<int(11)>>, true]\n" +
-                "  |  12 <-> 4: st1.s1\n" +
+                "  |  12 <-> 4: st1.s1[false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
@@ -631,7 +652,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  2:Project\n" +
                         "  |  <slot 8> : 8: v1\n" +
-                        "  |  <slot 27> : 9: st1.s1",
+                        "  |  <slot 27> : 9: st1.s1[false]",
                 "5:Project\n" +
                         "  |  <slot 16> : array_map(<slot 15> -> CAST(<slot 15> AS BIGINT) + 8: v1, 7: a1)\n" +
                         "  |  <slot 27> : 27: expr");
@@ -645,7 +666,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             assertContains(plan, "  0:OlapScanNode\n" +
                     "     table: pc0, rollup: pc0\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: array_length([]) IS NOT NULL\n" +
+                    "     Predicates: array_length(CAST([] AS ARRAY<BOOLEAN>)) IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=1.0\n" +
@@ -677,7 +698,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
             assertContains(plan, "  0:OlapScanNode\n" +
                     "     table: pc0, rollup: pc0\n" +
                     "     preAggregation: on\n" +
-                    "     Predicates: array_length([]) IS NOT NULL\n" +
+                    "     Predicates: array_length(CAST([] AS ARRAY<BOOLEAN>)) IS NOT NULL\n" +
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=3.0\n" +
@@ -721,9 +742,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         sql = "select row(1,2,3).col2 is null from pc0 t1 right join sc0 t2 on t1.v1 = t2.v1;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "5:Project\n" +
-                "  |  <slot 15> : row(1, 2, 3).col2 IS NULL");
+                "  |  <slot 15> : row(1, 2, 3).col2[true] IS NULL");
     }
-
 
 
     @Test
@@ -833,5 +853,208 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select ass[1].a, ass[1].b from tt;";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "[/ass/INDEX/a, /ass/INDEX/b]");
+    }
+
+    @Test
+    public void testJsonPruneNormal() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, '$.a.b.c'), " +
+                "get_json_string(j1, '$.\"a.b.c\".e.f.g'), " +
+                "json_query(j1, '$.a1.b1.c1'), " +
+                "json_exists(j1, '$.a2.b2.c2'), " +
+                "json_length(j1, '$.a3.b3[1].c3') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/\"a.b.c\"/e, /j1/a/b, /j1/a1/b1, /j1/a2/b2, /j1/a3/b3]");
+
+        sql = "select " +
+                "JSON_EXISTS(j1, '$.a.b.c2'), " +
+                "get_json_int(j1, 'asd') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b, /j1/asd]");
+    }
+
+    @Test
+    public void testJsonPathMerge() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, '$.a.b.c1'), " +
+                "JSON_EXISTS(j1, '$.a.b.c2'), " +
+                "json_length(j1, '$.a.b2.c1'), " +
+                "json_length(j1, '$.a.b2.c3') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b, /j1/a/b2]");
+
+        sql = "select " +
+                "get_json_int(j1, '$.a.b[1].c1'), " +
+                "JSON_EXISTS(j1, '$.a.b[2].c2'), " +
+                "JSON_EXISTS(j1, '$.a.b[2:2].c2'), " +
+                "JSON_EXISTS(j1, '$.a.b[*].c2'), " +
+                "JSON_EXISTS(j1, '$.\"a.b[*]\".c2'), " +
+                "JSON_EXISTS(j1, '$.\"a.b[*]\".c2[1]'), " +
+                "JSON_EXISTS(j1, '$.\"a.b[*]\".c2[2].a') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/\"a.b[*]\"/c2, /j1/a/b]");
+    }
+
+    @Test
+    public void testJsonArrayPat() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, '$.a[2].b[1].c1'), " +
+                "JSON_EXISTS(j1, '$.a[3].b[2].c2'), " +
+                "JSON_EXISTS(j1, '$.a.b[2:2].c2'), " +
+                "JSON_EXISTS(j1, '$.a.b[*].c2') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a]");
+    }
+
+    @Test
+    public void testJsonLongPath() throws Exception {
+        String sql = "select j1->'1'->'2'->'3'->'4'->'5'->'6'->'7'->'8'->'9'->\n" +
+                "'10'->'11'->'12'->'13'->'14'->'15' " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/1/2]");
+    }
+
+    @Test
+    public void testJsonFlag() throws Exception {
+        try {
+            connectContext.getSessionVariable().setCboPruneJsonSubfield(false);
+            String sql = "select " +
+                    "JSON_EXISTS(j1, '$.a.b.c2'), " +
+                    "get_json_int(j1, 'asd') " +
+                    "from js0;";
+            String plan = getVerboseExplain(sql);
+            assertNotContains(plan, "ColumnAccessPath:");
+
+            sql = "select sc0.st1.s1, st1.s2 from t0 join sc0 on sc0.v1 = t0.v1";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/st1/s1, /st1/s2]");
+        } finally {
+            connectContext.getSessionVariable().setCboPruneJsonSubfield(true);
+        }
+    }
+
+    @Test
+    public void testJsonErrorPath() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, '$asdfsdf') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "get_json_int(j1, '$.\"a.\"b[*]\"') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "get_json_int(j1, '$.a.b.c1'), " +
+                "json_length(j1, '$.*') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "get_json_int(j1, '$.a.b.c1'), " +
+                "json_length(j1, '$.*') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "json_length(j1, '$.*') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "json_length(j1, '$..abbb[3]') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "json_length(j1, '$..abbb[3]') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+    }
+
+    @Test
+    public void testJsonPathWithoutRoot() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, 'asd') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/asd]");
+
+        sql = "select " +
+                "get_json_int(j1, 'a.b.c.d') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b]");
+
+        sql = "select " +
+                "get_json_int(j1, '$') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+        
+        sql = "select " +
+                "get_json_int(j1, '$.') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+    }
+
+    @Test
+    public void testSubfieldPathLose() throws Exception {
+        String sql = "select v1 from pc0 where (a1 is not null) NOT IN (select t0.v1 from t0 where false)";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: pc0, rollup: pc0");
+        assertContains(plan, "ColumnAccessPath");
+    }
+
+    @Test
+    public void testJsonArray() throws Exception {
+        String sql = "select j1->'[0]' from js0;";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select j1->' [0]' from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select j1->'a. [0]' from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a]");
+    }
+
+    @Test
+    public void testPruneMapFromAllChild() throws Exception {
+        String sql = "WITH A AS (SELECT 'a' as event_key, 'x' as property_key ), \n" +
+                "          B AS (SELECT 'a' as event_key, map { 'x' :1 } as props ) \n" +
+                "SELECT * FROM A JOIN B ON A.event_key = B.event_key WHERE props [property_key] = 1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 6:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: expr = 5: expr\n" +
+                "  |  other join predicates: 6: expr[3: expr] = 1");
     }
 }

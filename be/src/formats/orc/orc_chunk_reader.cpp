@@ -87,7 +87,7 @@ Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     try {
         _reader_options.setMemoryPool(*getOrcMemoryPool());
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
-        return init(std::move(reader));
+        RETURN_IF_ERROR(init(std::move(reader)));
     } catch (std::exception& e) {
         auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0, file = $1", e.what(),
                                      _current_file_name);
@@ -364,6 +364,13 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         result->len = len;
         result->precision = precision;
         result->scale = scale;
+        // To support iceberg table time type
+        // When orc type is bigint and orc attribute iceberg.long-type is TIME, then convert result type to TYPE_TIME
+        if (result->type == TYPE_BIGINT && orc_type->hasAttributeKey("iceberg.long-type")) {
+            if ("TIME" == orc_type->getAttributeValue("iceberg.long-type")) {
+                result->type = TYPE_TIME;
+            }
+        }
     }
     return Status::OK();
 }
@@ -447,16 +454,6 @@ Status OrcChunkReader::_init_cast_exprs() {
         if (starrocks_type.is_assignable(orc_type)) {
             _cast_exprs[column_pos] = slot;
             continue;
-        }
-        // we don't support implicit cast column in query external hive table case.
-        // if we query external table, we heavily rely on type match to do optimization.
-        // For example, if we assume column A is an integer column, but it's stored as string in orc file
-        // then min/max of A is almost unusable. Think that there are values ["10", "10000", "100001", "11"]
-        // min/max will be "10" and "11", and we expect min/max is 10/100001
-        if (!_broker_load_mode && !is_implicit_castable(starrocks_type, orc_type)) {
-            return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1. file = $2",
-                                                            orc_type.debug_string(), starrocks_type.debug_string(),
-                                                            _current_file_name));
         }
         Expr* cast = VectorizedCastExprFactory::from_type(orc_type, starrocks_type, slot, &_pool);
         if (cast == nullptr) {
@@ -622,6 +619,13 @@ StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
         // TODO(murphy) check status
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
         col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
+
+        // If we feed nullable column to cast_expr, it may return non-nullable column if it really doesn't have null values
+        if (slot->is_nullable()) {
+            // wrap nullable column if necessary
+            col = NullableColumn::wrap_if_necessary(col);
+        }
+
         DCHECK_LE(col->size(), chunk_size);
         cast_chunk->append_column(std::move(col), slot->id());
     }
@@ -723,6 +727,8 @@ static std::unordered_set<TExprNodeType::type> _supported_expr_node_types = {
         TExprNodeType::type::SLOT_REF,
         TExprNodeType::type::STRING_LITERAL,
         TExprNodeType::type::LARGE_INT_LITERAL,
+        // is null & is not null
+        TExprNodeType::type::FUNCTION_CALL,
 };
 
 static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logical_types = {
@@ -748,8 +754,8 @@ static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logica
 };
 
 bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
-    TExprNodeType::type node_type = conjunct->node_type();
-    TExprOpcode::type op_type = conjunct->op();
+    const TExprNodeType::type& node_type = conjunct->node_type();
+    const TExprOpcode::type& op_type = conjunct->op();
     if (_supported_expr_node_types.find(node_type) == _supported_expr_node_types.end()) {
         return false;
     }
@@ -778,7 +784,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
     // supported one level. first child is slot, and others are literal values.
     // and only support some of logical types.
     if (node_type == TExprNodeType::BINARY_PRED || node_type == TExprNodeType::IN_PRED ||
-        node_type == TExprNodeType::IS_NULL_PRED) {
+        node_type == TExprNodeType::IS_NULL_PRED || node_type == TExprNodeType::FUNCTION_CALL) {
         // first child should be slot
         // and others should be literal.
         Expr* c = conjunct->get_child(0);
@@ -799,7 +805,27 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         }
 
         if (conjunct->get_num_children() == 1) {
-            return false;
+            if (node_type == TExprNodeType::IS_NULL_PRED) {
+                // null predicate only has one child
+                // we don't need to return false
+            } else if (node_type == TExprNodeType::FUNCTION_CALL) {
+                // null predicate only has one child
+                // check is null & is not null
+                std::string null_str;
+                if (!conjunct->is_null_scalar_function(null_str)) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // We only support is null / is not null in function call
+        if (node_type == TExprNodeType::FUNCTION_CALL) {
+            std::string null_str;
+            if (!conjunct->is_null_scalar_function(null_str)) {
+                return false;
+            }
         }
 
         for (int i = 1; i < conjunct->get_num_children(); i++) {
@@ -875,13 +901,15 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
     case LogicalType::TYPE_DECIMAL128:
         return orc::Literal{to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale};
     default:
-        CHECK(false) << "failed to handle logical type = " << std::to_string(ltype);
+        DCHECK(false);
     }
+    LOG(WARNING) << "failed to handle logical type = " << std::to_string(ltype) << " in translate_to_orc_literal()";
+    return Status::InternalError("failed to handle logical type = " + std::to_string(ltype));
 }
 
 Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
-    TExprNodeType::type node_type = conjunct->node_type();
-    TExprOpcode::type op_type = conjunct->op();
+    const TExprNodeType::type& node_type = conjunct->node_type();
+    const TExprOpcode::type& op_type = conjunct->op();
 
     // If conjunct is slot ref, like SELECT * FROM tbl where col;
     // We build SearchArgument about col=true directly.
@@ -902,7 +930,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         } else if (op_type == TExprOpcode::COMPOUND_NOT) {
             builder->startNot();
         } else {
-            CHECK(false) << "unexpected op_type in compound_pred type. op_type = " << std::to_string(op_type);
+            return Status::InternalError("unexpected op_type in compound_pred type. op_type = " +
+                                         std::to_string(op_type));
         }
         for (Expr* c : conjunct->children()) {
             RETURN_IF_ERROR(_add_conjunct(c, builder));
@@ -932,9 +961,17 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
     auto* ref = down_cast<ColumnRef*>(slot);
-    SlotId slot_id = ref->slot_id();
-    std::string name = _slot_id_to_desc[slot_id]->col_name();
-    orc::PredicateDataType pred_type = _supported_logical_types[slot->type().type];
+    const SlotId& slot_id = ref->slot_id();
+    const std::string& name = _slot_id_to_desc[slot_id]->col_name();
+
+    orc::PredicateDataType pred_type = orc::PredicateDataType::LONG;
+    auto type_it = _supported_logical_types.find(slot->type().type);
+    if (type_it != _supported_logical_types.end()) {
+        pred_type = type_it->second;
+    } else {
+        return Status::NotSupported(
+                fmt::format("orc chunk reader don't support {}.", std::to_string(slot->type().type)));
+    }
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
         Expr* lit = conjunct->get_child(1);
@@ -976,7 +1013,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
             break;
 
         default:
-            CHECK(false) << "unexpected op_type in binary_pred type. op_type = " << std::to_string(op_type);
+            return Status::InternalError("unexpected op_type in binary_pred type. op_type = " +
+                                         std::to_string(op_type));
         }
         return Status::OK();
     }
@@ -999,13 +1037,21 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         return Status::OK();
     }
 
-    if (node_type == TExprNodeType::IS_NULL_PRED) {
-        builder->isNull(name, pred_type);
+    if (node_type == TExprNodeType::IS_NULL_PRED || node_type == TExprNodeType::FUNCTION_CALL) {
+        std::string null_function_name;
+        if (conjunct->is_null_scalar_function(null_function_name)) {
+            if (null_function_name == "null") {
+                builder->isNull(name, pred_type);
+            } else if (null_function_name == "not null") {
+                builder->startNot();
+                builder->isNull(name, pred_type);
+                builder->end();
+            }
+        }
         return Status::OK();
     }
 
-    CHECK(false) << "unexpected node_type = " << std::to_string(node_type);
-    return Status::OK();
+    return Status::InternalError("unexpected node_type = " + std::to_string(node_type));
 }
 
 #define ADD_RF_TO_BUILDER                                            \

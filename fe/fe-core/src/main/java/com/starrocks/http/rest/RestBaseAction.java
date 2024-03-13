@@ -35,7 +35,6 @@
 package com.starrocks.http.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -64,14 +63,14 @@ public class RestBaseAction extends BaseAction {
     protected static final String LABEL_KEY = "label";
     private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
 
+    protected static ObjectMapper mapper = new ObjectMapper();
+
     public RestBaseAction(ActionController controller) {
         super(controller);
     }
 
     @Override
     public void handleRequest(BaseRequest request) {
-        LOG.info("receive http request. url={}", request.getRequest().uri());
-        long startTime = System.currentTimeMillis();
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
@@ -92,12 +91,6 @@ public class RestBaseAction extends BaseAction {
             response.appendContent(new RestBaseResult(msg).toJson());
             writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         }
-        long endTime = System.currentTimeMillis();
-        long elapsedTime = endTime - startTime;
-        if (elapsedTime > Config.http_slow_request_threshold_ms) {
-            LOG.warn("Execution uri={} time exceeded {} ms and took {} ms.", request.getRequest().uri(),
-                    Config.http_slow_request_threshold_ms, elapsedTime);
-        }
     }
 
     @Override
@@ -105,7 +98,7 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        // ctx's lifetime is same as the channel
+        // ctx lifetime is the same as the channel
         HttpConnectContext ctx = request.getConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
@@ -140,7 +133,6 @@ public class RestBaseAction extends BaseAction {
 
     public void sendResultByJson(BaseRequest request, BaseResponse response, Object obj) {
         String result = "";
-        ObjectMapper mapper = new ObjectMapper();
         try {
             result = mapper.writeValueAsString(obj);
         } catch (Exception e) {
@@ -156,8 +148,8 @@ public class RestBaseAction extends BaseAction {
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
         String urlStr = request.getRequest().uri();
-        URI urlObj = null;
-        URI resultUriObj = null;
+        URI urlObj;
+        URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
             resultUriObj = new URI("http", null, addr.getHostname(),
@@ -175,7 +167,7 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isLeader()) {
             return false;
         }
-        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getLeaderIpAndHttpPort();
+        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
         redirectTo(request, response,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;

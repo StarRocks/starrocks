@@ -29,6 +29,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -61,8 +63,11 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 .put(ConstantOperator.class, (op, childOps) -> op)
                 .put(ColumnRefOperator.class, (op, childOps) -> op)
                 .put(ArrayOperator.class, (op, childOps) -> new ArrayOperator(op.getType(), op.isNullable(), childOps))
-                .put(CollectionElementOperator.class, (op, childOps) -> new CollectionElementOperator(op.getType(),
-                        childOps.get(0), childOps.get(1)))
+                .put(CollectionElementOperator.class, (op, childOps) -> {
+                    CollectionElementOperator collectionElementOperator = (CollectionElementOperator) op;
+                    return new CollectionElementOperator(op.getType(),
+                            childOps.get(0), childOps.get(1), collectionElementOperator.isCheckOutOfBounds());
+                })
                 .put(ArraySliceOperator.class, (op, childOps) -> new ArraySliceOperator(op.getType(), childOps))
                 .put(CallOperator.class, (op, childOps) -> {
                     CallOperator call = (CallOperator) op;
@@ -251,6 +256,16 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitCloneOperator(CloneOperator operator, Void context) {
+        return shuttleIfUpdate(operator);
+    }
+
+    @Override
+    public ScalarOperator visitDictMappingOperator(DictMappingOperator operator, Void context) {
+        return shuttleIfUpdate(operator);
+    }
+
+    @Override
+    public ScalarOperator visitDictQueryOperator(DictQueryOperator operator, Void context) {
         return shuttleIfUpdate(operator);
     }
 

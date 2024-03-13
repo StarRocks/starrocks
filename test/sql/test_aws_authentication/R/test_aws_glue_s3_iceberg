@@ -1,0 +1,57 @@
+-- name: test_aws_glue_s3_iceberg
+CREATE EXTERNAL CATALOG test_aws_glue_s3_iceberg
+PROPERTIES
+(
+"type"="iceberg",
+"iceberg.catalog.type"="glue",
+"aws.glue.access_key"="${aws_ak}",
+"aws.glue.secret_key"="${aws_sk}",
+"aws.glue.region"="${aws_region}",
+"aws.s3.access_key"="${aws_ak}",
+"aws.s3.secret_key"="${aws_sk}",
+"aws.s3.region"="${aws_region}"
+);
+-- result:
+-- !result
+select * from test_aws_glue_s3_iceberg.sql_test_db.iceberg_glue_s3_orc;
+-- result:
+4	2004-01-01	KMT official from Taiwan to visit mainland
+5	2005-01-01	China leading engine for global economy
+1	2001-01-01	youth is a wonderful thing
+3	2003-01-01	Reform to further facilitate maturity of capital market
+2	2002-01-01	Mathematical Description of Systems
+-- !result
+drop catalog test_aws_glue_s3_iceberg;
+-- result:
+-- !result
+CREATE EXTERNAL CATALOG test_aws_assume_role_glue_s3_iceberg
+PROPERTIES
+(
+"type"="iceberg",
+"iceberg.catalog.type"="glue",
+"aws.glue.access_key"="${aws_ak}",
+"aws.glue.secret_key"="${aws_sk}",
+"aws.glue.region"="${aws_region}",
+"aws.glue.assume_role"="${aws_assume_role}",
+"aws.glue.sts.region"="${aws_sts_region}",
+"aws.glue.sts.endpoint"="${aws_sts_endpoint}",
+"aws.s3.access_key"="${aws_ak}",
+"aws.s3.secret_key"="${aws_sk}",
+"aws.s3.region"="${aws_region}",
+"aws.s3.assume_role"="${aws_assume_role}",
+"aws.s3.sts.region"="${aws_sts_region}",
+"aws.s3.sts.endpoint"="${aws_sts_endpoint}"
+);
+-- result:
+-- !result
+select * from test_aws_assume_role_glue_s3_iceberg.sql_test_db.iceberg_glue_s3_orc;
+-- result:
+1	2001-01-01	youth is a wonderful thing
+4	2004-01-01	KMT official from Taiwan to visit mainland
+2	2002-01-01	Mathematical Description of Systems
+5	2005-01-01	China leading engine for global economy
+3	2003-01-01	Reform to further facilitate maturity of capital market
+-- !result
+drop catalog test_aws_assume_role_glue_s3_iceberg;
+-- result:
+-- !result

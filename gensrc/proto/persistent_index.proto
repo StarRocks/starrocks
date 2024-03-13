@@ -22,11 +22,13 @@ message IndexSnapshotMetaPB {
     EditVersionPB version = 1;
     PagePointerPB data = 2;
     repeated uint32 dumped_shard_idxes = 3;
+    uint32 checksum = 4;
 }
 
 message IndexWalMetaPB {
     EditVersionPB version = 1;
     PagePointerPB data = 2;
+    uint32 checksum = 3;
 }
 
 message MutableIndexMetaPB {
@@ -45,6 +47,7 @@ message ImmutableIndexShardMetaPB {
     uint64 value_size = 5;
     uint64 nbucket = 6;
     uint64 data_size = 7;
+    uint64 uncompressed_size = 8; // if uncompressed_size is 0, which means no compression
 }
 
 message ShardInfoPB {
@@ -60,6 +63,8 @@ message ImmutableIndexMetaPB {
     repeated ImmutableIndexShardMetaPB shards = 4;
     repeated ShardInfoPB shard_info = 5;
     repeated uint64 shard_bf_off = 6;
+    // because CompressionTypePB defined in proto2, so we use int32 here to be compatible
+    int32 compression_type = 7;
 }
 
 message PersistentIndexMetaPB {

@@ -34,7 +34,7 @@ public class ConnectorTableInfo {
 
     public void updateMetaInfo(ConnectorTableInfo tableInfo) {
         if (relatedMaterializedViews == null) {
-            relatedMaterializedViews = Sets.newHashSet(tableInfo.relatedMaterializedViews);
+            relatedMaterializedViews = Sets.newConcurrentHashSet(tableInfo.relatedMaterializedViews);
         } else {
             relatedMaterializedViews.addAll(tableInfo.relatedMaterializedViews);
         }
@@ -74,10 +74,10 @@ public class ConnectorTableInfo {
     }
 
     public static class Builder {
-        private Set<MvId> relatedMaterializedViews = Sets.newHashSet();
+        private Set<MvId> relatedMaterializedViews = Sets.newConcurrentHashSet();
 
         public Builder setRelatedMaterializedViews(Set<MvId> relatedMaterializedViews) {
-            this.relatedMaterializedViews = relatedMaterializedViews;
+            this.relatedMaterializedViews = Sets.newConcurrentHashSet(relatedMaterializedViews);
             return this;
         }
 

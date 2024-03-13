@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -23,7 +24,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.common.MetaUtils;
-import org.apache.parquet.Strings;
 
 import java.util.Map;
 
@@ -47,7 +47,7 @@ public class CreateDbAnalyzer {
         Map<String, String> properties = statement.getProperties();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
             String volume = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING && !StorageVolumeMgr.LOCAL.equalsIgnoreCase(volume)) {
+            if (RunMode.isSharedNothingMode() && !StorageVolumeMgr.LOCAL.equalsIgnoreCase(volume)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Storage volume can only be 'local' in shared nothing mode");
             }

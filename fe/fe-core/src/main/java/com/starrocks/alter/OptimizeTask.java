@@ -88,6 +88,11 @@ public class OptimizeTask extends Task {
 
     @Override
     public String toString() {
-        return super.toString();
+        return super.toString() +
+                " OptimizeTask{" +
+                "partitionName='" + partitionName + '\'' +
+                ", tempPartitionName='" + tempPartitionName + '\'' +
+                ", optimizeTaskState=" + optimizeTaskState +
+                ", lastVersion=" + lastVersion;
     }
 }

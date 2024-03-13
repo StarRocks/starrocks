@@ -15,9 +15,12 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
+#include <future>
 #include <iterator>
 #include <memory>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -37,15 +40,20 @@
 #include "exec/sorting/sorting.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/log_block_manager.h"
+#include "exec/spill/mem_table.h"
+#include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/spill/spiller_factory.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "storage/olap_define.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
@@ -127,10 +135,10 @@ public:
         ChunkPtr chunk = std::make_shared<Chunk>();
         for (size_t i = 0; i < ctxs.size(); ++i) {
             auto ctx = ctxs[i];
-            DCHECK(ctx->root()->is_slotref());
+            CHECK(ctx->root()->is_slotref());
             auto ref = ctx->root()->get_column_ref();
             auto col = ColumnHelper::create_column(ctx->root()->type(), nullable[i]);
-            DCHECK(col->accept_mutable(&filler).ok());
+            CHECK(col->accept_mutable(&filler).ok());
             chunk->append_column(std::move(col), ref->slot_id());
         }
         return chunk;
@@ -138,27 +146,27 @@ public:
 };
 
 struct SyncExecutor {
-    template <class Runnable>
-    Status submit(Runnable&& runnable) {
-        std::forward<Runnable>(runnable)();
+    static Status submit(workgroup::ScanTask task) {
+        do {
+            task.run();
+        } while (!task.is_finished());
         return Status::OK();
     }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
 };
 
 struct ASyncExecutor {
-    template <class Runnable>
-    Status submit(Runnable&& runnable) {
-        _threads.emplace_back(std::forward<Runnable>(runnable));
+    using ExecFunction = std::function<void(workgroup::YieldContext&)>;
+
+    static Status submit(workgroup::ScanTask task) {
+        (void)std::async([task = std::move(task)]() mutable {
+            do {
+                task.run();
+            } while (!task.is_finished());
+        });
         return Status::OK();
     }
-    ~ASyncExecutor() {
-        for (auto& thread : _threads) {
-            thread.join();
-        }
-    }
-
-private:
-    std::vector<std::thread> _threads;
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
 };
 
 using SpillProcessMetrics = spill::SpillProcessMetrics;
@@ -176,8 +184,7 @@ public:
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
         ASSERT_OK(dummy_dir_mgr->init(path));
 
-        dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
-        dummy_block_mgr->set_dir_manager(dummy_dir_mgr.get());
+        dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, dummy_dir_mgr.get());
 
         dummy_rt_st.set_chunk_size(config::vector_chunk_size);
 
@@ -206,13 +213,16 @@ struct SpillTestContext {
 };
 
 StatusOr<SpillTestContext*> no_partition_context(ObjectPool* pool, RuntimeState* runtime_state,
-                                                 std::vector<TExpr>& order_bys, std::vector<TExpr>& tuple) {
+                                                 const std::vector<TExpr>& order_bys, std::vector<TExpr>& tuple) {
     auto context = pool->add(new SpillTestContext());
     context->partition_nums = 1;
     //
-    RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
-    RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
-    RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
+    if (!order_bys.empty()) {
+        RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
+        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
+        RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
+    }
+
     //
     std::vector<bool> ascs(order_bys.size());
     std::fill_n(ascs.begin(), order_bys.size(), true);
@@ -228,38 +238,54 @@ struct SpillerCaller {
     SpillerCaller(spill::Spiller* spiller) : _spiller(spiller) {}
 
     template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
         if (_spiller->_chunk_builder.chunk_schema()->empty()) {
             _spiller->_chunk_builder.chunk_schema()->set_schema(chunk);
         }
-        return _spiller->_writer->as<Writer>()->spill(state, chunk, std::forward<TaskExecutor>(executor),
-                                                      std::forward<MemGuard>(guard));
+        auto writer = _spiller->_writer->as<Writer>();
+        return writer->template spill<TaskExecutor>(state, chunk, std::forward<MemGuard>(guard));
     }
 
     template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-        return _spiller->_writer->as<Writer>()->flush(state, std::forward<TaskExecutor>(executor),
-                                                      std::forward<MemGuard>(guard));
+    Status flush(RuntimeState* state, MemGuard&& guard) {
+        auto writer = _spiller->_writer->as<Writer>();
+        return writer->template flush<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
     template <class TaskExecutor, class MemGuard>
-    StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-        return _spiller->_reader->restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard));
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard) {
+        return _spiller->_reader->restore<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
     template <class TaskExecutor, class MemGuard>
-    Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard) {
         if (!acquire_once) {
             acquire_once = true;
             RETURN_IF_ERROR(_spiller->_acquire_input_stream(state));
         }
-        return _spiller->_reader->trigger_restore(state, std::forward<TaskExecutor>(executor),
-                                                  std::forward<MemGuard>(guard));
+        return _spiller->_reader->trigger_restore<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
     bool acquire_once = false;
     spill::Spiller* _spiller;
 };
+
+bool chunk_equals(const ChunkPtr& l, const ChunkPtr& r) {
+    if (l->columns() != r->columns() || l->num_columns() != r->num_columns() ||
+        l->get_slot_id_to_index_map() != r->get_slot_id_to_index_map()) {
+        return false;
+    }
+    size_t num_rows = l->num_rows();
+    auto& lcolumns = l->columns();
+    auto& rcolumns = r->columns();
+    for (size_t i = 0; i < lcolumns.size(); ++i) {
+        if (!lcolumns[i]->equals(num_rows, *rcolumns[i], num_rows)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 TEST_F(SpillTest, unsorted_process) {
     ObjectPool pool;
@@ -310,11 +336,11 @@ TEST_F(SpillTest, unsorted_process) {
     {
         for (size_t i = 0; i < test_loop; ++i) {
             auto chunk = chunk_builder.gen(tuple, nullables);
-            ASSERT_OK(caller.spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
-        ASSERT_OK(caller.flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+        ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
     }
     size_t input_rows = 0;
     for (const auto& chunk : holder) {
@@ -324,9 +350,9 @@ TEST_F(SpillTest, unsorted_process) {
     // test restore
     {
         std::vector<ChunkPtr> restored;
-        ASSERT_OK(caller.trigger_restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+        ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
         for (size_t i = 0; i < test_loop; ++i) {
-            auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+            auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
             ASSERT_OK(chunk_st.status());
             ASSERT_OK(spiller->_spilled_task_status);
             if (chunk_st.value() != nullptr) {
@@ -334,7 +360,7 @@ TEST_F(SpillTest, unsorted_process) {
             }
         }
 
-        auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+        auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
         ASSERT_TRUE(chunk_st.status().is_end_of_file());
 
         size_t output_rows = 0;
@@ -346,14 +372,35 @@ TEST_F(SpillTest, unsorted_process) {
 
     // test 2
     {
-        ASyncExecutor executor;
         for (size_t i = 0; i < test_loop; ++i) {
             if (!spiller->is_full()) {
                 auto chunk = chunk_builder.gen(tuple, nullables);
-                ASSERT_OK(caller.spill(&dummy_rt_st, chunk, executor, EmptyMemGuard{}));
+                ASSERT_OK(caller.spill<ASyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
                 ASSERT_OK(spiller->_spilled_task_status);
             }
         }
+    }
+
+    {
+        // dummy_rt_st
+        // test schedule_mem_table_flush
+        size_t max_buffer_size = 1024 * 1024 * 1024;
+        std::shared_ptr<spill::SpillableMemTable> mem_table =
+                std::make_shared<spill::UnorderedMemTable>(&dummy_rt_st, max_buffer_size, nullptr, spiller.get());
+        std::vector<ChunkPtr> input;
+        for (size_t i = 0; i < 500; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            input.emplace_back(chunk->clone_unique());
+            ASSERT_OK(mem_table->append(std::move(chunk)));
+        }
+        ASSERT_OK(mem_table->done());
+        //
+        workgroup::YieldContext yield_ctx;
+        do {
+            yield_ctx.time_spent_ns = 0;
+            yield_ctx.need_yield = false;
+            ASSERT_OK(mem_table->finalize(yield_ctx));
+        } while (yield_ctx.need_yield);
     }
 }
 
@@ -407,21 +454,21 @@ TEST_F(SpillTest, order_by_process) {
         {
             for (size_t i = 0; i < test_loop; ++i) {
                 auto chunk = chunk_builder.gen(tuple, nullables);
-                ASSERT_OK(caller.spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+                ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
                 ASSERT_OK(spiller->_spilled_task_status);
                 holder.push_back(chunk);
                 contain_rows += chunk->num_rows();
             }
-            ASSERT_OK(caller.flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
         }
 
         std::vector<ChunkPtr> restored;
         size_t restored_rows = 0;
         {
-            ASSERT_OK(caller.trigger_restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
             ASSERT_TRUE(caller._spiller->has_output_data());
             for (size_t i = 0; i < test_loop; ++i) {
-                auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+                auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
                 ASSERT_OK(chunk_st.status());
                 ASSERT_OK(spiller->_spilled_task_status);
                 if (chunk_st.value() != nullptr) {
@@ -431,11 +478,86 @@ TEST_F(SpillTest, order_by_process) {
                 }
             }
 
-            auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+            auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
             ASSERT_TRUE(chunk_st.status().is_end_of_file());
         }
         ASSERT_EQ(contain_rows, restored_rows);
     }
+}
+
+TEST_F(SpillTest, partition_process) {
+    ObjectPool pool;
+
+    // order by id_int
+    // full data id_int, id_smallint
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, {}, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    (void)ctx;
+
+    std::vector<ExprContext*> tuple;
+    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+
+    // create chunk
+    RandomChunkBuilder chunk_builder;
+
+    // create spilled factory
+    // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
+    auto factory = spill::make_spilled_factory();
+
+    // create spiller
+    SpilledOptions spill_options(4);
+    // 4 buffer chunk
+    spill_options.mem_table_pool_size = 1;
+    // file size: 1M
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    // spill format type
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto chunk_empty = chunk_builder.gen(tuple, nullables);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::PartitionedSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 1024;
+    std::vector<ChunkPtr> holder;
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+        ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    }
+}
+
+TEST_F(SpillTest, aligned_buffer) {
+    spill::AlignedBuffer buffer;
+    ASSERT_EQ(buffer.data(), nullptr);
+    auto is_aligned = [](void* ptr, std::size_t alignment) {
+        return reinterpret_cast<uintptr_t>(ptr) % alignment == 0;
+    };
+    buffer.resize(1);
+    buffer.data()[0] = '@';
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
+    buffer.resize(8192);
+    ASSERT_EQ(buffer.data()[0], '@');
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
+    buffer.resize(1);
+    ASSERT_EQ(buffer.data()[0], '@');
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
 }
 
 /*

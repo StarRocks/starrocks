@@ -1,0 +1,30 @@
+-- name: test_expr_from_unixtime_add_partition
+CREATE TABLE partition_unixtime (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+)
+PROPERTIES (
+"replication_num" = "1"
+);
+alter table partition_unixtime add partition p20231226 VALUES [("2023-12-26"), ("2023-12-27"));
+show create table partition_unixtime;
+alter table partition_unixtime drop partition p20231226;
+CREATE TABLE partition_unixtime_ms (
+        create_time bigint,
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(from_unixtime_ms(create_time))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+)
+PROPERTIES (
+"replication_num" = "1"
+);
+alter table partition_unixtime_ms add partition p20231226 VALUES [("2023-12-26"), ("2023-12-27"));
+show create table partition_unixtime_ms;

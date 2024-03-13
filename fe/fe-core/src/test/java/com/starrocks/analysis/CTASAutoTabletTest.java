@@ -14,14 +14,14 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.alter.AlterJobV2Test;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
-import org.jetbrains.annotations.TestOnly;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -54,12 +54,13 @@ public class CTASAutoTabletTest {
         }
         cluster.runSql("db_for_auto_tablets", "create table ctas1 as select * from test_table1;");
         cluster.runSql("db_for_auto_tablets",
-                       "create table ctas2 distributed by hash(k1, k2) as select * from test_table1;");
+                "create table ctas2 distributed by hash(k1, k2) as select * from test_table1;");
 
         int bucketNum1 = 0;
         int bucketNum2 = 0;
         int bucketNum3 = 0;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable table = (OlapTable) db.getTable("test_table1");
             if (table == null) {
@@ -87,7 +88,7 @@ public class CTASAutoTabletTest {
                 bucketNum3 += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         Assert.assertEquals(bucketNum1, 6);
         Assert.assertEquals(bucketNum2, 3);

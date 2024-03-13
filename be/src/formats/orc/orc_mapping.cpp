@@ -90,7 +90,7 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
             }
         }
     } else {
-        DCHECK(false) << "Unreachable!";
+        return Status::InternalError("Unreachable");
     }
     return Status::OK();
 }
@@ -125,19 +125,29 @@ Status OrcMappingFactory::_check_orc_type_can_convert_2_logical_type(const orc::
                                                                      const TypeDescriptor& slot_target_type,
                                                                      const OrcMappingOptions& options) {
     bool can_convert = true;
+    // check orc type -> slot type desc
     if (orc_source_type->getKind() == orc::TypeKind::LIST) {
-        can_convert = slot_target_type.is_array_type();
+        can_convert &= slot_target_type.is_array_type();
     } else if (orc_source_type->getKind() == orc::TypeKind::MAP) {
-        can_convert = slot_target_type.is_map_type();
+        can_convert &= slot_target_type.is_map_type();
     } else if (orc_source_type->getKind() == orc::TypeKind::STRUCT) {
-        can_convert = slot_target_type.is_struct_type();
+        can_convert &= slot_target_type.is_struct_type();
+    }
+
+    // check slot type desc -> orc type
+    if (slot_target_type.is_array_type()) {
+        can_convert &= orc_source_type->getKind() == orc::TypeKind::LIST;
+    } else if (slot_target_type.is_map_type()) {
+        can_convert &= orc_source_type->getKind() == orc::TypeKind::MAP;
+    } else if (slot_target_type.is_struct_type()) {
+        can_convert &= orc_source_type->getKind() == orc::TypeKind::STRUCT;
     }
 
     //TODO Other logical type not check now!
 
     if (!can_convert) {
         return Status::NotSupported(
-                strings::Substitute("Not support to convert orc's type from $0 to $1, filename = $2",
+                strings::Substitute("Orc's type $0 and Slot's type $1 can't convert to each other, filename = $2",
                                     orc_source_type->toString(), slot_target_type.debug_string(), options.filename));
     }
     return Status::OK();
@@ -242,12 +252,6 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
                                              const orc::Type* orc_type, const OrcMappingOptions& options) {
     DCHECK(origin_type.is_complex_type());
     if (origin_type.type == LogicalType::TYPE_STRUCT) {
-        if (orc_type->getKind() != orc::TypeKind::STRUCT) {
-            return Status::InternalError(strings::Substitute(
-                    "Orc nest type check error: expect type in this layer is STRUCT, actual type is $0, ",
-                    orc_type->toString()));
-        }
-
         std::unordered_map<std::string, size_t> tmp_orc_fieldname_2_pos;
         for (size_t i = 0; i < orc_type->getSubtypeCount(); i++) {
             std::string field_name = Utils::format_name(orc_type->getFieldName(i), options.case_sensitive);
@@ -277,11 +281,6 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
             mapping->add_mapping(index, need_add_child_mapping, orc_child_type);
         }
     } else if (origin_type.type == LogicalType::TYPE_ARRAY) {
-        if (orc_type->getKind() != orc::TypeKind::LIST) {
-            return Status::InternalError(strings::Substitute(
-                    "Orc nest type check error: expect type in this layer is LIST, actual type is $0, ",
-                    orc_type->toString()));
-        }
         const orc::Type* orc_child_type = orc_type->getSubtype(0);
         const TypeDescriptor& origin_child_type = origin_type.children[0];
         // Check Array's element can be converted
@@ -296,12 +295,6 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
 
         mapping->add_mapping(0, need_add_child_mapping, orc_child_type);
     } else if (origin_type.type == LogicalType::TYPE_MAP) {
-        if (orc_type->getKind() != orc::TypeKind::MAP) {
-            return Status::InternalError(strings::Substitute(
-                    "Orc nest type check error: expect type in this layer is MAP, actual type is $0, ",
-                    orc_type->toString()));
-        }
-
         // Check Map's key can be converted
         if (!origin_type.children[0].is_unknown_type()) {
             RETURN_IF_ERROR(_check_orc_type_can_convert_2_logical_type(orc_type->getSubtype(0), origin_type.children[0],
@@ -330,7 +323,7 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         }
         mapping->add_mapping(1, need_add_value_child_mapping, orc_type->getSubtype(1));
     } else {
-        DCHECK(false) << "Unreachable";
+        return Status::InternalError("Unreachable");
     }
     return Status::OK();
 }

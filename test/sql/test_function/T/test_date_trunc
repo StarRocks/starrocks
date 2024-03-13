@@ -1,0 +1,23 @@
+-- name: test_date_trunc
+select date_trunc('year', '2023-10-31 23:59:59.001002');
+select date_trunc('year', '2023-10-31');
+select date_trunc('quarter', '2023-10-31 23:59:59.001002');
+select date_trunc('quarter', '2023-10-31');
+select date_trunc('quarter', '2023-09-15 23:59:59.001002');
+select date_trunc('quarter', '2023-09-15');
+select date_trunc('month', '2023-10-31 23:59:59.001002');
+select date_trunc('month', '2023-10-31');
+select date_trunc('week', '2023-10-31 23:59:59.001002');
+select date_trunc('week', '2023-10-31');
+select date_trunc('day', '2023-10-31 23:59:59.001002');
+select date_trunc('day', '2023-10-31');
+select date_trunc('hour', '2023-10-31 23:59:59.001002');
+select date_trunc('hour', '2023-10-31');
+select date_trunc('minute', '2023-10-31 23:59:59.001002');
+select date_trunc('minute', '2023-10-31');
+select date_trunc('second', '2023-10-31 23:59:59.001002');
+select date_trunc('second', '2023-10-31');
+select date_trunc('millisecond', '2023-10-31 23:59:59.001002');
+select date_trunc('millisecond', '2023-10-31');
+select date_trunc('microsecond', '2023-10-31 23:59:59.001002');
+select date_trunc('microsecond', '2023-10-31');

@@ -1476,6 +1476,8 @@ INSTANTIATE_TEST_SUITE_P(
 
                 // Second
                 TestParseDatetimeParam("1994-09-09 01:02:03.123", "yyyy-MM-dd HH:mm:ss.SSS"),
+                TestParseDatetimeParam("1994-09-09 01:02:03.12", "yyyy-MM-dd HH:mm:ss.SS"),
+                TestParseDatetimeParam("1994-09-09 01:02:03.1234", "yyyy-MM-dd HH:mm:ss.SSSS"),
 
                 // Timezone
                 TestParseDatetimeParam("1994-09-09 01:02:03 CST", "yyyy-MM-dd HH:mm:ss zzz"),
@@ -1520,10 +1522,12 @@ INSTANTIATE_TEST_SUITE_P(
                                               "1994-09-09 12:02:03 PM"),
                 SpecialTestParseDatetimeParam("1994-09-09 12:02:03 PM", "yyyy-MM-dd hh:mm:ss aa",
                                               "1994-09-09 12:02:03 PM"),
-                SpecialTestParseDatetimeParam("1994-09-09 12:02:03 AM", "yyyy-MM-dd KK:mm:ss aa",
-                                              "1994-09-09 00:02:03 PM"),
-                SpecialTestParseDatetimeParam("1994-09-09 12:02:03 PM", "yyyy-MM-dd KK:mm:ss aa",
-                                              "1994-09-09 00:02:03 PM"),
+                SpecialTestParseDatetimeParam("1994-09-09 12:02:03 AM", "yyyy-MM-dd KK:mm:ss aa", "NULL"),
+                SpecialTestParseDatetimeParam("1994-09-09 12:02:03 PM", "yyyy-MM-dd KK:mm:ss aa", "NULL"),
+                SpecialTestParseDatetimeParam("1994-09-09 11:02:03 AM", "yyyy-MM-dd KK:mm:ss aa",
+                                              "1994-09-09 11:02:03 AM"),
+                SpecialTestParseDatetimeParam("1994-09-09 11:02:03 PM", "yyyy-MM-dd KK:mm:ss aa",
+                                              "1994-09-09 11:02:03 PM"),
                 SpecialTestParseDatetimeParam("1994-09-09 00:02:03 AM", "yyyy-MM-dd KK:mm:ss aa",
                                               "1994-09-09 00:02:03 AM"),
                 SpecialTestParseDatetimeParam("1994-09-09 00:02:03 PM", "yyyy-MM-dd KK:mm:ss aa",
@@ -1533,7 +1537,15 @@ INSTANTIATE_TEST_SUITE_P(
                 SpecialTestParseDatetimeParam("1994-09-09 24:02:03", "yyyy-MM-dd HH:mm:ss", "NULL"),
                 SpecialTestParseDatetimeParam("1994-09-09 24:02:03", "yyyy-MM-dd kk:mm:ss", "NULL"),
                 SpecialTestParseDatetimeParam("1994-09-09 00:02:03", "yyyy-MM-dd HH:mm:ss", "1994-09-09 00:02:03"),
-                SpecialTestParseDatetimeParam("1994-09-09 00:02:03", "yyyy-MM-dd kk:mm:ss", "1994-09-09 24:02:03")
+                SpecialTestParseDatetimeParam("1994-09-09 00:02:03", "yyyy-MM-dd kk:mm:ss", "1994-09-09 24:02:03"),
+
+                // Millisecond
+                SpecialTestParseDatetimeParam("1994-09-09 01:02:03.123", "yyyy-MM-dd HH:mm:ss.SS",
+                                              "1994-09-09 01:02:03.12"),
+                SpecialTestParseDatetimeParam("1994-09-09 01:02:03.12", "yyyy-MM-dd HH:mm:ss.SSS",
+                                              "1994-09-09 01:02:03.120"),
+                SpecialTestParseDatetimeParam("1994-09-09 01:02:03.12345", "yyyy-MM-dd HH:mm:ss.SSSS",
+                                              "1994-09-09 01:02:03.1234")
 
                 // clang-format: on
                 ));

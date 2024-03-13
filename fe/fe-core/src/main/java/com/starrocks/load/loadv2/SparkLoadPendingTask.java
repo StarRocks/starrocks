@@ -67,6 +67,8 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LoadPriority;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.FailMsg;
@@ -115,7 +117,6 @@ public class SparkLoadPendingTask extends LoadTask {
                                 Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToBrokerFileGroups,
                                 SparkResource resource, BrokerDesc brokerDesc) {
         super(loadTaskCallback, TaskType.PENDING, LoadPriority.NORMAL_VALUE);
-        this.retryTime = 3;
         this.attachment = new SparkPendingTaskAttachment(signature);
         this.aggKeyToBrokerFileGroups = aggKeyToBrokerFileGroups;
         this.resource = resource;
@@ -160,7 +161,8 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         Map<Long, EtlTable> tables = Maps.newHashMap();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Map<Long, Set<Long>> tableIdToPartitionIds = Maps.newHashMap();
             Set<Long> allPartitionsTableIds = Sets.newHashSet();
@@ -188,7 +190,7 @@ public class SparkLoadPendingTask extends LoadTask {
                     tables.put(tableId, etlTable);
 
                     // add table indexes to transaction state
-                    TransactionState txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                             .getTransactionState(dbId, transactionId);
                     if (txnState == null) {
                         throw new LoadException("txn does not exist. id: " + transactionId);
@@ -202,7 +204,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         String outputFilePattern = EtlJobConfig.getOutputFilePattern(loadLabel, FilePatternVersion.V1);
@@ -383,7 +385,7 @@ public class SparkLoadPendingTask extends LoadTask {
         }
         List<EtlPartition> etlPartitions = Lists.newArrayList();
         Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
-        Map<Long, List<LiteralExpr>>  literalExprValues = listPartitionInfo.getLiteralExprValues();
+        Map<Long, List<LiteralExpr>> literalExprValues = listPartitionInfo.getLiteralExprValues();
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             if (partition == null) {
@@ -541,7 +543,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 for (ImportColumnDesc columnDesc : copiedColumnExprList) {
                     if (!columnDesc.isColumn() && slot.getColumnName().equals(columnDesc.getColumnName())) {
                         throw new LoadException("generated column can not refenece the column which is the " +
-                                                "result of the expression in spark load");
+                                "result of the expression in spark load");
                     }
                 }
             }

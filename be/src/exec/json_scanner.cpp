@@ -339,10 +339,7 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
-          _op_col_index(-1),
-          _payload_buffer(nullptr),
-          _payload_buffer_size(0),
-          _payload_buffer_capacity(0) {
+          _op_col_index(-1) {
     int index = 0;
     for (const auto& desc : _slot_descs) {
         if (desc == nullptr) {
@@ -684,31 +681,30 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
 Status JsonReader::_read_file_stream() {
     // TODO: Remove the down_cast, should not rely on the specific implementation.
     auto* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
-    {
-        SCOPED_RAW_TIMER(&_counter->file_read_ns);
-        ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
-
-        _state->update_num_bytes_scan_from_source(_parser_buf->remaining());
-
-        if (_parser_buf->capacity < _parser_buf->remaining() + simdjson::SIMDJSON_PADDING) {
-            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-            // Hence, a re-allocation is needed if the space is not enough.
-            auto buf = ByteBuffer::allocate(_parser_buf->remaining() + simdjson::SIMDJSON_PADDING);
-            buf->put_bytes(_parser_buf->ptr, _parser_buf->remaining());
-            buf->flip();
-            std::swap(buf, _parser_buf);
-        }
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
+    ASSIGN_OR_RETURN(_file_stream_buffer, stream_file->pipe()->read());
+    if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
+        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+        // Hence, a re-allocation is needed if the space is not enough.
+        auto buf = ByteBuffer::allocate(_file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING);
+        buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
+        buf->flip();
+        std::swap(buf, _file_stream_buffer);
     }
 
-    _payload_buffer.reset(_parser_buf->ptr);
-    _parser_buf->flip();
-    _payload_buffer_size = _parser_buf->remaining();
-    _payload_buffer_capacity = _parser_buf->remaining() + simdjson::SIMDJSON_PADDING;
+    _state->update_num_bytes_scan_from_source(_file_stream_buffer->remaining());
+
+    _payload = _file_stream_buffer->ptr;
+    _payload_size = _file_stream_buffer->remaining();
+    _payload_capacity = _file_stream_buffer->capacity;
+
     return Status::OK();
 }
 
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_file_broker() {
+    SCOPED_RAW_TIMER(&_counter->file_read_ns);
+
     // TODO: Remove the down_cast, should not rely on the specific implementation.
     auto* stream = down_cast<io::SeekableInputStream*>(_file->stream().get());
     auto res = stream->get_size();
@@ -727,25 +723,31 @@ Status JsonReader::_read_file_broker() {
                             sz, _scanner->_params.json_file_size_limit));
     }
 
-    if (sz > _payload_buffer_capacity) {
+    if (sz + simdjson::SIMDJSON_PADDING > _file_broker_buffer_capacity) {
         // reallocate if needed.
+        // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
+        // Hence, a re-allocation is needed if the space is not enough.
         auto allocated = sz + simdjson::SIMDJSON_PADDING;
-        _payload_buffer.reset(new char[allocated]);
-        _payload_buffer_capacity = allocated;
+        _file_broker_buffer.reset(new char[allocated]);
+        _file_broker_buffer_capacity = allocated;
+        _file_broker_buffer_size = 0;
     }
 
     {
-        SCOPED_RAW_TIMER(&_counter->file_read_ns);
-        auto res = _file->read(reinterpret_cast<void*>(_payload_buffer.get()), sz);
+        auto res = _file->read(reinterpret_cast<void*>(_file_broker_buffer.get()), sz);
         if (!res.ok()) {
             return res.status();
         }
-        _payload_buffer_size = sz;
+        _file_broker_buffer_size = res.value();
 
         if (res.value() <= 0) {
             return Status::EndOfFile("EOF of reading file");
         }
+        _state->update_num_bytes_scan_from_source(_file_broker_buffer_size);
     }
+    _payload = _file_broker_buffer.get();
+    _payload_size = _file_broker_buffer_size;
+    _payload_capacity = _file_broker_buffer_capacity;
 
     return Status::OK();
 }
@@ -754,9 +756,9 @@ Status JsonReader::_check_ndjson() {
     // Check the content format according to the first non-space character.
     // Treat json string started with '{' as ndjson.
     // Treat json string started with '[' as json array.
-    for (size_t i = 0; i < _payload_buffer_size; ++i) {
+    for (size_t i = 0; i < _payload_size; ++i) {
         // Skip spaces at the string head.
-        const auto& c = _payload_buffer.get()[i];
+        const auto& c = _payload[i];
         if (c == ' ' || c == '\t' || c == '\r' || c == '\n') continue;
 
         if (c == '[') {
@@ -814,8 +816,7 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     _empty_parser = false;
-    return _parser->parse(_payload_buffer.get(), _payload_buffer_size,
-                          _payload_buffer_size + simdjson::SIMDJSON_PADDING);
+    return _parser->parse(_payload, _payload_size, _payload_capacity);
 }
 
 // _construct_column constructs column based on no value.

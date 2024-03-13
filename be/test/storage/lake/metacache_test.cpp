@@ -40,37 +40,8 @@ using namespace starrocks;
 class LakeMetacacheTest : public TestBase {
 public:
     LakeMetacacheTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(DUP_KEYS);
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(next_id());
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(next_id());
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-        }
-
-        _tablet_schema = TabletSchema::create(*schema);
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -84,7 +55,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_metadata_cache";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -208,7 +179,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
         }
 
         writer->close();
@@ -220,7 +191,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     // no segment
     auto sz0 = metacache->memory_usage();
 
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
@@ -283,7 +254,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
     std::string segment_path("test_cache_segment_if_absent.dat");
 
     EXPECT_EQ(nullptr, metacache->lookup_segment(segment_path));
-    auto seg1 = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+    auto seg1 = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
 
     {
         // cache seg1, since there is no segment cached before, cache_segment_if_absent will cache the seg1 and return it.
@@ -293,7 +264,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
         EXPECT_EQ(seg1, metacache->lookup_segment(segment_path));
     }
 
-    auto seg2 = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+    auto seg2 = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
     {
         auto seg = metacache->cache_segment_if_absent(segment_path, seg2);
         EXPECT_TRUE(seg != nullptr);
@@ -342,7 +313,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
     for (int i = 0; i < kConcurrency; ++i) {
         TestCacheSegmentConcurrency ctx;
         ctx.pending_count = &pending_count;
-        ctx.segment = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+        ctx.segment = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
         ctx.mutex = &m;
         ctx.cv = &cv;
         ctx.cache = metacache;

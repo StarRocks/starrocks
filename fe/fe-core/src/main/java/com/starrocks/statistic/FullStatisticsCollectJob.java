@@ -101,7 +101,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             collectStatisticSync(sql, context);
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
 
         flushInsertStatisticsData(context, true);
@@ -223,6 +223,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         List<String> totalQuerySQL = new ArrayList<>();
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
+            if (partition == null) {
+                // statistics job doesn't lock DB, partition may be dropped, skip it
+                continue;
+            }
             for (String columnName : columns) {
                 totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnName));
             }

@@ -1,0 +1,56 @@
+-- name: test_cast_string_to_varbinary
+create table t1(c1 int, c2 string, c3 string);
+-- result:
+-- !result
+create table t2(c1 int, c2 binary, c3 varbinary);
+-- result:
+-- !result
+insert into t1 values (1, "1,2,3,4,5", "6,7,8,9");
+-- result:
+-- !result
+insert into t1 values (2, null, null);
+-- result:
+-- !result
+insert into t2 select * from t1;
+-- result:
+-- !result
+select * from t2 order by c1;
+-- result:
+1	1,2,3,4,5	6,7,8,9
+2	None	None
+-- !result
+select c1, cast(c2 as binary), cast(c2 as varbinary) from t1 order by c1;
+-- result:
+1	1,2,3,4,5	1,2,3,4,5
+2	None	None
+-- !result
+select cast("1,2,3,4,5" as binary), cast("6,7,8,9.10" as varbinary);
+-- result:
+1,2,3,4,5	6,7,8,9.10
+-- !result
+-- name: test_cast_varbinary_to_string
+create table t1(c1 int, c2 binary, c3 varbinary);
+-- result:
+-- !result
+create table t2(c1 int, c2 string, c3 string);
+-- result:
+-- !result
+insert into t1 values (1, "1,2,3,4,5", "6,7,8,9");
+-- result:
+-- !result
+insert into t1 values (2, null, null);
+-- result:
+-- !result
+insert into t2 select * from t1;
+-- result:
+-- !result
+select * from t2 order by c1;
+-- result:
+1	1,2,3,4,5	6,7,8,9
+2	None	None
+-- !result
+select c1, cast(c2 as string), cast(c3 as string) from t1 order by c1;
+-- result:
+1	1,2,3,4,5	6,7,8,9
+2	None	None
+-- !result

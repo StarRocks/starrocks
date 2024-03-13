@@ -41,6 +41,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final AnalyticWindow analyticWindow;
     private final List<Ordering> enforceOrderBy;
     private final boolean useHashBasedPartition;
+    private final boolean isSkewed;
 
     public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall,
                                   List<ScalarOperator> partitionExpressions,
@@ -48,6 +49,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                                   AnalyticWindow analyticWindow,
                                   List<Ordering> enforceOrderBy,
                                   boolean useHashBasedPartition,
+                                  boolean isSkewed,
                                   long limit,
                                   ScalarOperator predicate,
                                   Projection projection) {
@@ -58,6 +60,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         this.analyticWindow = analyticWindow;
         this.enforceOrderBy = enforceOrderBy;
         this.useHashBasedPartition = useHashBasedPartition;
+        this.isSkewed = isSkewed;
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
@@ -85,6 +88,10 @@ public class PhysicalWindowOperator extends PhysicalOperator {
 
     public boolean isUseHashBasedPartition() {
         return useHashBasedPartition;
+    }
+
+    public boolean isSkewed() {
+        return isSkewed;
     }
 
     @Override
@@ -124,13 +131,14 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                 Objects.equals(partitionExpressions, that.partitionExpressions) &&
                 Objects.equals(orderByElements, that.orderByElements) &&
                 Objects.equals(analyticWindow, that.analyticWindow) &&
-                Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
+                Objects.equals(useHashBasedPartition, that.useHashBasedPartition) &&
+                Objects.equals(isSkewed, that.isSkewed);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), analyticCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition);
+                useHashBasedPartition, isSkewed);
     }
 
     @Override

@@ -302,6 +302,7 @@ public class WindowTransformer {
                     .setAnalyticWindow(windowOperator.getWindow())
                     .setEnforceSortColumns(sortEnforceProperty.stream().distinct().collect(Collectors.toList()))
                     .setUseHashBasedPartition(windowOperator.useHashBasedPartition)
+                    .setIsSkewed(windowOperator.isSkewed)
                     .build());
         }
 
@@ -525,6 +526,10 @@ public class WindowTransformer {
         private List<OrderByElement> orderByElements;
         private final AnalyticWindow window;
         private final boolean useHashBasedPartition;
+        // If there are multiply window functions sharing the same window clause but only one of which has skew hint,
+        // it will be also treated as the same window clause. So this field should not be involved in the equals and
+        // hashCode method.
+        private boolean isSkewed;
 
         public WindowOperator(AnalyticExpr analyticExpr, List<Expr> partitionExprs,
                               List<OrderByElement> orderByElements, AnalyticWindow window) {
@@ -547,6 +552,11 @@ public class WindowTransformer {
                 }
             } else {
                 this.useHashBasedPartition = false;
+            }
+            if (!partitionExprs.isEmpty()) {
+                this.isSkewed = analyticExpr.isSkewed();
+            } else {
+                this.isSkewed = false;
             }
         }
 
@@ -574,6 +584,14 @@ public class WindowTransformer {
 
         public AnalyticWindow getWindow() {
             return window;
+        }
+
+        public boolean isSkewed() {
+            return isSkewed;
+        }
+
+        public void setSkewed() {
+            isSkewed = true;
         }
 
         @Override

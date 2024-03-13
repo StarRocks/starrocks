@@ -120,7 +120,8 @@ public class ProfilingExecPlan {
         }
 
         public boolean isFinalSink() {
-            return !instanceOf(DataStreamSink.class) && !instanceOf(MultiCastDataSink.class);
+            return instanceOf(DataSink.class) &&
+                    !instanceOf(DataStreamSink.class) && !instanceOf(MultiCastDataSink.class);
         }
 
         public boolean hasChild(int i) {
@@ -170,7 +171,7 @@ public class ProfilingExecPlan {
         public boolean isMemoryConsumingOperator() {
             return instanceOf(AggregationNode.class) || instanceOf(JoinNode.class)
                     || instanceOf(SortNode.class) || instanceOf(AnalyticEvalNode.class)
-                    || instanceOf(ExchangeNode.class) || instanceOf(ScanNode.class);
+                    || instanceOf(ExchangeNode.class);
         }
 
         private void setDisplayName(String displayName) {

@@ -38,7 +38,9 @@
 #include <rapidjson/rapidjson.h>
 
 #include <string>
+#include <vector>
 
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "util/pretty_printer.h"
 #include "util/template_util.h"
@@ -76,4 +78,21 @@ ToJsonValue(const T& value, const TUnit::type unit, rapidjson::Document* documen
 }
 
 std::string to_json(const Status& status);
+
+std::string to_json(const std::map<std::string, std::map<std::string, std::string>>& value);
+
+Status from_json(const std::string& json_value, std::map<std::string, std::map<std::string, std::string>>* map_result);
+
+class JsonFlater {
+public:
+    JsonFlater(std::vector<std::string> paths) : _flat_paths(paths){};
+
+    ~JsonFlater() = default;
+
+    void flatten(const Column* json_column, std::vector<ColumnPtr>* result);
+
+private:
+    std::vector<std::string> _flat_paths;
+};
+
 } // namespace starrocks

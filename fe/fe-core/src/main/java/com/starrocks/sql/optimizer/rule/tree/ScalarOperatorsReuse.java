@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 
@@ -146,7 +148,8 @@ public class ScalarOperatorsReuse {
         public ScalarOperator visitCollectionElement(CollectionElementOperator elemOp, Void context) {
             ScalarOperator operator = new CollectionElementOperator(elemOp.getType(),
                     elemOp.getChild(0).accept(this, null),
-                    elemOp.getChild(1).accept(this, null));
+                    elemOp.getChild(1).accept(this, null),
+                    elemOp.isCheckOutOfBounds());
             return tryRewrite(operator);
         }
 
@@ -240,6 +243,27 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
+        public ScalarOperator visitSubfield(SubfieldOperator predicate, Void context) {
+            // only rewrite subfield operator if and only if child is DictionaryGetOperator
+            if (predicate.getChild(0) instanceof DictionaryGetOperator) {
+                ScalarOperator operator = new SubfieldOperator(predicate.getChild(0).accept(this, null),
+                                predicate.getType(), predicate.getFieldNames(), predicate.getCopyFlag());
+                return tryRewrite(operator);
+            }
+            return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitDictionaryGetOperator(DictionaryGetOperator predicate, Void context) {
+            ScalarOperator operator = new DictionaryGetOperator(
+                    predicate.getChildren().stream().map(
+                        argument -> argument.accept(this, null)).collect(Collectors.toList()),
+                            predicate.getType(), predicate.getDictionaryId(),
+                                predicate.getDictionaryTxnId(), predicate.getKeySize());
+            return tryRewrite(operator);
+        }
+
+        @Override
         public ScalarOperator visitDictMappingOperator(DictMappingOperator operator, Void context) {
             return tryRewrite(operator.clone());
         }
@@ -290,7 +314,7 @@ public class ScalarOperatorsReuse {
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
             isLambdaDependent = false;
             lambdaArguments.clear();
-            if (!isNonDeterministicFuncOrLambdaDependent(operator) && operators.contains(operator)) {
+            if (!isLambdaDependent(operator) && operators.contains(operator)) {
                 Set<ScalarOperator> commonOperators = getOperatorsByDepth(depth, commonOperatorsByDepth);
                 commonOperators.add(operator);
             }
@@ -325,6 +349,23 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
+        public Integer visitCall(CallOperator scalarOperator, Void context) {
+            CallOperator callOperator = scalarOperator.cast();
+            if (FunctionSet.nonDeterministicFunctions.contains(callOperator.getFnName())) {
+                // try to reuse non deterministic function
+                // for example:
+                // select (rnd + 1) as rnd1, (rnd + 2) as rnd2 from (select rand() as rnd) sub
+                return collectCommonOperatorsByDepth(1, scalarOperator);
+            } else if (scalarOperator.getChildren().isEmpty()) {
+                // to keep the same logic as origin
+                return 0;
+            } else {
+                return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(argument ->
+                        argument.accept(this, context)).reduce(Math::max).map(m -> m + 1).orElse(1), scalarOperator);
+            }
+        }
+
+        @Override
         public Integer visitDictMappingOperator(DictMappingOperator scalarOperator, Void context) {
             return collectCommonOperatorsByDepth(1, scalarOperator);
         }
@@ -334,7 +375,7 @@ public class ScalarOperatorsReuse {
         // a lambda-dependent expressions also can't be reused if reuseLambdaDependentExpr is false.
         // For example, array_map(x->2x+1+2x,array),2x is lambda-dependent, so it can't be reused if
         // reuseLambdaDependentExpr is false, but array_map(x->2x+1+2x,array) can be reused if needed.
-        private boolean isNonDeterministicFuncOrLambdaDependent(ScalarOperator scalarOperator) {
+        private boolean isLambdaDependent(ScalarOperator scalarOperator) {
 
             if (hasLambdaFunction && !reuseLambdaDependentExpr) {
                 if (scalarOperator instanceof LambdaFunctionOperator) {
@@ -348,14 +389,8 @@ public class ScalarOperatorsReuse {
                 }
             }
 
-            if (scalarOperator instanceof CallOperator) {
-                String fnName = ((CallOperator) scalarOperator).getFnName();
-                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
-                    return true;
-                }
-            }
             for (ScalarOperator child : scalarOperator.getChildren()) {
-                if (isNonDeterministicFuncOrLambdaDependent(child)) {
+                if (isLambdaDependent(child)) {
                     return true;
                 }
             }

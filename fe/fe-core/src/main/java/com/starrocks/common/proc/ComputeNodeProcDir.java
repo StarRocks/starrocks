@@ -40,6 +40,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(ComputeNodeProcDir.class);
 
     public static final ImmutableList<String> TITLE_NAMES;
+    public static final ImmutableList<String> TITLE_NAMES_SHARED_DATA;
+
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                 .add("ComputeNodeId").add("IP").add("HeartbeatPort")
@@ -47,10 +49,13 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
                 .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
-        if (RunMode.allowCreateLakeTable()) {
-            builder.add("StarletPort").add("WorkerId");
-        }
         TITLE_NAMES = builder.build();
+        builder = new ImmutableList.Builder<String>()
+                .addAll(TITLE_NAMES)
+                .add("StarletPort")
+                .add("WorkerId")
+                .add("TabletNum");
+        TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
     private SystemInfoService clusterInfoService;
@@ -59,11 +64,19 @@ public class ComputeNodeProcDir implements ProcDirInterface {
         this.clusterInfoService = clusterInfoService;
     }
 
+    public static List<String> getMetadata() {
+        if (RunMode.isSharedDataMode()) {
+            return TITLE_NAMES_SHARED_DATA;
+        } else {
+            return TITLE_NAMES;
+        }
+    }
+
     @Override
     public ProcResult fetchResult()
             throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
+        result.setNames(getMetadata());
 
         final List<List<String>> computeNodesInfos = getClusterComputeNodesInfos();
         for (List<String> computeNodesInfo : computeNodesInfos) {
@@ -80,7 +93,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
      * @return
      */
     public static List<List<String>> getClusterComputeNodesInfos() {
-        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<List<String>> computeNodesInfos = new LinkedList<>();
         List<Long> computeNodeIds;
         computeNodeIds = clusterInfoService.getComputeNodeIds(false);
@@ -134,10 +147,14 @@ public class ComputeNodeProcDir implements ProcDirInterface {
 
             computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
 
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
+
+                String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
+                long tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
+                computeNodeInfo.add(tabletNum);
             }
 
             comparableComputeNodeInfos.add(computeNodeInfo);

@@ -32,8 +32,10 @@ public:
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     Status parse_csv(int chunk_size, ChunkPtr* chunk);
+    int64_t estimated_mem_usage() const override;
 
 private:
+    Status _setup_io_ranges() const;
     // create a reader or re init reader
     Status _create_or_reinit_reader();
     Status _build_hive_column_name_2_index();
@@ -50,7 +52,6 @@ private:
     std::vector<Column*> _column_raw_ptrs;
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;
-    size_t _current_range_index = 0;
     // _materialize_slots_index_2_csv_column_index[0] = 5 means materialize_slots[0]->column index 5 in csv
     // materialize_slots is StarRocks' table definition, column index is the actual position in csv
     std::vector<size_t> _materialize_slots_index_2_csv_column_index;

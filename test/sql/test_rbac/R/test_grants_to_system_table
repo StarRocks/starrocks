@@ -12,6 +12,9 @@ select GRANTEE, OBJECT_TYPE, PRIVILEGE_TYPE from sys.grants_to_users where GRANT
 -- result:
 'u1'@'%'	DATABASE	CREATE TABLE
 -- !result
+drop user u1;
+-- result:
+-- !result
 -- name: test_grant_table
 CREATE TABLE `t1` (
   `v1` bigint(20) NULL COMMENT "",
@@ -32,6 +35,9 @@ grant select on table t1 to u2;
 select GRANTEE, OBJECT_TYPE, PRIVILEGE_TYPE from sys.grants_to_users where GRANTEE="'u2'@'%'" and OBJECT_DATABASE=database() and OBJECT_NAME="t1" and PRIVILEGE_TYPE="SELECT";
 -- result:
 'u2'@'%'	TABLE	SELECT
+-- !result
+drop user u2;
+-- result:
 -- !result
 -- name: test_grant_view
 CREATE TABLE `t1` (
@@ -57,6 +63,9 @@ select GRANTEE, OBJECT_TYPE, PRIVILEGE_TYPE from sys.grants_to_users where GRANT
 -- result:
 'u3'@'%'	VIEW	SELECT
 -- !result
+drop user u3;
+-- result:
+-- !result
 -- name: test_grant_materialized_view
 CREATE TABLE `t1` (
   `v1` bigint(20) NULL COMMENT "",
@@ -80,4 +89,7 @@ grant select on materialized view mv to u4;
 select GRANTEE, OBJECT_TYPE, PRIVILEGE_TYPE from sys.grants_to_users where GRANTEE="'u4'@'%'" and OBJECT_DATABASE=database() and OBJECT_NAME="mv" and PRIVILEGE_TYPE="SELECT";
 -- result:
 'u4'@'%'	MATERIALIZED VIEW	SELECT
+-- !result
+drop user u4;
+-- result:
 -- !result

@@ -91,7 +91,7 @@ public class JobsDbProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<String> names = globalStateMgr.getDbNames();
+        List<String> names = globalStateMgr.getLocalMetastore().listDbNames();
         if (names == null || names.isEmpty()) {
             // empty
             return result;

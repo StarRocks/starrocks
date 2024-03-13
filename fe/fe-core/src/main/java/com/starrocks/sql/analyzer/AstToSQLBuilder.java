@@ -85,9 +85,7 @@ public class AstToSQLBuilder {
                 res += ".";
             }
 
-            res +=  fieldName.startsWith("`") ?
-                    fieldName
-                    : '`' + fieldName + '`';
+            res += '`' + fieldName + '`';
             if (!fieldName.equalsIgnoreCase(columnName)) {
                 res += " AS `" + columnName + "`";
             }
@@ -140,6 +138,12 @@ public class AstToSQLBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
             SelectList selectList = stmt.getSelectList();
             sqlBuilder.append("SELECT ");
+
+            // add hint
+            if (selectList.getHintNodes() != null) {
+                sqlBuilder.append(extractHintStr(selectList.getHintNodes()));
+            }
+
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
             }
@@ -163,10 +167,7 @@ public class AstToSQLBuilder {
                                     columnName));
                         }
                     } else {
-                        selectListString.add(
-                                expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
-                                        visit(expr) + " AS `" + columnName.replace("`", "") + "`" :
-                                        visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
+                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
                     }
                 }
             } else {
@@ -368,6 +369,13 @@ public class AstToSQLBuilder {
         public String visitInsertStatement(InsertStmt insert, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("INSERT ");
+
+            // add hint
+            if (insert.getHintNodes() != null) {
+                sb.append(extractHintStr(insert.getHintNodes()));
+            }
+
+
             if (insert.isOverwrite()) {
                 sb.append("OVERWRITE ");
             } else {
@@ -376,11 +384,25 @@ public class AstToSQLBuilder {
 
             // target
             sb.append(insert.getTableName().toSql()).append(" ");
-            // TODO: not support specify partition and columns
+
+            // target partition
+            if (insert.getTargetPartitionNames() != null &&
+                    CollectionUtils.isNotEmpty(insert.getTargetPartitionNames().getPartitionNames())) {
+                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
+            }
 
             // label
             if (StringUtils.isNotEmpty(insert.getLabel())) {
                 sb.append("WITH LABEL `").append(insert.getLabel()).append("` ");
+            }
+
+            // target column
+            if (CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
+                String columns = insert.getTargetColumnNames().stream()
+                        .map(x -> '`' + x + '`')
+                        .collect(Collectors.joining(","));
+                sb.append("(").append(columns).append(") ");
             }
 
             // source

@@ -1,0 +1,3 @@
+-- name: test_datacache_metrics
+
+select STATUS, DISK_USED_BYTES, MEM_USED_BYTES from default_catalog.information_schema.be_datacache_metrics limit 1;

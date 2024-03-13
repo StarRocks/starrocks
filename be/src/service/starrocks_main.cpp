@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
     } else {
         conffile += "/conf/be.conf";
     }
-    if (!starrocks::config::init(conffile.c_str(), true)) {
+    if (!starrocks::config::init(conffile.c_str())) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }

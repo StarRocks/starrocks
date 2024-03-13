@@ -17,24 +17,34 @@ package com.starrocks.hive.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
+import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.DateObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampObjectInspector;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
 public class HiveColumnValue implements ColumnValue {
     private final Object fieldData;
     private final ObjectInspector fieldInspector;
+    private final String timeZone;
 
-    HiveColumnValue(ObjectInspector fieldInspector, Object fieldData) {
+    HiveColumnValue(ObjectInspector fieldInspector, Object fieldData, String timeZone) {
         this.fieldInspector = fieldInspector;
         this.fieldData = fieldData;
+        this.timeZone = timeZone;
     }
 
     private Object inspectObject() {
@@ -88,11 +98,6 @@ public class HiveColumnValue implements ColumnValue {
     }
 
     @Override
-    public String getTimestamp(ColumnType.TypeValue type) {
-        return inspectObject().toString();
-    }
-
-    @Override
     public byte[] getBytes() {
         return (byte[]) inspectObject();
     }
@@ -105,7 +110,7 @@ public class HiveColumnValue implements ColumnValue {
         for (Object item : items) {
             HiveColumnValue cv = null;
             if (item != null) {
-                cv = new HiveColumnValue(itemInspector, item);
+                cv = new HiveColumnValue(itemInspector, item, timeZone);
             }
             values.add(cv);
         }
@@ -120,10 +125,10 @@ public class HiveColumnValue implements ColumnValue {
             HiveColumnValue cv0 = null;
             HiveColumnValue cv1 = null;
             if (kv.getKey() != null) {
-                cv0 = new HiveColumnValue(keyObjectInspector, kv.getKey());
+                cv0 = new HiveColumnValue(keyObjectInspector, kv.getKey(), timeZone);
             }
             if (kv.getValue() != null) {
-                cv1 = new HiveColumnValue(valueObjectInspector, kv.getValue());
+                cv1 = new HiveColumnValue(valueObjectInspector, kv.getValue(), timeZone);
             }
             keys.add(cv0);
             values.add(cv1);
@@ -141,7 +146,7 @@ public class HiveColumnValue implements ColumnValue {
                 StructField sf = fields.get(idx);
                 Object o = inspector.getStructFieldData(fieldData, sf);
                 if (o != null) {
-                    cv = new HiveColumnValue(sf.getFieldObjectInspector(), o);
+                    cv = new HiveColumnValue(sf.getFieldObjectInspector(), o, timeZone);
                 }
             }
             values.add(cv);
@@ -161,5 +166,26 @@ public class HiveColumnValue implements ColumnValue {
     @Override
     public BigDecimal getDecimal() {
         return ((HiveDecimal) inspectObject()).bigDecimalValue();
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((((DateObjectInspector) fieldInspector).getPrimitiveJavaObject(fieldData))
+                .toEpochDay());
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        if (fieldData instanceof Timestamp) {
+            return ((Timestamp) fieldData).toLocalDateTime();
+        } else if (fieldData instanceof TimestampWritableV2) {
+            return LocalDateTime.ofInstant(Instant.ofEpochSecond((((TimestampObjectInspector) fieldInspector)
+                    .getPrimitiveJavaObject(fieldData)).toEpochSecond()), ZoneId.of(timeZone));
+        } else {
+            org.apache.hadoop.hive.common.type.Timestamp timestamp =
+                    ((TimestampObjectInspector) fieldInspector).getPrimitiveJavaObject(fieldData);
+            return LocalDateTime.of(timestamp.getYear(), timestamp.getMonth(), timestamp.getDay(),
+                    timestamp.getHours(), timestamp.getMinutes(), timestamp.getSeconds());
+        }
     }
 }

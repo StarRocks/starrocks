@@ -22,16 +22,13 @@
 #include "storage/column_predicate.h"
 #include "storage/tablet.h"
 
-namespace doris {
-class PBackendService_Stub;
-}
-
 namespace starrocks {
 
 class OlapTablePartitionParam;
 class OlapTableLocationParam;
 class StarRocksNodesInfo;
 class LocalTabletReader;
+class PInternalService_Stub;
 
 namespace serde {
 struct ProtobufChunkMeta;
@@ -123,7 +120,7 @@ private:
                                     const std::vector<std::string>& value_columns, std::vector<bool>& found,
                                     Chunk& values, SchemaPtr& value_schema);
 
-    Status _tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
+    Status _tablet_multi_get_rpc(PInternalService_Stub* stub, int64_t tablet_id, int64_t version, Chunk& keys,
                                  const std::vector<std::string>& value_columns, std::vector<bool>& found, Chunk& values,
                                  SchemaPtr& value_schema);
     // fields for local tablet reader

@@ -94,6 +94,26 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         return new ArrayList<>(partitionIdToOffset.keySet());
     }
 
+    // checkReadyToExecuteFast compares the local latest partition offset and the consumed offset.
+    public boolean checkReadyToExecuteFast() {
+        RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
+        if (routineLoadJob == null) {
+            return false;
+        }
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) routineLoadJob;
+
+        for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
+            int partitionId = entry.getKey();
+            Long consumeOffset = entry.getValue();
+            Long localLatestOffset = kafkaRoutineLoadJob.getPartitionOffset(partitionId);
+            // If any partition has newer data, the task should be scheduled.
+            if (localLatestOffset != null && localLatestOffset > consumeOffset) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public boolean readyToExecute() throws UserException {
         RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
@@ -101,11 +121,19 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
             return false;
         }
 
+        if (checkReadyToExecuteFast()) {
+            return true;
+        }
+
         KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) routineLoadJob;
         Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
                 new ArrayList<>(partitionIdToOffset.keySet()));
+        for (Map.Entry<Integer, Long> entry : latestOffsets.entrySet()) {
+            kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
+        }
+
         for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
             int partitionId = entry.getKey();
             Long latestOffset = latestOffsets.get(partitionId);

@@ -22,6 +22,7 @@ import com.amazonaws.auth.BasicSessionCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
+import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
 import com.google.common.base.Preconditions;
@@ -80,6 +81,10 @@ public class AWSCloudCredential implements CloudCredential {
 
     private final String iamRoleArn;
 
+    private final String stsRegion;
+
+    private final String stsEndpoint;
+
     private final String externalId;
 
     private final String region;
@@ -87,7 +92,8 @@ public class AWSCloudCredential implements CloudCredential {
     private final String endpoint;
 
     protected AWSCloudCredential(boolean useAWSSDKDefaultBehavior, boolean useInstanceProfile, String accessKey,
-                                 String secretKey, String sessionToken, String iamRoleArn, String externalId, String region,
+                                 String secretKey, String sessionToken, String iamRoleArn, String stsRegion,
+                                 String stsEndpoint, String externalId, String region,
                                  String endpoint) {
         Preconditions.checkNotNull(accessKey);
         Preconditions.checkNotNull(secretKey);
@@ -102,6 +108,8 @@ public class AWSCloudCredential implements CloudCredential {
         this.secretKey = secretKey;
         this.sessionToken = sessionToken;
         this.iamRoleArn = iamRoleArn;
+        this.stsRegion = stsRegion;
+        this.stsEndpoint = stsEndpoint;
         this.externalId = externalId;
         this.region = region;
         this.endpoint = endpoint;
@@ -135,8 +143,15 @@ public class AWSCloudCredential implements CloudCredential {
             }
             AWSSecurityTokenServiceClientBuilder stsBuilder = AWSSecurityTokenServiceClientBuilder.standard()
                     .withCredentials(awsCredentialsProvider);
-            if (!region.isEmpty()) {
-                stsBuilder.setRegion(region);
+            if (!stsRegion.isEmpty()) {
+                stsBuilder.setRegion(stsRegion);
+            }
+            if (!stsEndpoint.isEmpty()) {
+                // Glue is using aws sdk v1. If the user provides the sts endpoint, the sts region must also be specified.
+                // But in aws sdk v2, user only need to provide one of the two
+                Preconditions.checkArgument(!stsRegion.isEmpty(),
+                        String.format("STS endpoint is set to %s but no signing region was provided", stsEndpoint));
+                stsBuilder.setEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(stsEndpoint, stsRegion));
             }
             AWSSecurityTokenService token = stsBuilder.build();
             builder.withStsClient(token);
@@ -171,6 +186,16 @@ public class AWSCloudCredential implements CloudCredential {
         configuration.set("fs.s3a.aws.credentials.provider",
                 "com.starrocks.credential.provider.AssumedRoleCredentialProvider");
         configuration.set("fs.s3a.assumed.role.arn", iamRoleArn);
+        if (!stsRegion.isEmpty()) {
+            configuration.set("fs.s3a.assumed.role.sts.endpoint.region", stsRegion);
+        }
+        if (!stsEndpoint.isEmpty()) {
+            // Hadoop is using aws sdk v1. If the user provides the sts endpoint, the sts region must also be specified.
+            // But in aws sdk v2, user only need to provide one of the two
+            Preconditions.checkArgument(!stsRegion.isEmpty(),
+                    String.format("STS endpoint is set to %s but no signing region was provided", stsEndpoint));
+            configuration.set("fs.s3a.assumed.role.sts.endpoint", stsEndpoint);
+        }
         configuration.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
         // TODO(SmithCruise) Not support assume role in none-ec2 machine
         // if (!region.isEmpty()) {
@@ -246,6 +271,8 @@ public class AWSCloudCredential implements CloudCredential {
         properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
         properties.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, iamRoleArn);
+        properties.put(CloudConfigurationConstants.AWS_S3_STS_REGION, stsRegion);
+        properties.put(CloudConfigurationConstants.AWS_S3_STS_ENDPOINT, stsEndpoint);
         properties.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, externalId);
         properties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
         properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
@@ -260,6 +287,8 @@ public class AWSCloudCredential implements CloudCredential {
                 ", secretKey='" + secretKey + '\'' +
                 ", sessionToken='" + sessionToken + '\'' +
                 ", iamRoleArn='" + iamRoleArn + '\'' +
+                ", stsRegion='" + stsRegion + '\'' +
+                ", stsEndpoint='" + stsEndpoint + '\'' +
                 ", externalId='" + externalId + '\'' +
                 ", region='" + region + '\'' +
                 ", endpoint='" + endpoint + '\'' +
@@ -278,6 +307,7 @@ public class AWSCloudCredential implements CloudCredential {
             awsCredentialInfo.setDefaultCredential(defaultCredentialInfo.build());
         } else if (useInstanceProfile) {
             if (!iamRoleArn.isEmpty()) {
+                // TODO: Support assumeRole with custom sts region and sts endpoint
                 AwsAssumeIamRoleCredentialInfo.Builder assumeIamRowCredentialInfo
                         = AwsAssumeIamRoleCredentialInfo.newBuilder();
                 assumeIamRowCredentialInfo.setIamRoleArn(iamRoleArn);

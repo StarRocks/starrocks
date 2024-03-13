@@ -302,6 +302,7 @@ fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0.patch
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-CVE-2023-31039.patch
+    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-2479.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -426,6 +427,7 @@ fi
 cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
     patch -p0 < $TP_PATCH_DIR/jemalloc_hook.patch
+    patch -p0 < $TP_PATCH_DIR/jemalloc_nallocx.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -499,4 +501,15 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $ARROW_SOURCE"
+fi
+
+# patch bzip
+if [[ -d $TP_SOURCE_DIR/$BZIP_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$BZIP_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $BZIP_SOURCE == "bzip2-1.0.8" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/bzip2-1.0.8.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $BZIP_SOURCE"
 fi

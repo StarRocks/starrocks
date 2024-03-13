@@ -25,7 +25,7 @@ import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.options.Options;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.IntType;
 import org.junit.Assert;
@@ -76,7 +76,7 @@ public class PaimonConnectorTest {
 
     @Test
     public void testCreatePaimonTable(@Mocked Catalog paimonNativeCatalog,
-                                      @Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+                                      @Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         Map<String, String> properties = new HashMap<>();
         properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
         properties.put("paimon.catalog.type", "filesystem");
@@ -126,6 +126,27 @@ public class PaimonConnectorTest {
         String accessKeyOption = paimonOptions.get("s3.access-key");
         String secretKeyOption = paimonOptions.get("s3.secret-key");
         String endpointOption = paimonOptions.get("s3.endpoint");
+        Assert.assertEquals(accessKeyOption, accessKeyValue);
+        Assert.assertEquals(secretKeyOption, secretKeyValue);
+        Assert.assertEquals(endpointOption, endpointValue);
+    }
+
+    @Test
+    public void testCreatePaimonConnectorWithOSS() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.warehouse", "oss://bucket/warehouse");
+        properties.put("paimon.catalog.type", "filesystem");
+        String accessKeyValue = "oss_access_key";
+        String secretKeyValue = "oss_secret_key";
+        String endpointValue = "oss_endpoint";
+        properties.put("aliyun.oss.access_key", accessKeyValue);
+        properties.put("aliyun.oss.secret_key", secretKeyValue);
+        properties.put("aliyun.oss.endpoint", endpointValue);
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options paimonOptions = connector.getPaimonOptions();
+        String accessKeyOption = paimonOptions.get("fs.oss.accessKeyId");
+        String secretKeyOption = paimonOptions.get("fs.oss.accessKeySecret");
+        String endpointOption = paimonOptions.get("fs.oss.endpoint");
         Assert.assertEquals(accessKeyOption, accessKeyValue);
         Assert.assertEquals(secretKeyOption, secretKeyValue);
         Assert.assertEquals(endpointOption, endpointValue);

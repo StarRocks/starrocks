@@ -246,6 +246,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_TRUE(query_ctx_mgr->init().ok());
 
     workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>("wg1", 1, 1, 1, 1, 1 /* concurrency_limit */,
+                                                                        1.0 /* spill_mem_limit_threshold */,
                                                                         workgroup::WorkGroupType::WG_NORMAL);
 
     auto* query_ctx1 = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 0, 1, 3, 60, 300);

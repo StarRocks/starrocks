@@ -162,7 +162,8 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     }
     // if rowset is partial rowset, we need to load rowset totally because we don't support load multiple load
     // for partial update so far
-    bool ignore_mem_limit = rowset->rowset_meta()->get_meta_pb().has_txn_meta() && rowset->num_segments() != 0;
+    bool ignore_mem_limit =
+            rowset->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() && rowset->num_segments() != 0;
 
     if (ignore_mem_limit) {
         for (size_t i = 0; i < rowset->num_delete_files(); i++) {
@@ -307,8 +308,8 @@ void RowsetUpdateState::plan_read_by_rssid(const vector<uint64_t>& rowids, size_
 }
 // update_column_ids needed read by rowset
 Status RowsetUpdateState::_prepare_partial_update_value_columns(Tablet* tablet, Rowset* rowset, uint32_t idx,
-                                                                const std::vector<uint32_t>& update_column_ids) {
-    auto tablet_schema = tablet->tablet_schema();
+                                                                const std::vector<uint32_t>& update_column_ids,
+                                                                const TabletSchemaCSPtr& tablet_schema) {
     if (_partial_update_value_column_ids.empty()) {
         // need to init
         for (uint32_t cid : update_column_ids) {
@@ -363,7 +364,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     }
 
     int64_t t_start = MonotonicMillis();
-    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
 
     std::vector<uint32_t> update_column_uids(txn_meta.partial_update_column_unique_ids().begin(),
                                              txn_meta.partial_update_column_unique_ids().end());
@@ -371,7 +372,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     std::vector<uint32_t> read_column_ids;
     for (uint32_t i = 0; i < tablet_schema->num_columns(); i++) {
         const auto& tablet_column = tablet_schema->column(i);
-        if (tablet_column.name() == "__row") {
+        if (tablet_column.name() == Schema::FULL_ROW_COLUMN) {
             continue;
         }
         if (update_columns_set.find(tablet_column.unique_id()) == update_columns_set.end()) {
@@ -422,7 +423,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     }
 
     if (tablet->is_column_with_row_store()) {
-        RETURN_IF_ERROR(_prepare_partial_update_value_columns(tablet, rowset, idx, update_column_uids));
+        RETURN_IF_ERROR(_prepare_partial_update_value_columns(tablet, rowset, idx, update_column_uids, tablet_schema));
     }
     int64_t t_end = MonotonicMillis();
     _partial_update_states[idx].update_byte_size();
@@ -445,7 +446,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
         _auto_increment_partial_update_states.resize(rowset->num_segments());
     }
     DCHECK_EQ(column_id.size(), 1);
-    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, column_id);
     std::vector<std::unique_ptr<Column>> read_column;
     read_column.resize(1);
@@ -544,12 +545,12 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
 }
 
 bool RowsetUpdateState::_check_partial_update(Rowset* rowset) {
-    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
+    if (!rowset->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() || rowset->num_segments() == 0) {
         return false;
     }
     // Merge condition and auto-increment-column-only partial update will also set txn_meta
     // but will not set partial_update_column_ids
-    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
     return !txn_meta.partial_update_column_ids().empty();
 }
 
@@ -693,7 +694,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                                 uint32_t rowset_id, uint32_t segment_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index, std::unique_ptr<Column>& delete_pks,
                                 int64_t* append_column_size) {
-    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();
     }
@@ -719,7 +720,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
             const auto& tablet_column = _tablet_schema->column(i);
             if (update_columns_set.find(tablet_column.unique_id()) == update_columns_set.end()) {
                 read_column_ids.emplace_back(i);
-                if (tablet_column.name() != "__row") {
+                if (tablet_column.name() != Schema::FULL_ROW_COLUMN) {
                     read_column_ids_without_full_row.push_back(i);
                 }
             }
@@ -772,7 +773,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                 _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr));
     } else if (_partial_update_states.size() != 0) {
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
-        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, _tablet_schema, read_column_ids,
+        FileInfo file_info{.path = dest_path};
+        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, &file_info, _tablet_schema, read_column_ids,
                                                  _partial_update_states[segment_id].write_columns, segment_id,
                                                  partial_rowset_footer));
     }

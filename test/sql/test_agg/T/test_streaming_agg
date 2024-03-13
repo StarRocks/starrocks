@@ -14,3 +14,12 @@ select c0, sum(c1) from t0 group by c0 order by c0;
 admin enable failpoint 'force_reset_aggregator_after_agg_streaming_sink_finish';
 select c0, sum(c1) from t0 group by c0 order by c0;
 admin disable failpoint 'force_reset_aggregator_after_agg_streaming_sink_finish';
+
+-- make sure execuate dop = 1
+create table t1 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- 4096 with null key
+insert into t1 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096)) union all select null,null;
+select c0, sum(c1) from t1 group by c0 order by 2 desc limit 10;

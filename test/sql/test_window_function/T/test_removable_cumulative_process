@@ -18,7 +18,7 @@ INSERT INTO `t1` values (1, 1, 1, NULL), (1, 1, 2, NULL), (1, NULL, 3, NULL), (1
 (NULL, NULL, 19, NULL), (NULL, NULL, 20, NULL), (NULL, 4, 21, NULL), (NULL, 4, 22, NULL),
 (NULL, NULL, 23, NULL), (NULL, NULL, 24, NULL);
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> COUNT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= COUNT =========================================================
 
 -- COUNT(Nullable Column)
 SELECT v3, v1, COUNT(v1) OVER(ORDER BY v3 ROWS BETWEEN 5 PRECEDING AND 2 PRECEDING) AS CNT FROM t1 ORDER BY v3;
@@ -34,7 +34,7 @@ SELECT v3, COUNT(v3) OVER(ORDER BY v3 ROWS BETWEEN 2 FOLLOWING AND 5 FOLLOWING) 
 SELECT v3, COUNT(v3) OVER(ORDER BY v3 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS CNT FROM t1 ORDER BY v3;
 SELECT v3, COUNT(v3) OVER(ORDER BY v3 ROWS BETWEEN CURRENT ROW AND 2 FOLLOWING) AS CNT FROM t1 ORDER BY v3;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> SUM <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= SUM =========================================================
 
 -- SUM(Nullable Column)
 SELECT v3, v1, SUM(v1) OVER(ORDER BY v3 ROWS BETWEEN 5 PRECEDING AND 2 PRECEDING) AS CNT FROM t1 ORDER BY v3;
@@ -50,7 +50,7 @@ SELECT v3, SUM(v3) OVER(ORDER BY v3 ROWS BETWEEN 2 FOLLOWING AND 5 FOLLOWING) AS
 SELECT v3, SUM(v3) OVER(ORDER BY v3 ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS CNT FROM t1 ORDER BY v3;
 SELECT v3, SUM(v3) OVER(ORDER BY v3 ROWS BETWEEN CURRENT ROW AND 2 FOLLOWING) AS CNT FROM t1 ORDER BY v3;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> AVG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= AVG =========================================================
 
 -- AVG(Nullable Column)
 SELECT v3, v1, AVG(v1) OVER(ORDER BY v3 ROWS BETWEEN 5 PRECEDING AND 2 PRECEDING) AS CNT FROM t1 ORDER BY v3;

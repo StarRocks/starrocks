@@ -5,6 +5,7 @@
 #include "gutil/cpu.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <sstream>

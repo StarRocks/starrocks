@@ -37,7 +37,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
@@ -50,9 +49,11 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
@@ -64,6 +65,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -137,7 +139,7 @@ public class LakeTableAlterMetaJobTest {
         KeysType keysType = KeysType.DUP_KEYS;
         db = new Database(dbId, "db0");
 
-        Database oldDb = GlobalStateMgr.getCurrentState().getIdToDb().putIfAbsent(db.getId(), db);
+        Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
         Assert.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
@@ -203,7 +205,7 @@ public class LakeTableAlterMetaJobTest {
     public void testRunPendingJob() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -219,7 +221,7 @@ public class LakeTableAlterMetaJobTest {
         FeConstants.runningUnitTest = false;
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -246,7 +248,7 @@ public class LakeTableAlterMetaJobTest {
     public void testDropTableBeforeCancel() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -260,7 +262,7 @@ public class LakeTableAlterMetaJobTest {
     public void testRunningJob() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -286,7 +288,7 @@ public class LakeTableAlterMetaJobTest {
     public void testFinishedRewritingJob() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
 
@@ -322,7 +324,7 @@ public class LakeTableAlterMetaJobTest {
     public void testReplay() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
 
@@ -376,18 +378,34 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testUpdateTabletMetaInfoTaskToThrift() throws AlterCancelException {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
         long backend = 1L;
         long txnId = 1L;
-        Set<Pair<Long, Integer>> tableIdWithSchemaHash = new HashSet<>();
-        Pair<Long, Integer> item = new Pair<>(1L, 1);
-        tableIdWithSchemaHash.add(item);
-        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch = new MarkedCountDownLatch<>(1);
-
-        UpdateTabletMetaInfoTask updateTabletMetaInfoTask = new UpdateTabletMetaInfoTask(backend, tableIdWithSchemaHash,
-                true, latch, TTabletMetaType.ENABLE_PERSISTENT_INDEX, TTabletType.TABLET_TYPE_LAKE, txnId);
-        TUpdateTabletMetaInfoReq result = updateTabletMetaInfoTask.toThrift();
+        Set<Long> tabletSet = new HashSet<>();
+        tabletSet.add(1L);
+        MarkedCountDownLatch<Long, Set<Long>> latch = new MarkedCountDownLatch<>(1);
+        TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
+                backend, tabletSet, true);
+        task.setLatch(latch);
+        task.setTxnId(txnId);
+        TUpdateTabletMetaInfoReq result = task.toThrift();
         Assert.assertEquals(result.txn_id, txnId);
         Assert.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
     }
 
+    @Test
+    public void testSetPropertyNotSupport() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, "all");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        List<AlterClause> alterList = Collections.singletonList(modify);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        Assertions.assertThrows(DdlException.class,
+                () -> schemaChangeHandler.createAlterMetaJob(alterList, db, table));
+    }
 }

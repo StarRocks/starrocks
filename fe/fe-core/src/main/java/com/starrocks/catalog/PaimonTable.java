@@ -15,46 +15,38 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 
 public class PaimonTable extends Table {
-    private static final Logger LOG = LogManager.getLogger(PaimonTable.class);
-    private final String catalogType;
-    private final String metastoreUris;
-    private final String warehousePath;
     private final String catalogName;
     private final String databaseName;
     private final String tableName;
-    private final AbstractFileStoreTable paimonNativeTable;
+    private final org.apache.paimon.table.Table paimonNativeTable;
     private final List<String> partColumnNames;
     private final List<String> paimonFieldNames;
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
-                       String catalogType, String metastoreUris, String warehousePath,
                        org.apache.paimon.table.Table paimonNativeTable, long createTime) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
-        this.catalogType = catalogType;
-        this.metastoreUris = metastoreUris;
-        this.warehousePath = warehousePath;
-        this.paimonNativeTable = (AbstractFileStoreTable) paimonNativeTable;
+        this.paimonNativeTable = paimonNativeTable;
         this.partColumnNames = paimonNativeTable.partitionKeys();
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
@@ -75,7 +67,7 @@ public class PaimonTable extends Table {
         return tableName;
     }
 
-    public AbstractFileStoreTable getNativeTable() {
+    public org.apache.paimon.table.Table getNativeTable() {
         return paimonNativeTable;
     }
 
@@ -86,7 +78,11 @@ public class PaimonTable extends Table {
 
     @Override
     public String getTableLocation() {
-        return paimonNativeTable.location().toString();
+        if (paimonNativeTable instanceof DataTable) {
+            return ((DataTable) paimonNativeTable).location().toString();
+        } else {
+            return paimonNativeTable.name().toString();
+        }
     }
 
     @Override
@@ -110,7 +106,7 @@ public class PaimonTable extends Table {
 
     @Override
     public boolean isUnPartitioned() {
-        return partColumnNames.size() == 0;
+        return partColumnNames.isEmpty();
     }
 
     @Override
@@ -120,14 +116,33 @@ public class PaimonTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        Preconditions.checkNotNull(partitions);
         TPaimonTable tPaimonTable = new TPaimonTable();
-        tPaimonTable.setCatalog_type(catalogType);
-        tPaimonTable.setMetastore_uri(metastoreUris);
-        tPaimonTable.setWarehouse_path(warehousePath);
+        String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
+        tPaimonTable.setPaimon_native_table(encodedTable);
+        tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        PaimonTable that = (PaimonTable) o;
+        return catalogName.equals(that.catalogName) &&
+                databaseName.equals(that.databaseName) &&
+                tableName.equals(that.tableName) &&
+                createTime == that.createTime;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(catalogName, databaseName, tableName, createTime);
     }
 }

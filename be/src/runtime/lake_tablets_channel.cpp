@@ -103,7 +103,7 @@ private:
             if (status.ok()) {
                 return;
             }
-            std::string msg = strings::Substitute("$0: $1", BackendOptions::get_localhost(), status.get_error_msg());
+            std::string msg = strings::Substitute("$0: $1", BackendOptions::get_localhost(), status.message());
             std::lock_guard l(_mtx);
             if (_response->status().status_code() == TStatusCode::OK) {
                 _response->mutable_status()->set_status_code(status.code());
@@ -206,6 +206,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
         _senders[params.sender_id()].has_incremental_open = true;
     } else {
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+        _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }
     RETURN_IF_ERROR(_create_delta_writers(params, false));
 
@@ -412,7 +413,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
-    } else if (request.eos() && request.wait_all_sender_close()) {
+    } else if (request.wait_all_sender_close()) {
+        _num_initial_senders.fetch_sub(1);
         std::string msg = fmt::format("LakeTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
         // wait for senders to be closed, may be timed out
         auto remain = request.timeout_ms();
@@ -427,11 +429,17 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
 int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
     int n = _num_remaining_senders.fetch_sub(1);
+    // if sender close means data send finished, we need to decrease _num_initial_senders
+    _num_initial_senders.fetch_sub(1);
     std::lock_guard l(_dirty_partitions_lock);
     for (int i = 0; i < partitions_size; i++) {
         _dirty_partitions.insert(partitions[i]);
     }
     return n - 1;
+}
+
+static void null_callback(const Status& status) {
+    (void)status;
 }
 
 void LakeTabletsChannel::_flush_stale_memtables() {
@@ -449,15 +457,15 @@ void LakeTabletsChannel::_flush_stale_memtables() {
             if (_immutable_partition_ids.count(writer->partition_id()) > 0) {
                 if (high_mem_usage) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(null_callback);
                 } else if (now - last_write_ts > 1) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(null_callback);
                 }
             } else {
                 if (high_mem_usage && now - last_write_ts > config::stale_memtable_flush_time_sec) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(null_callback);
                 }
             }
             if (log_flushed) {
@@ -556,7 +564,7 @@ void LakeTabletsChannel::cancel() {
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(
         Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
-    if (chunk == nullptr && !request.eos()) {
+    if (chunk == nullptr && !request.eos() && !request.wait_all_sender_close()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 

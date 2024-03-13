@@ -72,6 +72,10 @@ public class ColumnAccessPath {
         return type;
     }
 
+    public String getPath() {
+        return path;
+    }
+
     public boolean onlyRoot() {
         return type == TAccessPathType.ROOT && children.isEmpty();
     }
@@ -86,6 +90,17 @@ public class ColumnAccessPath {
 
     public boolean hasChildPath(String path) {
         return children.stream().anyMatch(p -> p.path.equals(path));
+    }
+
+    public boolean hasOverlap(List<String> fieldNames) {
+        if (!hasChildPath() || fieldNames.isEmpty()) {
+            return true;
+        }
+
+        if (children.stream().noneMatch(p -> p.path.equals(fieldNames.get(0)))) {
+            return false;
+        }
+        return getChildPath(fieldNames.get(0)).hasOverlap(fieldNames.subList(1, fieldNames.size()));
     }
 
     public boolean hasChildPath() {

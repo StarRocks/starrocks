@@ -137,7 +137,6 @@ private:
     // For performance reason, the simdjson parser should be reused over several files.
     //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
     simdjson::ondemand::parser _simdjson_parser;
-    ByteBufferPtr _parser_buf;
     bool _is_ndjson = false;
 
     std::unique_ptr<JsonParser> _parser;
@@ -150,9 +149,15 @@ private:
     // record the "__op" column's index
     int _op_col_index;
 
-    std::unique_ptr<char[]> _payload_buffer;
-    size_t _payload_buffer_size;
-    size_t _payload_buffer_capacity;
+    ByteBufferPtr _file_stream_buffer;
+
+    std::unique_ptr<char[]> _file_broker_buffer = nullptr;
+    size_t _file_broker_buffer_size = 0;
+    size_t _file_broker_buffer_capacity = 0;
+
+    char* _payload = nullptr;
+    size_t _payload_size = 0;
+    size_t _payload_capacity = 0;
 };
 
 } // namespace starrocks

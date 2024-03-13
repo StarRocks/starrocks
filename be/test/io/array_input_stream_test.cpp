@@ -119,4 +119,18 @@ PARALLEL_TEST(ArrayInputStreamTest, test_seek_and_peek) {
     ASSERT_EQ("", *in.peek(10));
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayInputStreamTest, test_read_all) {
+    std::string s("0123456789");
+    ArrayInputStream in(s.data(), static_cast<int64_t>(s.size()));
+
+    ASSIGN_OR_ABORT(auto content, in.read_all());
+    EXPECT_EQ(s, content);
+
+    ASSERT_OK(in.seek(5));
+
+    ASSIGN_OR_ABORT(content, in.read_all());
+    EXPECT_EQ(s, content);
+}
+
 } // namespace starrocks::io

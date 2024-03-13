@@ -51,6 +51,6 @@ protected:
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
 };
 
-double compaction_score(const std::shared_ptr<const TabletMetadataPB>& metadata);
+double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata);
 
 } // namespace starrocks::lake

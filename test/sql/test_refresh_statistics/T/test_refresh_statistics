@@ -1,0 +1,79 @@
+-- name: test_refresh_statistics
+CREATE TABLE `activities` (
+  `LINE` largeint(40) NOT NULL COMMENT "",
+  `EVENTTIME` datetime NULL COMMENT "",
+  `_SORTING` bigint(20) NULL COMMENT "",
+  `ACTIVITY_EN` varchar(65536) NULL COMMENT "",
+  `_CASE_KEY` varchar(65536) NULL COMMENT "",
+  `USER_NAME` varchar(65536) NULL COMMENT "",
+  `USER_TYPE` varchar(65536) NULL COMMENT "",
+  `CHANGED_TABLE` varchar(65536) NULL COMMENT "",
+  `CHANGED_FIELD` varchar(65536) NULL COMMENT "",
+  `CHANGED_FROM` varchar(65536) NULL COMMENT "",
+  `CHANGED_TO` varchar(65536) NULL COMMENT "",
+  `ACTIVITIES` largeint(40) NULL COMMENT ""
+) ENGINE=OLAP
+UNIQUE KEY(`LINE`, `EVENTTIME`, `_SORTING`, `ACTIVITY_EN`)
+partition by (`LINE`)
+DISTRIBUTED BY HASH(`LINE`, `EVENTTIME`, `_SORTING`, `ACTIVITY_EN`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4");
+
+create table test_2 like activities;
+
+insert into activities values (1, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(2, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',2),
+(3, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',3),
+(4, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',4),
+(5, '2020-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5);
+
+function: assert_table_cardinality('explain select * from activities', '5')
+
+insert into activities values (1, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(2, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',2),
+(3, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',3),
+(4, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',4),
+(5, '2020-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-03', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-04', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-05', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-05', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5),
+(5, '2020-01-05', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',5);
+
+[UC]analyze sample table activities with sync mode;
+
+function: assert_table_cardinality('explain select * from activities', '1\d+')
+
+insert into test_2 select * from activities;
+
+function: assert_table_cardinality('explain select * from test_2', '1\d+')
+
+[UC]analyze sample table test_2;
+
+function: assert_table_cardinality('explain select * from test_2', '1\d+')
+
+insert into test_2 values (1, '2021-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-03', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-04', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-05', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-06', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-07', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-08', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-09', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
+(1, '2021-01-10', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1);
+
+[UC]analyze sample table test_2;
+
+function: assert_table_cardinality('explain select * from test_2', '1\d+')
+
+
+
+
+
+
+
+

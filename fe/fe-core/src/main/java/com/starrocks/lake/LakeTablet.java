@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.staros.client.StarClientException;
@@ -53,11 +54,14 @@ public class LakeTablet extends Tablet {
 
     private static final String JSON_KEY_DATA_SIZE = "dataSize";
     private static final String JSON_KEY_ROW_COUNT = "rowCount";
+    private static final String JSON_KEY_DATA_SIZE_UPDATE_TIME = "dataSizeUpdateTime";
 
     @SerializedName(value = JSON_KEY_DATA_SIZE)
-    private long dataSize = 0L;
+    private volatile long dataSize = 0L;
     @SerializedName(value = JSON_KEY_ROW_COUNT)
-    private long rowCount = 0L;
+    private volatile long rowCount = 0L;
+    @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
+    private volatile long dataSizeUpdateTime = 0L;
 
     public LakeTablet(long id) {
         super(id);
@@ -77,6 +81,14 @@ public class LakeTablet extends Tablet {
         this.dataSize = dataSize;
     }
 
+    public void setDataSizeUpdateTime(long dataSizeUpdateTime) {
+        this.dataSizeUpdateTime = dataSizeUpdateTime;
+    }
+
+    public long getDataSizeUpdateTime() {
+        return dataSizeUpdateTime;
+    }
+
     // version is not used
     @Override
     public long getRowCount(long version) {
@@ -88,13 +100,13 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryComputeNodeId() throws UserException {
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
         return getPrimaryComputeNodeId(workerGroupId);
     }
 
     public long getPrimaryComputeNodeId(long clusterId) throws UserException {
-        return GlobalStateMgr.getCurrentStarOSAgent().
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().
                 getPrimaryComputeNodeIdByShard(getShardId(), clusterId);
     }
 
@@ -105,13 +117,20 @@ public class LakeTablet extends Tablet {
             return Collections.emptySet();
         }
         try {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-            return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
         } catch (UserException e) {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
         }
+    }
+
+    @Override
+    public List<Replica> getAllReplicas() {
+        List<Replica> replicas = Lists.newArrayList();
+        getQueryableReplicas(replicas, null, 0, -1, 0);
+        return replicas;
     }
 
     // visibleVersion and schemaHash is not used
@@ -162,8 +181,8 @@ public class LakeTablet extends Tablet {
         if (GlobalStateMgr.isCheckpointThread()) {
             throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-        return GlobalStateMgr.getCurrentStarOSAgent().getShardInfo(getShardId(), workerGroupId);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(getShardId(), workerGroupId);
     }
 }

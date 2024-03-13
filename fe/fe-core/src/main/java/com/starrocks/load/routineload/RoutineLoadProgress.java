@@ -56,7 +56,7 @@ public abstract class RoutineLoadProgress implements Writable {
         this.loadDataSourceType = loadDataSourceType;
     }
 
-    abstract void update(RLTaskTxnCommitAttachment attachment);
+    abstract void update(RoutineLoadProgress progress);
 
     abstract String toJsonString();
 

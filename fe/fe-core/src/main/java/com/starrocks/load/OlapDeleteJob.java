@@ -57,6 +57,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -71,11 +73,13 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -105,15 +109,16 @@ public class OlapDeleteJob extends DeleteJob {
     }
 
     @Override
-    @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
+    @java.lang.SuppressWarnings("squid:S2142") // allow catch InterruptedException
     public void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
             throws DdlException, QueryStateException {
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
-        List<Predicate> conditions = stmt.getDeleteConditions();
+        List<Predicate> conditions = getDeleteConditions();
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
@@ -162,7 +167,7 @@ public class OlapDeleteJob extends DeleteJob {
                                     TPriority.NORMAL,
                                     TTaskType.REALTIME_PUSH,
                                     getTransactionId(),
-                                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                                             .getNextTransactionId(), columnsDesc);
                             pushTask.setIsSchemaChanging(false);
                             pushTask.setCountDownLatch(countDownLatch);
@@ -184,13 +189,13 @@ public class OlapDeleteJob extends DeleteJob {
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it
-            if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
                 cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         LOG.info("countDownLatch count: {}", countDownLatch.getCount());
 
@@ -219,7 +224,7 @@ public class OlapDeleteJob extends DeleteJob {
             LOG.warn("InterruptedException: ", e);
         }
         LOG.info("delete job finish, countDownLatch count: {}", countDownLatch.getCount());
- 
+
         String errMsg = "";
         List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
         Status st = countDownLatch.getStatus();
@@ -257,7 +262,7 @@ public class OlapDeleteJob extends DeleteJob {
                     long endQuorumTimeoutMs = nowQuorumTimeMs + timeoutMs / 2;
                     // if job's state is quorum_finished then wait for a period of time and commit it.
                     while (getState() == DeleteState.QUORUM_FINISHED && endQuorumTimeoutMs > nowQuorumTimeMs
-                          && countDownLatch.getCount() > 0) {
+                            && countDownLatch.getCount() > 0) {
                         checkAndUpdateQuorum();
                         Thread.sleep(1000);
                         nowQuorumTimeMs = System.currentTimeMillis();
@@ -365,11 +370,12 @@ public class OlapDeleteJob extends DeleteJob {
         }
 
         // create cancel delete push task for each backends
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
         for (Long backendId : backendIds) {
             PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
                     TTaskType.REALTIME_PUSH, getTransactionId(),
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId());
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                            .getNextTransactionId());
             AgentTaskQueue.removePushTaskByTransactionId(backendId, getTransactionId(),
                     TPushType.DELETE, TTaskType.REALTIME_PUSH);
             AgentTaskExecutor.submit(new AgentBatchTask(cancelDeleteTask));
@@ -380,9 +386,16 @@ public class OlapDeleteJob extends DeleteJob {
     @Override
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
         long transactionId = getTransactionId();
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
+                getTabletFailInfos(), timeoutMs,
+                new InsertTxnCommitAttachment());
+    }
+
+    @Override
+    protected List<TabletCommitInfo> getTabletCommitInfos() {
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
             for (Replica replica : tDeleteInfo.getFinishedReplicas()) {
                 // the inverted index contains rolling up replica
@@ -394,8 +407,11 @@ public class OlapDeleteJob extends DeleteJob {
                 tabletCommitInfos.add(new TabletCommitInfo(tabletId, replica.getBackendId()));
             }
         }
-        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, tabletCommitInfos,
-                Lists.newArrayList(), timeoutMs,
-                new InsertTxnCommitAttachment());
+        return tabletCommitInfos;
+    }
+
+    @Override
+    protected List<TabletFailInfo> getTabletFailInfos() {
+        return Collections.emptyList();
     }
 }

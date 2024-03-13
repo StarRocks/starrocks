@@ -21,11 +21,12 @@ import com.starrocks.server.RunMode;
 
 public class AutoInferUtil {
     public static int calDefaultReplicationNum() throws UserException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return 1;
         }
 
-        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
+        int defaultReplicationNum =
+                Math.min(3, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber());
         if (defaultReplicationNum == 0) {
             throw new NoAliveBackendException("No alive backend");
         }

@@ -45,6 +45,7 @@ public abstract class AgentTask {
 
     protected long dbId;
     protected long tableId;
+    // physical partition id
     protected long partitionId;
     protected long indexId;
     protected long tabletId;

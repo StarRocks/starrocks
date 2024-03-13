@@ -41,6 +41,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.buffer.ByteBuf;
@@ -100,7 +101,6 @@ public abstract class BaseAction implements IAction {
     @Override
     public void handleRequest(BaseRequest request) throws Exception {
         BaseResponse response = new BaseResponse();
-        LOG.info("receive http request. url={}", request.getRequest().uri());
         try {
             execute(request, response);
         } catch (Exception e) {
@@ -111,6 +111,8 @@ public abstract class BaseAction implements IAction {
             } else {
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
             }
+        } finally {
+            ConnectContext.remove();
         }
     }
 

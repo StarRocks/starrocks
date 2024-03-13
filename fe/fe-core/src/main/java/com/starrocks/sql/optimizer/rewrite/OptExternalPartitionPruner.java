@@ -308,6 +308,8 @@ public class OptExternalPartitionPruner {
         } else if (table instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) table;
             if (!icebergTable.getSnapshot().isPresent()) {
+                // TODO: for iceberg table, it cannot decide whether it's pruned or not when `selectedPartitionIds`
+                //  is empty. It's expensive to set all partitions here.
                 return;
             }
 

@@ -17,10 +17,12 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.Role;
+
+import java.util.HashSet;
+import java.util.Set;
 
 public class FeNameFormat {
     private FeNameFormat() {
@@ -43,6 +45,14 @@ public class FeNameFormat {
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
+
+    private static final Set<String> FORBIDDEN_COLUMN_NAMES;
+
+    static {
+        FORBIDDEN_COLUMN_NAMES = new HashSet<>();
+        FORBIDDEN_COLUMN_NAMES.add("__op");
+        FORBIDDEN_COLUMN_NAMES.add("__row");
+    }
 
     public static void checkDbName(String dbName) {
         if (Strings.isNullOrEmpty(dbName) || !dbName.matches(DB_NAME_REGEX)) {
@@ -76,6 +86,14 @@ public class FeNameFormat {
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
+
+        if (!Config.allow_system_reserved_names) {
+            if (FORBIDDEN_COLUMN_NAMES.contains(columnName)) {
+                throw new SemanticException(
+                        "Column name [" + columnName + "] is a system reserved name. " +
+                        "If you are sure you want to use it, please set FE configuration allow_system_reserved_names");
+            }
+        }
     }
 
     public static void checkLabel(String label) {
@@ -93,18 +111,6 @@ public class FeNameFormat {
     public static void checkRoleName(String role, boolean canBeAdmin, String errMsg) {
         if (Strings.isNullOrEmpty(role) || !role.matches(COMMON_NAME_REGEX)) {
             throw new SemanticException("invalid role format: " + role);
-        }
-
-        boolean res;
-        if (CaseSensibility.ROLE.getCaseSensibility()) {
-            res = role.equals(Role.OPERATOR_ROLE) || (!canBeAdmin && role.equals(Role.ADMIN_ROLE));
-        } else {
-            res = role.equalsIgnoreCase(Role.OPERATOR_ROLE)
-                    || (!canBeAdmin && role.equalsIgnoreCase(Role.ADMIN_ROLE));
-        }
-
-        if (res) {
-            throw new SemanticException(errMsg + ": " + role);
         }
     }
 

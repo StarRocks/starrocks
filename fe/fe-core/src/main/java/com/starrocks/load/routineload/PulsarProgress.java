@@ -21,7 +21,6 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.thrift.TPulsarRLTaskProgress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -126,8 +125,8 @@ public class PulsarProgress extends RoutineLoadProgress {
     }
 
     @Override
-    public void update(RLTaskTxnCommitAttachment attachment) {
-        PulsarProgress newProgress = (PulsarProgress) attachment.getProgress();
+    public void update(RoutineLoadProgress progress) {
+        PulsarProgress newProgress = (PulsarProgress) progress;
         for (Map.Entry<String, Long> entry : newProgress.partitionToBacklogNum.entrySet()) {
             String partition = entry.getKey();
             Long backlogNum = entry.getValue();
@@ -136,8 +135,6 @@ public class PulsarProgress extends RoutineLoadProgress {
             // Remove initial position if exists
             partitionToInitialPosition.remove(partition);
         }
-        LOG.debug("update pulsar progress: {}, task: {}, job: {}",
-                newProgress.toJsonString(), DebugUtil.printId(attachment.getTaskId()), attachment.getJobId());
     }
 
     @Override

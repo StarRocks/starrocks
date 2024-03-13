@@ -31,16 +31,15 @@ public class SysDb extends Database {
         super.registerTableUnlocked(RoleEdges.create());
         super.registerTableUnlocked(GrantsTo.createGrantsToRoles());
         super.registerTableUnlocked(GrantsTo.createGrantsToUsers());
+        super.registerTableUnlocked(SysObjectDependencies.create());
+        super.registerTableUnlocked(SysFeLocks.create());
+        super.registerTableUnlocked(SysFeMemoryUsage.create());
     }
 
     @Override
-    public void dropTableWithLock(String name) {
+    public Table dropTable(String name) {
         // Do nothing.
-    }
-
-    @Override
-    public void dropTable(String name) {
-        // Do nothing.
+        return null;
     }
 
     @Override

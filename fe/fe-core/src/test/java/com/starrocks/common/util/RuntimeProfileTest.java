@@ -375,22 +375,27 @@ public class RuntimeProfileTest {
 
     @Test
     public void testProfileMergeStrategy() {
+        testProfileMergeStrategy(TCounterAggregateType.SUM, TCounterAggregateType.AVG);
+        testProfileMergeStrategy(TCounterAggregateType.AVG_SUM, TCounterAggregateType.SUM_AVG);
+    }
+
+    private void testProfileMergeStrategy(TCounterAggregateType type1, TCounterAggregateType type2) {
         List<RuntimeProfile> profiles = Lists.newArrayList();
 
         TCounterStrategy strategy1 = new TCounterStrategy();
-        strategy1.aggregate_type = TCounterAggregateType.SUM;
+        strategy1.aggregate_type = type1;
         strategy1.merge_type = TCounterMergeType.MERGE_ALL;
 
         TCounterStrategy strategy2 = new TCounterStrategy();
-        strategy2.aggregate_type = TCounterAggregateType.SUM;
+        strategy2.aggregate_type = type1;
         strategy2.merge_type = TCounterMergeType.SKIP_ALL;
 
         TCounterStrategy strategy3 = new TCounterStrategy();
-        strategy3.aggregate_type = TCounterAggregateType.AVG;
+        strategy3.aggregate_type = type2;
         strategy3.merge_type = TCounterMergeType.SKIP_FIRST_MERGE;
 
         TCounterStrategy strategy4 = new TCounterStrategy();
-        strategy4.aggregate_type = TCounterAggregateType.AVG;
+        strategy4.aggregate_type = type2;
         strategy4.merge_type = TCounterMergeType.SKIP_SECOND_MERGE;
 
         RuntimeProfile profile1 = new RuntimeProfile("profile");
@@ -604,6 +609,30 @@ public class RuntimeProfileTest {
         actualValues.add(mergedProfile.getInfoString("key1__DUP(4)"));
 
         Assert.assertEquals(expectedValues, actualValues);
+    }
+
+    @Test
+    public void testMassConflictInfoString() {
+        for (int i = 1; i <= 32; i++) {
+            testMassConflictInfoString(i);
+        }
+        testMassConflictInfoString(1024);
+        testMassConflictInfoString(3267);
+    }
+
+    private void testMassConflictInfoString(int num) {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+        for (int i = 1; i <= num; i++) {
+            RuntimeProfile profile = new RuntimeProfile();
+            profile.addInfoString("key", Integer.toString(i));
+            profiles.add(profile);
+        }
+
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
+        Assert.assertNotNull(mergedProfile);
+        for (int i = 0; i < num - 1; i++) {
+            Assert.assertNotNull(mergedProfile.getInfoString(String.format("key__DUP(%s)", i)));
+        }
     }
 
     @Test

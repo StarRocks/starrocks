@@ -400,7 +400,6 @@ public class LimitTest extends PlanTestBase {
         String plan;
         sql = "select * from t0 full outer join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  4:HASH JOIN\n"
                 + "  |  join op: FULL OUTER JOIN (PARTITIONED)\n"
                 + "  |  colocate: false, reason: \n"
@@ -596,13 +595,23 @@ public class LimitTest extends PlanTestBase {
                 "on a.v3 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v1 = b.v7 where b.v8 > t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        assertContains(plan, "14:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  other join predicates: 11: v8 > 5: v5\n" +
+                "  |  limit: 10");
         // check join on predicate which has expression with limit operator
         sql = "select t2.v8 from (select v1, v2, v1 as v3 from t0 where v2<> v3 limit 15) as a join t1 " +
                 "on a.v3 + 1 = t1.v4 join t2 on v4 = v7 join t2 as b" +
                 " on a.v3 + 2 = b.v7 where b.v8 > t1.v5 limit 10";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        assertContains(plan, "15:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 14: add = 4: v4\n" +
+                "  |  other join predicates: 11: v8 > 5: v5\n" +
+                "  |  limit: 10");
     }
 
     @Test
@@ -734,7 +743,7 @@ public class LimitTest extends PlanTestBase {
                 "LIMIT \n" +
                 "  61202;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "5:MERGING-EXCHANGE\n" +
+        assertContains(plan, "7:MERGING-EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
         assertContains(plan, "4:TOP-N\n" +
@@ -767,7 +776,7 @@ public class LimitTest extends PlanTestBase {
                 "  |  order by: <slot 9> 9: expr ASC, <slot 4> 4: S_NATIONKEY ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 21");
-        assertContains(plan, "3:MERGING-EXCHANGE\n" +
+        assertContains(plan, "5:MERGING-EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
     }
@@ -873,5 +882,38 @@ public class LimitTest extends PlanTestBase {
         String sql = "select count(*) from (select * from (select * from t0 limit 10) x limit 10, 10) xx;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:EMPTYSET");
+    }
+
+    @Test
+    public void testMergeLimitInCte() throws Exception {
+        String sql = "with with_t_0 as (select v1 from t0 where EXISTS (select v4 from t1)) \n" +
+                "select distinct 1 from with_t_0, (select v7, v8 from t2) subt right SEMI join t0 on subt.v8 = v2 \n" +
+                "union all \n" +
+                "select distinct 2 from with_t_0, (select v10, v11 from t3) subt right SEMI join t0 on subt.v11 = v3;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "7:UNION\n" +
+                "  |  \n" +
+                "  |----33:EXCHANGE\n" +
+                "  |       limit: 1\n" +
+                "  |    \n" +
+                "  20:EXCHANGE\n" +
+                "     limit: 1");
+    }
+
+    @Test
+    public void testTransformGroupByToLimit() throws Exception {
+        String sql = "select distinct v1 from (select t0.* from t0 join (select * from t1 where false) t1 " +
+                "right join t2 on t0.v1 = t2.v7) t";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "1:Project\n" +
+                "  |  <slot 1> : NULL\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t2",
+                "RESULT SINK\n" +
+                        "\n" +
+                        "  2:EXCHANGE\n" +
+                        "     limit: 1");
     }
 }

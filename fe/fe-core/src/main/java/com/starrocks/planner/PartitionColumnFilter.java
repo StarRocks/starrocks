@@ -39,12 +39,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.common.AnalysisException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -169,6 +170,26 @@ public class PartitionColumnFilter {
         return null;
     }
 
+    public Type getFilterType() {
+        if (lowerBound != null) {
+            return lowerBound.getType();
+        }
+        if (upperBound != null) {
+            return upperBound.getType();
+        }
+        if (inPredicate != null) {
+            return inPredicate.getChild(0).getType();
+        }
+        if (inPredicateLiterals != null && !inPredicateLiterals.isEmpty()) {
+            return inPredicateLiterals.get(0).getType();
+        }
+        return null;
+    }
+
+    public boolean isPoint() {
+        return lowerBoundInclusive && upperBoundInclusive && lowerBound != null && lowerBound.equals(upperBound);
+    }
+
     @Override
     public String toString() {
         String str = "";
@@ -188,6 +209,11 @@ public class PartitionColumnFilter {
             str += "\ninPredicate is UNSET";
         } else {
             str += "\ninPredicate is " + inPredicate;
+        }
+        if (null == inPredicateLiterals || inPredicateLiterals.isEmpty()) {
+            str += "\ninPredicateLiterals is UNSET";
+        } else {
+            str += "\ninPredicateLiterals is " + inPredicateLiterals;
         }
         return str;
     }

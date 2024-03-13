@@ -133,8 +133,7 @@ public class MetaService {
 
             try {
                 Storage currentStorageInfo = new Storage(realDir.getAbsolutePath());
-                StorageInfo storageInfo = new StorageInfo(currentStorageInfo.getClusterID(),
-                        currentStorageInfo.getImageJournalId());
+                StorageInfo storageInfo = new StorageInfo(currentStorageInfo.getImageJournalId());
 
                 response.setContentType("application/json");
                 Gson gson = new Gson();
@@ -316,7 +315,7 @@ public class MetaService {
 
             if (!Strings.isNullOrEmpty(host) && !Strings.isNullOrEmpty(portString)) {
                 int port = Integer.parseInt(portString);
-                Frontend fe = GlobalStateMgr.getCurrentState().checkFeExist(host, port);
+                Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().checkFeExist(host, port);
                 if (fe == null) {
                     response.updateHeader("role", FrontendNodeType.UNKNOWN.name());
                 } else {
@@ -356,7 +355,6 @@ public class MetaService {
         public void executeGet(BaseRequest request, BaseResponse response) {
             try {
                 Storage storage = new Storage(imageDir.getAbsolutePath());
-                response.updateHeader(MetaBaseAction.CLUSTER_ID, Integer.toString(storage.getClusterID()));
                 response.updateHeader(MetaBaseAction.TOKEN, storage.getToken());
             } catch (IOException e) {
                 LOG.error(e);

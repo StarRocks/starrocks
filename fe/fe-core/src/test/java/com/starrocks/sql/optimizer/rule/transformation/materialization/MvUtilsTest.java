@@ -43,7 +43,9 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.List;
+import java.util.Set;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.convertToDateRange;
 
 public class MvUtilsTest {
     private static ConnectContext connectContext;
@@ -112,7 +114,7 @@ public class MvUtilsTest {
         OptExpression scanExpr2 = OptExpression.create(scanOperator2);
         LogicalJoinOperator joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, binaryPredicate);
         OptExpression joinExpr = OptExpression.create(joinOperator, scanExpr, scanExpr2);
-        List<ScalarOperator> predicates = MvUtils.getAllValidPredicates(joinExpr);
+        Set<ScalarOperator> predicates = MvUtils.getAllValidPredicates(joinExpr);
         Assert.assertEquals(3, predicates.size());
         Assert.assertTrue(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr));
         LogicalJoinOperator joinOperator2 = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, binaryPredicate);
@@ -156,7 +158,7 @@ public class MvUtilsTest {
         {
             PartitionKey upper = PartitionKey.ofString("20231010");
             Range<PartitionKey> upRange = Range.atMost(upper);
-            Range<PartitionKey> upResult = MvUtils.convertToDateRange(upRange);
+            Range<PartitionKey> upResult = convertToDateRange(upRange);
             Assert.assertTrue(upResult.hasUpperBound());
             Assert.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
             Assert.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
@@ -169,7 +171,7 @@ public class MvUtilsTest {
         {
             PartitionKey lower = PartitionKey.ofString("20231010");
             Range<PartitionKey> lowRange = Range.atLeast(lower);
-            Range<PartitionKey> lowResult = MvUtils.convertToDateRange(lowRange);
+            Range<PartitionKey> lowResult = convertToDateRange(lowRange);
             Assert.assertTrue(lowResult.hasLowerBound());
             Assert.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
             Assert.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
@@ -183,7 +185,7 @@ public class MvUtilsTest {
             PartitionKey lower = PartitionKey.ofString("20231010");
             Range<PartitionKey> range = Range.atLeast(lower);
             range = range.intersection(Range.atMost(PartitionKey.ofString("20231020")));
-            Range<PartitionKey> result = MvUtils.convertToDateRange(range);
+            Range<PartitionKey> result = convertToDateRange(range);
             Assert.assertTrue(result.hasLowerBound());
             Assert.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
             Assert.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);

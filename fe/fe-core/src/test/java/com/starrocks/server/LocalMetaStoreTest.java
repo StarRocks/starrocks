@@ -34,10 +34,14 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
+import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStorageMedium;
@@ -139,13 +143,15 @@ public class LocalMetaStoreTest {
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.getPartitionIdToStorageMediumMap();
+        // Clean test.mv1, avoid its refreshment affecting other cases in this testsuite.
+        starRocksAssert.dropMaterializedView("test.mv1");
     }
 
     @Test
     public void testLoadClusterV2() throws Exception {
         LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
-                GlobalStateMgr.getCurrentRecycleBin(),
-                GlobalStateMgr.getCurrentColocateIndex());
+                GlobalStateMgr.getCurrentState().getRecycleBin(),
+                GlobalStateMgr.getCurrentState().getColocateTableIndex());
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         localMetaStore.save(image.getDataOutputStream());
@@ -178,19 +184,31 @@ public class LocalMetaStoreTest {
     }
 
     @Test
+    public void testReplayTruncateTable() throws DdlException {
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t1");
+        Partition p = table.getPartitions().stream().findFirst().get();
+        TruncateTableInfo info = new TruncateTableInfo(db.getId(), table.getId(), Lists.newArrayList(p), false);
+
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        localMetastore.replayTruncateTable(info);
+    }
+
+    @Test
     public void testModifyAutomaticBucketSize() throws DdlException {
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t1");
 
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
-            db.writeLock();
             Map<String, String> properties = Maps.newHashMap();
             LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
             table.setTableProperty(null);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -223,5 +241,20 @@ public class LocalMetaStoreTest {
                 starRocksAssert.useDatabase("test").withTable(
                         "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
+    }
+
+    @Test
+    public void testAlterTableProperties() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t1");
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "abcd");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        try {
+            localMetastore.alterTableProperties(db, table, properties);
+        } catch (RuntimeException e) {
+            Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
+        }
     }
 }

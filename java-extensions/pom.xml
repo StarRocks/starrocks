@@ -18,6 +18,7 @@
         <module>paimon-reader</module>
         <module>hive-reader</module>
         <module>hadoop-ext</module>
+        <module>odps-reader</module>
     </modules>
     <name>starrocks-java-extensions</name>
 
@@ -78,7 +79,7 @@
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
-                    <excludes>org/apache/hadoop/fs/**</excludes>
+                    <excludes>org/apache/hadoop/**</excludes>
                 </configuration>
                 <executions>
                     <execution>

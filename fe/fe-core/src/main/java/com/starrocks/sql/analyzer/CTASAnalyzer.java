@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
@@ -141,7 +142,7 @@ public class CTASAnalyzer {
                 // if we don't, we pick the first column
                 String defaultColumnName = finalColumnNames.get(0);
                 double candidateDistinctCountCount = 1.0;
-                StatisticStorage currentStatisticStorage = GlobalStateMgr.getCurrentStatisticStorage();
+                StatisticStorage currentStatisticStorage = GlobalStateMgr.getCurrentState().getStatisticStorage();
 
                 for (Map.Entry<Pair<String, Pair<String, String>>, Table> columnEntry : columnNameToTable.entrySet()) {
                     Pair<String, String> columnName = columnEntry.getKey().second;
@@ -189,6 +190,14 @@ public class CTASAnalyzer {
             }
             AnalyzerUtils.checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
             rangePartitionDesc.setAutoPartitionTable(true);
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            for (ColumnDef columnDef : columnDefs) {
+                for (String partitionColName : ((ListPartitionDesc) partitionDesc).getPartitionColNames()) {
+                    if (columnDef.getName().equalsIgnoreCase(partitionColName)) {
+                        columnDef.setAllowNull(false);
+                    }
+                }
+            }
         }
 
         Analyzer.analyze(createTableStmt, session);

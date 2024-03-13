@@ -36,6 +36,7 @@
 
 #include <netinet/in.h>
 
+#include <cstdint>
 #include <functional>
 #include <list>
 #include <map>
@@ -264,6 +265,9 @@ struct OlapReaderStatistics {
 
     int64_t rows_del_vec_filtered = 0;
 
+    int64_t rows_gin_filtered = 0;
+    int64_t gin_index_filter_ns = 0;
+
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
     int64_t total_columns_data_page_count = 0;
@@ -292,6 +296,17 @@ struct OlapReaderStatistics {
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
     // ------ for lake tablet ------
+
+    // ------ for json type, to count flat column ------
+    // key: json absolute path, value: count
+    int64_t json_flatten_ns = 0;
+    std::unordered_map<std::string, int64_t> flat_json_hits;
+    std::unordered_map<std::string, int64_t> dynamic_json_hits;
+};
+
+// OlapWriterStatistics used to collect statistics when write data to storage
+struct OlapWriterStatistics {
+    int64_t segment_write_ns = 0;
 };
 
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";

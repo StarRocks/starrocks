@@ -19,7 +19,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class DmlStmt extends StatementBase {
-
+    private long txnId;
     protected DmlStmt(NodePosition pos) {
         super(pos);
     }
@@ -31,4 +31,11 @@ public abstract class DmlStmt extends StatementBase {
 
     public abstract TableName getTableName();
 
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
+    }
 }

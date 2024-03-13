@@ -43,6 +43,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
@@ -99,7 +101,7 @@ public class DbsProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
             return result;
@@ -113,7 +115,8 @@ public class DbsProcDir implements ProcDirInterface {
                 continue;
             }
             List<Comparable> dbInfo = new ArrayList<Comparable>();
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 int tableNum = db.getTables().size();
                 dbInfo.add(db.getId());
@@ -132,7 +135,7 @@ public class DbsProcDir implements ProcDirInterface {
                 dbInfo.add(replicaQuota);
 
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             dbInfos.add(dbInfo);
         }

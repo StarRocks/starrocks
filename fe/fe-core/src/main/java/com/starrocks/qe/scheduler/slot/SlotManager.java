@@ -146,7 +146,7 @@ public class SlotManager {
     }
 
     private void handleRequireSlotTask(LogicalSlot slot) {
-        Frontend frontend = GlobalStateMgr.getCurrentState().getFeByName(slot.getRequestFeName());
+        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(slot.getRequestFeName());
         if (frontend == null) {
             slot.onCancel();
             LOG.warn("[Slot] SlotManager receives a slot requirement with unknown FE [slot={}]", slot);
@@ -231,7 +231,7 @@ public class SlotManager {
             request.setSlot_id(slot.getSlotId());
             request.setPipeline_dop(slot.getPipelineDop());
 
-            Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(slot.getRequestFeName());
+            Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(slot.getRequestFeName());
             if (fe == null) {
                 LOG.warn("[Slot] try to send finishSlotRequirement RPC to the unknown frontend [slot={}]", slot);
                 releaseSlotAsync(slot.getSlotId());

@@ -37,7 +37,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
     @Override
     public void executeTasks(TaskContext context) {
         long timeout = context.getOptimizerContext().getSessionVariable().getOptimizerExecuteTimeout();
-        long watch = context.getOptimizerContext().getCostTimeMs();
+        long watch = context.getOptimizerContext().optimizerElapsedMs();
         while (!tasks.empty()) {
             if (timeout > 0 && watch > timeout) {
                 // Should have at least one valid plan

@@ -1,0 +1,57 @@
+-- name: test_aws_glue_s3_hudi
+CREATE EXTERNAL CATALOG test_aws_glue_s3_hudi
+PROPERTIES
+(
+"type"="hudi",
+"hive.metastore.type"="glue",
+"aws.glue.access_key"="${aws_ak}",
+"aws.glue.secret_key"="${aws_sk}",
+"aws.glue.region"="${aws_region}",
+"aws.s3.access_key"="${aws_ak}",
+"aws.s3.secret_key"="${aws_sk}",
+"aws.s3.region"="${aws_region}"
+);
+-- result:
+-- !result
+select * from test_aws_glue_s3_hudi.sql_test_db.hudi_glue_s3_parquet;
+-- result:
+20231214112322440	20231214112322440_0_0	20231214112322440_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	1	1	2001-01-01	youth is a wonderful thing
+20231214112358551	20231214112358551_0_1	20231214112358551_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	2	2	2002-01-01	Mathematical Description of Systems
+20231214112415730	20231214112415730_0_2	20231214112415730_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	3	3	2003-01-01	Reform to further facilitate maturity of capital market
+20231214112430418	20231214112430418_0_3	20231214112430418_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	4	4	2004-01-01	KMT official from Taiwan to visit mainland
+20231214112445066	20231214112445066_0_4	20231214112445066_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	5	5	2005-01-01	China leading engine for global economy
+-- !result
+drop catalog test_aws_glue_s3_hudi;
+-- result:
+-- !result
+CREATE EXTERNAL CATALOG test_aws_assume_role_glue_s3_hudi
+PROPERTIES
+(
+"type"="hudi",
+"hive.metastore.type"="glue",
+"aws.glue.access_key"="${aws_ak}",
+"aws.glue.secret_key"="${aws_sk}",
+"aws.glue.region"="${aws_region}",
+"aws.glue.assume_role"="${aws_assume_role}",
+"aws.glue.sts.region"="${aws_sts_region}",
+"aws.glue.sts.endpoint"="${aws_sts_endpoint}",
+"aws.s3.access_key"="${aws_ak}",
+"aws.s3.secret_key"="${aws_sk}",
+"aws.s3.region"="${aws_region}",
+"aws.s3.assume_role"="${aws_assume_role}",
+"aws.s3.sts.region"="${aws_sts_region}",
+"aws.s3.sts.endpoint"="${aws_sts_endpoint}"
+);
+-- result:
+-- !result
+select * from test_aws_assume_role_glue_s3_hudi.sql_test_db.hudi_glue_s3_parquet;
+-- result:
+20231214112322440	20231214112322440_0_0	20231214112322440_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	1	1	2001-01-01	youth is a wonderful thing
+20231214112358551	20231214112358551_0_1	20231214112358551_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	2	2	2002-01-01	Mathematical Description of Systems
+20231214112415730	20231214112415730_0_2	20231214112415730_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	3	3	2003-01-01	Reform to further facilitate maturity of capital market
+20231214112430418	20231214112430418_0_3	20231214112430418_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	4	4	2004-01-01	KMT official from Taiwan to visit mainland
+20231214112445066	20231214112445066_0_4	20231214112445066_0_0		35e09593-cb35-498d-bcc8-931babe056e9-0_0-73-72_20231214112445066.parquet	5	5	2005-01-01	China leading engine for global economy
+-- !result
+drop catalog test_aws_assume_role_glue_s3_hudi;
+-- result:
+-- !result

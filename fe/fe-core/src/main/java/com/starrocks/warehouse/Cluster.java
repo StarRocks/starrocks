@@ -71,12 +71,12 @@ public class Cluster implements Writable {
 
     public List<Long> getComputeNodeIds() {
         List<Long> nodeIds = new ArrayList<>();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+        if (RunMode.isSharedNothingMode()) {
             return nodeIds;
         }
         try {
             // ask starMgr for node lists
-            nodeIds = GlobalStateMgr.getCurrentStarOSAgent().
+            nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent().
                     getWorkersByWorkerGroup(workerGroupId);
         } catch (UserException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());

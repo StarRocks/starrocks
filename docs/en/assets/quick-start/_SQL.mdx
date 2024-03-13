@@ -1,0 +1,169 @@
+
+These queries can be run in your SQL client.
+
+#### How many crashes are there per hour in NYC?
+
+```sql
+SELECT COUNT(*),
+       date_trunc("hour", crashdata.CRASH_DATE) AS Time
+FROM crashdata
+GROUP BY Time
+ORDER BY Time ASC
+LIMIT 200;
+```
+
+Here is part of the output. Note that I am looking closer at January 6th and 7th as this is Monday and Tuesday of a non-holiday week. Looking at New Years Day is probably not indicative of a normal morning during rush-hour traffic.
+
+```plaintext
+|       14 | 2014-01-06 06:00:00 |
+|       16 | 2014-01-06 07:00:00 |
+# highlight-start
+|       43 | 2014-01-06 08:00:00 |
+|       44 | 2014-01-06 09:00:00 |
+|       21 | 2014-01-06 10:00:00 |
+# highlight-end
+|       28 | 2014-01-06 11:00:00 |
+|       34 | 2014-01-06 12:00:00 |
+|       31 | 2014-01-06 13:00:00 |
+|       35 | 2014-01-06 14:00:00 |
+|       36 | 2014-01-06 15:00:00 |
+|       33 | 2014-01-06 16:00:00 |
+|       40 | 2014-01-06 17:00:00 |
+|       35 | 2014-01-06 18:00:00 |
+|       23 | 2014-01-06 19:00:00 |
+|       16 | 2014-01-06 20:00:00 |
+|       12 | 2014-01-06 21:00:00 |
+|       17 | 2014-01-06 22:00:00 |
+|       14 | 2014-01-06 23:00:00 |
+|       10 | 2014-01-07 00:00:00 |
+|        4 | 2014-01-07 01:00:00 |
+|        1 | 2014-01-07 02:00:00 |
+|        3 | 2014-01-07 03:00:00 |
+|        2 | 2014-01-07 04:00:00 |
+|        6 | 2014-01-07 06:00:00 |
+|       16 | 2014-01-07 07:00:00 |
+# highlight-start
+|       41 | 2014-01-07 08:00:00 |
+|       37 | 2014-01-07 09:00:00 |
+|       33 | 2014-01-07 10:00:00 |
+# highlight-end
+```
+
+It looks like about 40 accidents on a Monday or Tuesday morning during rush hour traffic, and around the same at 17:00 hours.
+
+#### What is the average temperature in NYC?
+
+```sql
+SELECT avg(HourlyDryBulbTemperature),
+       date_trunc("hour", weatherdata.DATE) AS Time
+FROM weatherdata
+GROUP BY Time
+ORDER BY Time ASC
+LIMIT 100;
+```
+
+Output:
+
+Note that this is data from 2014, NYC has not been this cold lately.
+
+```plaintext
++-------------------------------+---------------------+
+| avg(HourlyDryBulbTemperature) | Time                |
++-------------------------------+---------------------+
+|                            25 | 2014-01-01 00:00:00 |
+|                            25 | 2014-01-01 01:00:00 |
+|                            24 | 2014-01-01 02:00:00 |
+|                            24 | 2014-01-01 03:00:00 |
+|                            24 | 2014-01-01 04:00:00 |
+|                            24 | 2014-01-01 05:00:00 |
+|                            25 | 2014-01-01 06:00:00 |
+|                            26 | 2014-01-01 07:00:00 |
+```
+
+#### Is it safe to drive in NYC when visibility is poor?
+
+Let's look at the number of crashes when visibility is poor (between 0 and 1.0 miles). To answer this question use a JOIN across the two tables on the DATETIME column.
+
+```sql
+SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
+       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
+       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
+       max(w.HourlyPrecipitation) AS Precipitation,
+       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
+FROM crashdata c
+LEFT JOIN weatherdata w
+ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
+WHERE w.HourlyVisibility BETWEEN 0.0 AND 1.0
+GROUP BY Hour
+ORDER BY Crashes DESC
+LIMIT 100;
+```
+
+The highest number of crashes in a single hour during low visibility is 129. There are multiple things to consider:
+
+- February 3rd 2014 was a Monday
+- 8AM is rush hour
+- It was raining (0.12 inches or precipitation that hour)
+- The temperature is 32 degrees F (the freezing point for water)
+- Visibility is bad at 0.25 miles, normal for NYC is 10 miles
+
+```plaintext
++---------+--------+------------+---------------+-------------------+
+| Crashes | Temp_F | Visibility | Precipitation | Hour              |
++---------+--------+------------+---------------+-------------------+
+|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
+|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
+|     104 |     23 |       0.33 | 0.03          | 09 Jan 2015 08:00 |
+|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
+|      95 |     26 |       0.37 | 0.12          | 01 Mar 2015 15:00 |
+|      93 |     35 |       0.75 | 0.09          | 18 Jan 2015 09:00 |
+|      92 |     31 |       0.25 | 0.12          | 03 Feb 2014 10:00 |
+|      87 |   26.8 |        0.5 | 0.09          | 01 Mar 2015 16:00 |
+|      85 |     55 |       0.75 | 0.20          | 23 Dec 2015 17:00 |
+|      85 |     20 |       0.62 | 0.01          | 06 Jan 2015 11:00 |
+|      83 |   19.6 |       0.41 | 0.04          | 05 Mar 2015 13:00 |
+|      80 |     20 |       0.37 | 0.02          | 06 Jan 2015 10:00 |
+|      76 |   26.5 |       0.25 | 0.06          | 05 Mar 2015 09:00 |
+|      71 |     26 |       0.25 | 0.09          | 05 Mar 2015 10:00 |
+|      71 |   24.2 |       0.25 | 0.04          | 05 Mar 2015 11:00 |
+```
+
+#### What about driving in icy conditions?
+
+Water vapor can desublimate to ice at 40 degrees F; this query looks at temps between 0 and 40 degrees F.
+
+```sql
+SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
+       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
+       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
+       max(w.HourlyPrecipitation) AS Precipitation,
+       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
+FROM crashdata c
+LEFT JOIN weatherdata w
+ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
+WHERE w.HourlyDryBulbTemperature BETWEEN 0.0 AND 40.5 
+GROUP BY Hour
+ORDER BY Crashes DESC
+LIMIT 100;
+```
+
+The results for freezing temperatures suprised me a little, I did not expect too much traffic on a Sunday morning in the city on a cold January day.A quick look at [weather.com](https://weather.com/storms/winter/news/northeast-storm-rain-snow-wind) showed that there was a big storm with many crashes that day, just like what can be seen in the data.
+
+```plaintext
++---------+--------+------------+---------------+-------------------+
+| Crashes | Temp_F | Visibility | Precipitation | Hour              |
++---------+--------+------------+---------------+-------------------+
+|     192 |     34 |        1.5 | 0.09          | 18 Jan 2015 08:00 |
+|     170 |     21 |       NULL |               | 21 Jan 2014 10:00 |
+|     145 |     19 |       NULL |               | 21 Jan 2014 11:00 |
+|     138 |   33.5 |          5 | 0.02          | 18 Jan 2015 07:00 |
+|     137 |     21 |       NULL |               | 21 Jan 2014 09:00 |
+|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
+|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
+|     104 |     23 |        0.7 | 0.04          | 09 Jan 2015 08:00 |
+|      98 |     16 |          8 | 0.00          | 06 Mar 2015 08:00 |
+|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
+```
+
+Drive carefully!
+

@@ -19,19 +19,35 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 
 namespace starrocks::lake {
-class MetaFileBuilder;
 
-static const int kInvalidRowsetIndex = -1;
+class MetaFileBuilder;
+class TabletManager;
 
 class Rowset {
 public:
-    explicit Rowset(Tablet tablet, RowsetMetadataPtr rowset_metadata, int index);
+    static std::vector<RowsetPtr> get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata);
 
-    explicit Rowset(Tablet tablet, RowsetMetadataPtr rowset_metadata);
+    // Does NOT take the ownership of |tablet_mgr| and |metadata|.
+    explicit Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
+                    TabletSchemaPtr tablet_schema);
+
+    // Create a Rowset based on the rowset metadata of index |rowset_index| saved in the tablet metadata
+    // pointed by |tablet_metadata|.
+    //
+    // Note: the caller must ensure that the object pointed by |tablet_metadata| will not be updated during
+    // the lifecycle of this Rowset, otherwise the behavior is undefined.
+    //
+    // Requires:
+    //  - |tablet_mgr| and |tablet_metadata| is not nullptr
+    //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
+    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index);
 
     ~Rowset();
+
+    DISALLOW_COPY_AND_MOVE(Rowset);
 
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
 
@@ -62,29 +78,46 @@ public:
 
     [[nodiscard]] int64_t num_rows() const { return metadata().num_rows(); }
 
+    [[nodiscard]] int64_t num_dels() const { return metadata().num_dels(); }
+
     [[nodiscard]] int64_t data_size() const { return metadata().data_size(); }
 
     [[nodiscard]] uint32_t id() const { return metadata().id(); }
 
     [[nodiscard]] int index() const { return _index; }
 
-    [[nodiscard]] const RowsetMetadata& metadata() const { return *_rowset_metadata; }
+    [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_data_cache, bool fill_metadata_cache);
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts,
+                                                             bool fill_metadata_cache);
 
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache);
+    // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache,
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
                                        bool fill_metadata_cache);
 
-    int64_t tablet_id() const { return _tablet.id(); }
+    int64_t tablet_id() const { return _tablet_id; }
 
 private:
-    Tablet _tablet;
-    RowsetMetadataPtr _rowset_metadata;
-    int _index{kInvalidRowsetIndex};
+    TabletManager* _tablet_mgr;
+    int64_t _tablet_id;
+    const RowsetMetadataPB* _metadata;
+    int _index;
+    TabletSchemaPtr _tablet_schema;
+    TabletMetadataPtr _tablet_metadata;
 };
+
+inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
+    std::vector<RowsetPtr> rowsets;
+    rowsets.reserve(tablet_metadata->rowsets_size());
+    for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
+        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i);
+        rowsets.emplace_back(std::move(rowset));
+    }
+    return rowsets;
+}
 
 } // namespace starrocks::lake

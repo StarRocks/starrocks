@@ -117,7 +117,7 @@ public class EsRepository extends FrontendDaemon {
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
 
