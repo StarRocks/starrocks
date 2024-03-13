@@ -319,6 +319,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableStatistics.put("supplier", tableSupplier);
 
         tableStatistics.put("lineorder_new_l", ImmutableMap.of("P_SIZE", new ColumnStatistic(1, 5, 0, 1, 5)));
+        tableStatistics.put("skew_table", ImmutableMap.of("id", new ColumnStatistic(1, 1, 0, 1, 1)));
     }
 
     @Override
