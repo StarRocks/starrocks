@@ -79,6 +79,12 @@ std::string FileReader::_build_metacache_key() {
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
+#ifdef WITH_STARCACHE
+    // Only support file metacache in starcache engine
+    if (ctx->use_file_metacache && config::datacache_enable) {
+        _cache = BlockCache::instance();
+    }
+#endif
     RETURN_IF_ERROR(_get_footer());
 
     _build_split_tasks();
@@ -164,26 +170,18 @@ Status FileReader::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* fi
 }
 
 Status FileReader::_get_footer() {
-    bool use_cache = false;
-#ifdef WITH_STARCACHE
-    // Only support file metacache in starcache engine
-    if (_scanner_ctx->use_file_metacache && config::datacache_enable) {
-        use_cache = true;
-    }
-#endif
-
     if (_scanner_ctx->split_context != nullptr) {
         auto split_ctx = down_cast<const SplitContext*>(_scanner_ctx->split_context);
         _file_metadata = split_ctx->file_metadata;
         return Status::OK();
     }
 
-    if (!use_cache) {
+    if (!_cache) {
         int64_t file_metadata_size = 0;
         return _parse_footer(&_file_metadata, &file_metadata_size);
     }
 
-    BlockCache* cache = BlockCache::instance();
+    BlockCache* cache = _cache;
     CacheHandle cache_handle;
     std::string metacache_key = _build_metacache_key();
     {

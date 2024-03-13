@@ -26,7 +26,7 @@ PROPERTIES
 set enable_connector_split_io_tasks = true;
 -- result:
 -- !result
-select c1, count(1) from multi_stripes where c0 % 26 in (0, 25) group by c1;
+select c1, count(1) from multi_stripes where c0 % 26 in (0, 25) group by c1 order by c1;
 -- result:
 a	77
 z	76
