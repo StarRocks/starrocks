@@ -82,6 +82,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -466,6 +467,30 @@ public class MvUtils {
         };
         expression.getOp().accept(joinCollector, expression, null);
         return joinExprs;
+    }
+
+    public static void splitPredicate(
+            Set<ScalarOperator> predicates,
+            Set<String> equivalenceColumns,
+            Set<String> nonEquivalenceColumns) {
+        for (ScalarOperator operator : predicates) {
+            if (!MVUtils.isPredicateUsedForPrefixIndex(operator)) {
+                continue;
+            }
+
+            if (MVUtils.isEquivalencePredicate(operator)) {
+                equivalenceColumns.add(operator.getColumnRefs().get(0).getName().toLowerCase());
+            } else {
+                nonEquivalenceColumns.add(operator.getColumnRefs().get(0).getName().toLowerCase());
+            }
+        }
+    }
+
+    public static Set<ScalarOperator> getAllValidPredicatesFromScans(OptExpression root) {
+        List<LogicalScanOperator> scanOperators = getScanOperator(root);
+        Set<ScalarOperator> predicates = Sets.newHashSet();
+        scanOperators.stream().forEach(scanOperator -> predicates.addAll(Utils.extractConjuncts(scanOperator.getPredicate())));
+        return predicates.stream().filter(MvUtils::isValidPredicate).collect(Collectors.toSet());
     }
 
     // get all predicates within and below root
