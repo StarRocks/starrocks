@@ -38,11 +38,11 @@ DUPLICATE KEY(a)
 DISTRIBUTED BY HASH(a);
 
 INSERT INTO t0 VALUES
-(1, 1, 1, [2,3,4],parse_json('{"a":1, "b":true}')),
-(1, 2, 1, [2,3,5],parse_json('{"a":2, "b":true}')),
-(2, 1, 1, [2,3,6],parse_json('{"a":3, "b":true}')),
-(2, 2, 2, [2,4,5],parse_json('{"a":4, "b":false}')),
-(3, 1, 1, [3,3,5],parse_json('{"a":5, "b":false}'));
+(1, 1, 1, [2,3,4], parse_json('{"a":1, "b":true}')),
+(1, 2, 1, [2,3,5], parse_json('{"a":2, "b":true}')),
+(2, 1, 1, [2,3,6], parse_json('{"a":3, "b":true}')),
+(2, 2, 2, [2,4,5], parse_json('{"a":4, "b":false}')),
+(3, 1, 1, [3,3,5], parse_json('{"a":5, "b":false}'));
 ```
 
 ```plain text
