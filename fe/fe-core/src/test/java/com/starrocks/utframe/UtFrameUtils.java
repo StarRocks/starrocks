@@ -305,8 +305,12 @@ public class UtFrameUtils {
     }
 
     public static Backend addMockBackend(int backendId) throws Exception {
+        return addMockBackend(backendId, "127.0.0.1");
+    }
+
+    public static Backend addMockBackend(int backendId, String host) throws Exception {
         // start be
-        MockedBackend backend = new MockedBackend("127.0.0.1");
+        MockedBackend backend = new MockedBackend(host);
 
         // add be
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
@@ -621,7 +625,7 @@ public class UtFrameUtils {
         for (int i = 1; i < beNumToAdd; ++i) {
             //UtFrameUtils.addMockBackend(backendId++);
             String host = String.format("127.0.0.%s", i + 1);
-            UtFrameUtils.addMockBackend(backendId++, host, 9060);
+            UtFrameUtils.addMockBackend(backendId++, host);
         }
 
         Set<String> dbSet = replayDumpInfo.getCreateTableStmtMap().keySet().stream().map(key -> key.split("\\.")[0])
