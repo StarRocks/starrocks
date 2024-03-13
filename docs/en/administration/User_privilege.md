@@ -326,7 +326,7 @@ You can revoke privileges from a user or a role using [REVOKE](../sql-reference/
 
 - Revoke a privilege from a user.
 
-  The following example revokes the SELECT privilege on the table `sr_member` from the user `jack`, and disallows `jack` to grant this privilege to other users or roles):
+  The following example revokes the SELECT privilege on the table `sr_member` from the user `jack`, and disallows `jack` to grant this privilege to other users or roles:
 
   ```SQL
   REVOKE SELECT ON TABLE sr_member FROM USER jack@'172.10.1.10';

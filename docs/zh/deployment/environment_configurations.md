@@ -379,7 +379,7 @@ sysctl -p
 4. 检查 NTP 服务连接和监控状态。
 
    ```Bash
-   netstat -tlunp | grep ntp
+   netstat -tunlp | grep ntp
    ```
 
 5. 检查服务是否与 NTP 服务器同步。

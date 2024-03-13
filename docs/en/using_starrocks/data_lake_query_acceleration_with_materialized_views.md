@@ -118,7 +118,26 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 | background_refresh_metadata_interval_millis                  | 600000 (10 minutes)        | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. |
 | background_refresh_metadata_time_secs_since_last_access_secs | 86400 (24 hours)           | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. |
 
+<<<<<<< HEAD
 From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently only Iceberg V1 tables are supported.
+=======
+#### enable_background_refresh_connector_metadata
+
+**Default**: true in v3.0 false in v2.5<br/>
+**Description**: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. True indicates to enable the Hive metadata cache refresh, and false indicates to disable it.<br/>
+
+#### background_refresh_metadata_interval_millis
+
+**Default**: 600000 (10 minutes)<br/>
+**Description**: The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond.<br/>
+
+#### background_refresh_metadata_time_secs_since_last_access_secs
+
+**Default**: 86400 (24 hours)<br/>
+**Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second.
+
+From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently, only Iceberg V1 tables are supported.
+>>>>>>> d266a22555 ([Doc] fix spelling errors (#42490))
 
 ### Enable query rewrite for external catalog-based materialized views
 
