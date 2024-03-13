@@ -1716,6 +1716,8 @@ Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         return tablet->updates()->clear_meta();
     } else {
+        // for non-primary key tablet, make sure clear the dcg cache
+        tablet->remove_all_delta_column_group_cache();
         return TabletMetaManager::remove(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash());
     }
 }
