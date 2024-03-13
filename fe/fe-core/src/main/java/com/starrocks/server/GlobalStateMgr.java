@@ -1537,20 +1537,6 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
-    void checkOpTypeValid() throws IOException {
-        try {
-            for (Field field : OperationType.class.getDeclaredFields()) {
-                short id = field.getShort(null);
-                if (id > OperationType.OP_TYPE_EOF) {
-                    throw new IOException("OperationType cannot use a value exceeding 20000, " +
-                            "and an error will be reported if it exceeds : " + field.getName() + " = " + id);
-                }
-            }
-        } catch (IllegalAccessException e) {
-            throw new IOException(e);
-        }
-    }
-
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
@@ -1570,7 +1556,6 @@ public class GlobalStateMgr {
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadVersion(dis, checksum);
-            checkOpTypeValid();
 
             if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
                 Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()

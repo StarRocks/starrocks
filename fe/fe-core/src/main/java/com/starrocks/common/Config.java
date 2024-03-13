@@ -2386,7 +2386,7 @@ public class Config extends ConfigBase {
      * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
      */
     @ConfField
-    public static boolean metadata_journal_ignore_replay_failure = false;
+    public static boolean metadata_journal_ignore_replay_failure = true;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
