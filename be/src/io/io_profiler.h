@@ -71,6 +71,8 @@ public:
     static void take_tls_io_snapshot(IOStat* snapshot);
     static IOStat calculate_scoped_tls_io(const IOStat& snapshot);
 
+    static bool is_empty();
+
     class Scope {
     public:
         Scope() = delete;
