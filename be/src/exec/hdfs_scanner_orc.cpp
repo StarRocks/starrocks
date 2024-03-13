@@ -140,7 +140,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             int part_idx = 0;
             const int part_size = _scanner_ctx.partition_columns.size();
             for (part_idx = 0; part_idx < part_size; part_idx++) {
-                if (_scanner_ctx.partition_columns[part_idx].col_name == slot->col_name()) {
+                if (_scanner_ctx.partition_columns[part_idx].name() == slot->col_name()) {
                     break;
                 }
             }
@@ -202,7 +202,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 continue;
             }
             int32_t column_index = -1;
-            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.col_name);
+            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.name());
             if (orc_type != nullptr) {
                 column_index = orc_type->getColumnId();
             }
@@ -353,9 +353,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // we evaluate conjunct ctxs in `do_get_next`.
     _scanner_params.eval_conjunct_ctxs = false;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_ctx.case_sensitive);
+        auto col_name = OrcChunkReader::format_column_name(column.name(), _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id);
+        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(column.slot_desc);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
@@ -469,8 +469,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
-            _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
+            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
+            _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);

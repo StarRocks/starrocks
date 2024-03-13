@@ -108,14 +108,10 @@ Status HdfsScanner::_build_scanner_context() {
 
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-        column.col_idx = _scanner_params.materialize_index_in_chunk[i];
-        column.col_type = slot->type();
-        column.slot_id = slot->id();
-        column.col_name = slot->col_name();
+        column.idx_in_chunk = _scanner_params.materialize_index_in_chunk[i];
         column.decode_needed =
                 slot->is_output_column() || _scanner_params.slots_of_mutli_slot_conjunct.find(slot->id()) !=
                                                     _scanner_params.slots_of_mutli_slot_conjunct.end();
-
         ctx.materialized_columns.emplace_back(std::move(column));
     }
 
@@ -123,11 +119,7 @@ Status HdfsScanner::_build_scanner_context() {
         auto* slot = _scanner_params.partition_slots[i];
         HdfsScannerContext::ColumnInfo column;
         column.slot_desc = slot;
-        column.col_idx = _scanner_params.partition_index_in_chunk[i];
-        column.col_type = slot->type();
-        column.slot_id = slot->id();
-        column.col_name = slot->col_name();
-
+        column.idx_in_chunk = _scanner_params.partition_index_in_chunk[i];
         ctx.partition_columns.emplace_back(std::move(column));
     }
 
@@ -386,11 +378,11 @@ void HdfsScannerContext::update_materialized_columns(const std::unordered_set<st
     std::vector<ColumnInfo> updated_columns;
 
     for (auto& column : materialized_columns) {
-        auto col_name = column.formated_col_name(case_sensitive);
+        auto col_name = column.formatted_name(case_sensitive);
         // if `can_use_any_column`, we can set this column to non-existed column without reading it.
         if (names.find(col_name) == names.end() || can_use_any_column) {
             not_existed_slots.push_back(column.slot_desc);
-            SlotId slot_id = column.slot_id;
+            SlotId slot_id = column.slot_id();
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot[slot_id]) {
                     conjunct_ctxs_of_non_existed_slots.emplace_back(ctx);
@@ -405,27 +397,17 @@ void HdfsScannerContext::update_materialized_columns(const std::unordered_set<st
     materialized_columns.swap(updated_columns);
 }
 
-void HdfsScannerContext::update_not_existed_columns_of_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.empty() || row_count <= 0) return;
-
+void HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (not_existed_slots.empty() || row_count < 0) return;
     ChunkPtr& ck = (*chunk);
-    for (auto* slot_desc : not_existed_slots) {
-        ck->get_column_by_slot_id(slot_desc->id())->append_default(row_count);
-    }
-}
-
-void HdfsScannerContext::append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.size() == 0) return;
-
-    ChunkPtr& ck = (*chunk);
-    ck->set_num_rows(row_count);
     for (auto* slot_desc : not_existed_slots) {
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         if (row_count > 0) {
             col->append_default(row_count);
         }
-        ck->append_column(std::move(col), slot_desc->id());
+        ck->append_or_update_column(std::move(col), slot_desc->id());
     }
+    ck->set_num_rows(row_count);
 }
 
 Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {
@@ -451,7 +433,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
-    append_not_existed_columns_to_chunk(&chunk, 1);
+    append_or_update_not_existed_columns_to_chunk(&chunk, 1);
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
@@ -460,32 +442,9 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
     return !(chunk->has_rows());
 }
 
-void HdfsScannerContext::update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.empty() || row_count <= 0) return;
-
+void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (partition_columns.size() == 0 || row_count < 0) return;
     ChunkPtr& ck = (*chunk);
-    for (size_t i = 0; i < partition_columns.size(); i++) {
-        SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
-        DCHECK(partition_values[i]->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
-        ColumnPtr data_column = const_column->data_column();
-        auto chunk_part_column = ck->get_column_by_slot_id(slot_desc->id());
-
-        if (data_column->is_nullable()) {
-            chunk_part_column->append_nulls(1);
-        } else {
-            chunk_part_column->append(*data_column, 0, 1);
-        }
-        chunk_part_column->assign(row_count, 0);
-    }
-}
-
-void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0) return;
-
-    ChunkPtr& ck = (*chunk);
-    ck->set_num_rows(row_count);
-
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
         DCHECK(partition_values[i]->is_constant());
@@ -501,8 +460,9 @@ void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_
             }
             chunk_part_column->assign(row_count, 0);
         }
-        ck->append_column(std::move(chunk_part_column), slot_desc->id());
+        ck->append_or_update_column(std::move(chunk_part_column), slot_desc->id());
     }
+    ck->set_num_rows(row_count);
 }
 
 bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const {

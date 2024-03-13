@@ -65,6 +65,8 @@ public:
     int64_t io_time_spent() const override;
     int64_t estimated_mem_usage() const override;
 
+    void _init_chunk(ChunkPtr* chunk, size_t n) override;
+
 private:
     const HiveDataSourceProvider* _provider;
     const THdfsScanRange _scan_range;
@@ -113,7 +115,7 @@ private:
     bool _no_data = false;
 
     int _min_max_tuple_id = 0;
-    TupleDescriptor* _min_max_tuple_desc = nullptr;
+    const TupleDescriptor* _min_max_tuple_desc = nullptr;
 
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
@@ -124,6 +126,9 @@ private:
 
     // iceberg equality delete column slots.
     std::vector<SlotDescriptor*> _equality_delete_slots;
+
+    // iceberg equality delete column tuple desc.
+    TupleDescriptor* _delete_column_tuple_desc;
 
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;
