@@ -45,7 +45,7 @@ jobs:
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
