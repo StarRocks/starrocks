@@ -136,11 +136,13 @@ struct JoinHashTableItems {
             keys_per_bucket = used_buckets == 0 ? 0 : row_count * 1.0 / used_buckets;
             size_t probe_bytes = key_bytes + row_count * sizeof(uint32_t);
             // cache miss is serious when
-            // 1) the ht's size is enough large, for example, larger than (1UL << 27)
+            // 1) the ht's size is enough large, for example, larger than (1UL << 27) bytes.
             // 2) smaller ht but most buckets have more than one keys
             cache_miss_serious = row_count > (1UL << 18) &&
                                  ((probe_bytes > (1UL << 25) && keys_per_bucket > 2) ||
-                                  (probe_bytes > (1UL << 26) && keys_per_bucket > 1.2) || probe_bytes > (1UL << 27));
+                                  (probe_bytes > (1UL << 26) && keys_per_bucket > 1.5) || probe_bytes > (1UL << 27));
+            VLOG_QUERY << "ht cache miss serious = " << cache_miss_serious << " row# = " << row_count
+                       << " , bytes = " << probe_bytes << " , depth = " << keys_per_bucket;
         }
     }
 
