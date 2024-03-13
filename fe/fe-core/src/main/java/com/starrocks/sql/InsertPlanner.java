@@ -123,7 +123,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
-import static com.starrocks.catalog.Table.TableType.*;
+import static com.starrocks.catalog.Table.TableType.BLACKHOLE;
+import static com.starrocks.catalog.Table.TableType.HIVE;
+import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Table.TableType.MYSQL;
+import static com.starrocks.catalog.Table.TableType.OLAP;
+import static com.starrocks.catalog.Table.TableType.TABLE_FUNCTION;
 import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
