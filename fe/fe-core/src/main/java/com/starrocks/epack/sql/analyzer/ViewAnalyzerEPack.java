@@ -17,7 +17,7 @@ public class ViewAnalyzerEPack {
         new ViewAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext context) {
             ViewAnalyzer.analyze(statement, context);

@@ -24,7 +24,7 @@ public class MaterializedViewAnalyzerEPack {
         new MaterializedViewAnalyzerVisitor().visit(statement, context);
     }
 
-    static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class MaterializedViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {

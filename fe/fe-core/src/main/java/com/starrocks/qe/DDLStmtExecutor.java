@@ -164,8 +164,7 @@ public class DDLStmtExecutor {
         }
     }
 
-    protected static class StmtExecutorVisitor extends AstVisitor<ShowResultSet, ConnectContext> {
-
+    protected static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
 
         private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();

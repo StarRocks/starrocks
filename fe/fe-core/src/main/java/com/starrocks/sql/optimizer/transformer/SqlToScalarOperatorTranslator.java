@@ -255,7 +255,7 @@ public final class SqlToScalarOperatorTranslator {
         }
     }
 
-    private static class Visitor extends AstVisitor<ScalarOperator, Context> {
+    private static class Visitor implements AstVisitor<ScalarOperator, Context> {
         private ExpressionMapping expressionMapping;
         private final ColumnRefFactory columnRefFactory;
         private final List<ColumnRefOperator> correlation;
@@ -288,8 +288,7 @@ public final class SqlToScalarOperatorTranslator {
                 return expressionMapping.get(expr);
             }
 
-            return super.visit(node, context);
-
+            return node.accept(this, context);
         }
 
         @Override

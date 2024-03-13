@@ -51,7 +51,7 @@ public class AdminStmtAnalyzer {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
-    static class AdminStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class AdminStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statementBase, ConnectContext session) {
             visit(statementBase, session);
         }

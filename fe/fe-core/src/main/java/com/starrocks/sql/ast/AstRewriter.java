@@ -19,7 +19,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Subquery;
 
-public class AstRewriter<C> extends AstVisitor<ParseNode, C> {
+public class AstRewriter<C> implements AstVisitor<ParseNode, C> {
 
     // ---------------------------------------- Query Statement --------------------------------------------------------------
 

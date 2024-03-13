@@ -37,7 +37,7 @@ public class ShowSecurityIntegrationStatement extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowSecurityIntegrationStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitShowSecurityIntegrationStatement(this, context);
     }
 
 }

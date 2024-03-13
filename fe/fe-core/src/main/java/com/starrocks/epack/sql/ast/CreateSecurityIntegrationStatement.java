@@ -28,6 +28,6 @@ public class CreateSecurityIntegrationStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateSecurityIntegrationStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitCreateSecurityIntegrationStatement(this, context);
     }
 }

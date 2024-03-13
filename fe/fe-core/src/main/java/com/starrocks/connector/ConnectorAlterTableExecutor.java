@@ -22,18 +22,18 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class ConnectorAlterTableExecutor extends AstVisitor<Void, ConnectContext> {
+public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, ConnectContext> {
     protected AlterTableStmt stmt;
     protected final TableName tableName;
     protected List<Runnable> actions;
@@ -68,7 +68,7 @@ public class ConnectorAlterTableExecutor extends AstVisitor<Void, ConnectContext
 
     @Override
     public Void visit(ParseNode node, ConnectContext context) {
-        super.visit(node, context);
+        node.accept(this, context);
         for (Runnable r : actions) {
             r.run();
         }

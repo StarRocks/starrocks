@@ -11,6 +11,7 @@ import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DatabaseName;
@@ -19,7 +20,6 @@ import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.List;
@@ -30,7 +30,7 @@ public class FailoverGroupAnalyzer {
         new FailoverGroupAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class FailoverGroupAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class FailoverGroupAnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext context) {
             visit(statement, context);
@@ -268,7 +268,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt statement,
-                ConnectContext context) {
+                                                           ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");
@@ -311,7 +311,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt statement,
-                ConnectContext context) {
+                                                            ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");
@@ -321,7 +321,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt statement,
-                ConnectContext context) {
+                                                            ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");
@@ -331,7 +331,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt statement,
-                ConnectContext context) {
+                                                            ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");
@@ -341,7 +341,7 @@ public class FailoverGroupAnalyzer {
 
         @Override
         public Void visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement,
-                ConnectContext context) {
+                                                           ConnectContext context) {
             String failoverGroupName = statement.getFailoverGroupName();
             if (Strings.isNullOrEmpty(failoverGroupName)) {
                 throw new SemanticException("Failover group name is empty");

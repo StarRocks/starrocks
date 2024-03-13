@@ -10,6 +10,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
@@ -27,7 +28,6 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.TypeManager;
 
@@ -39,7 +39,7 @@ public class SecurityPolicyAnalyzer {
         new SecurityPolicyAnalyzerVisitor().analyze(statement, session);
     }
 
-    static class SecurityPolicyAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class SecurityPolicyAnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);

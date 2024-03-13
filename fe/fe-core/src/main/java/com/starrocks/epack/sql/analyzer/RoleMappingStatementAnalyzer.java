@@ -6,10 +6,10 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
 import com.starrocks.epack.privilege.RoleMapping;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.Arrays;
@@ -24,7 +24,7 @@ public class RoleMappingStatementAnalyzer {
         new RoleMappingStatementAnalyzerVisitor().analyze(statement, context);
     }
 
-    public static class RoleMappingStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class RoleMappingStatementAnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
         final Set<String> requiredProperties = new HashSet<>(Arrays.asList(
                 RoleMapping.ROLE_MAPPING_PROPERTY_INTEGRATION_NAME_KEY,
                 RoleMapping.ROLE_MAPPING_PROPERTY_ROLE_NAME_KEY));

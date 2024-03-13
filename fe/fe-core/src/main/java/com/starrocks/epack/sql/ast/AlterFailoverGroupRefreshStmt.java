@@ -29,6 +29,6 @@ public class AlterFailoverGroupRefreshStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterFailoverGroupRefreshStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitAlterFailoverGroupRefreshStatement(this, context);
     }
 }

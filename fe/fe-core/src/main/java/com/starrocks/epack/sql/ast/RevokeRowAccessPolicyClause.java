@@ -26,6 +26,6 @@ public class RevokeRowAccessPolicyClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRevokeRowAccessPolicyClause(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitRevokeRowAccessPolicyClause(this, context);
     }
 }

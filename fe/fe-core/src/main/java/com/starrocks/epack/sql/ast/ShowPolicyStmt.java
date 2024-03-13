@@ -58,6 +58,6 @@ public class ShowPolicyStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPolicyStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitShowPolicyStatement(this, context);
     }
 }

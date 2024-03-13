@@ -54,7 +54,7 @@ public class DropStmtAnalyzer {
         new DropStmtAnalyzerVisitor().analyze(ddlStmt, session);
     }
 
-    static class DropStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class DropStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(DdlStmt statement, ConnectContext session) {
             visit(statement, session);
         }

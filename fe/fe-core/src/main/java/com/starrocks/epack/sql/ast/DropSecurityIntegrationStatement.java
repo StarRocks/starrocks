@@ -24,7 +24,7 @@ public class DropSecurityIntegrationStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropSecurityIntegrationStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitDropSecurityIntegrationStatement(this, context);
     }
 
 }

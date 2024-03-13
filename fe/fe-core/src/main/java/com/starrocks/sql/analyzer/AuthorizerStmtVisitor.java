@@ -223,7 +223,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
+public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
     // TODO(yiming): match "/dbs", not only show tablet detail cmd, need to change privilege check for other proc node
     private static final Pattern SHOW_TABLET_DETAIL_CMD_PATTERN =

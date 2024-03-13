@@ -36,6 +36,6 @@ public class CreateSecondaryFailoverGroupStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateSecondaryFailoverGroupStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitCreateSecondaryFailoverGroupStatement(this, context);
     }
 }

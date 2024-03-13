@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.epack.sql.ast;
 
-package com.starrocks.sql.ast;
-
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RefreshRoleMappingStatement extends DdlStmt {
@@ -28,7 +29,6 @@ public class RefreshRoleMappingStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRefreshRoleMappingStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitRefreshRoleMappingStatement(this, context);
     }
-
 }

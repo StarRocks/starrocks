@@ -28,6 +28,6 @@ public class ApplyMaskingPolicyClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitApplyMaskingPolicyClause(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitApplyMaskingPolicyClause(this, context);
     }
 }

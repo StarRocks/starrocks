@@ -36,7 +36,7 @@ public class ResumeWarehouseStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitResumeWarehouseStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitResumeWarehouseStatement(this, context);
     }
 
 }

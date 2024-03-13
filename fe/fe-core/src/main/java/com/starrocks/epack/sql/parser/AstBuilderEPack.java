@@ -40,6 +40,7 @@ import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
@@ -70,7 +71,6 @@ import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
-import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
@@ -995,7 +995,6 @@ public class AstBuilderEPack extends AstBuilder {
         }
         return new DropComputeNodeClause(hostPorts, createPos(context), whName);
     }
-
 
     @Override
     public ParseNode visitDecommissionDiskClause(StarRocksParser.DecommissionDiskClauseContext context) {

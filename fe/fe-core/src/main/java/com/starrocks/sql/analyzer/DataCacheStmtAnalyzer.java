@@ -44,7 +44,7 @@ public class DataCacheStmtAnalyzer {
         new DataCacheStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class DataCacheStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class DataCacheStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {

@@ -29,6 +29,6 @@ public class DropFailoverGroupStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropFailoverGroupStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitDropFailoverGroupStatement(this, context);
     }
 }

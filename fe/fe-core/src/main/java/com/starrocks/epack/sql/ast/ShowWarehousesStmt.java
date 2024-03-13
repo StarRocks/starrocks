@@ -73,7 +73,7 @@ public class ShowWarehousesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowWarehousesStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitShowWarehousesStatement(this, context);
     }
 }
 

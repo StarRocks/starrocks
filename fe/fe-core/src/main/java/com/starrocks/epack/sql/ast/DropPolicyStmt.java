@@ -39,6 +39,6 @@ public class DropPolicyStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropPolicyStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitDropPolicyStatement(this, context);
     }
 }

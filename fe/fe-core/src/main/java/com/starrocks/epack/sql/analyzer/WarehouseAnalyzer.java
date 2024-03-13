@@ -17,6 +17,7 @@ package com.starrocks.epack.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
@@ -29,7 +30,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 
@@ -38,7 +38,7 @@ public class WarehouseAnalyzer {
         new WarehouseAnalyzer.WarehouseAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class WarehouseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class WarehouseAnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

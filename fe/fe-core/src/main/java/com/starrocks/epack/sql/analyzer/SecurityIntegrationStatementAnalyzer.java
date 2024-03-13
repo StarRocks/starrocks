@@ -6,12 +6,12 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.starrocks.authentication.LDAPSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.Arrays;
@@ -27,11 +27,11 @@ public class SecurityIntegrationStatementAnalyzer {
         new SecurityIntegrationStatementAnalyzerVisitor().analyze(statement, context);
     }
 
-    public static class SecurityIntegrationStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class SecurityIntegrationStatementAnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
         final ImmutableSortedSet<String> supportedAuthMechanism =
                 ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
-                .add(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)
-                .build();
+                        .add(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)
+                        .build();
         final Set<String> requiredProperties = new HashSet<>(Arrays.asList(
                 SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
                 LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY,

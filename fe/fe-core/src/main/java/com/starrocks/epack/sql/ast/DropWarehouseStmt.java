@@ -42,7 +42,7 @@ public class DropWarehouseStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropWarehouseStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitDropWarehouseStatement(this, context);
     }
 
     @Override

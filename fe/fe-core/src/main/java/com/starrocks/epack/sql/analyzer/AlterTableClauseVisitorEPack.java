@@ -10,6 +10,7 @@ import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
@@ -23,7 +24,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 
-public class AlterTableClauseVisitorEPack extends AlterTableClauseVisitor {
+public class AlterTableClauseVisitorEPack extends AlterTableClauseVisitor implements AstVisitorEPack<Void, ConnectContext> {
     @Override
     public Void visitApplyMaskingPolicyClause(ApplyMaskingPolicyClause clause, ConnectContext context) {
         clause.getWithColumnMaskingPolicy().analyze(context, clause.getMaskingColumn());

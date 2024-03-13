@@ -67,7 +67,7 @@ public class CreateWarehouseStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateWarehouseStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitCreateWarehouseStatement(this, context);
     }
 
     @Override

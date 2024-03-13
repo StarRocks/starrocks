@@ -33,6 +33,6 @@ public class CancelDecommissionDiskClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelDecommissionDiskClause(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitCancelDecommissionDiskClause(this, context);
     }
 }

@@ -241,7 +241,7 @@ public class FragmentNormalizer {
         return null;
     }
 
-    public static class SimpleRangePredicateVisitor extends AstVisitor<String, Void> {
+    public static class SimpleRangePredicateVisitor implements AstVisitor<String, Void> {
         @Override
         public String visitBinaryPredicate(BinaryPredicate node, Void context) {
             String lhs = visit(node.getChild(0), context);

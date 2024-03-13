@@ -24,7 +24,7 @@ public class DropRoleMappingStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropRoleMappingStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitDropRoleMappingStatement(this, context);
     }
 
 }

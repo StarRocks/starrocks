@@ -60,6 +60,6 @@ public class ShowNodesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowNodesStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitShowNodesStatement(this, context);
     }
 }

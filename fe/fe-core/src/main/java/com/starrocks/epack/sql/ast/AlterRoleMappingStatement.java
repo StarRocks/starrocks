@@ -35,6 +35,6 @@ public class AlterRoleMappingStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterRoleMappingStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitAlterRoleMappingStatement(this, context);
     }
 }

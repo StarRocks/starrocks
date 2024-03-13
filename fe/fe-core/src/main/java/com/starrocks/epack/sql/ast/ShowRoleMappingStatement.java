@@ -40,7 +40,7 @@ public class ShowRoleMappingStatement extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRoleMappingStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitShowRoleMappingStatement(this, context);
     }
 
 }

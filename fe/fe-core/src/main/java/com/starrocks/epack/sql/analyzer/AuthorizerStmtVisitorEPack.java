@@ -21,6 +21,7 @@ import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -35,6 +36,7 @@ import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
@@ -67,7 +69,6 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import org.apache.commons.collections4.CollectionUtils;
 
@@ -76,7 +77,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
+public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements AstVisitorEPack<Void, ConnectContext> {
     public AuthorizerStmtVisitorEPack() {
     }
 
@@ -584,7 +585,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
                 }
             }
         }
-        
+
         return null;
     }
 

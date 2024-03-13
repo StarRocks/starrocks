@@ -27,6 +27,7 @@ import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -38,12 +39,12 @@ import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
+import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.io.IOException;
@@ -69,7 +70,8 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
         }
     }
 
-    static class StmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVisitor {
+    static class StmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVisitor
+            implements AstVisitorEPack<ShowResultSet, ConnectContext> {
 
         private static final StmtExecutorVisitorEPack INSTANCE = new StmtExecutorVisitorEPack();
 
@@ -207,7 +209,6 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
             return null;
         }
 
-
         @Override
         public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
@@ -256,7 +257,7 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterFailoverGroupSetStatement(AlterFailoverGroupSetStmt stmt,
-                ConnectContext context) {
+                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupSet(stmt)
             );
@@ -265,7 +266,7 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterFailoverGroupAddStatement(AlterFailoverGroupAddStmt stmt,
-                ConnectContext context) {
+                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupAdd(stmt)
             );
@@ -274,7 +275,7 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt stmt,
-                ConnectContext context) {
+                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupRemove(stmt)
             );
@@ -283,7 +284,7 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt stmt,
-                ConnectContext context) {
+                                                                     ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupRefresh(stmt)
             );
@@ -292,7 +293,7 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt stmt,
-                ConnectContext context) {
+                                                                     ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupPrimary(stmt)
             );
@@ -301,7 +302,7 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt stmt,
-                ConnectContext context) {
+                                                                     ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupSuspend(stmt)
             );
@@ -310,7 +311,7 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt stmt,
-                ConnectContext context) {
+                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupResume(stmt)
             );

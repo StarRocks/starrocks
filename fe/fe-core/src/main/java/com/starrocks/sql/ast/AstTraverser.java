@@ -19,7 +19,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
-public class AstTraverser<R, C> extends AstVisitor<R, C> {
+public class AstTraverser<R, C> implements AstVisitor<R, C> {
 
     // ---------------------------------------- Query Statement --------------------------------------------------------------
 

@@ -65,7 +65,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ExpressionConverter extends AstVisitor<Expression, Void> {
+public class ExpressionConverter implements AstVisitor<Expression, Void> {
     private static final Logger LOG = LogManager.getLogger(ExpressionConverter.class);
 
     StructType tableSchema;
@@ -215,7 +215,7 @@ public class ExpressionConverter extends AstVisitor<Expression, Void> {
         return columnName;
     }
 
-    private static class ExtractColumnName extends AstVisitor<String, Void> {
+    private static class ExtractColumnName implements AstVisitor<String, Void> {
         @Override
         public String visitCastExpr(CastExpr node, Void context) {
             return node.getChild(0).accept(this, null);

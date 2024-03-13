@@ -70,6 +70,6 @@ public class CreatePolicyStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreatePolicyStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitCreatePolicyStatement(this, context);
     }
 }

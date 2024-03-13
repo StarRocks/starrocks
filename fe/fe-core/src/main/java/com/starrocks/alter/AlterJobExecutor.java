@@ -69,7 +69,7 @@ import org.apache.logging.log4j.Logger;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
+public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     protected static final Logger LOG = LogManager.getLogger(AlterJobExecutor.class);
     protected String catalog;
     protected Database db;

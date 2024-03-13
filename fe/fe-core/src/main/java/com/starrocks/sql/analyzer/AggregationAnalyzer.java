@@ -109,13 +109,13 @@ public class AggregationAnalyzer {
     /**
      * visitor returns true if all expressions are constant with respect to the group.
      */
-    private class VerifyExpressionVisitor extends AstVisitor<Boolean, Void> {
+    private class VerifyExpressionVisitor implements AstVisitor<Boolean, Void> {
         @Override
         public Boolean visit(ParseNode expr) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {
                 return true;
             }
-            return super.visit(expr);
+            return expr.accept(this, null);
         }
 
         @Override

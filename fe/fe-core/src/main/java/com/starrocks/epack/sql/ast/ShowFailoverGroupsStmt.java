@@ -51,7 +51,7 @@ public class ShowFailoverGroupsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowFailoverGroupsStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitShowFailoverGroupsStatement(this, context);
     }
 
     @Override

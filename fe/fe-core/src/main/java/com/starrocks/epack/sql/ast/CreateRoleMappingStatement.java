@@ -28,6 +28,6 @@ public class CreateRoleMappingStatement extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateRoleMappingStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitCreateRoleMappingStatement(this, context);
     }
 }

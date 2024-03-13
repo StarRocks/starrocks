@@ -17,9 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.epack.sql.analyzer.CreateTableAnalyzerEPack;
 import com.starrocks.epack.sql.analyzer.MaterializedViewAnalyzerEPack;
-import com.starrocks.epack.sql.analyzer.SecurityIntegrationStatementAnalyzer;
 import com.starrocks.epack.sql.analyzer.ViewAnalyzerEPack;
-import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -150,7 +148,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
-public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+public class AnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
     public void analyze(StatementBase statement, ConnectContext session) {
         visit(statement, session);
     }
@@ -706,13 +704,6 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
         PrivilegeStmtAnalyzer.analyze(stmt, session);
-        return null;
-    }
-
-    @Override
-    public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
-                                                        ConnectContext context) {
-        SecurityIntegrationStatementAnalyzer.analyze(statement, context);
         return null;
     }
 

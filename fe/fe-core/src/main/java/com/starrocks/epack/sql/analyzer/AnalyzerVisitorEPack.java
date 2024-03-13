@@ -11,6 +11,7 @@ import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -35,7 +36,7 @@ import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerVisitor;
 
-public class AnalyzerVisitorEPack extends AnalyzerVisitor {
+public class AnalyzerVisitorEPack extends AnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
 
     // ---------------------------------------- Security Policy Statement ------------------------------------------
 

@@ -54,6 +54,6 @@ public class ShowClustersStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowClusterStatement(this, context);
+        return ((AstVisitorEPack<R, C>) visitor).visitShowClusterStatement(this, context);
     }
 }
