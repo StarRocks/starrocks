@@ -330,7 +330,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return table.isMaterializedView()
                 && node instanceof LogicalOlapScanOperator
                 && context.getGroupExpression() != null
-                && node.getOpType() != context.getGroupExpression().getGroup().getFirstLogicalExpression().getOp().getOpType();
+                && context.getGroupExpression().hasAppliedMVRules();
     }
 
     @Override
