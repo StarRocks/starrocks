@@ -51,7 +51,7 @@ database_name: test
 DISTRIBUTED BY HASH(`order_id`)
 REFRESH ASYNC START("2022-09-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_medium" = "HDD"
 )
 AS SELECT `order_list`.`order_id`, sum(`goods`.`price`) AS `total`
