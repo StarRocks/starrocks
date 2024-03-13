@@ -981,7 +981,7 @@ under the License.
                     <forkCount>${fe_ut_parallel}</forkCount>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
-                    <parallelTestsTimeoutForcedInSeconds>5</parallelTestsTimeoutForcedInSeconds>
+                    <parallelTestsTimeoutForcedInSeconds>1</parallelTestsTimeoutForcedInSeconds>
 <!--                    <parallelTestsTimeoutInSeconds>5</parallelTestsTimeoutInSeconds>-->
 <!--                    <forkedProcessTimeoutInSeconds>5</forkedProcessTimeoutInSeconds>-->
 <!--                    <forkedProcessExitTimeoutInSeconds>5</forkedProcessExitTimeoutInSeconds>-->
