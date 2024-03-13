@@ -94,6 +94,8 @@ message PTransmitChunkParams {
     optional bool is_pipeline_level_shuffle = 10 [default = false];
     // Driver sequences of pipeline level shuffle.
     repeated int32 driver_sequences = 11;
+
+    optional int64 request_timestamp = 12;
 };
 
 message PTransmitDataResult {

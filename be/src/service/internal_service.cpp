@@ -130,6 +130,17 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (request->has_request_timestamp()) {
+        int64_t request_timestamp = request->request_timestamp();
+        // LOG if network rpc time greater than 1s
+        if (MonotonicNanos() - request_timestamp > 1000000000L) {
+            LOG(INFO) << "TRACE slow rpc: transmit_chunk, fragment_instance_id=" << print_id(request->finst_id())
+                      << ", node=" << request->node_id() << " span_id=" << cntl->span_id() << " trace_id"
+                      << cntl->trace_id() << ", cost=" << (MonotonicNanos() - request_timestamp) << "ns";
+        }
+    }
+
     auto task = [=]() { this->_transmit_chunk(cntl_base, request, response, done); };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
@@ -178,6 +189,18 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     // transmit_data(), which will cause a dirty memory access.
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* req = const_cast<PTransmitChunkParams*>(request);
+
+    int64_t current_time = MonotonicNanos();
+    if (request->has_request_timestamp()) {
+        int64_t request_timestamp = request->request_timestamp();
+        // LOG if network rpc time greater than 1s
+        if (current_time - request_timestamp > 1000000000L) {
+            LOG(INFO) << "TRACE slow rpc: transmit_chunk, fragment_instance_id=" << print_id(request->finst_id())
+                      << ", node=" << request->node_id() << " span_id=" << cntl->span_id() << " trace_id"
+                      << cntl->trace_id() << ", cost=" << (current_time - request_timestamp) << "ns";
+        }
+    }
+
     Status st;
     st.to_protobuf(response->mutable_status());
     DeferOp defer([&]() {
