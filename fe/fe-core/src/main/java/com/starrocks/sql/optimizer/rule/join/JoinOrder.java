@@ -318,6 +318,10 @@ public abstract class JoinOrder {
         Map<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
         if (!onPredicates.isEmpty()) {
+            ColumnRefSet allChildColumns = new ColumnRefSet();
+            allChildColumns.union(leftExprInfo.expr.getOutputColumns());
+            allChildColumns.union(rightExprInfo.expr.getOutputColumns());
+
             for (int i = 0; i < onPredicates.size(); i++) {
                 ScalarOperator predicate = onPredicates.get(i);
                 ColumnRefSet useColumns = predicate.getUsedColumns();
@@ -341,9 +345,6 @@ public abstract class JoinOrder {
                         continue;
                     }
 
-                    ColumnRefSet allChildColumns = new ColumnRefSet();
-                    allChildColumns.union(leftExprInfo.expr.getOutputColumns());
-                    allChildColumns.union(rightExprInfo.expr.getOutputColumns());
                     if (allChildColumns.containsAll(valueUseColumns)) {
                         // depend on two children, must rewrite to origin expression
                         ReplaceColumnRefRewriter rewriter =
