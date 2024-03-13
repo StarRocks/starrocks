@@ -14,30 +14,44 @@
 
 #pragma once
 
-#include <map>
-
 #include "storage/lake/key_index.h"
 #include "storage/persistent_index.h"
+#include "util/phmap/btree.h"
 
 namespace starrocks::lake {
 
+using IndexValueInfo = std::pair<int64_t, IndexValue>;
+
 class PersistentIndexMemtable {
 public:
+    // |version|: version of index values, -1 means latest version
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  KeyIndexesInfo* not_found, size_t* num_found);
+                  KeyIndexesInfo* not_found, size_t* num_found, int64_t version = -1);
 
-    Status insert(size_t n, const Slice* keys, const IndexValue* values);
+    // |version|: version of index values, -1 means latest version
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version = -1);
 
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexesInfo* not_found, size_t* num_found);
+    // |version|: version of index values, -1 means latest version
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexesInfo* not_found, size_t* num_found,
+                 int64_t version = -1);
 
-    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes);
+    // |version|: version of index values, -1 means latest version
+    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes,
+                   int64_t version = -1);
 
-    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found, size_t* num_found);
+    // |version|: version of index values, -1 means latest version
+    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found, size_t* num_found,
+               int64_t version = -1);
 
     void clear();
 
 private:
-    std::map<std::string, IndexValue, std::less<>> _map;
+    void insert(const std::string& key, int64_t version, const IndexValue& value);
+
+    static void update(std::list<IndexValueInfo>& index_value_info, int64_t version, const IndexValue& value);
+
+private:
+    phmap::btree_map<std::string, std::list<IndexValueInfo>, std::less<>> _map;
 };
 
 } // namespace starrocks::lake
