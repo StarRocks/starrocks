@@ -217,7 +217,9 @@ void FileReader::_build_split_tasks() {
         _scanner_ctx->split_tasks == nullptr) {
         return;
     }
-    for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
+
+    size_t row_group_size = _file_metadata->t_metadata().row_groups.size();
+    for (size_t i = 0; i < row_group_size; i++) {
         const tparquet::RowGroup& row_group = _file_metadata->t_metadata().row_groups[i];
         bool selected = _select_row_group(row_group);
         if (!selected) continue;
@@ -230,9 +232,12 @@ void FileReader::_build_split_tasks() {
         _scanner_ctx->split_tasks->emplace_back(std::move(split_ctx));
     }
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->split_tasks->size() == 1) {
+    if (_scanner_ctx->split_tasks->size() <= 1) {
         _scanner_ctx->split_tasks->clear();
     }
+
+    VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
+                  << ", size = " << _scanner_ctx->split_tasks->size();
 }
 
 StatusOr<uint32_t> FileReader::_get_footer_read_size() const {
