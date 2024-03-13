@@ -993,7 +993,7 @@ under the License.
                     <excludes>
                         <exclude>**/QueryDumpRegressionTest.java</exclude>
                     </excludes>
-                    <parallel>suites</parallel>
+                    <parallel>classes</parallel>
                     <parallelTestsTimeoutForcedInSeconds>1</parallelTestsTimeoutForcedInSeconds>
                     <parallelTestsTimeoutInSeconds>1</parallelTestsTimeoutInSeconds>
                 </configuration>
