@@ -2016,6 +2016,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
+        starRocksAssert.dropMaterializedView("mv_insert");
     }
 
     /**
@@ -2135,4 +2136,131 @@ public class MvRewriteTest extends MvRewriteTestBase {
             PlanTestBase.assertNotContains(plan, "event_time1 >= '2023-01-05 00:00:00'");
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void test() throws Exception {
+        connectContext.executeSql("drop table if exists t11");
+        starRocksAssert.withTable("create table t11(\n" +
+                "shop_id int,\n" +
+                "region int,\n" +
+                "shop_type string,\n" +
+                "shop_flag string,\n" +
+                "store_id String,\n" +
+                "store_qty Double\n" +
+                ") DUPLICATE key(shop_id) distributed by hash(shop_id) buckets 1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        cluster.runSql("test", "insert into\n" +
+                "t11\n" +
+                "values\n" +
+                "(1, 1, 's', 'o', '1', null),\n" +
+                "(1, 1, 'm', 'o', '2', 2),\n" +
+                "(1, 1, 'b', 'c', '3', 1);");
+        connectContext.executeSql("drop materialized view if exists mv11");
+        starRocksAssert.withMaterializedView("create MATERIALIZED VIEW mv11 (region, ct) " +
+                "DISTRIBUTED BY RANDOM buckets 1 REFRESH MANUAL as\n" +
+                "select region,\n" +
+                "count(\n" +
+                "distinct (\n" +
+                "case\n" +
+                "when store_qty > 0 then store_id\n" +
+                "else null\n" +
+                "end\n" +
+                ")\n" +
+                ")\n" +
+                "from t11\n" +
+                "group by region;");
+        cluster.runSql("test", "refresh materialized view mv11 with sync mode");
+        {
+            String query = "select region,\n" +
+                    "count(\n" +
+                    "distinct (\n" +
+                    "case\n" +
+                    "when store_qty > 0.0 then store_id\n" +
+                    "else null\n" +
+                    "end\n" +
+                    ")\n" +
+                    ") as ct\n" +
+                    "from t11\n" +
+                    "group by region\n" +
+                    "having\n" +
+                    "count(\n" +
+                    "distinct (\n" +
+                    "case\n" +
+                    "when store_qty > 0.0 then store_id\n" +
+                    "else null\n" +
+                    "end\n" +
+                    ")\n" +
+                    ") > 0\n";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv11", "PREDICATES: 10: ct > 0");
+        }
+    }
+
+    @Test
+    public void testMvRewriteWithSortKey() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
+        {
+            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v1 " +
+                    "DISTRIBUTED BY RANDOM buckets 1 " +
+                    "order by (v1) " +
+                    "REFRESH MANUAL " +
+                    "as\n" +
+                    "select v1, v2, sum(v3) from t0 group by v1, v2");
+            cluster.runSql("test", "refresh materialized view mv_order_by_v1 with sync mode");
+            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v2 " +
+                    "DISTRIBUTED BY RANDOM buckets 1 " +
+                    "order by (v2) " +
+                    "REFRESH MANUAL " +
+                    "as\n" +
+                    "select v1, v2, sum(v3) from t0 group by v1, v2");
+            cluster.runSql("test", "refresh materialized view mv_order_by_v2 with sync mode");
+            {
+                // in predicate
+                String query = "select v1, v2, sum(v3) from t0 where v1 in (1, 2, 3) group by v1, v2;";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_order_by_v1");
+            }
+            {
+                // equal predicate
+                String query = "select v1, v2, sum(v3) from t0 where v1 = 1 group by v1, v2;";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_order_by_v1");
+            }
+            starRocksAssert.dropMaterializedView("mv_order_by_v1");
+            starRocksAssert.dropMaterializedView("mv_order_by_v2");
+        }
+        {
+            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v1 " +
+                    "DISTRIBUTED BY RANDOM buckets 1 " +
+                    "order by (v1) " +
+                    "REFRESH MANUAL " +
+                    "as\n" +
+                    "select v1, v2, v3 from t0");
+            cluster.runSql("test", "refresh materialized view mv_order_by_v1 with sync mode");
+            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v2 " +
+                    "DISTRIBUTED BY RANDOM buckets 1 " +
+                    "order by (v2) " +
+                    "REFRESH MANUAL " +
+                    "as\n" +
+                    "select v1, v2, v3 from t0");
+            cluster.runSql("test", "refresh materialized view mv_order_by_v2 with sync mode");
+            {
+                String query = "select v1, v2, v3 from t0 where v1 in (1, 2, 3);";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_order_by_v1");
+            }
+            {
+                String query = "select v1, v2, v3 from t0 where v1 = 1;";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_order_by_v1");
+            }
+            starRocksAssert.dropMaterializedView("mv_order_by_v1");
+            starRocksAssert.dropMaterializedView("mv_order_by_v2");
+        }
+    }
+>>>>>>> 385bd40cac ([Enhancement] enhance mv rewrite by considering sort key during selecting best mv (#41956))
 }

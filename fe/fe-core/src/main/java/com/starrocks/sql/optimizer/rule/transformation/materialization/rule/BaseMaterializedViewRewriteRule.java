@@ -29,6 +29,10 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.Operator;
+>>>>>>> 385bd40cac ([Enhancement] enhance mv rewrite by considering sort key during selecting best mv (#41956))
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -97,7 +101,21 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         try {
+<<<<<<< HEAD
             return doTransform(queryExpression, context);
+=======
+            List<OptExpression> expressions = doTransform(queryExpression, context);
+            if (expressions == null || expressions.isEmpty()) {
+                return Lists.newArrayList();
+            }
+            if (context.isInMemoPhase()) {
+                return expressions;
+            } else {
+                // in rule phase, only return the best one result
+                BestMvSelector bestMvSelector = new BestMvSelector(expressions, context, queryExpression);
+                return Lists.newArrayList(bestMvSelector.selectBest());
+            }
+>>>>>>> 385bd40cac ([Enhancement] enhance mv rewrite by considering sort key during selecting best mv (#41956))
         } catch (Exception e) {
             // for mv rewrite rules, do not disturb query when exception.
             logMVRewrite(context, this, "mv rewrite exception, exception message:{}", e.toString());
