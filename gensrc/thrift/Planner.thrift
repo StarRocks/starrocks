@@ -57,6 +57,16 @@ struct TCacheParam {
    11: optional set<i32> cached_plan_node_ids;
 }
 
+struct TExecGroup {
+  1: optional i32 group_id
+  2: list<i32> plan_node_ids
+}
+
+struct TGroupExecutionParam {
+  1: optional bool enable_group_execution
+  2: optional list<TExecGroup> exec_groups
+}
+
 // TPlanFragment encapsulates info needed to execute a particular
 // plan fragment, including how to produce and how to partition its output.
 // It leaves out node-specific parameters neede for the actual execution.
@@ -99,6 +109,7 @@ struct TPlanFragment {
   21: optional list<Data.TGlobalDict> load_global_dicts
   22: optional TCacheParam cache_param
   23: optional map<i32, Exprs.TExpr> query_global_dict_exprs
+  24: optional TGroupExecutionParam group_execution_param
 }
 
 // location information for a single scan range

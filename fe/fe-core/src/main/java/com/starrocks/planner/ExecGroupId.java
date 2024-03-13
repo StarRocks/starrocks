@@ -14,16 +14,25 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.Id;
 import com.starrocks.common.IdGenerator;
 
-import java.util.List;
+public class ExecGroupId extends Id<ExecGroupId> {
+    public ExecGroupId(int id) {
+        super(id);
+    }
 
-public interface RuntimeFilterBuildNode {
-    List<RuntimeFilterDescription> getBuildRuntimeFilters();
+    public static IdGenerator<ExecGroupId> createGenerator() {
+        return new IdGenerator<>() {
+            @Override
+            public ExecGroupId getNextId() {
+                return new ExecGroupId(nextId++);
+            }
 
-    void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl,
-                             ExecGroupSets execGroupSets);
-
-    void clearBuildRuntimeFilters();
+            @Override
+            public ExecGroupId getMaxId() {
+                return new ExecGroupId(nextId - 1);
+            }
+        };
+    }
 }
