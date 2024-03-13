@@ -158,7 +158,7 @@ public class FrontendOptions {
         try {
             fqdnString = NetUtils.removeScope(InetAddress.getLocalHost().getCanonicalHostName());
             String ip = NetUtils.removeScope(InetAddress.getLocalHost().getHostAddress());
-            LOG.debug("ip is {}", ip);
+            LOG.info("ip is {}", ip);
         } catch (UnknownHostException e) {
             LOG.error("Got a UnknownHostException when try to get FQDN");
             System.exit(-1);
