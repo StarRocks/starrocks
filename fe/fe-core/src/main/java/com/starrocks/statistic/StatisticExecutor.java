@@ -169,6 +169,14 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(tableUUID, columnNames);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute external histogram statistic table expire fail.");
+        }
+    }
+
     // If you call this function, you must ensure that the db lock is added
     public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column)
             throws Exception {
@@ -237,7 +245,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_TABLE_VERSION
                 || version == StatsConstants.STATISTIC_BATCH_VERSION
                 || version == StatsConstants.STATISTIC_EXTERNAL_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION) {
+                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -289,6 +298,7 @@ public class StatisticExecutor {
         // update StatisticsCache
         statsConnectCtx.setStatisticsConnection(false);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+<<<<<<< HEAD
             for (String columnName : statsJob.getColumns()) {
                 HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
                         table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
@@ -297,6 +307,27 @@ public class StatisticExecutor {
                 GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(
                         histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
                         Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
+=======
+            if (table.isNativeTableOrMaterializedView()) {
+                for (String columnName : statsJob.getColumns()) {
+                    HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
+                            table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
+                            statsJob.getProperties());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshHistogramStatisticsCache(
+                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
+                }
+            } else {
+                for (String columnName : statsJob.getColumns()) {
+                    ExternalHistogramStatsMeta histogramStatsMeta = new ExternalHistogramStatsMeta(
+                            statsJob.getCatalogName(), db.getFullName(), table.getName(), columnName,
+                            statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
+
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(histogramStatsMeta);
+                    // todo(ywb): refresh external histogram statistics cache
+                }
+>>>>>>> c7ab986937 ([Feature] Support collect Hive histogram statistics (#42186))
             }
         } else {
             if (table.isNativeTableOrMaterializedView()) {

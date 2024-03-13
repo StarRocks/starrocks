@@ -147,6 +147,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -969,6 +970,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META: {
                 data = ExternalBasicStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
+                data = ExternalHistogramStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
+                data = ExternalHistogramStatsMeta.read(in);
                 isRead = true;
                 break;
             }

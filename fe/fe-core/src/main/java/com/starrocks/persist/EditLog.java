@@ -105,6 +105,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -1018,6 +1019,17 @@ public class EditLog {
                 case OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
+                    break;
+                }
+                case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
+                    ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
+                    // todo(ywb): refresh connector table histogram statistics cache
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
+                    ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
@@ -2027,6 +2039,14 @@ public class EditLog {
 
     public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
         logEdit(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
+    }
+
+    public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, meta);
+    }
+
+    public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {

@@ -704,6 +704,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_EXTERNAL_BASIC_STATS_META = 11205;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_EXTERNAL_HISTOGRAM_STATS_META = 11206;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META = 11207;
+
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
     @IgnorableOnReplayFailed

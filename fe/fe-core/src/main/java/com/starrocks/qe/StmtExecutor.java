@@ -166,6 +166,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
+import com.starrocks.statistic.ExternalHistogramStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -1225,20 +1226,30 @@ public class StmtExecutor {
                                 Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.isExternal()) {
-            StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                    StatsConstants.AnalyzeType.FULL;
-            // TODO: we should check old statistic and confirm paritionlist
-            statisticExecutor.collectStatistics(statsConnectCtx,
-                    StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
-                            analyzeStmt.getTableName().getCatalog(),
-                            db, table, null,
-                            analyzeStmt.getColumnNames(),
-                            analyzeType,
-                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                    analyzeStatus,
-                    false);
+            if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
+                statisticExecutor.collectStatistics(statsConnectCtx,
+                    new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
+                            db, table, analyzeStmt.getColumnNames(),
+                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                            analyzeStmt.getProperties()),
+                        analyzeStatus,
+                        false);
+            } else {
+                StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                        StatsConstants.AnalyzeType.FULL;
+                // TODO: we should check old statistic and confirm paritionlist
+                statisticExecutor.collectStatistics(statsConnectCtx,
+                        StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                                analyzeStmt.getTableName().getCatalog(),
+                                db, table, null,
+                                analyzeStmt.getColumnNames(),
+                                analyzeType,
+                                StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                        analyzeStatus,
+                        false);
+            }
         } else {
-            if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+            if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
@@ -1286,14 +1297,31 @@ public class StmtExecutor {
 
     private void handleDropHistogramStmt() {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
-        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropHistogramStmt.getTableName());
-        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
-                .collect(Collectors.toList());
+        Table table = MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+        if (dropHistogramStmt.isExternal()) {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
         GlobalStateMgr.getCurrentAnalyzeMgr()
                 .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalHistogramStatsMetaAndData(
+                    StatisticUtils.buildConnectContext(), dropHistogramStmt.getTableName(), table,
+                    dropHistogramStmt.getColumnNames());
+            // todo(ywb): expire external histogram statistics
+        } else {
+            List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                    .collect(Collectors.toList());
+
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                    .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(),
+                            Sets.newHashSet(table.getId()));
+            GlobalStateMgr.getCurrentState().getStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+        }
+>>>>>>> c7ab986937 ([Feature] Support collect Hive histogram statistics (#42186))
     }
 
     private void handleKillAnalyzeStmt() {

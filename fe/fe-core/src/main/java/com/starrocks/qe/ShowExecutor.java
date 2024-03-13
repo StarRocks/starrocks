@@ -226,6 +226,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -519,7 +520,599 @@ public class ShowExecutor {
                         if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvMeta.getIndexId()))) {
                             continue;
                         }
+<<<<<<< HEAD
                         singleTableMVs.add(Pair.create(olapTable, mvMeta));
+=======
+
+                        try {
+                            Authorizer.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
+                                    ConnectContext.get().getCurrentRoleIds(),
+                                    new TableName(db.getFullName(), olapTable.getName()));
+                        } catch (AccessDeniedException e) {
+                            continue;
+                        }
+
+                        DynamicPartitionProperty dynamicPartitionProperty =
+                                olapTable.getTableProperty().getDynamicPartitionProperty();
+                        String tableName = olapTable.getName();
+                        int replicationNum = dynamicPartitionProperty.getReplicationNum();
+                        replicationNum = (replicationNum == DynamicPartitionProperty.NOT_SET_REPLICATION_NUM) ?
+                                olapTable.getDefaultReplicationNum() : RunMode.defaultReplicationNum();
+                        rows.add(Lists.newArrayList(
+                                tableName,
+                                String.valueOf(dynamicPartitionProperty.getEnable()),
+                                dynamicPartitionProperty.getTimeUnit().toUpperCase(),
+                                String.valueOf(dynamicPartitionProperty.getStart()),
+                                String.valueOf(dynamicPartitionProperty.getEnd()),
+                                dynamicPartitionProperty.getPrefix(),
+                                String.valueOf(dynamicPartitionProperty.getBuckets()),
+                                String.valueOf(replicationNum),
+                                dynamicPartitionProperty.getStartOfInfo(),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.LAST_SCHEDULER_TIME),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.DYNAMIC_PARTITION_STATE),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.CREATE_PARTITION_MSG),
+                                dynamicPartitionScheduler
+                                        .getRuntimeInfo(tableName, DynamicPartitionScheduler.DROP_PARTITION_MSG)));
+                    }
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+                return new ShowResultSet(statement.getMetaData(), rows);
+            }
+
+            return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
+        }
+
+        @Override
+        public ShowResultSet visitShowIndexStatement(ShowIndexStmt statement, ConnectContext context) {
+            List<List<String>> rows = Lists.newArrayList();
+            Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+            MetaUtils.checkDbNullAndReport(db, statement.getDbName());
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                Table table = db.getTable(statement.getTableName().getTbl());
+                if (table == null) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
+                            db.getOriginName() + "." + statement.getTableName().toString());
+                } else if (table instanceof OlapTable) {
+                    List<Index> indexes = ((OlapTable) table).getIndexes();
+                    for (Index index : indexes) {
+                        rows.add(Lists.newArrayList(statement.getTableName().toString(), "",
+                                index.getIndexName(), "", String.join(",", index.getColumns()), "", "", "", "",
+                                "", String.format("%s%s", index.getIndexType().name(), index.getPropertiesString()),
+                                index.getComment()));
+                    }
+                } else {
+                    // other type view, mysql, hive, es
+                    // do nothing
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
+            Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+            MetaUtils.checkDbNullAndReport(db, statement.getDbName());
+
+            long txnId = statement.getTxnId();
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            try {
+                return new ShowResultSet(statement.getMetaData(), transactionMgr.getSingleTranInfo(db.getId(), txnId));
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        @Override
+        public ShowResultSet visitShowPluginsStatement(ShowPluginsStmt statement, ConnectContext context) {
+            List<List<String>> rows = GlobalStateMgr.getCurrentState().getPluginMgr().getPluginShowInfos();
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
+            List<List<String>> rows = new ArrayList<>();
+            for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
+                List<String> oneSql = new ArrayList<>();
+                oneSql.add(String.valueOf(entry.getValue().id));
+                oneSql.add(entry.getKey());
+                rows.add(oneSql);
+            }
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt statement, ConnectContext context) {
+            return new ShowResultSet(statement.getMetaData(), DataCacheMgr.getInstance().getShowResultSetRows());
+        }
+
+        @Override
+        public ShowResultSet visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, ConnectContext context) {
+            List<AnalyzeJob> jobs = context.getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList();
+            List<List<String>> rows = Lists.newArrayList();
+            jobs.sort(Comparator.comparing(AnalyzeJob::getId));
+            for (AnalyzeJob job : jobs) {
+                try {
+                    List<String> result = ShowAnalyzeJobStmt.showAnalyzeJobs(context, job);
+                    if (result != null) {
+                        rows.add(result);
+                    }
+                } catch (MetaNotFoundException e) {
+                    // pass
+                    LOG.warn("analyze job {} meta not found, {}", job.getId(), e);
+                }
+            }
+            rows = doPredicate(statement, statement.getMetaData(), rows);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, ConnectContext context) {
+            List<AnalyzeStatus> statuses = new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr()
+                    .getAnalyzeStatusMap().values());
+            List<List<String>> rows = Lists.newArrayList();
+            statuses.sort(Comparator.comparing(AnalyzeStatus::getId));
+            for (AnalyzeStatus status : statuses) {
+                try {
+                    List<String> result = ShowAnalyzeStatusStmt.showAnalyzeStatus(context, status);
+                    if (result != null) {
+                        rows.add(result);
+                    }
+                } catch (MetaNotFoundException e) {
+                    // pass
+                }
+            }
+            rows = doPredicate(statement, statement.getMetaData(), rows);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, ConnectContext context) {
+            List<BasicStatsMeta> metas = new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr()
+                    .getBasicStatsMetaMap().values());
+            List<List<String>> rows = Lists.newArrayList();
+            for (BasicStatsMeta meta : metas) {
+                try {
+                    List<String> result = ShowBasicStatsMetaStmt.showBasicStatsMeta(context, meta);
+                    if (result != null) {
+                        rows.add(result);
+                    }
+                } catch (MetaNotFoundException e) {
+                    // pass
+                }
+            }
+            List<ExternalBasicStatsMeta> externalMetas =
+                    new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr().getExternalBasicStatsMetaMap().values());
+            for (ExternalBasicStatsMeta meta : externalMetas) {
+                try {
+                    List<String> result = ShowBasicStatsMetaStmt.showExternalBasicStatsMeta(context, meta);
+                    if (result != null) {
+                        rows.add(result);
+                    }
+                } catch (MetaNotFoundException e) {
+                    // pass
+                }
+            }
+
+            rows = doPredicate(statement, statement.getMetaData(), rows);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext context) {
+            List<HistogramStatsMeta> metas = new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr()
+                    .getHistogramStatsMetaMap().values());
+            List<List<String>> rows = Lists.newArrayList();
+            for (HistogramStatsMeta meta : metas) {
+                try {
+                    List<String> result = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(context, meta);
+                    if (result != null) {
+                        rows.add(result);
+                    }
+                } catch (MetaNotFoundException e) {
+                    // pass
+                }
+            }
+
+            List<ExternalHistogramStatsMeta> externalMetas =
+                    new ArrayList<>(context.getGlobalStateMgr().getAnalyzeMgr().getExternalHistogramStatsMetaMap().values());
+            for (ExternalHistogramStatsMeta meta : externalMetas) {
+                try {
+                    List<String> result = ShowHistogramStatsMetaStmt.showExternalHistogramStatsMeta(context, meta);
+                    if (result != null) {
+                        rows.add(result);
+                    }
+                } catch (MetaNotFoundException e) {
+                    // pass
+                }
+            }
+
+            rows = doPredicate(statement, statement.getMetaData(), rows);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowResourceGroupStatement(ShowResourceGroupStmt statement, ConnectContext context) {
+            List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(statement);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowUserStatement(ShowUserStmt statement, ConnectContext context) {
+            List<List<String>> rowSet = Lists.newArrayList();
+
+            if (statement.isAll()) {
+                AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                List<String> users = authorizationManager.getAllUsers();
+                users.forEach(u -> rowSet.add(Lists.newArrayList(u)));
+            } else {
+                List<String> row = Lists.newArrayList();
+                row.add(context.getCurrentUserIdentity().toString());
+                rowSet.add(row);
+            }
+
+            return new ShowResultSet(statement.getMetaData(), rowSet);
+        }
+
+        @Override
+        public ShowResultSet visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
+            List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
+                    .filter(row -> {
+                                if (!InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
+
+                                    try {
+                                        Authorizer.checkAnyActionOnCatalog(
+                                                context.getCurrentUserIdentity(),
+                                                context.getCurrentRoleIds(), row.get(0));
+                                    } catch (AccessDeniedException e) {
+                                        return false;
+                                    }
+
+                                    return true;
+                                }
+                                return true;
+                            }
+                    )
+                    .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
+            return new ShowResultSet(statement.getMetaData(), rowSet);
+        }
+
+        @Override
+        public ShowResultSet visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
+            List<List<String>> computeNodesInfos = ComputeNodeProcDir.getClusterComputeNodesInfos();
+            return new ShowResultSet(statement.getMetaData(), computeNodesInfos);
+        }
+
+        @Override
+        public ShowResultSet visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            List<List<String>> userAuthInfos = Lists.newArrayList();
+
+            Map<UserIdentity, UserAuthenticationInfo> authenticationInfoMap = new HashMap<>();
+            if (statement.isAll()) {
+                authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
+            } else {
+                UserAuthenticationInfo userAuthenticationInfo;
+                if (statement.getUserIdent() == null) {
+                    userAuthenticationInfo = authenticationManager
+                            .getUserAuthenticationInfoByUserIdentity(context.getCurrentUserIdentity());
+                } else {
+                    userAuthenticationInfo =
+                            authenticationManager.getUserAuthenticationInfoByUserIdentity(
+                                    statement.getUserIdent());
+                }
+                authenticationInfoMap.put(statement.getUserIdent(), userAuthenticationInfo);
+            }
+            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
+                UserAuthenticationInfo userAuthenticationInfo = entry.getValue();
+                userAuthInfos.add(Lists.newArrayList(
+                        entry.getKey().toString(),
+                        userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
+                        userAuthenticationInfo.getAuthPlugin(),
+                        userAuthenticationInfo.getTextForAuthPlugin()));
+            }
+
+            return new ShowResultSet(statement.getMetaData(), userAuthInfos);
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement,
+                                                                     ConnectContext context) {
+            String catalogName = statement.getCatalogName();
+            List<List<String>> rows = Lists.newArrayList();
+            if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
+                return new ShowResultSet(statement.getMetaData(), rows);
+            }
+
+            Catalog catalog = context.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+            if (catalog == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+
+            // Create external catalog catalogName (
+            StringBuilder createCatalogSql = new StringBuilder();
+            createCatalogSql.append("CREATE EXTERNAL CATALOG ")
+                    .append("`").append(catalogName).append("`")
+                    .append("\n");
+
+            // Comment
+            String comment = catalog.getComment();
+            if (comment != null) {
+                createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
+            }
+            Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
+            CredentialUtil.maskCredential(clonedConfig);
+            // Properties
+            createCatalogSql.append("PROPERTIES (")
+                    .append(new PrintableMap<>(clonedConfig, " = ", true, true))
+                    .append("\n)");
+            rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowCharsetStatement(ShowCharsetStmt statement, ConnectContext context) {
+            List<List<String>> rows = Lists.newArrayList();
+            List<String> row = Lists.newArrayList();
+            // | utf8 | UTF-8 Unicode | utf8_general_ci | 3 |
+            row.add("utf8");
+            row.add("UTF-8 Unicode");
+            row.add("utf8_general_ci");
+            row.add("3");
+            rows.add(row);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, ConnectContext context) {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
+            List<String> storageVolumeNames = null;
+            try {
+                storageVolumeNames = storageVolumeMgr.listStorageVolumeNames();
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            PatternMatcher matcher = null;
+            List<List<String>> rows = Lists.newArrayList();
+            if (!statement.getPattern().isEmpty()) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.STORAGEVOLUME.getCaseSensibility());
+            }
+            PatternMatcher finalMatcher = matcher;
+            storageVolumeNames = storageVolumeNames.stream()
+                    .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
+                    .filter(storageVolumeName -> {
+                                    try {
+                                        Authorizer.checkAnyActionOnStorageVolume(context.getCurrentUserIdentity(),
+                                                context.getCurrentRoleIds(), storageVolumeName);
+                                    } catch (AccessDeniedException e) {
+                                        return false;
+                                    }
+                                    return true;
+                                }
+                    ).collect(Collectors.toList());
+            for (String storageVolumeName : storageVolumeNames) {
+                rows.add(Lists.newArrayList(storageVolumeName));
+            }
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, ConnectContext context) {
+            try {
+                return new ShowResultSet(statement.getMetaData(), statement.getResultRows());
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        @Override
+        public ShowResultSet visitShowPipeStatement(ShowPipeStmt statement, ConnectContext context) {
+            List<List<Comparable>> rows = Lists.newArrayList();
+            String dbName = statement.getDbName();
+            long dbId = GlobalStateMgr.getCurrentState().mayGetDb(dbName)
+                    .map(Database::getId)
+                    .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName));
+            PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+            for (Pipe pipe : pipeManager.getPipesUnlock().values()) {
+                // show pipes in current database
+                if (pipe.getPipeId().getDbId() != dbId) {
+                    continue;
+                }
+
+                // check privilege
+                try {
+                    Authorizer.checkAnyActionOnPipe(context.getCurrentUserIdentity(),
+                            context.getCurrentRoleIds(), new PipeName(dbName, pipe.getName()));
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+
+                // execute
+                List<Comparable> row = Lists.newArrayList();
+                ShowPipeStmt.handleShow(row, pipe);
+                rows.add(row);
+            }
+
+            // order by
+            List<OrderByPair> orderByPairs = statement.getOrderByPairs();
+            ListComparator<List<Comparable>> comparator = null;
+            if (orderByPairs != null) {
+                OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
+                comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
+            } else {
+                // sort by id asc
+                comparator = new ListComparator<>(0);
+            }
+            rows.sort(comparator);
+
+            // limit
+            long limit = statement.getLimit();
+            long offset = statement.getOffset() == -1L ? 0 : statement.getOffset();
+            if (offset >= rows.size()) {
+                rows = Lists.newArrayList();
+            } else if (limit != -1L) {
+                if ((limit + offset) < rows.size()) {
+                    rows = rows.subList((int) offset, (int) (limit + offset));
+                } else {
+                    rows = rows.subList((int) offset, rows.size());
+                }
+            }
+
+            List<List<String>> result = rows.stream().map(x -> x.stream().map(y -> (String) y)
+                            .collect(Collectors.toList()))
+                    .collect(Collectors.toList());
+            return new ShowResultSet(statement.getMetaData(), result);
+        }
+
+        @Override
+        public ShowResultSet visitDescPipeStatement(DescPipeStmt statement, ConnectContext context) {
+            List<List<String>> rows = Lists.newArrayList();
+            PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+            Pipe pipe = pipeManager.mayGetPipe(statement.getName())
+                    .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_UNKNOWN_PIPE, statement.getName()));
+
+            List<String> row = Lists.newArrayList();
+            DescPipeStmt.handleDesc(row, pipe);
+            rows.add(row);
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowFailPointStatement(ShowFailPointStatement statement, ConnectContext context) {
+            // send request and build resultSet
+            PListFailPointRequest request = new PListFailPointRequest();
+            SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            PatternMatcher matcher = null;
+            if (statement.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.VARIABLES.getCaseSensibility());
+            }
+            List<Backend> backends = new LinkedList<>();
+            if (statement.getBackends() == null) {
+                List<Long> backendIds = clusterInfoService.getBackendIds(true);
+                if (backendIds == null) {
+                    throw new SemanticException("No alive backends");
+                }
+                for (long backendId : backendIds) {
+                    Backend backend = clusterInfoService.getBackend(backendId);
+                    if (backend == null) {
+                        continue;
+                    }
+                    backends.add(backend);
+                }
+            } else {
+                for (String backendAddr : statement.getBackends()) {
+                    String[] tmp = backendAddr.split(":");
+                    if (tmp.length != 2) {
+                        throw new SemanticException("invalid backend addr");
+                    }
+                    Backend backend = clusterInfoService.getBackendWithBePort(tmp[0], Integer.parseInt(tmp[1]));
+                    if (backend == null) {
+                        throw new SemanticException("cannot find backend with addr " + backendAddr);
+                    }
+                    backends.add(backend);
+                }
+            }
+            // send request
+            List<Pair<Backend, Future<PListFailPointResponse>>> futures = Lists.newArrayList();
+            for (Backend backend : backends) {
+                try {
+                    futures.add(Pair.create(backend,
+                            BackendServiceClient.getInstance().listFailPointAsync(backend.getBrpcAddress(), request)));
+                } catch (RpcException e) {
+                    throw new SemanticException("sending list failpoint request fails");
+                }
+            }
+            // handle response
+            List<List<String>> rows = Lists.newArrayList();
+            for (Pair<Backend, Future<PListFailPointResponse>> future : futures) {
+                try {
+                    final Backend backend = future.first;
+                    final PListFailPointResponse result = future.second.get(10, TimeUnit.SECONDS);
+                    if (result != null && result.status.statusCode != TStatusCode.OK.getValue()) {
+                        String errMsg = String.format("list failpoint status failed, backend: %s:%d, error: %s",
+                                backend.getHost(), backend.getBePort(), result.status.errorMsgs.get(0));
+                        LOG.warn(errMsg);
+                        throw new SemanticException(errMsg);
+                    }
+                    Preconditions.checkNotNull(result);
+                    for (PFailPointInfo failPointInfo : result.failPoints) {
+                        String name = failPointInfo.name;
+                        PFailPointTriggerMode triggerMode = failPointInfo.triggerMode;
+                        if (matcher != null && !matcher.match(name)) {
+                            continue;
+                        }
+                        List<String> row = Lists.newArrayList();
+                        row.add(failPointInfo.name);
+                        row.add(triggerMode.mode.toString());
+                        if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
+                            row.add(Integer.toString(triggerMode.nTimes));
+                        } else if (triggerMode.mode == FailPointTriggerModeType.PROBABILITY_ENABLE) {
+                            row.add(Double.toString(triggerMode.probability));
+                        } else {
+                            row.add("");
+                        }
+                        row.add(String.format("%s:%d", backend.getHost(), backend.getBePort()));
+                        rows.add(row);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (Throwable e) {
+                    throw new SemanticException(e.getMessage());
+                }
+            }
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        @Override
+        public ShowResultSet visitShowDictionaryStatement(ShowDictionaryStmt statement, ConnectContext context) {
+            List<List<String>> allInfo = null;
+            try {
+                allInfo = GlobalStateMgr.getCurrentState().getDictionaryMgr().getAllInfo(statement.getDictionaryName());
+            } catch (Exception e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(statement.getMetaData(), allInfo);
+        }
+
+        @Override
+        public ShowResultSet visitShowBackendBlackListStatement(ShowBackendBlackListStmt statement, ConnectContext context) {
+            List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData();
+            return new ShowResultSet(statement.getMetaData(), rows);
+        }
+
+        private List<List<String>> doPredicate(ShowStmt showStmt,
+                                               ShowResultSetMetaData showResultSetMetaData,
+                                               List<List<String>> rows) {
+            Predicate predicate = showStmt.getPredicate();
+            if (predicate == null) {
+                return rows;
+            }
+
+            SlotRef slotRef = (SlotRef) predicate.getChild(0);
+            StringLiteral stringLiteral = (StringLiteral) predicate.getChild(1);
+            List<List<String>> returnRows = new ArrayList<>();
+            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
+
+            int idx = showResultSetMetaData.getColumnIdx(slotRef.getColumnName());
+            if (binaryPredicate.getOp().isEquivalence()) {
+                for (List<String> row : rows) {
+                    if (row.get(idx).equals(stringLiteral.getStringValue())) {
+                        returnRows.add(row);
+>>>>>>> c7ab986937 ([Feature] Support collect Hive histogram statistics (#42186))
                     }
                 }
             }
