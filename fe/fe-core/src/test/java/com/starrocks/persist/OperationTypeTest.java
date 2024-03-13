@@ -173,7 +173,6 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_TABLE_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_TABLE_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_PARTITION_V2));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_COLUMN_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_ROLLUP_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RENAME_ROLLUP_V2));
@@ -202,9 +201,6 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(
                 OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ALTER_CATALOG));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_DICTIONARY));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_DICTIONARY));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_DICTIONARY_MGR));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REPLICATION_JOB));
     }
 

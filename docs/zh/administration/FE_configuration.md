@@ -740,7 +740,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 <!--
 ##### edit_log_write_slow_log_threshold_ms
 
-<<<<<<< HEAD
 - 默认值：2000
 - 类型：Int
 - 单位：Milliseconds
@@ -748,10 +747,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 描述：
 - 引入版本：-
 -->
-=======
-- 含义：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 FE 无法识别的 logID。<br />如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。
-- 默认值：FALSE
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
 ##### ignore_unknown_log_id
 
@@ -4650,42 +4645,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### jdbc_minimum_idle_connections
 
-<<<<<<< HEAD
-=======
-- 含义：Heartbeat Manager 中存储心跳任务的阻塞队列大小。
-- 默认值：1024
-
-#### bdbje_reset_election_group
-
-- 含义：是否重置 BDBJE 复制组。如果设置为 `TRUE`，FE 将重置 BDBJE 复制组（即删除所有 FE 节点的信息）并以 Leader 身份启动。重置后，该 FE 将成为集群中唯一的成员，其他 FE 节点通过 `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'` 重新加入该集群。仅当无法成功选举出 leader FE 时（因为大部分 follower FE 数据已损坏）才使用此配置。该参数用来替代 `metadata_failure_recovery`。
-- 默认值：FALSE
-
-#### metadata_journal_ignore_replay_failure
-
-- 含义：是否忽略回放失败的日志。设置为 `TRUE` 表示忽略回放失败的日志，但是对于会损坏集群数据的失败，此配置并不生效。
-- 默认值：FALSE
-
-#### edit_log_port
-
-- 含义：FE 所在 StarRocks 集群中各 Leader FE、Follower FE、Observer FE 之间通信用的端口。
-- 默认值：9010
-
-#### edit_log_type
-
-- 含义：编辑日志的类型。取值只能为 `BDB`。
-- 默认值：BDB
-
-#### bdbje_heartbeat_timeout_second
-
-- 含义：FE 所在 StarRocks 集群中 Leader FE 和 Follower FE 之间的 BDB JE 心跳超时时间。
-- 单位：秒。
-- 默认值：30
-
-#### bdbje_lock_timeout_second
-
-- 含义：BDB JE 操作的锁超时时间。
-- 单位：秒。
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 - 默认值：1
 - 类型：Int
 - 单位：-

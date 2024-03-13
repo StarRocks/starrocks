@@ -355,30 +355,20 @@ public class OperationType {
     //real time load 100 -108
     @Deprecated
     public static final short OP_UPSERT_TRANSACTION_STATE = 100;
-<<<<<<< HEAD
-    @Deprecated
-    public static final short OP_DELETE_TRANSACTION_STATE = 101;
-=======
 
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_TRANSACTION_STATE = 101;
 
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     @Deprecated
     public static final short OP_FINISHING_ROLLUP = 102;
 
     @Deprecated
     public static final short OP_FINISHING_SCHEMA_CHANGE = 103;
-<<<<<<< HEAD
-    @Deprecated
-    public static final short OP_SAVE_TRANSACTION_ID = 104;
-=======
 
     @Deprecated
     public static final short OP_SAVE_TRANSACTION_ID = 104;
 
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
 
     @IgnorableOnReplayFailed
@@ -798,12 +788,6 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_RENAME_PARTITION_V2 = 13005;
-<<<<<<< HEAD
-=======
-
-    @IgnorableOnReplayFailed
-    public static final short OP_RENAME_COLUMN_V2 = 13006;
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_ROLLUP_V2 = 13010;
@@ -821,21 +805,6 @@ public class OperationType {
     public static final short OP_BATCH_ADD_ROLLUP_V2 = 13015;
 
     public static final short OP_ADD_REPLICA_V2 = 13020;
-<<<<<<< HEAD
-    public static final short OP_DELETE_REPLICA_V2 = 13021;
-    public static final short OP_UPDATE_REPLICA_V2 = 13022;
-    public static final short OP_BACKEND_TABLETS_INFO_V2 = 13023;
-    public static final short OP_ADD_BACKEND_V2 = 13024;
-    public static final short OP_DROP_BACKEND_V2 = 13025;
-    public static final short OP_BACKEND_STATE_CHANGE_V2 = 13026;
-    public static final short OP_ADD_FRONTEND_V2 = 13027;
-    public static final short OP_ADD_FIRST_FRONTEND_V2 = 13028;
-    public static final short OP_REMOVE_FRONTEND_V2 = 13029;
-    public static final short OP_UPDATE_FRONTEND_V2 = 13030;
-    public static final short OP_ADD_BROKER_V2 = 13031;
-    public static final short OP_DROP_BROKER_V2 = 13032;
-=======
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_REPLICA_V2 = 13021;
@@ -926,20 +895,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_CATALOG = 13300;
 
-<<<<<<< HEAD
-=======
-    // Dictionary
-
-    @IgnorableOnReplayFailed
-    public static final short OP_CREATE_DICTIONARY = 13400;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_DROP_DICTIONARY = 13401;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
-
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;

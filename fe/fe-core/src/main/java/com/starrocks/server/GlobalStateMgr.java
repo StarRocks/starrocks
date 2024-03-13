@@ -1550,20 +1550,6 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
-    void checkOpTypeValid() throws IOException {
-        try {
-            for (Field field : OperationType.class.getDeclaredFields()) {
-                short id = field.getShort(null);
-                if (id > OperationType.OP_TYPE_EOF) {
-                    throw new IOException("OperationType cannot use a value exceeding 20000, " +
-                            "and an error will be reported if it exceeds : " + field.getName() + " = " + id);
-                }
-            }
-        } catch (IllegalAccessException e) {
-            throw new IOException(e);
-        }
-    }
-
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
@@ -1583,7 +1569,6 @@ public class GlobalStateMgr {
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadVersion(dis, checksum);
-            checkOpTypeValid();
 
             if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
                 Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
@@ -1774,11 +1759,7 @@ public class GlobalStateMgr {
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
     }
 
-<<<<<<< HEAD
     public long loadVersion(DataInputStream dis, long checksum) throws IOException {
-=======
-    public void loadHeader(DataInputStream dis) throws IOException {
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
         // for new format, version schema is [starrocksMetaVersion], and the int value must be positive
         // for old format, version schema is [-1, metaVersion, starrocksMetaVersion]
         // so we can check the first int to determine the version schema
@@ -1801,7 +1782,6 @@ public class GlobalStateMgr {
         }
 
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
-<<<<<<< HEAD
 
         return checksum;
     }
@@ -1821,8 +1801,6 @@ public class GlobalStateMgr {
     }
 
     public void loadHeaderV2(DataInputStream dis) throws IOException {
-=======
->>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
         isDefaultClusterCreated = header.isDefaultClusterCreated();
