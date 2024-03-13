@@ -318,6 +318,27 @@ public class Optimizer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void ruleBasedMaterializedViewRewrite(OptExpression tree,
+                                                  TaskContext rootTaskContext) {
+        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
+            return;
+        }
+        if (mvRewriteStrategy.enableRBOViewBasedRewrite) {
+            // try view based mv rewrite first, then try normal mv rewrite rules
+            viewBasedMvRuleRewrite(tree, rootTaskContext);
+        }
+        if (mvRewriteStrategy.enableForceRBORewrite) {
+            // use rule based mv rewrite strategy to do mv rewrite for multi tables query
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
+        } else if (mvRewriteStrategy.enableRBOSingleTableRewrite) {
+            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        }
+    }
+
+>>>>>>> 23143c3885 ([BugFix] optimize mv cost calculation (#42243))
     private OptExpression logicalRuleRewrite(
             OptExpression tree,
             TaskContext rootTaskContext) {
