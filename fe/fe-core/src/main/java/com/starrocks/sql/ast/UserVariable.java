@@ -152,12 +152,13 @@ public class UserVariable extends SetListItem {
     }
 
     /**
-     * first byte
+     * It's the same with MYSQL_PROTOCAL.
+     * the value of the first byte meaning:
      * less 251 means the length of the following bytes
      * 251 means NULL
-     * 252 means the length need 2 bytes to represent
-     * 253 means the length need 3 bytes to represent
-     * 254 means the length need 8 bytes to represent
+     * 252 means the length need the next 2 bytes to represent
+     * 253 means the length need the next 3 bytes to represent
+     * 254 means the length need the next 8 bytes to represent
      * @param bytes
      * @return
      */

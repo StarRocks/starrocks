@@ -423,7 +423,7 @@ public class SetStmtAnalyzer {
             ArrayType arrayType = (ArrayType) type;
             PrimitiveType itemPrimitiveType = arrayType.getItemType().getPrimitiveType();
             if (itemPrimitiveType.isDateType() || itemPrimitiveType.isNumericType() ||
-                    itemPrimitiveType.isCharFamily() || itemPrimitiveType.isJsonType()) {
+                    itemPrimitiveType.isCharFamily()) {
                 return true;
             }
         } else if (type.isScalarType()) {
