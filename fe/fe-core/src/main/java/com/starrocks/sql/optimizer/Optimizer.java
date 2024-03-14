@@ -347,9 +347,9 @@ public class Optimizer {
         }
     }
 
-    private void ruleBasedMaterializedViewRewriteEarlyStage(OptExpression tree,
-                                                            TaskContext rootTaskContext,
-                                                            ColumnRefSet requiredColumns) {
+    private void ruleBasedMaterializedViewRewriteMultiStages(OptExpression tree,
+                                                             TaskContext rootTaskContext,
+                                                             ColumnRefSet requiredColumns) {
         if (!mvRewriteStrategy.mvStrategy.isMultiStages()) {
             return;
         }
@@ -379,14 +379,8 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
 
-        // only do this after mv has been rewritten success
-        if (context.getQueryMaterializationContext().hasRewrittenSuccess()) {
-            deriveLogicalProperty(tree);
-            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
-            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
-            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        }
+        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
         OptimizerTraceUtil.logOptExpression("after RuleBasedMaterializedViewRewrite:\n%s", tree);
     }
 
@@ -486,7 +480,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
 
         // rule based materialized view rewrite: early stage
-        ruleBasedMaterializedViewRewriteEarlyStage(tree, rootTaskContext, requiredColumns);
+        ruleBasedMaterializedViewRewriteMultiStages(tree, rootTaskContext, requiredColumns);
         if (sessionVariable.isEnableRboTablePrune() || mvRewriteStrategy.mvStrategy.isMultiStages()) {
             context.resetJoinPushDownParams();
         }

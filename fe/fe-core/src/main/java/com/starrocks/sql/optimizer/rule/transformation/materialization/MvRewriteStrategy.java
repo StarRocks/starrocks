@@ -37,7 +37,9 @@ public class MvRewriteStrategy {
         MVStrategy(int ordinal) {
             this.ordinal = ordinal;
         }
-
+        public int getOrdinal() {
+            return this.ordinal;
+        }
         public static Map<Integer, MVStrategy> ORDINAL_MAP = getOrdinalMap();
         public static Map<Integer, MVStrategy> getOrdinalMap() {
             Map<Integer, MVStrategy> ordinalMap = new HashMap<>();

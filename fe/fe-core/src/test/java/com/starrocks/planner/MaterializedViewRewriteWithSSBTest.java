@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -32,7 +33,8 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
         // create SSB tables
         // put lineorder last because it depends on other tables for foreign key constraints
         createTables("sql/ssb/", Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder"));
-        connectContext.getSessionVariable().setMaterializedViewRewriteStrategy(2);
+        connectContext.getSessionVariable().setMaterializedViewRewriteStrategy(
+                MvRewriteStrategy.MVStrategy.MULTI_STAGES.getOrdinal());
     }
 
     @Test
@@ -45,7 +47,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
         String mv3 = "CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC every (interval 10 minute) AS\n" +
                 "select * from mv1 lo join mv2 cust on lo.lo_custkey = cust.c_custkey;";
 
-        connectContext.getSessionVariable().setQueryIncludingMVNames("mv1,mv2,mv3");
         starRocksAssert.withMaterializedViews(ImmutableList.of(mv1, mv2, mv3), (obj) -> {
             String query = "select *\n" +
                     "from (\n" +
@@ -61,7 +62,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                     "on lo.lo_custkey = cust.c_custkey;";
             sql(query).contains("mv3");
         });
-        connectContext.getSessionVariable().setQueryIncludingMVNames("");
     }
 
     @Test
@@ -70,9 +70,8 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                 "select p_brand, LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum\n" +
                 "from lineorder l left join part p on l.LO_PARTKEY = p.P_PARTKEY\n" +
                 "group by p_brand, LO_ORDERDATE";
-        connectContext.getSessionVariable().setQueryIncludingMVNames("mv0");
 
-        // TODO: This case must disable outer join to inner join in `JoinPredicatePushdown`
+        // This case must disable outer join to inner join in `JoinPredicatePushdown`
         starRocksAssert.withMaterializedView(mv, () -> {
             String query = "select t1.p_brand as p_brand, t1.LO_ORDERDATE as LO_ORDERDATE,\n" +
                     "SUM(revenue_sum) + SUM(supplycost_sum) as revenue_and_supplycost_sum\n" +
@@ -90,7 +89,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                     "group by t1.p_brand, t1.LO_ORDERDATE;";
             sql(query).contains("mv0");
         });
-        connectContext.getSessionVariable().setQueryIncludingMVNames("");
     }
 
     @Test
@@ -98,7 +96,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
         String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
                 "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum\n" +
                 "from lineorder l group by LO_ORDERDATE";
-        connectContext.getSessionVariable().setQueryIncludingMVNames("mv0");
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
 
         starRocksAssert.withMaterializedView(mv, () -> {
@@ -107,7 +104,48 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                     "   group by LO_ORDERDATE";
             sql(query).contains("mv0");
         });
-        connectContext.getSessionVariable().setQueryIncludingMVNames("");
+    }
+
+    @Test
+    public void testJoinWithMultiCountDistinct() {
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, " +
+                "   bitmap_union(to_bitmap(LO_REVENUE)), \n" +
+                "   bitmap_union(to_bitmap(lo_linenumber)), \n" +
+                "   bitmap_union(to_bitmap(lo_custkey)), \n" +
+                "   bitmap_union(to_bitmap(lo_partkey)), \n" +
+                "   bitmap_union(to_bitmap(lo_suppkey)), \n" +
+                "   bitmap_union(to_bitmap(lo_orderpriority)), \n" +
+                "   bitmap_union(to_bitmap(lo_shippriority)), \n" +
+                "   bitmap_union(to_bitmap(lo_ordtotalprice)), \n" +
+                "   bitmap_union(to_bitmap(lo_tax)), \n" +
+                "   bitmap_union(to_bitmap(lo_shipmode)) \n" +
+                "from lineorder l group by LO_ORDERDATE";
+
+        starRocksAssert.withMaterializedView(mv, () -> {
+            {
+                String query = "select LO_ORDERDATE, count(distinct LO_REVENUE) as revenue_sum\n" +
+                        "   from lineorder l \n" +
+                        "   group by LO_ORDERDATE";
+                sql(query).contains("mv0");
+            }
+
+            {
+                String query = "select LO_ORDERDATE, " +
+                    "   count(distinct LO_REVENUE), \n" +
+                    "   count(distinct lo_linenumber), \n" +
+                    "   count(distinct lo_custkey), \n" +
+                    "   count(distinct lo_suppkey), \n" +
+                    "   count(distinct lo_partkey), \n" +
+                    "   count(distinct lo_orderpriority), \n" +
+                    "   count(distinct lo_shippriority), \n" +
+                    "   count(distinct lo_ordtotalprice), \n" +
+                    "   count(distinct lo_tax), \n" +
+                    "   count(distinct lo_shipmode) \n" +
+                    "from lineorder l group by LO_ORDERDATE";
+                sql(query).contains("mv0");
+            }
+        });
     }
 
     @Test
@@ -116,8 +154,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
         String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
                 "select LO_ORDERDATE, bitmap_union(to_bitmap(LO_REVENUE)) as revenue_sum\n" +
                 "from lineorder l group by LO_ORDERDATE";
-        connectContext.getSessionVariable().setQueryIncludingMVNames("mv0");
-        connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
 
         starRocksAssert.withMaterializedView(mv, () -> {
@@ -142,7 +178,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                 sql(query).contains("mv0");
             }
         });
-        connectContext.getSessionVariable().setQueryIncludingMVNames("");
     }
 
     @Test
@@ -151,8 +186,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
         String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
                 "select LO_ORDERDATE, count(distinct LO_REVENUE) as revenue_sum\n" +
                 "from lineorder l group by LO_ORDERDATE";
-        connectContext.getSessionVariable().setQueryIncludingMVNames("mv0");
-        connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
 
         starRocksAssert.withMaterializedView(mv, () -> {
@@ -164,6 +197,5 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                 sql(query).contains("mv0");
             }
         });
-        connectContext.getSessionVariable().setQueryIncludingMVNames("");
     }
 }
