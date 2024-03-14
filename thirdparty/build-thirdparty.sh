@@ -1237,8 +1237,8 @@ strip_binary() {
 # set GLOBAL_C*FLAGS for easy restore in each sub build process
 export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L"
-export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L -gz=zlib"
+export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -gz=zlib"
 
 # set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
 export CPPFLAGS=$GLOBAL_CPPFLAGS
