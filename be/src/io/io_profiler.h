@@ -54,14 +54,8 @@ public:
     static IOStatEntry* get_context();
     static void clear_context();
 
-<<<<<<< HEAD
-=======
-    static void take_tls_io_snapshot(IOStat* snapshot);
-    static IOStat calculate_scoped_tls_io(const IOStat& snapshot);
-
     static bool is_empty();
 
->>>>>>> 9075b0a81f ([BugFix] Reset historical io stats after catch io profile (#42517))
     class Scope {
     public:
         Scope() = delete;
