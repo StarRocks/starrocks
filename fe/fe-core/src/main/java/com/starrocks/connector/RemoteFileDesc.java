@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -33,6 +34,7 @@ public class RemoteFileDesc {
     private long modificationTime;
     private ImmutableList<RemoteFileBlockDesc> blockDescs;
     private boolean splittable;
+    private RemoteFileInputFormat inputFormat;
     private TextFileFormatDesc textFileFormatDesc;
     private ImmutableList<String> hudiDeltaLogs;
 
@@ -110,6 +112,14 @@ public class RemoteFileDesc {
     public RemoteFileDesc setSplittable(boolean splittable) {
         this.splittable = splittable;
         return this;
+    }
+
+    public RemoteFileInputFormat getInputFormat() {
+        return inputFormat;
+    }
+
+    public void setInputFormat(RemoteFileInputFormat inputFormat) {
+        this.inputFormat = inputFormat;
     }
 
     public RemoteFileDesc setTextFileFormatDesc(TextFileFormatDesc textFileFormatDesc) {

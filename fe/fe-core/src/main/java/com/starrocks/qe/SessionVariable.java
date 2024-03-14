@@ -673,6 +673,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String JIT_LEVEL = "jit_level";
 
+    public static final String CONNECTOR_MAX_SPLIT_SIZE = "connector_max_split_size";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1727,6 +1729,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = JIT_LEVEL)
     private int jitLevel = 1;
+
+    @VarAttr(name = CONNECTOR_MAX_SPLIT_SIZE)
+    private long connectorMaxSplitSize = 64L * 1024L * 1024L;
 
     private int exprChildrenLimit = -1;
 
@@ -3448,6 +3453,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return  enableArrayDistinctAfterAggOpt;
     }
 
+    public long getConnectorMaxSplitSize() {
+        return connectorMaxSplitSize;
+    }
+
+    public boolean isEnableConnectorSplitIoTasks() {
+        return enableConnectorSplitIoTasks;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -3568,6 +3581,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setJit_level(jitLevel);
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
         tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
+        tResult.setConnector_max_split_size(connectorMaxSplitSize);
         return tResult;
     }
 

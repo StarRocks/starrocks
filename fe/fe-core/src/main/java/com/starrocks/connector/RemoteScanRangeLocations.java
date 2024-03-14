@@ -86,10 +86,17 @@ public class RemoteScanRangeLocations {
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
                                        Optional<RemoteFileBlockDesc> blockDesc, DataCacheOptions dataCacheOptions) {
-        // NOTE: Config.hive_max_split_size should be extracted to a local variable,
-        // because it may be changed before calling 'splitScanRangeLocations'
-        // and after needSplit has been calculated.
-        final long splitSize = Config.hive_max_split_size;
+        long splitSize = Config.hive_max_split_size;
+        ConnectContext connectContext = ConnectContext.get();
+        boolean splitIOTasksOnBackend = false;
+        if (connectContext != null) {
+            splitSize = connectContext.getSessionVariable().getConnectorMaxSplitSize();
+            splitIOTasksOnBackend = connectContext.getSessionVariable().isEnableConnectorSplitIoTasks();
+        }
+        if (!fileDesc.getInputFormat().isBackendSplittable()) {
+            splitIOTasksOnBackend = false;
+        }
+
         long totalSize = fileDesc.getLength();
         long offset = 0;
 
@@ -100,7 +107,12 @@ public class RemoteScanRangeLocations {
             offset = block.getOffset();
         }
 
-        boolean needSplit = fileDesc.isSplittable() && totalSize > splitSize;
+        // do split when meet all conditions:
+        // 1. when backend can not do split.
+        // 2. when this file is splittable
+        // 3. when total size is larger than split size.
+        boolean needSplit = (!splitIOTasksOnBackend) && (fileDesc.isSplittable()) && (totalSize > splitSize);
+
         if (needSplit) {
             splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, offset, totalSize, splitSize,
                     dataCacheOptions);
