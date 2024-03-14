@@ -2650,9 +2650,16 @@ public class PlanFragmentBuilder {
             // reset column is nullable, for handle union select xx join select xxx...
             setOperationNode.setHasNullableGenerateChild();
             List<Expr> setOutputList = Lists.newArrayList();
-            for (ColumnRefOperator columnRefOperator : setOperation.getOutputColumnRefOp()) {
+            for (int index = 0; index < setOperation.getOutputColumnRefOp().size(); index++) {
+                ColumnRefOperator columnRefOperator = setOperation.getOutputColumnRefOp().get(index);
                 SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(columnRefOperator.getId()));
-                slotDesc.setIsNullable(slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild());
+                boolean isNullable = slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild();
+                for (List<ColumnRefOperator> childOutputColumn : setOperation.getChildOutputColumns()) {
+                    ColumnRefOperator childRef = childOutputColumn.get(index);
+                    Expr childExpr = ScalarOperatorToExpr.buildExecExpression(childRef, formatterContext);
+                    isNullable |= childExpr.isNullable();
+                }
+                slotDesc.setIsNullable(isNullable);
                 setOutputList.add(new SlotRef(String.valueOf(columnRefOperator.getId()), slotDesc));
             }
             setOperationTuple.computeMemLayout();
