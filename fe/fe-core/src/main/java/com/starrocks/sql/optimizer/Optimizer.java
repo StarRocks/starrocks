@@ -308,7 +308,9 @@ public class Optimizer {
                                   ColumnRefFactory columnRefFactory, ColumnRefSet requiredColumns) {
         // prepare related mvs if needed and initialize mv rewrite strategy
         new MvRewritePreprocessor(connectContext, columnRefFactory, context, requiredColumns)
-                .prepare(logicOperatorTree, mvRewriteStrategy);
+                .prepare(logicOperatorTree);
+        // initialize mv rewrite strategy finally
+        mvRewriteStrategy = MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, logicOperatorTree);
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -341,14 +343,57 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             rootTaskContext.setRequiredColumns(requiredColumns.clone());
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-            context.setEnableLeftRightJoinEquivalenceDerive(true);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         }
     }
 
+    private void ruleBasedMaterializedViewRewriteEarlyStage(OptExpression tree,
+                                                            TaskContext rootTaskContext,
+                                                            ColumnRefSet requiredColumns) {
+        if (!mvRewriteStrategy.mvStrategy.isMultiStages()) {
+            return;
+        }
+
+        OptimizerTraceUtil.logOptExpression("before RuleBasedMaterializedViewRewrite:\n%s", tree);
+
+        ///////////// Normalize query plan before rule based mv rewrite. /////////////
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+        CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
+        rootTaskContext.setRequiredColumns(requiredColumns.clone());
+
+        // TODO: disable join reorder for both query and mv's plan for better match and optimizer cost.
+
+        // try view based mv rewrite first, then try normal mv rewrite rules
+        if (mvRewriteStrategy.enableRBOViewBasedRewrite) {
+            // view based mv rewrite for single view
+            viewBasedMvRuleRewrite(tree, rootTaskContext);
+        }
+
+        if (mvRewriteStrategy.enableForceRBORewrite) {
+            // use rule based mv rewrite strategy to do mv rewrite for multi tables query
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
+        } else if (mvRewriteStrategy.enableRBOSingleTableRewrite) {
+            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        }
+
+        // only do this after mv has been rewritten success
+        if (context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+            deriveLogicalProperty(tree);
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        }
+        OptimizerTraceUtil.logOptExpression("after RuleBasedMaterializedViewRewrite:\n%s", tree);
+    }
+
     private void ruleBasedMaterializedViewRewrite(OptExpression tree,
                                                   TaskContext rootTaskContext) {
-        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
+        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
+                context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             return;
         }
         if (mvRewriteStrategy.enableRBOViewBasedRewrite) {
@@ -381,8 +426,17 @@ public class Optimizer {
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperators(tree, context);
-        if (sessionVariable.isEnableRboTablePrune()) {
-            context.setEnableLeftRightJoinEquivalenceDerive(false);
+
+        // Whether to do complete equivalence derive in
+        // {@link com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule}, eg: outer join to inner join,
+        // or derive equivalence derive for outer joins.
+        // NOTE: It's useful for normal queries but it will disturb some rewrite rule(eg: mv rewrite, table prune), so add
+        // a config to control it.
+        if (sessionVariable.isEnableRboTablePrune() || mvRewriteStrategy.mvStrategy.isMultiStages()) {
+            context.getJoinPushDownParams().enableLeftRightJoinEquivalenceDerive = false;
+            if (mvRewriteStrategy.mvStrategy.isMultiStages()) {
+                context.getJoinPushDownParams().enableLeftRightJoinToInnerJoin = false;
+            }
         }
 
         // inline CTE if consume use once
@@ -430,6 +484,13 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+
+        // rule based materialized view rewrite: early stage
+        ruleBasedMaterializedViewRewriteEarlyStage(tree, rootTaskContext, requiredColumns);
+        if (sessionVariable.isEnableRboTablePrune() || mvRewriteStrategy.mvStrategy.isMultiStages()) {
+            context.resetJoinPushDownParams();
+        }
+
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);

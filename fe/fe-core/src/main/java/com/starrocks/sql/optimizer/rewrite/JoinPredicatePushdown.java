@@ -59,19 +59,20 @@ public class JoinPredicatePushdown {
 
     private List<ScalarOperator> leftPushDown;
     private List<ScalarOperator> rightPushDown;
-    private boolean enableLeftRightOuterJoinEquivalenceDerive = true;
+
+    // Join push down parameters to control the push down strategies.
+    private final OptimizerContext.JoinPushDownParams joinPushDownParams;
 
     private final OptimizerContext optimizerContext;
 
     public JoinPredicatePushdown(
             OptExpression joinOptExpression, boolean isOnPredicate, boolean directToChild,
-            ColumnRefFactory columnRefFactory, boolean enableLeftRightOuterJoinEquivalenceDerive,
-            OptimizerContext optimizerContext) {
+            ColumnRefFactory columnRefFactory, OptimizerContext optimizerContext) {
         this.joinOptExpression = joinOptExpression;
         this.isOnPredicate = isOnPredicate;
         this.directToChild = directToChild;
         this.columnRefFactory = columnRefFactory;
-        this.enableLeftRightOuterJoinEquivalenceDerive = enableLeftRightOuterJoinEquivalenceDerive;
+        this.joinPushDownParams = optimizerContext.getJoinPushDownParams();
         this.leftPushDown = Lists.newArrayList();
         this.rightPushDown = Lists.newArrayList();
         this.optimizerContext = optimizerContext;
@@ -378,7 +379,7 @@ public class JoinPredicatePushdown {
             newOnPredicate = equivalenceDeriveOnPredicate(newOnPredicate, joinOptExpression, join);
             return newOnPredicate;
         } else {
-            if (join.getJoinType().isOuterJoin()) {
+            if (joinPushDownParams.enableLeftRightJoinToInnerJoin && join.getJoinType().isOuterJoin()) {
                 joinOptExpression = convertOuterToInner(joinOptExpression, predicateToPush);
                 join = (LogicalJoinOperator) joinOptExpression.getOp();
             }
@@ -389,8 +390,8 @@ public class JoinPredicatePushdown {
             } else {
                 ScalarOperator predicate = rangePredicateDerive(predicateToPush);
                 JoinOperator joinType = join.getJoinType();
-                if (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin() ||
-                        enableLeftRightOuterJoinEquivalenceDerive) {
+                if (joinPushDownParams.enableLeftRightJoinEquivalenceDerive ||
+                        (!joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin())) {
                     getPushdownPredicatesFromEquivalenceDerive(
                             Utils.compoundAnd(join.getOnPredicate(), predicate), joinOptExpression, join);
                 }
