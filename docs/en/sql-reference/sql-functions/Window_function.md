@@ -229,7 +229,7 @@ This function is supported from v3.2.
 CUME_DIST() OVER (partition_by_clause order_by_clause)
 ```
 
-**This function must be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value `N/N = 1`, where `N` is the partition size.**
+**This function must be used with ORDER BY to sort partition rows into the desired order.**
 
 CUME_DIST() contains NULL values and treats them as the lowest values.
 
@@ -375,7 +375,7 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 
 `IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the last value in the filtered result is NULL. If you specify IGNORE NULLS, the last non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
-By default, last_value() calculates `rows between unbounded preceding and current row`, which compares the current row with all its preceding rows. If you want to show only one value for each partition, use `rows between unbounded preceding and unbounded following` after ORDER BY.
+By default, LAST_VALUE() calculates `rows between unbounded preceding and current row`, which compares the current row with all its preceding rows. If you want to show only one value for each partition, use `rows between unbounded preceding and unbounded following` after ORDER BY.
 
 **Examples:**
 
@@ -521,7 +521,7 @@ For value 6 in row 7, the value two rows backward is NULL and NULL is ignored be
 
 Returns the value of the row that leads the current row by `offset` rows. This function is often used to compare values between rows and filter data.
 
-Data types that can be queried by `lead()` are the same as those supported by [lag()](#lag).
+Data types that can be queried by `LEAD()` are the same as those supported by [LAG()](#lag).
 
 **Syntax:**
 
@@ -805,7 +805,7 @@ As the above example shown, when `num_buckets` is `2`:
 
 The PERCENT_RANK() function calculates the relative rank of a row within a result set as a percentage. It returns the percentage of partition values less than the value in the current row, excluding the highest value. The return values range from 0 to 1. This function is useful for percentile calculations and analyzing data distribution.
 
-The PERCENT_RANK() function is calculated using the following formula, where rank represents the row rank and rows represents the number of partition rows:
+The PERCENT_RANK() function is calculated using the following formula, where RANK() represents the row rank and rows represents the number of partition rows:
 
 ```plaintext
 (rank - 1) / (rows - 1)

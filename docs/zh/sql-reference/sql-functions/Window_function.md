@@ -234,7 +234,7 @@ CUME_DIST() 将 NULL 值作为最小值处理。
 
 **示例**：
 
-以下示例计算各个科目下每个得分的累积分布情况。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
+以下示例计算各个科目下每个得分按照升序排序后的累积分布情况。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```sql
 SELECT *, 
@@ -273,9 +273,9 @@ FROM scores;
 +------+-------+---------+-------+---------------------+
 ```
 
-- 对于第一行 `cume_dist` 数据 `1`，分组 NULL 中只有这一行数据，小于等于 90 分的数据只有这一行，累积分布为 1。
-- 对于第二行数据 `0.2`，分组 `english` 中有 5 个值，小于等于 NULL 分的数据只有一行 (NULL)，累积分布为 0.2。
-- 对于第三行数据 `0.4`，分组 `english` 中有 5 个值，小于等于 85 分的数据有两行（85 和 NULL），累积分布为 0.4。
+- 对于第一行 `cume_dist` 数据 `1`，分组 NULL 中只有这一行数据，小于等于当前值 90 分的数据只有这一行本身，所以累积分布为 1。
+- 对于第二行数据 `0.2`，分组 `english` 中有 5 行数据，小于等于当前值 NULL 的数据只有一行 (NULL 本身)，所以累积分布为 0.2。
+- 对于第三行数据 `0.4`，分组 `english` 中有 5 行数据，小于等于当前值 85 分的数据有两行（85 和 NULL），所以累积分布为 0.4。
 
 ## 使用 DENSE_RANK() 窗口函数
 
@@ -383,7 +383,7 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 
 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果最后一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
-last_value() 默认会统计 `rows between unbounded preceding and current row`，即会对比当前行与之前所有行。如果每个分区只想显示一个结果，可以在 ORDER BY 后使用 `rows between unbounded preceding and unbounded following`.
+LAST_VALUE() 默认会统计 `rows between unbounded preceding and current row`，即会对比当前行与之前所有行。如果每个分区只想显示一个结果，可以在 ORDER BY 后使用 `rows between unbounded preceding and unbounded following`.
 
 **示例**：
 
@@ -454,7 +454,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 **示例**：
 
-示例一：lag 中未指定 IGNORE NULLS
+示例一：LAG() 中未指定 IGNORE NULLS
 
 建表并插入数据：
 
@@ -502,7 +502,7 @@ FROM test_tbl ORDER BY col_1;
 
 对于第 3 行数据 NULL，往前遍历两行对应的值是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
 
-示例二：lag 中指定了 IGNORE NULLS
+示例二：LAG() 中指定了 IGNORE NULLS
 
 依然使用上面的数据表。
 
@@ -551,7 +551,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 **示例**：
 
-示例一：lead 中未指定 IGNORE NULLS
+示例一：LEAD() 中未指定 IGNORE NULLS
 
 建表并插入数据：
 
@@ -599,7 +599,7 @@ FROM test_tbl ORDER BY col_1;
 
 对于最后两行，因为往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
 
-示例二：lead 中指定了 IGNORE NULLS
+示例二：LEAD() 中指定了 IGNORE NULLS
 
 依然使用上面的数据表。
 
@@ -1033,7 +1033,7 @@ ORDER BY city_id;
 +---------+--------+-------+
 ```
 
-示例三：按照 `item` 将表分为 2 个分区，使用 rank() 获取每个分区里销量 `sales` 排名第一的记录。
+示例三：按照 `item` 将表分为 2 个分区，使用 RANK() 获取每个分区里销量 `sales` 排名第一的记录。
 
 ```SQL
 SELECT city_id, item, sales
