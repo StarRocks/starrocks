@@ -1963,6 +1963,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
         writeLock();
+        if (this.substate == substate && reason == null) {
+            return;
+        }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_substate", this.substate)
                 .add("desire_job_substate", substate)
