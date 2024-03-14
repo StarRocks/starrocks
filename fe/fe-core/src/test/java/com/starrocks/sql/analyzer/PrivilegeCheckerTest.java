@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
@@ -3833,5 +3834,11 @@ public class PrivilegeCheckerTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("only allow set password for native user"));
         }
+
+        // clean
+        String dropUserSql = "drop user testNonNativeUser";
+        DropUserStmt dropUserStmt =
+                (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropUserSql, starRocksAssert.getCtx());
+        authenticationManager.dropUser(dropUserStmt);
     }
 }
