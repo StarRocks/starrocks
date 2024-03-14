@@ -127,20 +127,6 @@ public:
 
     void reset_cancel_major_compaction();
 
-<<<<<<< HEAD
-=======
-    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
-
-    // only for ut
-    void set_status(bool loaded, Status st) {
-        _loaded = loaded;
-        _status = st;
-    }
-
-protected:
-    void _set_schema(const Schema& pk_schema);
-
->>>>>>> 4d02de56d8 ([BugFix] Check the return value after load primary index in pk compaction (#42221))
 private:
     void _set_schema(const vectorized::Schema& pk_schema);
 
