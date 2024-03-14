@@ -2,25 +2,16 @@
 
 ## Key 列和排序键
 
-|                                            | **主键(Primary Key table)**               | **明细表(Duplicate Key table)**                          | **聚合表(Aggregate Key table)**                         | **更新表(Unique Key table)**                             |
-| ------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| **Key 列和唯一约束**                       | 主键（Primary Key）具有唯一约束和非空约束。                  | Duplicate Key 不具有唯一约束。                               | 聚合键（Aggregate Key）具有唯一约束。                        | 唯一键（Unique Key）唯一约束。                               |
-| **Key 列和数据变更的逻辑关系**| 基于主键对数据进行增删改操作。如果新数据的主键值与表中原数据的主键值相同，则存在唯一约束冲突，此时新数据会替代原数据。:::note与更新表相比，主键表增强了其底层存储引擎。已经可以取代更新表。::: | Duplicate Key 不具有唯一约束，因此如果新数据的 Duplicate Key 与表中原数据相同，则新旧数据都会存在表中。 | 基于聚合键对数据进行增删改操作。如果新数据与表中原数据存在唯一约束冲突，则会根据聚合键和 Value 列的聚合函数聚合新旧数据。 | 基于唯一键对数据进行增删改操作。如果新数据与表中原数据存在唯一约束冲突，则新数据会替代原数据。:::note更新表实际可以视为聚合函数为 replace 的聚合表。::: |
-| **Key 列和排序键的关系**                   | 自 3.0 起，两者解耦。                                        | 两者耦合.                                                    |                                                              |                                                              |
-| **Key 列和维度列的关系**                   | 必须是**全体**维度列。                                       | 可以是**全部或者部分**维度列 。                              | 必须是**全体**维度列。                                       |                                                              |
-| **排序键和维度列的关系**                   | 自 3.0 起，排序键与 Key 列解耦，排序键通过 `ORDER BY` 指定，可以为各种列的排列组合。只要列的数据类型满足排序键的要求。 | 可以是**全部或者部分**维度列。                               | 必须是**全体**维度列。                                       |                                                              |
-| **Key 列和排序键支持的数据类型**       | 数值（包括整型、布尔）、字符串、时间日期。                   | 数值（包括整型、布尔、Decimal）、字符串、时间日期。          |                                                              |                                                              |
-| **Key 列和分区/分桶列的关系**                | 分区列、分桶列必须在主键中。                                 | 无                                                           | 分区列、分桶列必须在聚合键中。                               | 分区列、分桶列必须在唯一键中。                               |
-
-:::note
-
-维度列和指标列：StarRocks 是分析型数据库，帮助您基于多维度分析业务数据的指标情况，以便更深入地理解数据的关系和趋势。因此业务数据中通常可以分为维度列和指标列。
-
-:::
+<table>
+<thead>
+<tr><th> </th><th><strong>主键表 (Primary Key table)</strong></th><th><strong>明细表 (Duplicate Key table)</strong></th><th><strong>聚合表 (Aggregate Key table)</strong></th><th><strong>更新表 (Unique Key table)</strong></th></tr>
+</thead>
+<tr><td width= "200"><strong>Key 列和唯一约束</strong></td><td>主键（Primary Key）具有唯一约束和非空约束。</td><td>Duplicate Key 不具有唯一约束。</td><td>聚合键（Aggregate Key）具有唯一约束。</td><td>唯一键（Unique Key）唯一约束。</td></tr><tr><td><strong>Key 列和数据变更的关系（逻辑关系）</strong></td><td>基于主键对数据进行增删改操作。如果新数据的主键值与表中原数据的主键值相同，则存在唯一约束冲突，此时新数据会替代原数据。<br />与更新表相比，主键表增强了其底层存储引擎。已经可以取代更新表。</td><td>Duplicate Key 不具有唯一约束，因此如果新数据的 Duplicate Key 与表中原数据相同，则新旧数据都会存在表中。</td><td>基于聚合键对数据进行增删改操作。如果新数据与表中原数据存在唯一约束冲突，则会根据聚合键和 Value 列的聚合函数聚合新旧数据。</td><td>基于唯一键对数据进行增删改操作。如果新数据与表中原数据存在唯一约束冲突，则新数据会替代原数据。<br />更新表实际可以视为聚合函数为 replace 的聚合表。</td></tr><tr><td><strong>Key 列和排序键的关系</strong></td><td>自 3.0 起，两者解耦。</td><td colspan="3">两者耦合。</td></tr><tr><td><strong>Key 列和排序键支持的数据类型</strong></td><td>数值（包括整型、布尔）、字符串、时间日期。</td><td colspan="3">数值（包括整型、布尔、Decimal）、字符串、时间日期。</td></tr><tr><td><strong>Key 和分区/分桶列的关系</strong></td><td>分区列、分桶列必须在主键中。</td><td>无</td><td>分区列、分桶列必须在聚合键中。</td><td>分区列、分桶列必须在唯一键中。</td></tr>
+</table>
 
 ## Key 列和 Value 列的数据类型
 
-表中 Key 列支持数据类型为**：**数值（包括整型、布尔和 DECIMAL）、字符串、时间日期。
+表中 Key 列支持数据类型为数值（包括整型、布尔和 DECIMAL）、字符串、时间日期。
 
 :::note
 
@@ -30,34 +21,27 @@
 
 而表中 Value 列支持基础的数据类型，包括数值、字符串、时间日期。不同类型的表中 Value 列对于 BITMAP、HLL 以及半结构化类型的支持度不同，具体如下：
 
-|                                                  | **主键****表** **(****Primary Key** **table)** | **明细表****(Duplicate Key table)** | **聚合表** **(Aggregate Key table)**                         | **更新表****(Unique Key table)** |
-| ------------------------------------------------ | ---------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ | -------------------------------- |
-| **BITMAP**                                       | 支持                                           | 不支持                              | 支持。聚合函数必须为 bitmap_union、replace 或者replace_if_not_null。 | 支持                             |
-| **HLL**                                          | 支持                                           | 不支持                              | 支持。聚合函数必须为 hll_union、replace 或者replace_if_not_null。 | 支持                             |
-| **PERCENTILE**                                   | 支持                                           | 不支持                              | 支持。聚合函数必须为 percentile_union、replace 或者replace_if_not_null。 | 支持                             |
-| **半结构化类型：** **JSON****/ARRAY/MAP/STRUCT** | 支持                                           | 支持                                | 支持。聚合函数必须为 replace 或者replace_if_not_null。       | 支持                             |
+<table>
+<thead>
+<tr><th> </th><th><strong>主键表 (Primary Key table)</strong></th><th><strong>明细表 (Duplicate Key table)</strong></th><th><strong>聚合表 (Aggregate Key table)</strong></th><th><strong>更新表 (Unique Key table)</strong></th></tr>
+</thead>
+<tbody><tr><td><strong>BITMAP</strong></td><td>支持</td><td>不支持</td><td>支持。聚合函数必须为 bitmap_union、replace 或者 replace_if_not_null。</td><td>支持</td></tr><tr><td><strong>HLL</strong></td><td>支持</td><td>不支持</td><td>支持。聚合函数必须为 hll_union、replace 或者replace_if_not_null。</td><td>支持</td></tr><tr><td><strong>PERCENTILE</strong></td><td>支持</td><td>不支持</td><td>支持。聚合函数必须为 percentile_union、replace 或者 replace_if_not_null。</td><td>支持</td></tr><tr><td><strong>半结构化类型：</strong> <strong>JSON/ARRAY/MAP/STRUCT</strong></td><td>支持</td><td>支持</td><td>支持。聚合函数必须为 replace 或者 replace_if_not_null。</td><td>支持</td></tr></tbody>
+</table>
 
 ## 数据变更
 
-|                               | **主键表(Primary Key table)**               | **明细表(Duplicate Key table)**                          | **聚合表(Aggregate Key table)**                         | **更新表(Unique Key table)**                             |
-| ----------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| **导入数据时实现INSERT** | 支持。[在导入任务中配置`__op=0` 实现 INSERT](../../loading/Load_to_Primary_Key_tables.md)。 <br/>内部实现时，StarRocks 将 INSERT 和 UPDATE 操作均视为 UPSERT 操作。 | 支持                                                         | 支持（同聚合键值的数据行会聚合）                             | 支持（同唯一键值的数据行会更新）                             |
-| **导入数据时实现****UPDATE**  | 不支持                                                       | 支持（使用 Replace 聚合函数实现）                            | 支持（更新表本身就可以视为使用 Replace 聚合函数的聚合表）    |                                                              |
-| **导入数据时实现****DELETE**  | 支持。[在导入任务中配置`__op=1` 实现 DELETE](../../loading/Load_to_Primary_Key_tables.md)。             | 不支持                                                       | 不支持                                                       | 不支持                                                       |
-| **导入数据列值的完整性**      | 默认必须导入全部列值。如果开启部分列更新`partial_update`，或者列具有默认值，则无需导入全部列值。 | 默认必须导入全部列值。如果列具有默认值，则无需导入全部列值。 | 默认必须导入全部列值。不过，聚合表可以通过指定Value 列的聚合函数为REPLACE_IF_NOT_NULL 实现部分列更新，具体使用方式，请参见 [aggr_type](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#column_definition)。并且如果列具有默认值，也无需导入全部列值。 | 默认必须导入全部列值。如果列具有默认值，则无需导入全部列值。 |
-| **DML [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md)**     | 支持                                                         |                                                              |                                                              |                                                              |
-| **DML [UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md)**     | <ul><li>Key 列作为过滤条件：支持。</li><li>Value 列作为过滤条件：支持。</li></ul>    | 不支持                                                       |                                                              |                                                              |
-| **DML [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)**     | <ul><li>Key 列作为过滤条件：支持。</li><li>Value 列作为过滤条件：支持。</li></ul>            | <ul><li>Key 列作为过滤条件：支持。</li><li>Value 列作为过滤条件：支持。</li></ul>注意，仅支持基于 Key 或 Value  列本身的简单过滤条件，如 =、<、>，不支持复杂条件，如函数、子查询。 | <ul><li>Key 列作为过滤条件：支持。注意，仅支持基于 Key 列本身的简单过滤条件，如 `=`、<、>，不支持复杂条件，如函数、子查询。</li><li>Value 列作为过滤条件：不支持。</li></ul> |                                                              |
+<table>
+<thead>
+<tr><th> </th><th width= "200"><strong>主键表 (Primary Key table)</strong></th><th><strong>明细表 (Duplicate Key table)</strong></th><th width= "200"><strong>聚合表 (Aggregate Key table)</strong></th><th><strong>更新表 (Unique Key table)</strong></th></tr>
+</thead>
+<tbody><tr><td><strong>导入数据时实现</strong> <strong>INSERT</strong></td><td rowspan="2">支持。<a href=''>在导入任务中配置<code>__op=0</code> 实现 INSERT</a>。内部实现时，StarRocks 将 INSERT 和 UPDATE 操作均视为 UPSERT 操作。</td><td>支持</td><td>支持（同聚合键值的数据行会聚合）</td><td>支持（同唯一键值的数据行会更新）</td></tr><tr><td><strong>导入数据时实现 UPDATE</strong></td><td>不支持</td><td>支持（使用 Replace 聚合函数实现）</td><td>支持（更新表本身就可以视为使用 Replace 聚合函数的聚合表）</td></tr><tr><td><strong>导入数据时实现 DELETE</strong></td><td>支持。<a href=''>在导入任务中配置<code>__op=1</code> 实现 DELETE</a>。</td><td>不支持</td><td>不支持</td><td>不支持</td></tr><tr><td><strong>导入数据列值的完整性</strong></td><td>默认必须导入全部列值。如果开启部分列更新<code>partial_update</code>，或者列具有默认值，则无需导入全部列值。</td><td>默认必须导入全部列值。如果列具有默认值，则无需导入全部列值。</td><td>默认必须导入全部列值。不过，聚合表可以通过指定 Value 列的聚合函数为 REPLACE_IF_NOT_NULL 实现部分列更新，具体使用方式，请参见 <a href='../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#column_definition'>aggr_type</a>。并且如果列具有默认值，也无需导入全部列值。</td><td>默认必须导入全部列值。如果列具有默认值，则无需导入全部列值。</td></tr><tr><td><strong>DML</strong> <strong><a href='../../sql-reference/sql-statements/data-manipulation/INSERT.md'>INSERT</a></strong></td><td colspan="4">支持</td></tr><tr><td><strong>DML</strong><strong><a href='../../sql-reference/sql-statements/data-manipulation/UPDATE.md'>UPDATE</a></strong></td><td><ul><li>Key 列作为过滤条件：支持</li><li>Value 列作为过滤条件：支持</li></ul>   </td><td colspan="3">不支持</td></tr><tr><td><strong>DML</strong> <strong><a href='../../sql-reference/sql-statements/data-manipulation/DELETE.md'>DELETE</a></strong></td><td><ul><li>Key 列作为过滤条件：支持</li><li>Value 列作为过滤条件：支持</li></ul></td><td><ul><li>Key 列作为过滤条件：支持</li><li>Value 列作为过滤条件：支持注意，仅支持基于 Key 或 Value  列本身的简单过滤条件，如 =、&lt;、&gt;，不支持复杂条件，如函数、子查询。</li></ul></td><td  colspan="2"><ul><li>Key 列作为过滤条件： 支持。注意，仅支持基于 Key 列本身的简单过滤条件，如 =、&lt;、&gt;，不支持复杂条件，如函数、子查询。</li><li>Value 列作为过滤条件：不支持</li></ul></td></tr></tbody>
+</table>
 
 ## 和其他功能的兼容性
 
-|                                      | **主键表(Primary Key table)** | **明细表(Duplicate Key table)** | **聚合表(Aggregate Key table)** | **更新表(Unique Key table)** |        |
-| ------------------------------------ | ---------------------------------------------- | ----------------------------------- | ------------------------------------ | -------------------------------- | ------ |
-| **Bitmap 索引/Bloom filer 索引** | **基于 Key 列构建索引**                        | 支持                                |                                      |                                  |        |
-| **基于 Value 列构建索引**            | 支持                                           | 支持                                | 不支持                               | 不支持                           |        |
-| **分区/分桶**                    | **表达式分区/List 分区**                       | 支持                                |                                      |                                  |        |
-| **随机分桶**                         | 不支持                                         | 自 3.1 起，支持                     | 不支持                               | 不支持                           |        |
-| **物化视图**                         | **异步物化视图**                           | 支持                                |                                      |                                  |        |
-| **同步物化视图**                 | 不支持                                         | 支持                                | 支持                                 | 支持                             |        |
-| **其他功能**                         | **CTAS**                                       | 支持                                | 支持                                 | 不支持                           | 不支持 |
-| **backup & restore**                 | 自 2.5 起，支持                                | 支持                                |                                      |                                  |        |
+<table>
+<thead>
+<tr><th colspan="2"></th><th><strong>主键表 (Primary Key table)</strong></th><th><strong>明细表 (Duplicate Key table)</strong></th><th><strong>聚合表 (Aggregate Key table)</strong></th><th><strong>更新表 (Unique Key table)</strong></th></tr>
+</thead>
+<tbody><tr><td rowspan="2"><strong>Bitmap</strong> <strong>索引/Bloom filer 索引</strong></td><td><strong>基于 Key 列构建索引</strong></td><td colspan="4">支持</td></tr><tr><td><strong>基于 Value 列构建索引</strong></td><td>支持</td><td>支持</td><td>不支持</td><td>不支持</td></tr><tr><td rowspan="2"><strong>分区/分桶</strong></td><td><strong>表达式分区/List 分区</strong></td><td colspan="4">支持</td></tr><tr><td><strong>随机分桶</strong></td><td>不支持</td><td>自 3.1 起，支持</td><td>不支持</td><td>不支持</td></tr><tr><td  rowspan="2"><strong>物化视图</strong></td><td colspan="4"><strong>异步物化视图</strong></td><td>支持</td></tr><tr><td><strong>同步物化视图</strong></td><td>不支持</td><td>支持</td><td>支持</td><td>支持</td></tr><tr><td rowspan="2"><strong>其他功能</strong></td><td><strong>CTAS</strong></td><td>支持</td><td>支持</td><td>不支持</td><td>不支持</td></tr><tr><td><strong>backup &amp; restore</strong></td><td>自 2.5 起，支持</td><td colspan="3">支持</td></tr></tbody>
+</table>
