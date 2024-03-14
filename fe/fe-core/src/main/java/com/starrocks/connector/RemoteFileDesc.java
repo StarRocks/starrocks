@@ -118,8 +118,9 @@ public class RemoteFileDesc {
         return inputFormat;
     }
 
-    public void setInputFormat(RemoteFileInputFormat inputFormat) {
+    public RemoteFileDesc setInputFormat(RemoteFileInputFormat inputFormat) {
         this.inputFormat = inputFormat;
+        return this;
     }
 
     public RemoteFileDesc setTextFileFormatDesc(TextFileFormatDesc textFileFormatDesc) {

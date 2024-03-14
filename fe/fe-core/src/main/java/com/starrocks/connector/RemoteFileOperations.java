@@ -179,6 +179,7 @@ public class RemoteFileOperations {
                 .setFiles(fileDescs.stream()
                         .map(desc -> desc.setTextFileFormatDesc(partition.getTextFileFormatDesc()))
                         .map(desc -> desc.setSplittable(partition.isSplittable()))
+                        .map(desc -> desc.setInputFormat(partition.getInputFormat()))
                         .collect(Collectors.toList()));
 
         return builder.build();
