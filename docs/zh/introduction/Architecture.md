@@ -31,7 +31,7 @@ FE 有三种角色：Leader FE，Follower FE 和 Observer FE，区别如下。
 
 | **FE 角色** | **元数据读写**                                               | **Leader 选举**                                          |
 | --------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Leader          | Leader FE 提供元数据读写服务，Follower 和 Observer 只有读取权限，无写入权限。Follower 和 Observer 将元数据写入请求路由到 Leader，Leader 更新完元数据后，会通过 BDB JE (Berkeley DB Java Edition) 同步给 Follower 和 Observer。必须有半数以上的 Follower 节点同步成功才算作元数据写入成功。 | Leader 从 Follower 中自动选出。如果当前 Leader 节点失败，Follower 会发起新一轮选举。 |
+| Leader          | Leader FE 提供元数据读写服务，Follower 和 Observer 只有读取权限，无写入权限。Follower 和 Observer 将元数据写入请求路由到 Leader，Leader 更新完元数据后，会通过 BDB JE (Berkeley DB Java Edition) 同步给 Follower 和 Observer。必须有半数以上的 Follower 节点同步成功才算作元数据写入成功。 | Leader 本身也是 Follower 节点，是从 Follower 中自动选出的。如果当前 Leader 节点失败，Follower 会发起新一轮选举。 |
 | Follower        | 只有元数据读取权限，无写入权限。通过回放 Leader 的元数据日志来异步同步数据。 | Follower 参与 Leader 选举，会通过类 Paxos 的 BDBJE 协议自动选举出一个 Leader，必须有半数以上的 Follower 节点存活才能进行选主。 |
 | Observer        | 同 Follower。                                                | Observer 主要用于扩展集群的查询并发能力，可选部署。Observer 不参与选主，不会增加集群的选主压力。 |
 
