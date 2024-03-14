@@ -41,7 +41,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
-import com.starrocks.sql.optimizer.validate.InputDependenciesChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -314,39 +313,56 @@ public abstract class JoinOrder {
     protected Optional<ExpressionInfo> buildJoinExpr(GroupInfo leftGroup, GroupInfo rightGroup) {
         ExpressionInfo leftExprInfo = leftGroup.bestExprInfo;
         ExpressionInfo rightExprInfo = rightGroup.bestExprInfo;
-        ScalarOperator onPredicates = buildInnerJoinPredicate(leftGroup.atoms, rightGroup.atoms);
-
-        LogicalJoinOperator newJoin;
-
-        if (onPredicates != null) {
-            newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN, onPredicates);
-        } else {
-            newJoin = new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null);
-        }
+        List<ScalarOperator> onPredicates = buildInnerJoinPredicate(leftGroup.atoms, rightGroup.atoms);
 
         Map<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
-        if (onPredicates != null) {
-            ColumnRefSet useColumns = onPredicates.getUsedColumns();
+        if (!onPredicates.isEmpty()) {
+            ColumnRefSet allChildColumns = new ColumnRefSet();
+            allChildColumns.union(leftExprInfo.expr.getOutputColumns());
+            allChildColumns.union(rightExprInfo.expr.getOutputColumns());
 
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
-                if (!useColumns.contains(entry.getKey())) {
-                    continue;
-                }
+            for (int i = 0; i < onPredicates.size(); i++) {
+                ScalarOperator predicate = onPredicates.get(i);
+                ColumnRefSet useColumns = predicate.getUsedColumns();
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
+                    if (!useColumns.contains(entry.getKey())) {
+                        continue;
+                    }
 
-                if (entry.getValue().isConstantRef()) {
-                    // constant always on left
-                    leftExpression.put(entry.getKey(), entry.getValue());
-                    continue;
-                }
+                    if (entry.getValue().isConstantRef()) {
+                        // constant always on left
+                        leftExpression.put(entry.getKey(), entry.getValue());
+                        continue;
+                    }
 
-                ColumnRefSet valueUseColumns = entry.getValue().getUsedColumns();
-                if (leftExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
-                    leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
-                    rightExpression.put(entry.getKey(), entry.getValue());
+                    ColumnRefSet valueUseColumns = entry.getValue().getUsedColumns();
+                    if (leftExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
+                        leftExpression.put(entry.getKey(), entry.getValue());
+                        continue;
+                    } else if (rightExprInfo.expr.getOutputColumns().containsAll(valueUseColumns)) {
+                        rightExpression.put(entry.getKey(), entry.getValue());
+                        continue;
+                    }
+
+                    if (allChildColumns.containsAll(valueUseColumns)) {
+                        // depend on two children, must rewrite to origin expression
+                        ReplaceColumnRefRewriter rewriter =
+                                new ReplaceColumnRefRewriter(Map.of(entry.getKey(), entry.getValue()));
+                        predicate = rewriter.rewrite(predicate);
+                        onPredicates.set(i, predicate);
+                    } else {
+                        return Optional.empty();
+                    }
                 }
             }
+        }
+
+        LogicalJoinOperator newJoin;
+        if (!onPredicates.isEmpty()) {
+            newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN, Utils.compoundAnd(onPredicates));
+        } else {
+            newJoin = new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null);
         }
 
         pushRequiredColumns(leftExprInfo, leftExpression);
@@ -398,13 +414,6 @@ public abstract class JoinOrder {
                 joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
                         rightExprInfo.expr);
             }
-        }
-
-        try {
-            InputDependenciesChecker.getInstance().validate(joinExpr, context.getTaskContext());
-        } catch (Exception e) {
-            LOGGER.debug("the reorder result is not a valid plan.", e);
-            return Optional.empty();
         }
 
         if (reverse) {
@@ -476,7 +485,7 @@ public abstract class JoinOrder {
         exprInfo.expr.deriveLogicalPropertyItself();
     }
 
-    private ScalarOperator buildInnerJoinPredicate(BitSet left, BitSet right) {
+    private List<ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {
         List<ScalarOperator> onPredicates = Lists.newArrayList();
         BitSet joinBitSet = new BitSet();
         joinBitSet.or(left);
@@ -489,7 +498,7 @@ public abstract class JoinOrder {
                 onPredicates.add(edge.predicate);
             }
         }
-        return Utils.compoundAnd(onPredicates);
+        return onPredicates;
     }
 
     public boolean canBuildInnerJoinPredicate(GroupInfo leftGroup, GroupInfo rightGroup) {
