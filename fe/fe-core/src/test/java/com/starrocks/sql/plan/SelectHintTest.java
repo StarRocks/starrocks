@@ -40,5 +40,16 @@ public class SelectHintTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0");
+
+        sql = "select /*+ set_user_variable(@a = 1, @b = (select array_agg(v4) from t1))*/ @a, @b, v1 from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 1\n" +
+                "  |  <slot 5> : 'MOCK_HINT_VALUE'\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON");
     }
 }

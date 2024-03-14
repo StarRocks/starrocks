@@ -25,6 +25,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -354,18 +355,13 @@ public class SetStmtAnalyzer {
 
                 Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
 
+                Type type = variableResult.getType();
+                PrimitiveType primitiveType = variableResult.getType().getPrimitiveType();
+
                 //can not apply to metric types or complex type except array type
-                if (variableResult.getType().isOnlyMetricType() || variableResult.getType().isFunctionType()) {
+                if (!checkUserVariableType(type)) {
                     throw new SemanticException("Can't set variable with type " + variableResult.getType());
                 }
-
-                if (variableResult.getType().isArrayType()) {
-                    ArrayType arrayType = (ArrayType) variableResult.getType();
-                    if (!arrayType.getItemType().isScalarType()) {
-                        throw new SemanticException("Can't set variable with type " + variableResult.getType());
-                    }
-                }
-
 
                 ((SelectRelation) queryStatement.getQueryRelation()).getSelectList().getItems()
                         .set(0, new SelectListItem(variableResult, null));
@@ -422,5 +418,24 @@ public class SetStmtAnalyzer {
         userIdentity.analyze();
         var.setUserIdent(userIdentity);
         var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
+    }
+
+    private static boolean checkUserVariableType(Type type) {
+        if (type.isArrayType()) {
+            ArrayType arrayType = (ArrayType) type;
+            PrimitiveType itemPrimitiveType = arrayType.getItemType().getPrimitiveType();
+            if (itemPrimitiveType.isDateType() || itemPrimitiveType.isNumericType() ||
+                    itemPrimitiveType.isCharFamily() || itemPrimitiveType.isJsonType()) {
+                return true;
+            }
+        } else if (type.isScalarType()) {
+            PrimitiveType primitiveType = type.getPrimitiveType();
+            if (primitiveType.isDateType() || primitiveType.isNumericType() ||
+                    primitiveType.isCharFamily() || primitiveType.isJsonType()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
