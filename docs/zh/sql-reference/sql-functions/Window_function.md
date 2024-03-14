@@ -173,6 +173,8 @@ from stock_ticker;
 +--------------+---------------------+---------------+----------------+
 ```
 
+比如，第一行的 `moving_average` 取值 `12.87500000`，是 "2014-10-02" 的值 `12.86`，加前一天 "2014-10-02" 的值 null，再加后一天 "2014-10-03" 的值 `12.89` 之后的平均值。
+
 <br/>
 
 ## 使用 COUNT() 窗口函数
@@ -187,7 +189,7 @@ COUNT(expr) [OVER (analytic_clause)]
 
 **示例**：
 
-以下示例计算从**当前行到第一行**科目 `math` 分数大于 90 分的个数。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例计算从**当前行到第一行**科目 `math` 分数大于 90 分的个数。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *,
@@ -235,7 +237,7 @@ CUME_DIST() 将 NULL 值作为最小值处理。
 
 **示例**：
 
-以下示例计算各个科目下每个得分的累积分布情况。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例计算各个科目下每个得分的累积分布情况。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```sql
 SELECT *, 
@@ -274,9 +276,13 @@ FROM scores;
 +------+-------+---------+-------+---------------------+
 ```
 
+- 对于第一行数据 `1`，分组 NULL 中只有这一行数据，小于等于 90 分的数据只有这一行，累积分布为 100%。
+- 对于第二行数据 `0.2`，分组 `english` 中有 5 个值，小于等于 NULL 分的数据只有一行 (NULL)，累积分布为 20%。
+- 对于第三行数据 `0.4`，分组 `english` 中有 5 个值，小于等于 85 分的数据有两行（85 和 NULL），累积分布为 40%。
+
 ## 使用 DENSE_RANK() 窗口函数
 
-`DENSE_RANK()` 函数用来为特定窗口中的数据排名。当函数中出现相同排名时，下一行的排名为相同排名数加 1。因此，`DENSE_RANK()` 返回的序号**是连续的数字**。而 `RANK()` 返回的序号**有可能是不连续的数字**。
+`DENSE_RANK()` 函数用来为特定窗口中的数据排名。当函数中出现相同排名时，下一行的排名为相同排名数加 1。因此，`DENSE_RANK()` 返回的序号**是连续的数字**。而 `RANK()` 返回的序号**有可能是不连续的数字**。举例：如果前面有两个排名 1，DENSE_RANK() 第三行仍然会返回排名 2，但是 RANK() 第三行会返回 3。
 
 **语法**：
 
@@ -286,7 +292,7 @@ DENSE_RANK() OVER(partition_by_clause order_by_clause)
 
 **示例**：
 
-以下示例使用 `DENSE_RANK()` 对 math 科目的得分排名（采用降序）。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例使用 `DENSE_RANK()` 对 math 科目的得分排名（采用降序）。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *,
@@ -313,6 +319,8 @@ from scores where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
+示例中有两个得分 80，排名都为 3，下一行的 70 排名是 4，排名是连续的。
+
 <br/>
 
 ## 使用 FIRST_VALUE() 窗口函数
@@ -329,7 +337,7 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 **示例**：
 
-以下示例使用 `FIRST_VALUE()` 函数和 IGNORE NULLS，根据 `subject` 列分组，按照降序返回每个分组中的最高分。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例使用 `FIRST_VALUE()` 函数和 IGNORE NULLS，根据 `subject` 列分组，按照降序返回每个分组中的最高分。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *,
@@ -382,9 +390,11 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 
 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果最后一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
+last_value() 默认会统计 `rows between unbounded preceding and current row`，即会对比当前行与之前所有行。如果每个分区只想显示一个结果，可以在 ORDER BY 后使用 `rows between unbounded preceding and unbounded following`.
+
 **示例**：
 
-以下示例使用 `LAST_VALUE()` 函数，根据 `subject` 列分组，按照降序返回每个分组中的最低得分。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例使用 `LAST_VALUE()` 函数，根据 `subject` 列分组，按照降序返回每个分组中的最低得分。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *,
@@ -641,7 +651,7 @@ MAX(expr) [OVER (analytic_clause)]
 
 **示例**：
 
-以下示例计算**从第一行到当前行之后一行中**的 math 科目的得分最大值。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例计算**从第一行到当前行之后一行中**的 math 科目的得分最大值。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *, 
@@ -705,7 +715,7 @@ MIN(expr) [OVER (analytic_clause)]
 
 **示例**
 
-以下示例计算所有行中的 math 科目得分的最小值。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例计算所有行中的 math 科目得分的最小值。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *,
@@ -771,7 +781,7 @@ NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
 
 **示例**：
 
-以下示例使用 `NTILE()` 函数将当前窗口中的数据划分至 `2` 个桶中，划分结果见 `bucket_id` 列。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例使用 `NTILE()` 函数将当前窗口中的数据划分至 `2` 个桶中，划分结果见 `bucket_id` 列。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```sql
 select *,
@@ -812,8 +822,8 @@ from scores;
 
 如上述例子所示，`num_buckets` 为 `2`，此时：
 
-- 第 1 行为一个分区，划分在一个分桶中。
-- 2-7 行为一个分区，其中前 3 行在第一个分桶中、后 3 行在第二个分桶中。
+- 第 1 行是一个分区，划分在一个分桶中。
+- 2-7 行是一个分区，其中前 3 行在第一个分桶中、后 3 行在第二个分桶中。
 
 ## 使用 PERCENT_RANK() 函数
 
@@ -834,7 +844,7 @@ PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 
 **Examples:**
 
-以下示例计算科目 math 下得分的排名情况。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例计算科目 math 下得分的排名情况。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 SELECT *,
@@ -861,7 +871,7 @@ FROM scores where subject in ('math');
 
 ## 使用 RANK() 窗口函数
 
-`RANK()` 函数用来对当前窗口内的数据进行排名，返回结果集是对分区内每行的排名，行的排名是相关行之前的排名数加一。与 `DENSE_RANK()` 不同的是， `RANK()` 返回的序号**有可能是不连续的数字**，而 `DENSE_RANK()` 返回的序号**是连续的数字**。
+`RANK()` 函数用来对当前窗口内的数据进行排名，返回结果集是对分区内每行的排名，行的排名是相关行之前的排名数加一。与 `DENSE_RANK()` 不同的是，`RANK()` 返回的序号**有可能是不连续的数字**，而 `DENSE_RANK()` 返回的序号**是连续的数字**。举例：如果前面有两个排名 1，RANK() 第三行会返回 3，而 DENSE_RANK() 第三行仍然会返回排名 2。
 
 **语法**：
 
@@ -871,7 +881,7 @@ RANK() OVER(partition_by_clause order_by_clause)
 
 **示例**：
 
-以下示例对 math 科目的得分进行排名。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例对 math 科目的得分进行排名。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *, 
@@ -897,6 +907,8 @@ from scores where subject in ('math');
 +------+-------+---------+-------+------+
 ```
 
+示例中有两个得分 80，排名都为 3，下一行的 70 排名是 5。
+
 <br/>
 
 ## 使用 ROW_NUMBER() 窗口函数
@@ -911,7 +923,7 @@ ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 
 **示例**：
 
-以下示例对以 `subject` 列为分区的 math 科目的得分进行排名。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例对以 `subject` 列为分区的 math 科目的得分进行排名。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *, 
@@ -1079,7 +1091,7 @@ SUM(expr) [OVER (analytic_clause)]
 
 **示例**：
 
-以下示例将数据按照 `subject` 列进行分组，并在组内计算所有行 `score` 列数据的和。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例将数据按照 `subject` 列进行分组，并在组内计算所有行 `score` 列数据的和。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```SQL
 select *,
@@ -1139,7 +1151,7 @@ VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 
 **示例**：
 
-建表语句参见[建表示例](#窗口函数建表示例)。
+该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
 select *,
@@ -1181,7 +1193,7 @@ VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 
 **示例**：
 
-建表语句参见[建表示例](#窗口函数建表示例)。
+该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
 select *,
@@ -1222,7 +1234,7 @@ STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_c
 
 **示例**：
 
-建表语句参见[建表示例](#窗口函数建表示例)。
+该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
 select *, STD(score)
@@ -1262,7 +1274,7 @@ STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause 
 
 **示例**：
 
-建表语句参见[建表示例](#窗口函数建表示例)。
+该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
 select *, STDDEV_SAMP(score)
@@ -1320,7 +1332,7 @@ COVAR_SAMP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_
 
 **示例**：
 
-建表语句参见[建表示例](#窗口函数建表示例)。
+该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
 select *, COVAR_SAMP(id, score) 
@@ -1377,7 +1389,7 @@ COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_c
 
 **示例**：
 
-建表语句参见[建表示例](#窗口函数建表示例)。
+该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
 select *, COVAR_POP(id, score)
@@ -1417,7 +1429,7 @@ CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause
 
 **示例**：
 
-建表语句参见[建表示例](#窗口函数建表示例)。
+该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
 select *, CORR(id, score)

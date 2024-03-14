@@ -111,7 +111,7 @@ INSERT INTO `scores` VALUES
   (6, "amber", "math", 92),
   (6, "amber", NULL, 90),
   (6, "amber", "physics", 100);
-  ```
+```
 
 ## Function examples
 
@@ -179,6 +179,8 @@ Return data:
 | JDR          | 2014-10-08 00:00:00 |         13.98 |    14.36500000 |
 +--------------+---------------------+---------------+----------------+
 ```
+
+For example, `12.87500000` in the first row is the average value of closing prices on "2014-10-02" (`12.86`), its previous day "2014-10-01" (null), and its following day "2014-10-03" (`12.89`).
 
 ### COUNT()
 
@@ -266,9 +268,13 @@ FROM scores;
 +------+-------+---------+-------+---------------------+
 ```
 
+- For the first row `1`, the NULL group has only one row, and only this row is equal to 90. The cumulative distribution is 100%。
+- For the first row `0.2`, the `english` group has five rows, and only this row (NULL) itself is equal to NULL. The cumulative distribution is 20%.
+- For the second row`0.4`, the `english` group has five rows, and two rows (85 and NULL) are less than or equal to 85. The cumulative distribution is 40%.
+
 ### DENSE_RANK()
 
-The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK()**does not have vacant** numbers. For example, if there are two 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
+The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK() **does not have vacant** numbers. For example, if there are two 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
 
 **Syntax:**
 
@@ -302,6 +308,8 @@ from scores where subject in ('math');
 |    1 | lily  | math    |  NULL |    5 |
 +------+-------+---------+-------+------+
 ```
+
+The result data has two rows whose score is 80. They all rank 3. The rank for the next score 70 is 4. This shows DENSE_RANK() **does not have vacant** numbers.
 
 ### FIRST_VALUE()
 
@@ -872,6 +880,8 @@ from scores where subject in ('math');
 |    1 | lily  | math    |  NULL |    6 |
 +------+-------+---------+-------+------+
 ```
+
+The result data has two rows whose score is 80. They all rank 3. The rank for the next score 70 is 5.
 
 ### ROW_NUMBER()
 
