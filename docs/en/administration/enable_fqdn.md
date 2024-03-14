@@ -16,7 +16,7 @@ To enable FQDN access for a StarRocks cluster, make sure the following requireme
 
 - In the file **/etc/hosts** on each machine, you must specify the corresponding IP addresses and FQDNs of other machines in the cluster.
 
-- IP addresses in the **/etc/hosts** file must be uniqule.
+- IP addresses in the **/etc/hosts** file must be unique.
 
 ## Set up a new cluster with FQDN access
 

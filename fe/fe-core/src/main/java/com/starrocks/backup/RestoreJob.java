@@ -74,7 +74,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -87,6 +86,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -1501,7 +1501,7 @@ public class RestoreJob extends AbstractJob {
         allTabletCommitted(true /* is replay */);
     }
 
-    public List<String> getInfo() throws AnalysisException {
+    public List<String> getInfo() {
         List<String> info = Lists.newArrayList();
         info.add(String.valueOf(jobId));
         info.add(label);
@@ -1524,7 +1524,7 @@ public class RestoreJob extends AbstractJob {
             info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
                     + "]").collect(Collectors.toList())));
         } catch (Exception e) {
-            throw new AnalysisException("meta data may has been updated during this period, please try again");
+            throw new SemanticException("meta data may has been updated during this period, please try again");
         }
         info.add(status.toString());
         info.add(String.valueOf(timeoutMs / 1000));

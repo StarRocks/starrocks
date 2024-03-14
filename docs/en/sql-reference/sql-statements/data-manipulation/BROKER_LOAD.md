@@ -62,7 +62,7 @@ INTO TABLE <table_name>
 [COLUMNS TERMINATED BY "<column_separator>"]
 [ROWS TERMINATED BY "<row_separator>"]
 [FORMAT AS "CSV | Parquet | ORC"]
-[(fomat_type_options)]
+[(format_type_options)]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]

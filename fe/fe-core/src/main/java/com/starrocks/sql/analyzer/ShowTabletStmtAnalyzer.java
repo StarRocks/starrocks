@@ -48,7 +48,7 @@ public class ShowTabletStmtAnalyzer {
         new ShowTabletStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowTabletStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ShowTabletStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private long version = -1;
         private long backendId = -1;

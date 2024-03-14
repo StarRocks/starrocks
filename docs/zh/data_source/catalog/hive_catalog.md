@@ -16,9 +16,11 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 
 - 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue。
 
-  > **说明**
-  >
-  > 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
+  :::note
+  
+  如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
+
+  :::
 
 ## 使用说明
 
@@ -55,9 +57,11 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
   - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
 
-> **注意**
->
-> 如果查询时因为域名无法识别 (Unknown Host) 而发生访问失败，您需要将 HDFS 集群中各节点的主机名及 IP 地址之间的映射关系配置到 **/etc/hosts** 路径中。
+:::notice
+
+如果查询时因为域名无法识别 (Unknown Host) 而发生访问失败，您需要将 HDFS 集群中各节点的主机名及 IP 地址之间的映射关系配置到 **/etc/hosts** 路径中。
+
+:::note
 
 ### Kerberos 认证
 
@@ -124,9 +128,11 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
-> **说明**
->
-> 在查询 Hive 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+:::note
+
+在查询 Hive 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+
+:::
 
 `MetastoreParams` 包含如下参数。
 
@@ -893,9 +899,11 @@ GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
 
 同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Hive Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Hive Catalog 内创建数据库。本功能自 3.2 版本起开始支持。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+:::note
+
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+:::
 
 [切换至目标 Hive Catalog](#切换-hive-catalog-和数据库)，然后通过如下语句创建 Hive 数据库：
 
@@ -927,9 +935,11 @@ CREATE DATABASE <database_name>
 
 同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该 Hive 数据库。本功能自 3.2 版本起开始支持。仅支持删除空数据库。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+:::note
+
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+:::
 
 删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
 
@@ -941,11 +951,14 @@ DROP DATABASE <database_name>
 
 ## 创建 Hive 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Hive 数据库下创建 Managed Table。本功能自 3.2 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)、[CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)、或 [CREATE TABLE LIKE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) 在该 Hive 数据库下创建 Managed Table。本功能自 3.2 版本起开始支持。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+:::note
+
+- 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+- Hive Catalog 自 3.2.4 版本起支持 CREATE TABLE LIKE。
+
+:::
 
 [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。然后通过如下语法创建 Hive 的 Managed Table：
 
@@ -958,6 +971,7 @@ partition_column_definition1,partition_column_definition2...])
 [partition_desc]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
+[LIKE [database.]<source_table_name>]
 ```
 
 ### 参数说明
@@ -1043,9 +1057,11 @@ PARTITION BY (par_col1[, par_col2...])
 
 同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。需要注意的是，写数据到 External Table 的功能默认是关闭的，您可以通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../reference/System_variable.md) 打开。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+:::note
+
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+:::
 
 [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)，然后通过如下语法将 StarRocks 表数据写入到 Parquet 格式的 Hive 表中：
 
@@ -1132,9 +1148,11 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。注意当前只支持删除 Hive 的 Managed Table。
 
-> **说明**
->
-> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+:::note
+
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+:::
 
 执行删除表的操作时，您必须在 DROP TABLE 语句中指定 `FORCE` 关键字。该操作不会删除表对应的文件路径，但是会删除 HDFS 或对象存储上的表数据。请您谨慎执行该操作。
 
@@ -1160,9 +1178,11 @@ REFRESH EXTERNAL TABLE <table_name>
 - Hive 表有 Schema 变更。
 - Hive 表被 DROP 后重建一个同名 Hive 表。
 - 创建 Hive Catalog 时在 `PROPERTIES` 中指定了 `"enable_cache_list_names" = "true"`。在 Hive 侧新增分区后，需要查询新增分区。
-  > **说明**
-  >
-  > 自 2.5.5 版本起，StarRocks 支持周期性刷新 Hive 元数据缓存。参见本文下面”[周期性刷新元数据缓存](#周期性刷新元数据缓存)“小节。开启 Hive 元数据缓存周期性刷新功能以后，默认情况下 StarRocks 每 10 分钟刷新一次 Hive 元数据缓存。因此，一般情况下，无需执行手动更新。您只有在新增分区后，需要立即查询新增分区的数据时，才需要执行手动更新。
+  :::note
+  
+  自 2.5.5 版本起，StarRocks 支持周期性刷新 Hive 元数据缓存。参见本文下面”[周期性刷新元数据缓存](#周期性刷新元数据缓存)“小节。开启 Hive 元数据缓存周期性刷新功能以后，默认情况下 StarRocks 每 10 分钟刷新一次 Hive 元数据缓存。因此，一般情况下，无需执行手动更新。您只有在新增分区后，需要立即查询新增分区的数据时，才需要执行手动更新。
+
+  :::
 
 注意 REFRESH EXTERNAL TABLE 只会更新 FE 中已缓存的表和分区。
 

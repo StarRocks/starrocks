@@ -460,6 +460,41 @@ class ParserTest {
         Assert.assertTrue(timeOfLL > timeOfSLL);
     }
 
+    @Test
+    void testPivot() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from t pivot (sum(v1) for v2 in (1, 2, 3))");
+        sqls.add("select * from t pivot (sum(v1) as s1 for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
+        sqls.add("select * from t " +
+                "pivot (sum(v1) as s1, count(v2) as c1, avg(v3) as c3 " +
+                "for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
+
+
+        List<String> expects = Lists.newArrayList();
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1)\n" +
+                "FOR v2 IN (1, 2, 3)\n" +
+                ")");
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1\n" +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                ")");
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1, count(v2) AS c1, avg(v3) AS c3\n" +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                ")");
+        for (String sql : sqls) {
+            try {
+                StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+                String newSql = AstToSQLBuilder.toSQL(stmt);
+                assertEquals(expects.get(sqls.indexOf(sql)), newSql);
+            } catch (Exception e) {
+                e.printStackTrace();
+                fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+    }
+
     private static Stream<Arguments> keyWordSqls() {
         List<String> sqls = Lists.newArrayList();
         sqls.add("select current_role()");

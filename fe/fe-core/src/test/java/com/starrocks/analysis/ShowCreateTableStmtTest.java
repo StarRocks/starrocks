@@ -73,8 +73,8 @@ public class ShowCreateTableStmtTest {
                         " as select k1 from base");
         String sql = "show create view test_mv";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(showCreateTableStmt, ctx);
         Assert.assertEquals("test_mv", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE VIEW `test_mv` AS SELECT `test`.`base`.`k1`\n" +
                 "FROM `test`.`base`", resultSet.getResultRows().get(0).get(1));
@@ -115,8 +115,8 @@ public class ShowCreateTableStmtTest {
                         ");");
         String sql = "show create table test_pk_current_timestamp";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(showCreateTableStmt, ctx);
         Assert.assertEquals("test_pk_current_timestamp", resultSet.getResultRows().get(0).get(0));
         Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("datetime NOT NULL DEFAULT CURRENT_TIMESTAMP"));
     }
@@ -155,8 +155,8 @@ public class ShowCreateTableStmtTest {
                         ");");
         String sql = "show create table test.aaa";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(showCreateTableStmt, ctx);
         Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
     }
 }

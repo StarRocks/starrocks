@@ -58,7 +58,7 @@ public class BackupRestoreAnalyzer {
         new BackupRestoreStmtAnalyzerVisitor().analyze(statement, session);
     }
 
-    public static class BackupRestoreStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class BackupRestoreStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private static final String PROP_TIMEOUT = "timeout";
         private static final long MIN_TIMEOUT_MS = 600_000L; // 10 min

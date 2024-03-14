@@ -25,6 +25,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
@@ -40,6 +41,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
@@ -67,13 +69,16 @@ class QueryTransformer {
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
     private final boolean inlineView;
+    private final Map<Operator, ParseNode> optToAstMap;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext, boolean inlineView) {
+                            CTETransformerContext cteContext, boolean inlineView,
+                            Map<Operator, ParseNode> optToAstMap) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
         this.inlineView = inlineView;
+        this.optToAstMap = optToAstMap;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -157,11 +162,8 @@ class QueryTransformer {
 
     private OptExprBuilder planFrom(Relation node, CTETransformerContext cteContext) {
         TransformerContext transformerContext = new TransformerContext(
-                columnRefFactory,
-                session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                cteContext,
-                inlineView);
+                columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                cteContext, inlineView, optToAstMap);
         return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
@@ -364,7 +366,7 @@ class QueryTransformer {
         return subOpt.withNewRoot(limitOperator);
     }
 
-    private OptExprBuilder aggregate(OptExprBuilder subOpt,
+    public OptExprBuilder aggregate(OptExprBuilder subOpt,
                                      List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
         if (aggregates.size() == 0 && groupByExpressions.size() == 0) {

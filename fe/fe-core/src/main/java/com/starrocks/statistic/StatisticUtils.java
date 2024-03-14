@@ -375,6 +375,19 @@ public class StatisticUtils {
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
+        } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_uuid",  new TypeDef(tableUUIDType)),
+                    new ColumnDef("column_name", new TypeDef(columnNameType)),
+                    new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
+                    new ColumnDef("db_name", new TypeDef(dbNameType)),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
         } else {
             throw new StarRocksPlannerException("Not support stats table " + tableName, ErrorType.INTERNAL_ERROR);
         }

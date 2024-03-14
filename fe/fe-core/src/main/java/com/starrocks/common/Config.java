@@ -2466,7 +2466,7 @@ public class Config extends ConfigBase {
                     "REMINDER: Set this to a value longer than the maximum possible execution time of queries," +
                     " to avoid deletion of versions still being accessed.\n" +
                     "NOTE: Increasing this value may increase the space usage of the remote storage system.")
-    public static long lake_autovacuum_grace_period_minutes = 5;
+    public static long lake_autovacuum_grace_period_minutes = 30;
 
     @ConfField(mutable = true, comment =
             "time threshold in hours, if a partition has not been updated for longer than this " +
@@ -2843,6 +2843,8 @@ public class Config extends ConfigBase {
     public static int replication_max_parallel_data_size_mb = 10240; // 10g
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+    @ConfField(mutable = true)
+    public static boolean enable_legacy_compatibility_for_replication = false;
 
     @ConfField(mutable = true)
     public static boolean jdbc_meta_default_cache_enable = false;
