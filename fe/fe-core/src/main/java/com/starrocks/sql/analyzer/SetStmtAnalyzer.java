@@ -356,8 +356,6 @@ public class SetStmtAnalyzer {
                 Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
 
                 Type type = variableResult.getType();
-                PrimitiveType primitiveType = variableResult.getType().getPrimitiveType();
-
                 //can not apply to metric types or complex type except array type
                 if (!checkUserVariableType(type)) {
                     throw new SemanticException("Can't set variable with type " + variableResult.getType());
