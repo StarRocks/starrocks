@@ -24,10 +24,35 @@ FEs are responsible for metadata management, client connection management, query
   - Followers can only read metadata. They synchronize and replay logs from the leader FE to update metadata.
   - Followers participate in leader election, which requires more than half of the followers in the cluster be active.
 
+<<<<<<< HEAD
 - Observer
   - Observers are mainly used to increase the query concurrency of the cluster.
   - Observers do not participate in leader election and therefore, will not add leader selection pressure to the cluster.
   - Observers synchronize and replay logs from the leader FE to update metadata.
+=======
+## Storage-compute coupled
+
+As a typical massively parallel processing (MPP) database, StarRocks uses the storage-compute coupled architecture in versions earlier than 3.0. In this architecture, BE is responsible for both data storage and computation. Direct access to local data on the BE mode allows for local computation, avoiding data transfer and data copying, thereby providing ultra-fast query and analytics performance. This architecture supports multi-replica data storage, enhancing cluster's ability to handle high-concurrency queries and ensuring data reliability. It is well-suited for scenarios that pursue optimal query performance.
+
+### Nodes
+
+In the storage-compute coupled architecture, StarRocks consists of two types of nodes: FEs and BEs.
+
+- FE is responsible for metadata management and constructing execution plans.
+- BE executes query plans and stores data. BE utilizes local storage to accelerate queries and the multi-replica mechanism to ensure high data availability.
+
+### FE
+
+FE is responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs. FEs can work as the leader, followers, and observers. Followers can elect a leader according to the Paxos-like BDB JE protocol. BDB JE is short for Berkeley DB Java Edition.
+
+| **FE Role** | **Metadata management**                                               | **Leader election**                                              |
+| ----------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| Leader FE      | The leader FE reads and writes metadata. Follower and observer FEs can only read metadata. They route metadata write requests to the leader FE. The leader FE updates the metadata and then uses BDE JE to synchronize the metadata changes to the follower and observer FEs. Data writes are considered successful only after the metadata changes are synchronized to more than half of the follower FEs. | The leader FE, technically speaking, is also a follower node and is elected from follower FEs. To perform leader election, more than half of the follower FEs in the cluster must be active. When the leader FE fails, follower FEs will start another round of leader election. |
+| Follower FE    | Followers can only read metadata. They synchronize and replay logs from the leader FE to update metadata. | Followers participate in leader election, which requires more than half of the followers in the cluster be active. |
+| Observer FE   | Observers synchronize and replay logs from the leader FE to update metadata.     | Observers are mainly used to increase the query concurrency of the cluster. Observers do not participate in leader election and therefore, will not add leader selection pressure to the cluster.|
+
+### BE
+>>>>>>> 37b4f739fd ([Doc] optimize search for system variable and description of follower FEs (#42614))
 
 BEs are responsible for data storage and SQL execution.
 
