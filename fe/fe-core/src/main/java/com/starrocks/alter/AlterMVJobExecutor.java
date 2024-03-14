@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
@@ -258,6 +259,12 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
             materializedView.getTableProperty().getProperties()
                     .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
             materializedView.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
+            if (!materializedView.isEnableRewrite()) {
+                // invalidate caches for mv rewrite when disable mv rewrite.
+                CachingMvPlanContextBuilder.getInstance().invalidateFromCache(materializedView, false);
+            } else {
+                CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(materializedView);
+            }
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
