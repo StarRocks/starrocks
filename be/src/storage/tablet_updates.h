@@ -301,26 +301,11 @@ public:
 
     Status pk_index_major_compaction();
 
-<<<<<<< HEAD
-=======
-    // get the max rowset creation time for largest major version
-    int64_t max_rowset_creation_time();
-
-    Status get_rowset_stats(std::map<uint32_t, std::string>* output_rowset_stats);
-
-    Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
-    // recover
-    Status recover();
-
     void set_error(const string& msg) { _set_error(msg); }
     void reset_error() {
         _error = false;
         _error_msg = "";
     }
-
-    Status generate_pk_dump_if_in_error_state();
-
->>>>>>> 4d02de56d8 ([BugFix] Check the return value after load primary index in pk compaction (#42221))
 
 private:
     friend class Tablet;

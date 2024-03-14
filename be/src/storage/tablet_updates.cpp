@@ -1677,7 +1677,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _compaction_state.reset();
         std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
                                               st.to_string(), debug_string());
-        failure_handler(msg);
+        LOG(ERROR) << msg;
+        _set_error(msg);
         return;
     }
 
