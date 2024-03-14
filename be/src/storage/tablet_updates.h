@@ -298,6 +298,7 @@ public:
         _error = false;
         _error_msg = "";
     }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
