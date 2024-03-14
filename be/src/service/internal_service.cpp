@@ -299,6 +299,10 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
         return Status::InvalidArgument("batch_size is not set");
     }
+    // Before version 2.5, broker load was not executed in the pipeline engine.
+    // The batch_size params may not be set in the request sent by FE.
+    // During the grayscale upgrade process, the request sent by the old version of FE will report an error.
+    // For compatibility, choose to skip checking batch_size for load job here.
     bool need_check_chunk_size = true;
     if (t_request.query_options.__isset.query_type && t_request.query_options.query_type == TQueryType::LOAD) {
         need_check_chunk_size = false;
