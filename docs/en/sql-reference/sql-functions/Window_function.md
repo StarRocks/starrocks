@@ -219,7 +219,12 @@ from scores where subject in ('math') and score > 90;
 
 ### CUME_DIST()
 
-The CUME_DIST() function calculates the cumulative distribution of a value within a partition, indicating its relative position as a percentage of values less than or equal to the value in the current row. With a range of 0 to 1, it's useful for percentile calculations and data distribution analysis.
+The CUME_DIST() function calculates the cumulative distribution of a value within a partition or window, indicating its relative position as a percentage in the partition. It is often used to calculate the distribution of highest or lowest values in a group.
+
+- If data is sorted in ascending order, this function calculates the percentage of values less than or equal to the value in the current row.
+- If data is sorted in descending order, this function calculates the percentage of values greater than or equal to the value in the current row.
+
+The cumulative distribution is in the range of 0 to 1. It is useful for percentile calculation and data distribution analysis.
 
 This function is supported from v3.2.
 
@@ -229,7 +234,8 @@ This function is supported from v3.2.
 CUME_DIST() OVER (partition_by_clause order_by_clause)
 ```
 
-**This function must be used with ORDER BY to sort partition rows into the desired order.**
+- `partition_by_clause`: optional. If this clause is not specified, the entire result set is processed as a single partition.
+- `order_by_clause`: **This function must be used with ORDER BY to sort partition rows into the desired order.**
 
 CUME_DIST() contains NULL values and treats them as the lowest values.
 
@@ -269,9 +275,9 @@ FROM scores;
 +------+-------+---------+-------+---------------------+
 ```
 
-- For `cume_dist` in the first row, the NULL group has only one row, and only this row is equal to 90. The cumulative distribution is 1。
-- For `cume_dist` in the second row, the `english` group has five rows, and only this row (NULL) itself is equal to NULL. The cumulative distribution is 0.2.
-- For `cume_dist` in the third row, the `english` group has five rows, and two rows (85 and NULL) are less than or equal to 85. The cumulative distribution is 0.4.
+- For `cume_dist` in the first row, the `NULL` group has only one row, and only this row itself meets the condition of "less than or equal to the current row". The cumulative distribution is 1。
+- For `cume_dist` in the second row, the `english` group has five rows, and only this row itself (NULL) meets the condition of "less than or equal to the current row". The cumulative distribution is 0.2.
+- For `cume_dist` in the third row, the `english` group has five rows, and two rows (85 and NULL) meet the condition of "less than or equal to the current row". The cumulative distribution is 0.4.
 
 ### DENSE_RANK()
 
@@ -803,13 +809,15 @@ As the above example shown, when `num_buckets` is `2`:
 
 ### PERCENT_RANK()
 
-The PERCENT_RANK() function calculates the relative rank of a row within a result set as a percentage. It returns the percentage of partition values less than the value in the current row, excluding the highest value. The return values range from 0 to 1. This function is useful for percentile calculations and analyzing data distribution.
+Calculates the relative rank of a row within a result set as a percentage.
 
-The PERCENT_RANK() function is calculated using the following formula, where RANK() represents the row rank and rows represents the number of partition rows:
+PERCENT_RANK() is calculated using the following formula, where `Rank` represents the rank of the current row in the partition.
 
 ```plaintext
-(rank - 1) / (rows - 1)
+(Rank - 1)/(Rows in partition - 1)
 ```
+
+The return values range from 0 to 1. This function is useful for percentile calculation and analyzing data distribution. It is supported from v3.2.
 
 **Syntax:**
 
@@ -821,7 +829,7 @@ PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 
 **Examples:**
 
-The following example shows the relative rank of column `score` within the group of `math`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+The following example shows the relative rank of each `score` within the group of `math`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
 SELECT *,
