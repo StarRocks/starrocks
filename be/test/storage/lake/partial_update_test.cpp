@@ -355,7 +355,7 @@ TEST_P(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
 
 TEST_P(PartialUpdateTest, test_resolve_conflict) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
-    auto chunk1 = generate_data(kChunkSize, 0, true, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 5);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
         indexes[i] = i;
@@ -400,7 +400,7 @@ TEST_P(PartialUpdateTest, test_resolve_conflict) {
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
-    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     if (GetParam().enable_persistent_index) {
@@ -470,7 +470,84 @@ TEST_P(PartialUpdateTest, test_resolve_conflict_multi_segment) {
     }
 }
 
+<<<<<<< HEAD
 TEST_P(PartialUpdateTest, test_write_with_index_reload) {
+=======
+TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 5);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // normal write
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::skip_cache_latest_metadata",
+                                          [](void* arg) { *(bool*)arg = true; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::skip_cache_latest_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    std::vector<int64_t> txn_ids;
+    // concurrent partial update
+    for (int i = 0; i < 2; i++) {
+        auto txn_id = next_id();
+        txn_ids.push_back(txn_id);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+        ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
+    ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
+}
+
+TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
+>>>>>>> 751f5c5f6a ([BugFix] fix cloud native pk concurrent partial update issue (#42355))
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 3);
     auto indexes = std::vector<uint32_t>(kChunkSize);

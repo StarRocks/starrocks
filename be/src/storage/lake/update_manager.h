@@ -73,7 +73,12 @@ public:
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
+<<<<<<< HEAD
                              const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids, bool with_default,
+=======
+                             const TabletSchemaCSPtr& tablet_schema, std::vector<uint32_t>& column_ids,
+                             bool with_default, bool include_op_write,
+>>>>>>> 751f5c5f6a ([BugFix] fix cloud native pk concurrent partial update issue (#42355))
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
