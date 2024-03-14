@@ -432,7 +432,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
 
         Status st;
-        request.params->set_request_timestamp(MonotonicNanos());
+        request.params->set_request_timestamp(UnixMillis());
         if (bthread_self()) {
             st = _send_rpc(closure, request);
         } else {
