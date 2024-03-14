@@ -399,7 +399,7 @@ public class BDBEnvironment {
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
         Set<InetSocketAddress> addrs = GlobalStateMgr.getCurrentState()
-                .getFrontends(FrontendNodeType.FOLLOWER)
+                .getFrontends(null)
                 .stream()
                 .filter(Frontend::isAlive)
                 .map(fe -> new InetSocketAddress(fe.getHost(), fe.getEditLogPort()))
