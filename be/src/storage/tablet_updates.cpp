@@ -1672,6 +1672,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     } else {
         st = index.load(&_tablet);
     }
+
+    if (!st.ok()) {
+        _compaction_state.reset();
+        std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
+                                              st.to_string(), debug_string());
+        failure_handler(msg);
+        return;
+    }
+
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
     bool enable_persistent_index = index.enable_persistent_index();
@@ -1696,6 +1705,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             manager->index_cache().release(index_entry);
         }
     });
+<<<<<<< HEAD
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
         _compaction_state.reset();
@@ -1705,6 +1715,19 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
+=======
+    if (enable_persistent_index && !rebuild_index) {
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+        if (!st.ok() && !st.is_not_found()) {
+            std::string msg = strings::Substitute("get persistent index meta failed: $0 $1", st.to_string(),
+                                                  _debug_string(false, true));
+            failure_handler(msg);
+            return;
+        }
+    }
+
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+>>>>>>> 4d02de56d8 ([BugFix] Check the return value after load primary index in pk compaction (#42221))
     Rowset* output_rowset = _get_rowset(rowset_id).get();
     if (output_rowset == nullptr) {
         string msg = strings::Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
