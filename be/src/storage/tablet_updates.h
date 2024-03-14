@@ -347,6 +347,10 @@ public:
     Status recover();
 
     void set_error(const string& msg) { _set_error(msg); }
+    void reset_error() {
+        _error = false;
+        _error_msg = "";
+    }
 
     Status generate_pk_dump_if_in_error_state();
 
