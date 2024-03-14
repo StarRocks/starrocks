@@ -19,11 +19,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-<<<<<<< HEAD
-=======
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.ParseNode;
->>>>>>> fb483fdb72 ([Feature] Support text based mv rewrite (#41271))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.KeysType;

@@ -1760,9 +1760,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // recheck again
         fixRelationship();
     }
-<<<<<<< HEAD
-}
-=======
 
     /**
      * Used for text based materialized view rewrite.
@@ -1779,4 +1776,3 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return defineQueryParseNode;
     }
 }
->>>>>>> fb483fdb72 ([Feature] Support text based mv rewrite (#41271))

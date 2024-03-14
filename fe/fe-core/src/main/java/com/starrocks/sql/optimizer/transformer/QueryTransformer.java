@@ -165,16 +165,8 @@ class QueryTransformer {
         // and the internal cte with the same name will overwrite the original mapping
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         TransformerContext transformerContext = new TransformerContext(
-<<<<<<< HEAD
-                columnRefFactory,
-                session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                newCteContext,
-                inlineView);
-=======
                 columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                cteContext, inlineView, optToAstMap);
->>>>>>> fb483fdb72 ([Feature] Support text based mv rewrite (#41271))
+                newCteContext, inlineView, optToAstMap);
         return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 

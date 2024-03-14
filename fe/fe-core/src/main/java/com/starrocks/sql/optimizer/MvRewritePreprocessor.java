@@ -500,17 +500,7 @@ public class MvRewritePreprocessor {
                                             Set<Table> queryTables) {
         if (!mv.isActive())  {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
-<<<<<<< HEAD
             return false;
-=======
-            return Pair.create(false, "MV is not active");
-        }
-        if (!mv.isEnableRewrite()) {
-            String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
-                    mv.getTableProperty().getMvQueryRewriteSwitch();
-            logMVPrepare(connectContext, mv, message);
-            return Pair.create(false, message);
->>>>>>> fb483fdb72 ([Feature] Support text based mv rewrite (#41271))
         }
         // if mv is a subset of query tables, it can be used for rewrite.
         if (!canMVRewriteIfMVHasExtraTables(mv, queryTables)) {

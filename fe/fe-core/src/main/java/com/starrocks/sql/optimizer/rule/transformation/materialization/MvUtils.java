@@ -29,11 +29,8 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
-<<<<<<< HEAD
-=======
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
->>>>>>> fb483fdb72 ([Feature] Support text based mv rewrite (#41271))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
