@@ -137,10 +137,8 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     Columns args;
     args.reserve(_children.size());
     for (Expr* child : _children) {
-        StatusOr<ColumnPtr> column;
-        column = context->evaluate(child, ptr);
-        RETURN_IF_ERROR(column);
-        args.emplace_back(column.value());
+        ASSIGN_OR_RETURN(ColumnPtr column, context->evaluate(child, ptr));
+        args.emplace_back(column);
     }
 
     if (_is_returning_random_value) {
