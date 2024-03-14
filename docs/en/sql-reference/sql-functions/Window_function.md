@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['analytic']
 ---
 
 # Window functions
@@ -81,7 +82,7 @@ ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | {
 
 ## Window function sample table
 
-This section creates a sample table `scores`, which you can use to test many window functions below.
+This section creates a sample table `scores`. You can use this table to test many window functions below.
 
 ```SQL
 CREATE TABLE `scores` (
@@ -119,7 +120,7 @@ This section describes the window functions supported in StarRocks.
 
 ### AVG()
 
-Calculate the average value of a field in a given window. This function ignores NULL values.
+Calculates the average value of a field in a given window. This function ignores NULL values.
 
 **Syntax:**
 
@@ -164,7 +165,7 @@ select stock_symbol, closing_date, closing_price,
 from stock_ticker;
 ```
 
-Return data:
+Output:
 
 ```plaintext
 +--------------+---------------------+---------------+----------------+
@@ -268,9 +269,9 @@ FROM scores;
 +------+-------+---------+-------+---------------------+
 ```
 
-- For the first row `1`, the NULL group has only one row, and only this row is equal to 90. The cumulative distribution is 100%。
-- For the first row `0.2`, the `english` group has five rows, and only this row (NULL) itself is equal to NULL. The cumulative distribution is 20%.
-- For the second row`0.4`, the `english` group has five rows, and two rows (85 and NULL) are less than or equal to 85. The cumulative distribution is 40%.
+- For `cume_dist` in the first row, the NULL group has only one row, and only this row is equal to 90. The cumulative distribution is 1。
+- For `cume_dist` in the second row, the `english` group has five rows, and only this row (NULL) itself is equal to NULL. The cumulative distribution is 0.2.
+- For `cume_dist` in the third row, the `english` group has five rows, and two rows (85 and NULL) are less than or equal to 85. The cumulative distribution is 0.4.
 
 ### DENSE_RANK()
 
@@ -768,7 +769,7 @@ select *,
 from scores;
 ```
 
-Return data:
+Output:
 
 ```plaintext
 +------+-------+---------+-------+-----------+
@@ -1041,7 +1042,9 @@ ORDER BY city_id;
 
 **Usage notes:**
 
-The execution order of clauses in a query with QUALIFY is evaluated in the following order:
+- QUALIFY supports only the following three window functions: ROW_NUMBER(), RANK(), and DENSE_RANK().
+
+- The execution order of clauses in a query with QUALIFY is evaluated in the following order:
 
 1. FROM
 2. WHERE
@@ -1113,9 +1116,9 @@ Returns the population variance of an expression. VAR_POP and VARIANCE_POP are a
 VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> **NOTE**
->
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
 
 **Parameters:**
 
@@ -1155,9 +1158,9 @@ Returns the sample variance of an expression. These functions can be used as win
 VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> **NOTE**
->
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
 
 **Parameters:**
 
@@ -1195,9 +1198,9 @@ Returns the standard deviation of an expression. These functions can be used as 
 STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> **NOTE**
->
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
 
 **Parameters:**
 
@@ -1235,9 +1238,9 @@ Returns the sample standard deviation of an expression. This function can be use
 STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> **NOTE**
->
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
 
 **Parameters:**
 
@@ -1264,6 +1267,7 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |  8.999999999999998 |
 |    3 | jack  | math    |    95 | 10.139033484509259 |
 +------+-------+---------+-------+--------------------+
+
 select *, STDDEV_SAMP(score)
     over (
         partition by subject
@@ -1292,9 +1296,9 @@ Returns the sample covariance of two expressions. This function is supported fro
 COVAR_SAMP(expr1,expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> **NOTE**
->
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
 
 **Parameters:**
 
@@ -1348,9 +1352,9 @@ Returns the population covariance of two expressions. This function is supported
 COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> **NOTE**
->
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
 
 **Parameters:**
 
@@ -1388,9 +1392,9 @@ Returns the Pearson correlation coefficient between two expressions. This functi
 CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> **NOTE**
->
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
 
 **Parameters:**
 
@@ -1433,34 +1437,4 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |   -0.015594571538795024 |
 |    3 | jack  | math    |    95 |   -0.015594571538795024 |
 +------+-------+---------+-------+-------------------------+
-```
-
-Use the CORR() window function.
-
-```plaintext
-select CORR(k, v) over (partition by no) FROM agg;
-+------------------------------------+
-| corr(k, v) OVER (PARTITION BY no ) |
-+------------------------------------+
-|                               NULL |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-+------------------------------------+
-
-select CORR(k,v) over (
-    partition by no
-    order by k
-    rows between unbounded preceding and 1 following) AS window_test
-FROM agg order by no,k;
-+--------------------+
-| window_test        |
-+--------------------+
-|               NULL |
-|                  1 |
-|                  1 |
-| 0.9988445981121532 |
-| 0.9988445981121532 |
-+--------------------+
 ```

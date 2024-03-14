@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['analytic']
 ---
 
 # 使用窗口函数组织过滤数据
@@ -175,8 +176,6 @@ from stock_ticker;
 
 比如，第一行的 `moving_average` 取值 `12.87500000`，是 "2014-10-02" 的值 `12.86`，加前一天 "2014-10-02" 的值 null，再加后一天 "2014-10-03" 的值 `12.89` 之后的平均值。
 
-<br/>
-
 ## 使用 COUNT() 窗口函数
 
 `COUNT()` 函数用于返回特定窗口内满足要求的行的数目。
@@ -212,8 +211,6 @@ from scores where subject in ('math') and score > 90;
 |    3 | jack  | math    |    95 |           2 |
 +------+-------+---------+-------+-------------+
 ```
-
-<br/>
 
 ## 使用 CUME_DIST() 窗口函数
 
@@ -276,9 +273,9 @@ FROM scores;
 +------+-------+---------+-------+---------------------+
 ```
 
-- 对于第一行数据 `1`，分组 NULL 中只有这一行数据，小于等于 90 分的数据只有这一行，累积分布为 100%。
-- 对于第二行数据 `0.2`，分组 `english` 中有 5 个值，小于等于 NULL 分的数据只有一行 (NULL)，累积分布为 20%。
-- 对于第三行数据 `0.4`，分组 `english` 中有 5 个值，小于等于 85 分的数据有两行（85 和 NULL），累积分布为 40%。
+- 对于第一行 `cume_dist` 数据 `1`，分组 NULL 中只有这一行数据，小于等于 90 分的数据只有这一行，累积分布为 1。
+- 对于第二行数据 `0.2`，分组 `english` 中有 5 个值，小于等于 NULL 分的数据只有一行 (NULL)，累积分布为 0.2。
+- 对于第三行数据 `0.4`，分组 `english` 中有 5 个值，小于等于 85 分的数据有两行（85 和 NULL），累积分布为 0.4。
 
 ## 使用 DENSE_RANK() 窗口函数
 
@@ -320,8 +317,6 @@ from scores where subject in ('math');
 ```
 
 示例中有两个得分 80，排名都为 3，下一行的 70 排名是 4，排名是连续的。
-
-<br/>
 
 ## 使用 FIRST_VALUE() 窗口函数
 
@@ -375,8 +370,6 @@ from scores;
 |    1 | lily  | math    |  NULL |    95 |
 +------+-------+---------+-------+-------+
 ```
-
-<br/>
 
 ## 使用 LAST_VALUE() 窗口函数
 
@@ -433,8 +426,6 @@ from scores;
 |    1 | lily  | math    |  NULL |   70 |
 +------+-------+---------+-------+------+
 ```
-
-<br/>
 
 ## 使用 LAG() 窗口函数
 
@@ -538,8 +529,6 @@ FROM test_tbl ORDER BY col_1;
 
 对于第 7 行数据 6，往前遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
-<br/>
-
 ## 使用 LEAD() 窗口函数
 
 用来计算当前行**之后**若干行的值。该函数可用于直接比较行间差值或进行数据过滤。
@@ -636,8 +625,6 @@ FROM test_tbl ORDER BY col_1;
 可以看到对于第 7-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
 
 对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
-
-<br />
 
 ## 使用 MAX() 窗口函数
 
@@ -834,7 +821,7 @@ from scores;
 
 返回一个介于 0 和 1 之间的数。该函数常用于计算百分位和数据分布。
 
-**Syntax:**
+**语法：**
 
 ```SQL
 PERCENT_RANK() OVER (partition_by_clause order_by_clause)
@@ -842,7 +829,7 @@ PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 
 该函数必须与 ORDER BY 一起使用，对排序后的数据进行分布统计。NULL 值作为最小值处理。
 
-**Examples:**
+**示例：**
 
 以下示例计算科目 math 下得分的排名情况。该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
@@ -909,8 +896,6 @@ from scores where subject in ('math');
 
 示例中有两个得分 80，排名都为 3，下一行的 70 排名是 5。
 
-<br/>
-
 ## 使用 ROW_NUMBER() 窗口函数
 
 `ROW_NUMBER()` 函数为每个 Partition 的每一行返回一个从 `1` 开始连续递增的整数。与 `RANK()` 和 `DENSE_RANK()` 不同的是，`ROW_NUMBER()` 返回的值**不会重复也不会出现空缺**，是**连续递增**的。
@@ -973,7 +958,7 @@ FROM example_table
 QUALIFY ROW_NUMBER() OVER(PARTITION BY PROVINCE_CODE ORDER BY TOTAL_SCORE) = 1;
 ```
 
-**当前 QUALIFY 仅支持如下窗口函数：ROW_NUMBER()，RANK()，DENSE_RANK()。**
+当前 QUALIFY 仅支持如下窗口函数：ROW_NUMBER()，RANK()，DENSE_RANK()。
 
 **语法**：
 
@@ -1065,7 +1050,9 @@ ORDER BY city_id;
 
 **注意事项**：
 
-带 QUALIFY 的查询语句中，子句的执行顺序如下：
+- 当前 QUALIFY 仅支持如下窗口函数：ROW_NUMBER()，RANK()，DENSE_RANK()。
+
+- 带 QUALIFY 的查询语句中，子句的执行顺序如下：
 
 1. FROM
 2. WHERE
@@ -1076,8 +1063,6 @@ ORDER BY city_id;
 7. DISTINCT
 8. ORDER BY
 9. LIMIT
-
-<br/>
 
 ## 使用 SUM() 窗口函数
 
@@ -1141,9 +1126,9 @@ VARIANCE() 窗口函数用于统计表达式的总体方差。VAR_POP 和 VARIAN
 VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> 注意
->
-> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::tip
+从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::
 
 **参数说明**：
 
@@ -1183,9 +1168,9 @@ VAR_SAMP() 窗口函数用于统计表达式的样本方差。
 VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> 注意
->
-> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::tip
+从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::
 
 **参数说明**：
 
@@ -1224,9 +1209,9 @@ STD() 窗口函数用于统计表达式的总体标准差。
 STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> 注意
->
-> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::tip
+从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::
 
 **参数说明**：
 
@@ -1264,9 +1249,9 @@ STDDEV_SAMP() 窗口函数用于统计表达式的样本标准差。
 STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> 注意
->
-> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::tip
+从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::
 
 **参数说明**：
 
@@ -1322,9 +1307,9 @@ COVAR_SAMP() 窗口函数用于统计表达式的样本协方差。
 COVAR_SAMP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> 注意
->
-> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::tip
+从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::
 
 **参数说明**：
 
@@ -1379,9 +1364,9 @@ COVAR_POP() 窗口函数用于统计表达式的总体协方差。
 COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> 注意
->
-> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::tip
+从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::
 
 **参数说明**：
 
@@ -1419,9 +1404,9 @@ CORR() 窗口函数用于统计表达式的相关系数。
 CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
-> 注意
->
-> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::tip
+从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
+:::
 
 **参数说明**：
 
