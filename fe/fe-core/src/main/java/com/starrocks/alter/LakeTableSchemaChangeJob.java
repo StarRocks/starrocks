@@ -344,7 +344,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         Warehouse currentWh =
                                 GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
 
-                        Long nodeId = Utils.chooseBackend(lakeTablet, currentWh.getAnyAvailableCluster().getWorkerGroupId());
+                        Long nodeId = Utils.chooseNodeId(lakeTablet, currentWh.getAnyAvailableCluster().getWorkerGroupId());
                         if (nodeId == null) {
                             throw new AlterCancelException("No alive backend or compute node in warehouse " + warehouseId);
                         }
@@ -443,7 +443,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        Long nodeId = Utils.chooseBackend((LakeTablet) shadowTablet,
+                        Long nodeId = Utils.chooseNodeId((LakeTablet) shadowTablet,
                                 currentWh.getAnyAvailableCluster().getWorkerGroupId());
 
                         if (nodeId == null) {
