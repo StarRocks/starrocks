@@ -405,14 +405,25 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
         return Status::InvalidArgument("batch_size is not set");
     }
-    auto batch_size = t_request.query_options.batch_size;
-    if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
-        return Status::InvalidArgument(
-                fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
-                            MAX_CHUNK_SIZE, batch_size));
+    // Before version 2.5, broker load was not executed in the pipeline engine.
+    // The batch_size params may not be set in the request sent by FE.
+    // During the grayscale upgrade process, the request sent by the old version of FE will report an error.
+    // For compatibility, choose to skip checking batch_size for load job here.
+    bool need_check_chunk_size = true;
+    if (t_request.query_options.__isset.query_type && t_request.query_options.query_type == TQueryType::LOAD) {
+        need_check_chunk_size = false;
+    }
+    if (need_check_chunk_size) {
+        auto batch_size = t_request.query_options.batch_size;
+        if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+            return Status::InvalidArgument(
+                    fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                                MAX_CHUNK_SIZE, batch_size));
+        }
     }
 
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
