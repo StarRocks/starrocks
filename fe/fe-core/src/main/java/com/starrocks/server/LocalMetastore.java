@@ -133,6 +133,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DisablePartitionRecoveryInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -2427,6 +2428,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayDisableTableRecovery(DisableTableRecoveryInfo disableTableRecoveryInfo) {
         recycleBin.replayDisableTableRecovery(disableTableRecoveryInfo.getTableIds());
+    }
+
+    public void replayDisablePartitionRecovery(DisablePartitionRecoveryInfo disablePartitionRecoveryInfo) {
+        recycleBin.replayDisablePartitionRecovery(disablePartitionRecoveryInfo.getPartitionId());
     }
 
     public void replayRecoverTable(RecoverInfo info) {
