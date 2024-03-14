@@ -60,7 +60,7 @@ public class QueryRuntimeProfileTest {
     }
 
     @Test
-    public void testLoadChannelProfile1() {
+    public void testLoadChannelProfile() {
         new Expectations() {
             {
                 jobSpec.hasOlapTableSink();
@@ -110,7 +110,6 @@ public class QueryRuntimeProfileTest {
 
         RuntimeProfile channelProfile1 = new RuntimeProfile("Channel (host=127.0.0.1)");
         profile.addChild(channelProfile1);
-        channelProfile1.addInfoString("Address", "127.0.0.1");
         Counter peakMemoryCounter1 = channelProfile1.addCounter("PeakMemoryUsage", TUnit.BYTES,
                 Counter.createStrategy(TCounterAggregateType.AVG));
         peakMemoryCounter1.setValue(1024 * 1024 * 1024);
@@ -135,7 +134,6 @@ public class QueryRuntimeProfileTest {
 
         RuntimeProfile channelProfile2 = new RuntimeProfile("Channel (host=127.0.0.2)");
         profile.addChild(channelProfile2);
-        channelProfile2.addInfoString("Address", "127.0.0.2");
         Counter peakMemoryCounter2 = channelProfile2.addCounter("PeakMemoryUsage", TUnit.BYTES,
                 Counter.createStrategy(TCounterAggregateType.AVG));
         peakMemoryCounter2.setValue(1024 * 1024);

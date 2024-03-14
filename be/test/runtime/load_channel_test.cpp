@@ -636,7 +636,6 @@ TEST_F(LoadChannelTestForLakeTablet, test_final_profile) {
     RuntimeProfile* channel_profile = profile->get_child(0);
     ASSERT_NE(nullptr, profile);
     ASSERT_EQ(fmt::format("Channel (host={})", BackendOptions::get_localhost()), channel_profile->name());
-    ASSERT_EQ(BackendOptions::get_localhost(), *channel_profile->get_info_string("Address"));
     ASSERT_EQ(1, channel_profile->get_counter("IndexNum")->value());
     ASSERT_EQ(-1, channel_profile->get_counter("LoadMemoryLimit")->value());
 

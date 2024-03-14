@@ -47,6 +47,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,6 +57,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class QueryRuntimeProfile {
@@ -574,12 +577,15 @@ public class QueryRuntimeProfile {
         Counter counter = mergedProfile.addCounter("ChannelNum", TUnit.UNIT, null);
         counter.setValue(channelProfiles.size());
 
-        String backendAddresses = channelProfiles.stream().map(profile -> profile.getInfoString("Address"))
-                        .collect(Collectors.joining(","));
-        mergedProfile.addInfoString("BackendAddresses", backendAddresses);
+        String hosts = channelProfiles.stream()
+                               .map(p -> getChannelHost(p.getName()))
+                               .filter(Optional::isPresent)
+                               .map(Optional::get)
+                               .collect(Collectors.joining(","));
+        mergedProfile.addInfoString("BackendAddresses", hosts);
 
         RuntimeProfile mergedChannelProfile =
-                RuntimeProfile.mergeIsomorphicProfiles(channelProfiles, Sets.newHashSet("Address"));
+                RuntimeProfile.mergeIsomorphicProfiles(channelProfiles, Collections.emptySet());
         if (mergedChannelProfile == null) {
             if (LOG.isDebugEnabled()) {
                 StringBuilder builder = new StringBuilder();
@@ -596,6 +602,15 @@ public class QueryRuntimeProfile {
         RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
 
         return Optional.of(mergedProfile);
+    }
+
+    // The pattern for each channel profile name like "Channel (host=127.0.0.1)"
+    private static final Pattern CHANNEL_NAME_PATTERN = Pattern.compile("^Channel \\(host=(.+)\\)$");
+
+    // Get load channel host from the channel profile name.
+    private static Optional<String> getChannelHost(String channelProfileName) {
+        Matcher matcher = CHANNEL_NAME_PATTERN.matcher(channelProfileName);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
     private List<String> getUnfinishedInstanceIds() {
