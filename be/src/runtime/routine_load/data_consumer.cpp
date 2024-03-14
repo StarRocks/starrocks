@@ -393,8 +393,21 @@ Status KafkaDataConsumer::reset() {
     return Status::OK();
 }
 
-Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) {
-    RdKafka::ErrorCode err = _k_consumer->commitSync(offset);
+Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets) {
+    std::vector<RdKafka::TopicPartition*> topic_partitions;
+    // delete TopicPartition finally
+    auto tp_deleter = [&topic_partitions]() {
+        std::for_each(topic_partitions.begin(), topic_partitions.end(),
+                      [](RdKafka::TopicPartition* tp1) { delete tp1; });
+    };
+    DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
+
+    for (auto& offset : offsets) {
+        RdKafka::TopicPartition* tp1 = RdKafka::TopicPartition::create(topic, offset.first, offset.second + 1);
+        topic_partitions.push_back(tp1);
+    }
+
+    RdKafka::ErrorCode err = _k_consumer->commitSync(topic_partitions);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
         ss << "failed to commit kafka offset : " << RdKafka::err2str(err);
