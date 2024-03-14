@@ -7018,7 +7018,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.identifierOrString() != null) {
             queryStatementContext.forEach(varNameContext -> {
                 Identifier identifier = (Identifier) visit(varNameContext);
-                variableExprs.add(new VariableExpr(identifier.getValue(), SetType.USER));
+                variableExprs.add(new UserVariableExpr(identifier.getValue(), identifier.getPos()));
             });
         }
         return new ExecuteStmt(stmtName, variableExprs);
