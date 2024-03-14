@@ -141,6 +141,12 @@ public:
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
+    // only for ut
+    void set_status(bool loaded, Status st) {
+        _loaded = loaded;
+        _status = st;
+    }
+
 protected:
     void _set_schema(const Schema& pk_schema);
 
