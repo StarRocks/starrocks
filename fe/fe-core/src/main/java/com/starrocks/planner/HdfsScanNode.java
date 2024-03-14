@@ -35,7 +35,9 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
@@ -103,7 +105,7 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
+        return new ArrayList<>(scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates));
     }
 
     @Override

@@ -52,14 +52,16 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class RemoteScanRangeLocations {
     private static final Logger LOG = LogManager.getLogger(RemoteScanRangeLocations.class);
 
-    private final List<TScanRangeLocations> result = new ArrayList<>();
+    private final Set<TScanRangeLocations> result = new HashSet<>();
     private final List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = new ArrayList<>();
     private boolean forceScheduleLocal = false;
 
@@ -84,7 +86,7 @@ public class RemoteScanRangeLocations {
         }
     }
 
-    private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
+    private boolean addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
                                        Optional<RemoteFileBlockDesc> blockDesc, DataCacheOptions dataCacheOptions) {
         // NOTE: Config.hive_max_split_size should be extracted to a local variable,
         // because it may be changed before calling 'splitScanRangeLocations'
@@ -102,35 +104,40 @@ public class RemoteScanRangeLocations {
 
         boolean needSplit = fileDesc.isSplittable() && totalSize > splitSize;
         if (needSplit) {
-            splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, offset, totalSize, splitSize,
+            return splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, offset, totalSize, splitSize,
                     dataCacheOptions);
         } else {
-            createScanRangeLocationsForSplit(partitionId, partition, fileDesc, blockDesc, offset, totalSize,
+            return createScanRangeLocationsForSplit(partitionId, partition, fileDesc, blockDesc, offset, totalSize,
                     dataCacheOptions);
         }
     }
 
-    private void splitScanRangeLocations(long partitionId, RemoteFileInfo partition,
+    private boolean splitScanRangeLocations(long partitionId, RemoteFileInfo partition,
                                          RemoteFileDesc fileDesc,
                                          Optional<RemoteFileBlockDesc> blockDesc,
                                          long offset, long length, long splitSize, DataCacheOptions dataCacheOptions) {
         long remainingBytes = length;
         do {
             if (remainingBytes < 2 * splitSize) {
-                createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
+                if (!createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
                         blockDesc, offset + length - remainingBytes,
-                        remainingBytes, dataCacheOptions);
+                        remainingBytes, dataCacheOptions)) {
+                    return false;
+                }
                 remainingBytes = 0;
             } else {
-                createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
+                if (!createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
                         blockDesc, offset + length - remainingBytes,
-                        splitSize, dataCacheOptions);
+                        splitSize, dataCacheOptions)) {
+                    return false;
+                }
                 remainingBytes -= splitSize;
             }
         } while (remainingBytes > 0);
+        return true;
     }
 
-    private void createScanRangeLocationsForSplit(long partitionId, RemoteFileInfo partition,
+    private boolean createScanRangeLocationsForSplit(long partitionId, RemoteFileInfo partition,
                                                   RemoteFileDesc fileDesc,
                                                   Optional<RemoteFileBlockDesc> blockDesc,
                                                   long offset, long length, DataCacheOptions dataCacheOptions) {
@@ -175,7 +182,7 @@ public class RemoteScanRangeLocations {
             scanRangeLocations.addToLocations(scanRangeLocation);
         }
 
-        result.add(scanRangeLocations);
+        return result.add(scanRangeLocations);
     }
 
     public static boolean isTextFormat(THdfsFileFormat format) {
@@ -269,7 +276,7 @@ public class RemoteScanRangeLocations {
         return Optional.of(dataCacheOptions);
     }
 
-    public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
+    public Set<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
                                            HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
         HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
@@ -305,9 +312,10 @@ public class RemoteScanRangeLocations {
                     if (fileDesc.getLength() == 0) {
                         continue;
                     }
+                    boolean addResult = false;
                     if (forceScheduleLocal) {
                         for (RemoteFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                            addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                            addResult = addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
                                     Optional.of(blockDesc),
                                     dataCacheOptions);
                             LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
@@ -315,13 +323,16 @@ public class RemoteScanRangeLocations {
                                     blockDesc.getLength());
                         }
                     } else {
-                        addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                        addResult = addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
                                 Optional.empty(),
                                 dataCacheOptions);
                         LOG.debug("Add scan range success. partition: {}, file: {}, range: {}-{}",
                                 partitions.get(i).getFullPath(), fileDesc.getFileName(), 0, fileDesc.getLength());
                     }
-
+                    if (!addResult) {
+                        LOG.warn("Add same scan range. partition: {}, file: {}, range: {}-{}",
+                                partitions.get(i).getFullPath(), fileDesc.getFileName(), 0, fileDesc.getLength());
+                    }
                 }
             }
         } else if (table instanceof HudiTable) {
