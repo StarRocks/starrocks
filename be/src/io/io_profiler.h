@@ -54,6 +54,8 @@ public:
     static IOStatEntry* get_context();
     static void clear_context();
 
+    static bool is_empty();
+
     class Scope {
     public:
         Scope() = delete;
