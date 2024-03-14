@@ -321,6 +321,7 @@ public:
     Status generate_pk_dump_if_in_error_state();
 
 >>>>>>> 4d02de56d8 ([BugFix] Check the return value after load primary index in pk compaction (#42221))
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

@@ -150,6 +150,7 @@ public:
     }
 
 >>>>>>> 4d02de56d8 ([BugFix] Check the return value after load primary index in pk compaction (#42221))
+
 protected:
     void _set_schema(const Schema& pk_schema);
 
