@@ -176,6 +176,7 @@ public class Authorizer {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
+            case OLAP_EXTERNAL:
             case CLOUD_NATIVE:
             case MYSQL:
             case ELASTICSEARCH:
