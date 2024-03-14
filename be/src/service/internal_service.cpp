@@ -134,10 +134,11 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     if (request->has_request_timestamp()) {
         int64_t request_timestamp = request->request_timestamp();
         // LOG if network rpc time greater than 1s
-        if (MonotonicNanos() - request_timestamp > 1000000000L) {
-            LOG(INFO) << "TRACE slow rpc: transmit_chunk, fragment_instance_id=" << print_id(request->finst_id())
-                      << ", node=" << request->node_id() << " span_id=" << cntl->span_id() << " trace_id"
-                      << cntl->trace_id() << ", cost=" << (MonotonicNanos() - request_timestamp) << "ns";
+        if (UnixMillis() - request_timestamp > 1000L) {
+            LOG(INFO) << "TRACE slow rpc in network: transmit_chunk, fragment_instance_id="
+                      << print_id(request->finst_id()) << ", node=" << request->node_id()
+                      << " span_id=" << cntl->span_id() << " trace_id" << cntl->trace_id()
+                      << ", cost=" << (UnixMillis() - request_timestamp) << "ms";
         }
     }
 
@@ -190,14 +191,15 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* req = const_cast<PTransmitChunkParams*>(request);
 
-    int64_t current_time = MonotonicNanos();
+    int64_t current_time = UnixMillis();
     if (request->has_request_timestamp()) {
         int64_t request_timestamp = request->request_timestamp();
         // LOG if network rpc time greater than 1s
-        if (current_time - request_timestamp > 1000000000L) {
-            LOG(INFO) << "TRACE slow rpc: transmit_chunk, fragment_instance_id=" << print_id(request->finst_id())
-                      << ", node=" << request->node_id() << " span_id=" << cntl->span_id() << " trace_id"
-                      << cntl->trace_id() << ", cost=" << (current_time - request_timestamp) << "ns";
+        if (current_time - request_timestamp > 1000L) {
+            LOG(INFO) << "TRACE slow rpc after queue: transmit_chunk, fragment_instance_id="
+                      << print_id(request->finst_id()) << ", node=" << request->node_id()
+                      << " span_id=" << cntl->span_id() << " trace_id" << cntl->trace_id()
+                      << ", cost=" << (current_time - request_timestamp) << "ms";
         }
     }
 
