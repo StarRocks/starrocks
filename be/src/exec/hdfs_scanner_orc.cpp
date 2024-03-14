@@ -697,7 +697,10 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter,
                    _app_stats.orc_stripe_active_lazy_coalesce_seperately);
 
-    root->add_info_string("ORCSearchArgument: ", _orc_reader->get_search_argument_string());
+    if (_orc_reader != nullptr) {
+        // _orc_reader is nullptr for split task
+        root->add_info_string("ORCSearchArgument: ", _orc_reader->get_search_argument_string());
+    }
 }
 
 } // namespace starrocks
