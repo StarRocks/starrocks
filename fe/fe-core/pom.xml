@@ -983,7 +983,7 @@ under the License.
                     <reuseForks>false</reuseForks>
 
                     <forkedProcessTimeoutInSeconds>40</forkedProcessTimeoutInSeconds>
-<!--                    <forkedProcessExitTimeoutInSeconds>5</forkedProcessExitTimeoutInSeconds>-->
+                    <forkedProcessExitTimeoutInSeconds>40</forkedProcessExitTimeoutInSeconds>
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar -Xmx4096m
                         -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
