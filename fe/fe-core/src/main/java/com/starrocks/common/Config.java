@@ -2787,6 +2787,8 @@ public class Config extends ConfigBase {
     public static int replication_max_parallel_data_size_mb = 10240; // 10g
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+    @ConfField(mutable = true)
+    public static boolean enable_legacy_compatibility_for_replication = false;
 
     @ConfField(mutable = true)
     public static boolean jdbc_meta_default_cache_enable = false;
