@@ -20,7 +20,7 @@ displayed_sidebar: "Chinese"
   - [使用 MAX() 窗口函数](#使用-max-窗口函数)
   - [使用 MIN() 窗口函数](#使用-min-窗口函数)
   - [使用 NTILE() 窗口函数](#使用-ntile-窗口函数)
-    - [PERCENT\_RANK()](#percent_rank)
+  - [使用 PERCENT\_RANK() 函数](#使用-percent_rank-函数)
   - [使用 RANK() 窗口函数](#使用-rank-窗口函数)
   - [使用 ROW\_NUMBER() 窗口函数](#使用-row_number-窗口函数)
   - [使用 QUALIFY 窗口函数](#使用-qualify-窗口函数)
@@ -35,7 +35,7 @@ displayed_sidebar: "Chinese"
 
 本文介绍如何使用 StarRocks 窗口函数。
 
-窗口函数是 StarRocks 内置的特殊函数。和聚合函数类似，窗口函数通过对多行数据进行计算得到一个数据值。不同的是，窗口函数使用 Over() 子句对**当前窗口**内的数据进行排序和分组，同时**对结果集的每一行**计算出一个单独的值，而不是对每个 Group By 分组计算一个值。这种灵活的方式允许您在 SELECT 子句中增加额外的列，对结果集进行重新组织和过滤。
+窗口函数是 StarRocks 内置的特殊函数。和聚合函数类似，窗口函数通过对多行数据进行计算得到一个数据值。不同的是，窗口函数使用 OVER() 子句对**当前窗口**内的数据进行排序和分组，同时**对结果集的每一行**计算出一个单独的值，而不是对每个 GROUP BY 分组计算一个值。这种灵活的方式允许您在 SELECT 子句中增加额外的列，对结果集进行重新组织和过滤。
 
 窗口函数在金融和科学计算领域较为常用，常被用来分析趋势、计算离群值以及对大量数据进行分桶分析等。
 
@@ -49,7 +49,7 @@ partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ```
 
-> 注意：窗口函数只能出现在 SELECT 列表和最外层的 Order By 子句中。在查询过程中，窗口函数会在最后生效，也就是在执行完 Join，Where 和 Group By 等操作之后生效。
+> 注意：窗口函数只能出现在 SELECT 列表和最外层的 ORDER BY 子句中。在查询过程中，窗口函数会在最后生效，也就是在执行完 Join，Where 和 GROUP BY 等操作之后生效。
 
 ### 参数说明
 
@@ -78,7 +78,7 @@ order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 
 ## 窗口函数建表示例
 
-本节创建的 `scores` 表用于下面多个函数的示例。
+本节创建的 `scores` 表将用于下面多个函数的示例。
 
 ```SQL
 CREATE TABLE `scores` (
@@ -329,7 +329,7 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 **示例**：
 
-以下示例使用 `FIRST_VALUE()` 函数和 IGNORE NULLS，根据 `subject` 列分组，返回每个分组中第一个 `score` 值，降序排序。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例使用 `FIRST_VALUE()` 函数和 IGNORE NULLS，根据 `subject` 列分组，按照降序返回每个分组中的最高分。建表语句参见[建表示例](#窗口函数建表示例)。
 
 ```SQL
 select *,
@@ -384,7 +384,7 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 
 **示例**：
 
-以下示例使用 `LAST_VALUE()` 函数，根据 `country` 列分组，返回每个分组中最后一个 `greeting` 的值。建表语句参见[建表示例](#窗口函数建表示例)。
+以下示例使用 `LAST_VALUE()` 函数，根据 `subject` 列分组，按照降序返回每个分组中的最低得分。建表语句参见[建表示例](#窗口函数建表示例)。
 
 ```SQL
 select *,
@@ -668,6 +668,7 @@ where subject in ('math');
 
 以下示例计算 `math` 科目所有行中的最大值。
 
+```sql
 select *,
     max(score)
         over (
@@ -677,10 +678,11 @@ select *,
         ) as max
 from scores
 where subject in ('math');
+```
 
 从 2.4 版本开始，该函数支持设置 `rows between n preceding and n following`，即支持计算当前行前n行及后 `n` 行中的最大值。比如要计算当前行前 3 行和后 2 行中的最大值，语句可写为：
 
-```SQL
+```sql
 select *,
     max(score)
         over (
@@ -697,7 +699,7 @@ where subject in ('math');
 
 **语法**：
 
-```SQL
+```sql
 MIN(expr) [OVER (analytic_clause)]
 ```
 
@@ -813,7 +815,7 @@ from scores;
 - 第 1 行为一个分区，划分在一个分桶中。
 - 2-7 行为一个分区，其中前 3 行在第一个分桶中、后 3 行在第二个分桶中。
 
-### PERCENT_RANK()
+## 使用 PERCENT_RANK() 函数
 
 计算当前行在所在的分区内的相对排名，百分比。计算公式为 `(Rank - 1)/(Rows in partition - 1)`。
 
@@ -1053,15 +1055,15 @@ ORDER BY city_id;
 
 带 QUALIFY 的查询语句中，子句的执行顺序如下：
 
-> 1. From
-> 2. Where
-> 3. Group by
-> 4. Having
-> 5. Window
-> 6. QUALIFY
-> 7. Distinct
-> 8. Order by
-> 9. Limit
+1. FROM
+2. WHERE
+3. GROUP BY
+4. HAVING
+5. Window
+6. QUALIFY
+7. DISTINCT
+8. ORDER BY
+9. LIMIT
 
 <br/>
 
