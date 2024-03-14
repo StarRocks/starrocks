@@ -213,6 +213,10 @@ Status FileReader::_get_footer() {
 }
 
 void FileReader::_build_split_tasks() {
+    // dont do split in following cases:
+    // 1. this feature is not enabled
+    // 2. we have already do split before (that's why `split_context` is nullptr)
+    // 3. in unit test case (that's why `split_tasks` is nullptr)
     if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr ||
         _scanner_ctx->split_tasks == nullptr) {
         return;
