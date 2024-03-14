@@ -243,7 +243,7 @@ private:
     // Accumulated time to wait for memtable flush in add_chunk()
     RuntimeProfile::Counter* _wait_flush_timer = nullptr;
     // Accumulated time to wait for async delta writers in add_chunk()
-    RuntimeProfile::Counter* _wait_writer_timer = nullptr;
+    RuntimeProfile::Counter* _wait_write_timer = nullptr;
     // Accumulated time to wait for secondary replicas in add_chunk()
     RuntimeProfile::Counter* _wait_replica_timer = nullptr;
     // Accumulated time to wait for txn persist in add_chunk()

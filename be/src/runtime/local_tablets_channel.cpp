@@ -75,7 +75,7 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
     _add_chunk_timer = ADD_TIMER(_profile, "AddChunkTime");
     _add_row_num = ADD_COUNTER(_profile, "AddRowNum", TUnit::UNIT);
     _wait_flush_timer = ADD_CHILD_TIMER(_profile, "WaitFlushTime", "AddChunkTime");
-    _wait_writer_timer = ADD_CHILD_TIMER(_profile, "WaitWriterTime", "AddChunkTime");
+    _wait_write_timer = ADD_CHILD_TIMER(_profile, "WaitWriteTime", "AddChunkTime");
     _wait_replica_timer = ADD_CHILD_TIMER(_profile, "WaitReplicaTime", "AddChunkTime");
     _wait_txn_persist_timer = ADD_CHILD_TIMER(_profile, "WaitTxnPersistTime", "AddChunkTime");
 }
@@ -433,7 +433,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
     COUNTER_UPDATE(_add_row_num, total_row_num);
     COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_us * 1000);
-    COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
+    COUNTER_UPDATE(_wait_write_timer, wait_writer_ns);
     COUNTER_UPDATE(_wait_replica_timer, wait_replica_ns);
 
     // remove tablets channel and load channel after all things done
