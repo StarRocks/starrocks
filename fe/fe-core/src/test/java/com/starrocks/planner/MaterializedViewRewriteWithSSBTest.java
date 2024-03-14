@@ -19,9 +19,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -71,6 +74,7 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                 "from lineorder l left join part p on l.LO_PARTKEY = p.P_PARTKEY\n" +
                 "group by p_brand, LO_ORDERDATE";
 
+        // What if query plan of mv disable join reorder?
         // This case must disable outer join to inner join in `JoinPredicatePushdown`
         starRocksAssert.withMaterializedView(mv, () -> {
             String query = "select t1.p_brand as p_brand, t1.LO_ORDERDATE as LO_ORDERDATE,\n" +
@@ -97,7 +101,6 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                 "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum\n" +
                 "from lineorder l group by LO_ORDERDATE";
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
-
         starRocksAssert.withMaterializedView(mv, () -> {
             String query = "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum\n" +
                     "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
