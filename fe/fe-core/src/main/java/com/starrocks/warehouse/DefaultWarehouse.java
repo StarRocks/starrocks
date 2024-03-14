@@ -14,19 +14,19 @@
 
 package com.starrocks.warehouse;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
+import com.google.gson.annotations.SerializedName;
 
-public class WarehouseClusterProcNode implements ProcNodeInterface {
-    private final Warehouse warehouse;
+public class DefaultWarehouse extends Warehouse {
+    @SerializedName(value = "cluster")
+    Cluster cluster;
 
-    public WarehouseClusterProcNode(Warehouse wh) {
-        this.warehouse = wh;
+    public DefaultWarehouse(long id, String name, long clusterId) {
+        super(id, name);
+        cluster = new Cluster(clusterId);
     }
 
     @Override
-    public ProcResult fetchResult() throws AnalysisException {
-        return warehouse.getClusterProcData();
+    public Cluster getAnyAvailableCluster() {
+        return cluster;
     }
 }

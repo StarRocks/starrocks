@@ -15,17 +15,12 @@
 package com.starrocks.warehouse;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Map;
 
 public abstract class Warehouse implements Writable {
 
@@ -71,24 +66,11 @@ public abstract class Warehouse implements Writable {
         this.exist = exist;
     }
 
-    public abstract void getProcNodeData(BaseProcResult result);
-
-    public abstract Map<Long, Cluster> getClusters() throws DdlException;
-
     public abstract Cluster getAnyAvailableCluster();
-
-    public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
-
-    public abstract ProcResult getClusterProcData();
 
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
-    }
-
-    public static Warehouse read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Warehouse.class);
     }
 }
