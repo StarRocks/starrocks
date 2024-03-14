@@ -498,16 +498,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_runtime_state(runtime_state);
     _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
-    if (_use_orc_sargs) {
-        std::vector<Expr*> conjuncts;
-        for (const auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
-            for (const auto& it2 : it.second) {
-                conjuncts.push_back(it2->root());
-            }
-        }
-        RETURN_IF_ERROR(
-                _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_ctx.runtime_filter_collector));
-    }
     _orc_reader->set_hive_column_names(_scanner_ctx.hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_ctx.case_sensitive);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
@@ -515,7 +505,18 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
 
-    RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
+    if (_use_orc_sargs) {
+        std::vector<Expr*> conjuncts;
+        for (const auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
+            for (const auto& it2 : it.second) {
+                conjuncts.push_back(it2->root());
+            }
+        }
+        const OrcPredicates orc_predicates(&conjuncts, _scanner_ctx.runtime_filter_collector);
+        RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
+    } else {
+        RETURN_IF_ERROR(_orc_reader->init(std::move(reader), nullptr));
+    }
 
     // create iceberg delete builder at last
     RETURN_IF_ERROR(build_iceberg_delete_builder());
@@ -696,6 +697,8 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.orc_stripe_active_lazy_coalesce_together);
     COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter,
                    _app_stats.orc_stripe_active_lazy_coalesce_seperately);
+
+    root->add_info_string("ORCSearchArgument: ", _orc_reader->get_search_argument_string());
 }
 
 } // namespace starrocks

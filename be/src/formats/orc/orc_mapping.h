@@ -113,7 +113,6 @@ public:
 
 private:
     std::unordered_map<size_t, const OrcMappingOrcType> _mapping;
-    std::unordered_map<std::string, orc::Type*> _new_mapping;
 
     Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
                                          std::list<uint64_t>* column_id_list);

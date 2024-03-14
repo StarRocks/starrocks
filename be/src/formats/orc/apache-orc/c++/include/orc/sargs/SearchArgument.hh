@@ -214,6 +214,15 @@ public:
                                       const std::initializer_list<Literal>& literals) = 0;
     virtual SearchArgumentBuilder& in(const std::string& column, PredicateDataType type,
                                       const std::vector<Literal>& literals) = 0;
+    /**
+     * Add an in leaf to the current item on the stack.
+     * @param columnId the column id of the column
+     * @param type the type of the expression
+     * @param literals the literals
+     * @return this
+    */
+    virtual SearchArgumentBuilder& in(uint64_t columnId, PredicateDataType type,
+                                      const std::vector<Literal>& literals) = 0;
 
     /**
      * Add an in leaf to the current item on the stack.
