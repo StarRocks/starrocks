@@ -710,17 +710,18 @@ public class MaterializedViewRewriter {
         final OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         final OptExpression mvExpression = materializationContext.getMvExpression();
         final ScalarOperator mvEqualPredicate = mvPredicateSplit.getEqualPredicates();
+        final ColumnRefFactory queryColumnRefFactory = materializationContext.getQueryRefFactory();
+        final ColumnRefFactory mvColumnRefFactory = materializationContext.getMvColumnRefFactory();
         final Map<Integer, Map<String, ColumnRefOperator>> queryRelationIdToColumns =
-                getRelationIdToColumns(materializationContext.getQueryRefFactory());
+                getRelationIdToColumns(queryColumnRefFactory);
         final Map<Integer, Map<String, ColumnRefOperator>> mvRelationIdToColumns =
-                getRelationIdToColumns(materializationContext.getMvColumnRefFactory());
+                getRelationIdToColumns(mvColumnRefFactory);
         // for query: A1 join A2 join B, mv: A1 join A2 join B
         // there may be two mapping:
         //    1. A1 -> A1, A2 -> A2, B -> B
         //    2. A1 -> A2, A2 -> A1, B -> B
         List<BiMap<Integer, Integer>> relationIdMappings = generateRelationIdMap(
-                materializationContext.getQueryRefFactory(),
-                queryTables, queryExpression, materializationContext.getMvColumnRefFactory(),
+                queryColumnRefFactory, queryTables, queryExpression, mvColumnRefFactory,
                 mvTables, mvExpression, matchMode, compensationRelations, expectedExtraQueryToMVRelationIds);
         if (relationIdMappings.isEmpty()) {
             logMVRewrite(mvRewriteContext, "Rewrite complete failed: relation id mapping is empty");
@@ -731,8 +732,8 @@ public class MaterializedViewRewriter {
         final PredicateSplit queryPredicateSplit = mvRewriteContext.getQueryPredicateSplit();
         final List<ColumnRefOperator> scanMvOutputColumns =
                 materializationContext.getScanMvOperator().getOutputColumns();
-        final Set<ColumnRefOperator> queryColumnSet = queryRelationIdToColumns.values()
-                .stream().flatMap(x -> x.values().stream())
+        // NOTE: New column ref may be created into queryColumnRefFactory besides column refs of table relations.
+        final Set<ColumnRefOperator> queryColumnSet = queryColumnRefFactory.getColumnRefs().stream()
                 .filter(columnRef -> !scanMvOutputColumns.contains(columnRef))
                 .collect(Collectors.toSet());
         final EquivalenceClasses queryEc = createEquivalenceClasses(
@@ -746,11 +747,9 @@ public class MaterializedViewRewriter {
         deduceEquivalenceClassesFromRangePredicates(rangePredicates, queryEc, true);
 
         final RewriteContext rewriteContext = new RewriteContext(
-                queryExpression, queryPredicateSplit, queryEc,
-                queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
+                queryExpression, queryPredicateSplit, queryEc, queryRelationIdToColumns, queryColumnRefFactory,
                 mvRewriteContext.getQueryColumnRefRewriter(), mvExpression, mvPredicateSplit, mvRelationIdToColumns,
-                materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
-                materializationContext.getOutputMapping(), queryColumnSet);
+                mvColumnRefFactory, mvColumnRefRewriter, materializationContext.getOutputMapping(), queryColumnSet);
 
         // collect partition and distribution related predicates in mv
         // used to prune partition and buckets after mv rewrite
