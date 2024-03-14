@@ -413,13 +413,8 @@ public class BDBEnvironment {
     }
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
-<<<<<<< HEAD
         Set<InetSocketAddress> addrs = GlobalStateMgr.getCurrentState()
-                .getFrontends(FrontendNodeType.FOLLOWER)
-=======
-        Set<InetSocketAddress> addrs = GlobalStateMgr.getCurrentState().getNodeMgr()
                 .getFrontends(null)
->>>>>>> 16618427d6 ([BugFix] Fix observer node recovery bug (#40815))
                 .stream()
                 .filter(Frontend::isAlive)
                 .map(fe -> new InetSocketAddress(fe.getHost(), fe.getEditLogPort()))
