@@ -269,4 +269,11 @@ public class TypeTest {
         // test initialed fieldMap by ctor in deserializer.
         Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));
     }
+
+    @Test
+    public void testExtendedPrecision() {
+        ScalarType type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 10, 4);
+        Assert.assertTrue(type == AggregateType.extendedPrecision(type, true));
+        Assert.assertTrue(type != AggregateType.extendedPrecision(type, false));
+    }
 }
