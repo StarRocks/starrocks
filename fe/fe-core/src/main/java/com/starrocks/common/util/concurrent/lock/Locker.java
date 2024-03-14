@@ -16,6 +16,7 @@ package com.starrocks.common.util.concurrent.lock;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -29,7 +30,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -213,9 +213,11 @@ public class Locker {
         if (dbs == null) {
             return;
         }
-        dbs.sort(Comparator.comparingLong(Database::getId));
-        for (Database db : dbs) {
-            lockDatabase(db, lockType);
+        // use TreeMap to remove duplicate and sort by db id
+        Map<Long, Database> dbMap = Maps.newTreeMap();
+        dbs.stream().forEach(db -> dbMap.put(db.getId(), db));
+        for (Map.Entry<Long, Database> entry : dbMap.entrySet()) {
+            lockDatabase(entry.getValue(), lockType);
         }
     }
 
@@ -227,8 +229,11 @@ public class Locker {
         if (dbs == null) {
             return;
         }
-        for (Database db : dbs) {
-            unLockDatabase(db, lockType);
+        // use TreeMap to remove duplicate and sort by db id
+        Map<Long, Database> dbMap = Maps.newTreeMap();
+        dbs.stream().forEach(db -> dbMap.put(db.getId(), db));
+        for (Map.Entry<Long, Database> entry : dbMap.entrySet()) {
+            unLockDatabase(entry.getValue(), lockType);
         }
     }
 
