@@ -57,6 +57,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateGroupByConstantRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
@@ -371,6 +372,51 @@ public class RuleSet {
                 AggregateJoinRule.getInstance(),
                 OnlyJoinRule.getInstance()
         ));
+<<<<<<< HEAD
+=======
+
+        REWRITE_RULES.put(RuleSetType.ALL_MV_REWRITE, Stream.concat(
+                REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
+                REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
+                        .collect(Collectors.toList()));
+
+        REWRITE_RULES.put(RuleSetType.PRUNE_EMPTY_OPERATOR, ImmutableList.of(
+                PruneEmptyScanRule.OLAP_SCAN,
+                PruneEmptyScanRule.HIVE_SCAN,
+                PruneEmptyScanRule.HUDI_SCAN,
+                PruneEmptyScanRule.ICEBERG_SCAN,
+                PruneEmptyScanRule.PAIMON_SCAN,
+                PruneEmptyScanRule.ODPS_SCAN,
+                PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
+                PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
+                new PruneEmptyDirectRule(),
+                new PruneEmptyUnionRule(),
+                new PruneEmptyIntersectRule(),
+                new PruneEmptyExceptRule(),
+                new PruneEmptyWindowRule()
+        ));
+
+        REWRITE_RULES.put(RuleSetType.SHORT_CIRCUIT_SET, ImmutableList.of(
+                new PruneTrueFilterRule(),
+                new PushDownPredicateProjectRule(),
+                PushDownPredicateScanRule.OLAP_SCAN,
+                new CastToEmptyRule(),
+                new PruneProjectColumnsRule(),
+                PruneScanColumnRule.OLAP_SCAN,
+                new PruneProjectEmptyRule(),
+                new MergeTwoProjectRule(),
+                new PruneProjectRule(),
+                new PartitionPruneRule(),
+                new DistributionPruneRule()));
+
+        REWRITE_RULES.put(RuleSetType.FINE_GRAINED_RANGE_PREDICATE, ImmutableList.of(
+                FineGrainedRangePredicateRule.INSTANCE,
+                FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
+
+        REWRITE_RULES.put(RuleSetType.ELIMINATE_GROUP_BY, ImmutableList.of(
+                EliminateGroupByConstantRule.INSTANCE
+        ));
+>>>>>>> f39ccca32b ([BugFix] eliminate constant in group by key (#42353))
     }
 
     public RuleSet() {
