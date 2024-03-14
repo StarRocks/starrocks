@@ -69,7 +69,7 @@ public:
         size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
         DCHECK_LE(element_null_count, offset_size.second);
         size_t null_offset = 0;
-        // nulls lay at the array's head, not tail. Such cases exist in older version.
+        // nulls lay at the array's head, not tail. Such array may result from older version.
         if (UNLIKELY(array_element.is_null(offset_size.first))) {
             null_offset = element_null_count;
         }
