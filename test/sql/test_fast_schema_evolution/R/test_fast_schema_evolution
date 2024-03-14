@@ -258,12 +258,11 @@ PRIMARY KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
 ORDER BY(`v3`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from tab1;
@@ -298,7 +297,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
     "fast_schema_evolution" = "true"
@@ -326,12 +324,10 @@ DUPLICATE KEY(`id_int`, `v1`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 insert into reproducex4 values (7,8,9);
@@ -365,7 +361,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
     "fast_schema_evolution" = "false"
@@ -393,11 +388,9 @@ DUPLICATE KEY(`id_int`, `v1`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
+"compression" = "LZ4",
 "replicated_storage" = "true",
-"compression" = "LZ4"
+"replication_num" = "1"
 );
 -- !result
 insert into reproducex4 values (7,8,9);

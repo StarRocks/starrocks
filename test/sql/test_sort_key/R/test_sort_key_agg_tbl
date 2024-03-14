@@ -19,7 +19,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );
@@ -39,7 +38,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,v2)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );
@@ -59,7 +57,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );
@@ -128,12 +125,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
 ORDER BY(`k1`, `k2`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from agg_test;
@@ -166,12 +161,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
 ORDER BY(`k1`, `k2`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from agg_test;
@@ -209,7 +202,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );
@@ -277,12 +269,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
 ORDER BY(`k1`, `k2`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from agg_test;
@@ -315,12 +305,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
 ORDER BY(`k1`, `k2`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from agg_test;
