@@ -505,6 +505,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
 
+    std::unique_ptr<OrcPredicates> orc_predicates = nullptr;
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
         for (const auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
@@ -512,11 +513,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                 conjuncts.push_back(it2->root());
             }
         }
-        const OrcPredicates orc_predicates(&conjuncts, _scanner_ctx.runtime_filter_collector);
-        RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
-    } else {
-        RETURN_IF_ERROR(_orc_reader->init(std::move(reader), nullptr));
+        orc_predicates = std::make_unique<OrcPredicates>(&conjuncts, _scanner_ctx.runtime_filter_collector);
     }
+    RETURN_IF_ERROR(_orc_reader->init(std::move(reader), orc_predicates.get()));
 
     // create iceberg delete builder at last
     RETURN_IF_ERROR(build_iceberg_delete_builder());
