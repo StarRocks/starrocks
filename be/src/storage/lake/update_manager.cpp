@@ -389,13 +389,8 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
 }
 
 Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& metadata,
-<<<<<<< HEAD
                                         const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema,
-                                        std::vector<uint32_t>& column_ids, bool with_default,
-=======
-                                        const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
                                         std::vector<uint32_t>& column_ids, bool with_default, bool include_op_write,
->>>>>>> 751f5c5f6a ([BugFix] fix cloud native pk concurrent partial update issue (#42355))
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns,
                                         AutoIncrementPartialUpdateState* auto_increment_state) {

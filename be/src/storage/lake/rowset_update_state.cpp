@@ -649,15 +649,9 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const TxnLogPB_OpWrit
         std::vector<uint32_t> read_idxes;
         plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
         DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
-<<<<<<< HEAD
         RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, *tablet_schema,
-                                                                read_column_ids, num_default > 0, rowids_by_rssid,
-                                                                &read_columns));
-=======
-        RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, tablet_schema,
                                                                 read_column_ids, num_default > 0, false,
                                                                 rowids_by_rssid, &read_columns));
->>>>>>> 751f5c5f6a ([BugFix] fix cloud native pk concurrent partial update issue (#42355))
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             std::unique_ptr<Column> new_write_column =
@@ -737,11 +731,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const TxnLogPB_OpWrit
         auto_increment_read_column.resize(1);
         auto_increment_read_column[0] = _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
         RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(
-<<<<<<< HEAD
-                tablet, metadata, op_write, *tablet_schema, column_id, new_rows > 0, rowids_by_rssid,
-=======
-                tablet, metadata, op_write, tablet_schema, column_id, new_rows > 0, false, rowids_by_rssid,
->>>>>>> 751f5c5f6a ([BugFix] fix cloud native pk concurrent partial update issue (#42355))
+                tablet, metadata, op_write, *tablet_schema, column_id, new_rows > 0, false, rowids_by_rssid,
                 &auto_increment_read_column, &_auto_increment_partial_update_states[segment_id]));
 
         std::unique_ptr<Column> new_write_column =
