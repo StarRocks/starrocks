@@ -269,7 +269,7 @@ public class LakePublishBatchTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transTablets,
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transTablets,
                 Lists.newArrayList(), null);
 
         long transactionId8 = globalTransactionMgr.
@@ -278,7 +278,7 @@ public class LakePublishBatchTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        globalTransactionMgr.commitTransaction(db.getId(), transactionId8, transTablets,
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId8, transTablets,
                 Lists.newArrayList(), null);
 
         new MockUp<Database>() {
@@ -291,13 +291,13 @@ public class LakePublishBatchTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
 
+        Assert.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
+        Assert.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
+
         TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId7);
         TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId8);
-
-        // wait publish complete
-        Thread.sleep(1000);
         Assert.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
         Assert.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
     }
