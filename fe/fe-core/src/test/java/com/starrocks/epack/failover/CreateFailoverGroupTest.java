@@ -69,11 +69,11 @@ public class CreateFailoverGroupTest {
 
         ShowFailoverGroupsStmt showStmt1 = (ShowFailoverGroupsStmt) analyzeSuccess(
                 "SHOW FAILOVER GROUPS");
-        new ShowExecutor(starRocksAssert.getCtx(), showStmt1).execute();
+        new ShowExecutor().execute(showStmt1, starRocksAssert.getCtx());
 
         DescribeFailoverGroupStmt descStmt1 = (DescribeFailoverGroupStmt) analyzeSuccess(
                 "DESC FAILOVER GROUP test_group1");
-        new ShowExecutor(starRocksAssert.getCtx(), descStmt1).execute();
+        new ShowExecutor().execute(descStmt1, starRocksAssert.getCtx());
 
         CreatePrimaryFailoverGroupStmt createStmt2 = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP test_group2 " +

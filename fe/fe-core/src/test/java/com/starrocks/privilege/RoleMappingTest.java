@@ -435,7 +435,7 @@ public class RoleMappingTest {
         ShowRoleMappingStatement showStmt = (ShowRoleMappingStatement) UtFrameUtils
                 .parseStmtWithNewParser("SHOW role mappings", connectContext);
         RoleMappingStatementAnalyzer.analyze(showStmt, connectContext);
-        ShowResultSet res = new ShowExecutor(connectContext, showStmt).execute();
+        ShowResultSet res = new ShowExecutor().execute(showStmt, connectContext);
         System.out.println(res.getResultRows());
 
         Assert.assertEquals(2, res.getResultRows().size());

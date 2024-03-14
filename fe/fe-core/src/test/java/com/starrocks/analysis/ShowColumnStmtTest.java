@@ -61,8 +61,8 @@ public class ShowColumnStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "show full columns from test_default;";
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(showColumnStmt, ctx);
         Assert.assertEquals("uuid()", resultSet.getResultRows().get(0).get(5));
     }
 
@@ -71,8 +71,8 @@ public class ShowColumnStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "show full columns from test_only_metric_default;";
         ShowColumnStmt showColumnStmt = (ShowColumnStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, showColumnStmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(showColumnStmt, ctx);
         // here must set null not \N
         Assert.assertNull(resultSet.getResultRows().get(0).get(5));
         Assert.assertNull(resultSet.getResultRows().get(1).get(5));

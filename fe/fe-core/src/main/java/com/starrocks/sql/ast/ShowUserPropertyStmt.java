@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
@@ -67,7 +66,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
         this.pattern = pattern;
     }
 
-    public List<List<String>> getRows(ConnectContext connectContext) throws AnalysisException {
+    public List<List<String>> getRows(ConnectContext connectContext) {
         List<List<String>> rows = new ArrayList<>();
         AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 

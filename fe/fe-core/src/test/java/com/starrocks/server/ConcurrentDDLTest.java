@@ -167,7 +167,7 @@ public class ConcurrentDDLTest {
                         ShowTableStmt showTableStmt =
                                 (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
                                         "show tables from concurrent_test_db", connectContext);
-                        ShowExecutor showExecutor = new ShowExecutor(connectContext, showTableStmt);
+                        ShowExecutor showExecutor = new ShowExecutor();
                         starRocksAssert.dropDatabase("concurrent_test_db");
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {

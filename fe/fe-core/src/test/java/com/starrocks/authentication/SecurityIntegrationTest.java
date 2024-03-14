@@ -413,7 +413,7 @@ public class SecurityIntegrationTest {
         ShowSecurityIntegrationStatement showStmt = (ShowSecurityIntegrationStatement) UtFrameUtils
                 .parseStmtWithNewParser("SHOW security integrations", connectContext);
         SecurityIntegrationStatementAnalyzer.analyze(showStmt, connectContext);
-        ShowResultSet res = new ShowExecutor(connectContext, showStmt).execute();
+        ShowResultSet res = new ShowExecutor().execute(showStmt, connectContext);
         System.out.println(res.getResultRows());
         Assert.assertEquals("[ldap1forshow, ldap, \\N]", res.getResultRows().get(0).toString());
         Assert.assertEquals("[ldap2forshow, ldap, \\N]", res.getResultRows().get(1).toString());
@@ -434,7 +434,7 @@ public class SecurityIntegrationTest {
         ShowCreateSecurityIntegrationStatement showStmt = (ShowCreateSecurityIntegrationStatement) UtFrameUtils
                 .parseStmtWithNewParser("SHOW create security integration ldap1forshowcreate", connectContext);
         SecurityIntegrationStatementAnalyzer.analyze(showStmt, connectContext);
-        ShowResultSet res = new ShowExecutor(connectContext, showStmt).execute();
+        ShowResultSet res = new ShowExecutor().execute(showStmt, connectContext);
         System.out.println(res.getResultRows());
         Assert.assertTrue(res.getResultRows().get(0).get(1).contains("\"ldap_user_group_match_attr\" = \"memberUid\""));
         // test the show create result can actually work

@@ -71,12 +71,12 @@ public class DropPolicyTest {
 
         DDLStmtExecutorEPack.execute(analyzeSuccess("drop row access  policy if exists rp"), starRocksAssert.getCtx());
 
-        ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
-                (ShowStmt) analyzeSuccess("show masking policies"));
-        Assert.assertEquals(0, showExecutor.execute().getResultRows().size());
+        ShowExecutor showExecutor = new ShowExecutor();
+        Assert.assertEquals(0, showExecutor.execute((ShowStmt) analyzeSuccess("show masking policies"),
+                starRocksAssert.getCtx()).getResultRows().size());
 
-        showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
-                (ShowStmt) analyzeSuccess("show row access policies"));
-        Assert.assertEquals(0, showExecutor.execute().getResultRows().size());
+        showExecutor = new ShowExecutor();
+        Assert.assertEquals(0, showExecutor.execute((ShowStmt) analyzeSuccess("show row access policies"),
+                starRocksAssert.getCtx()).getResultRows().size());
     }
 }

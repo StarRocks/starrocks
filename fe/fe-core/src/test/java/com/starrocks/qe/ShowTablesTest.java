@@ -62,8 +62,8 @@ public class ShowTablesTest {
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
         ShowTableStmt stmt = new ShowTableStmt("testDb", false, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(stmt, ctx);
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testMv", resultSet.getString(0));
@@ -78,8 +78,8 @@ public class ShowTablesTest {
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
         ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(stmt, ctx);
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testMv", resultSet.getString(0));
@@ -95,8 +95,8 @@ public class ShowTablesTest {
         ctx.setCurrentCatalog("hive_catalog");
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowTableStmt stmt = new ShowTableStmt("hive_db", true, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(stmt, ctx);
         Assert.assertFalse(resultSet.next());
 
         Assert.assertThrows(ErrorReportException.class,
@@ -117,7 +117,7 @@ public class ShowTablesTest {
     public void testShowData() {
         ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
         ShowDataStmt stmt = new ShowDataStmt("test", "testTbl", null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        Assert.assertThrows(ErrorReportException.class, executor::execute);
+        ShowExecutor executor = new ShowExecutor();
+        Assert.assertThrows(ErrorReportException.class, () -> executor.execute(stmt, ctx));
     }
 }

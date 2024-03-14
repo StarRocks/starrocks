@@ -16,7 +16,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -142,9 +141,9 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) throws AnalysisException {
+    public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) {
         if (stmt.getName() != null && !resourceGroupMap.containsKey(stmt.getName())) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_RG_ERROR, stmt.getName());
+            ErrorReport.reportSemanticException(ErrorCode.ERROR_NO_RG_ERROR, stmt.getName());
         }
 
         List<List<String>> rows;
