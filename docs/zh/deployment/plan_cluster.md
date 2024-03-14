@@ -14,7 +14,7 @@ StarRocks 主要由两种类型的组件组成：FE 节点和 BE 节点。每个
 
 FE 节点主要负责元数据管理、客户端连接管理、查询计划和查询调度。
 
-对于 StarRocks 生产集群，建议您至少部署**三个** Follower FE 节点，以防止单点故障。
+对于 StarRocks 生产集群，建议您至少部署**三个** Follower FE 节点，以防止单点故障。Leader FE 会从 Follower FE 中自动选出。
 
 StarRocks 通过 BDB JE 协议跨 FE 节点管理元数据。StarRocks 从所有 Follower FE 节点中选出一个 Leader FE 节点。只有 Leader FE 节点可以写入元数据，其他 Follower FE 节点只能根据 Leader FE 节点的日志更新元数据。如果 Leader FE 节点掉线，只要超过半数的 Follower FE 节点存活，StarRocks 就会重新选举出一个新的 Leader FE 节点。
 

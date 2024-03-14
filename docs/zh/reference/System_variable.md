@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['session','variable']
 ---
 
 # 系统变量
