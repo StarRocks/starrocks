@@ -628,9 +628,13 @@ public class PlanFragmentBuilder {
             });
 
 
-            for (SlotId sid : projectMap.keySet()) {
-                SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(sid.asInt());
-                slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
+            for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
+                SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(entry.getKey().asInt());
+                if (entry.getValue().isLiteral() && !entry.getValue().isNullable()) {
+                    slotDescriptor.setIsNullable(false);
+                } else {
+                    slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
+                }
             }
             tupleDescriptor.computeMemLayout();
 

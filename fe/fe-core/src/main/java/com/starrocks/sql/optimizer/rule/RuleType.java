@@ -185,6 +185,8 @@ public enum RuleType {
 
     TF_FINE_GRAINED_RANGE_PREDICATE_WITH_PROJECTION,
 
+    TF_ELIMINATE_GROUP_BY_CONSTANT,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
