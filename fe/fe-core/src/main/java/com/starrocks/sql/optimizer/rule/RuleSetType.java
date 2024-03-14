@@ -40,5 +40,7 @@ public enum RuleSetType {
     SHORT_CIRCUIT_SET,
 
     FINE_GRAINED_RANGE_PREDICATE,
+
+    ELIMINATE_GROUP_BY,
     NUM_RULE_SET
 }
