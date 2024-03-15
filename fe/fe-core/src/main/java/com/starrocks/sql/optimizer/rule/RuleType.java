@@ -172,16 +172,8 @@ public enum RuleType {
 
     TF_CONVERT_TO_EQUAL_FOR_NULL_RULE,
     TF_ARRAY_DISTINCT_AFTER_AGG,
-
-<<<<<<< HEAD
-=======
-    TF_FINE_GRAINED_RANGE_PREDICATE,
-
-    TF_FINE_GRAINED_RANGE_PREDICATE_WITH_PROJECTION,
-
     TF_ELIMINATE_GROUP_BY_CONSTANT,
 
->>>>>>> f39ccca32b ([BugFix] eliminate constant in group by key (#42353))
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,

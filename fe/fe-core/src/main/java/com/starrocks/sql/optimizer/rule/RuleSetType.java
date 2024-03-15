@@ -34,16 +34,6 @@ public enum RuleSetType {
     INTERSECT_REWRITE,
     SINGLE_TABLE_MV_REWRITE,
     MULTI_TABLE_MV_REWRITE,
-<<<<<<< HEAD
-    NUM_RULE_SET;
-=======
-    ALL_MV_REWRITE,
-    PRUNE_EMPTY_OPERATOR,
-    SHORT_CIRCUIT_SET,
-
-    FINE_GRAINED_RANGE_PREDICATE,
-
     ELIMINATE_GROUP_BY,
     NUM_RULE_SET
->>>>>>> f39ccca32b ([BugFix] eliminate constant in group by key (#42353))
 }
