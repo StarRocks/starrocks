@@ -22,11 +22,11 @@ void PersistentIndexMemtable::insert(const std::string& key, int64_t version, co
     _map.emplace(key, index_value_infos);
 }
 
-void PersistentIndexMemtable::update(std::list<IndexValueInfo>& index_value_infos, int64_t version,
+void PersistentIndexMemtable::update(std::list<IndexValueInfo>* index_value_infos, int64_t version,
                                      const IndexValue& value) {
     std::list<IndexValueInfo> t;
     t.emplace_front(version, value);
-    index_value_infos.swap(t);
+    index_value_infos->swap(t);
 }
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
@@ -44,7 +44,7 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
             auto old_value = index_value_infos.front().second;
             old_values[i] = old_value;
             nfound += old_value.get_value() != NullIndexValue;
-            update(it->second, version, value);
+            update(&it->second, version, value);
         }
     }
     *num_found = nfound;
@@ -83,7 +83,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
             auto old_index_value = index_value_infos.front().second;
             old_values[i] = old_index_value;
             nfound += old_index_value.get_value() != NullIndexValue;
-            update(index_value_infos, version, IndexValue(NullIndexValue));
+            update(&index_value_infos, version, IndexValue(NullIndexValue));
         }
     }
     *num_found = nfound;
@@ -99,7 +99,7 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
         if (it == _map.end()) {
             insert(key, version, value);
         } else {
-            update(it->second, version, value);
+            update(&it->second, version, value);
         }
     }
     return Status::OK();
