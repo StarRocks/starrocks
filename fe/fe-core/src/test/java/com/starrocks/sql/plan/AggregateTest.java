@@ -2731,5 +2731,15 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(*)\n" +
                 "  |  group by: 1: v1\n" +
                 "  |  having: abs(1) > abs(2)");
+
+        sql = "select max(a), a from (select v1, abs(1) as a, abs(2) as b from t0) t group by a, v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:Project\n" +
+                "  |  <slot 4> : abs(1)\n" +
+                "  |  <slot 6> : 6: max\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(abs(1))\n" +
+                "  |  group by: 1: v1");
     }
 }
