@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['analytic']
 ---
 
 # Window functions
@@ -7,21 +8,26 @@ displayed_sidebar: "English"
 - [Window functions](#window-functions)
   - [Background](#background)
   - [Usage](#usage)
-    - [Functions](#functions)
+    - [Syntax](#syntax)
     - [PARTITION BY clause](#partition-by-clause)
     - [ORDER BY clause](#order-by-clause)
     - [Window clause](#window-clause)
-  - [Function Examples](#function-examples)
+  - [Window function sample table](#window-function-sample-table)
+  - [Function examples](#function-examples)
     - [AVG()](#avg)
     - [COUNT()](#count)
     - [DENSE\_RANK()](#dense_rank)
-    - [NTILE()](#ntile)
     - [FIRST\_VALUE()](#first_value)
-    - [LAG()](#lag)
     - [LAST\_VALUE()](#last_value)
+    - [LAG()](#lag)
     - [LEAD()](#lead)
     - [MAX()](#max)
     - [MIN()](#min)
+<<<<<<< HEAD
+=======
+    - [NTILE()](#ntile)
+    - [PERCENT\_RANK()](#percent_rank)
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
     - [RANK()](#rank)
     - [ROW\_NUMBER()](#row_number)
     - [QUALIFY()](#qualify)
@@ -40,7 +46,7 @@ The window function is a special class of built-in functions. Similar to the agg
 
 ## Usage
 
-Syntax of the window function:
+### Syntax
 
 ```SQL
 function(args) OVER(partition_by_clause order_by_clause [window_clause])
@@ -48,6 +54,7 @@ partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ```
 
+<<<<<<< HEAD
 ### Functions
 
 Currently supported functions include:
@@ -59,6 +66,8 @@ Currently supported functions include:
 * NTILE()
 * VARIANCE(), VAR_SAMP(), STD(), STDDEV_SAMP(), COVAR_SAMP(), COVAR_POP(), CORR()
 
+=======
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ### PARTITION BY clause
 
 The Partition By clause is similar to Group By. It groups the input rows by one or more specified columns. Rows with the same value are grouped together.
@@ -81,46 +90,86 @@ FROM events;
 
 The window clause is used to specify a range of rows for operations (the preceding and following rows based on the current row). It supports the following syntaxes: AVG(), COUNT(), FIRST_VALUE(), LAST_VALUE(), and SUM(). For MAX() and MIN(), the window clause can specify the start to `UNBOUNDED PRECEDING`.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
 ```
 
-Example:
+## Window function sample table
 
-Suppose we have the following stock data, the stock symbol is JDR, and the closing price is the daily closing price.
+This section creates a sample table `scores`. You can use this table to test many window functions below.
 
 ```SQL
-create table stock_ticker (
-    stock_symbol string,
-    closing_price decimal(8,2),
-    closing_date timestamp);
+CREATE TABLE `scores` (
+    `id` int(11) NULL,
+    `name` varchar(11) NULL,
+    `subject` varchar(11) NULL,
+    `score` int(11) NULL
+  )
+DISTRIBUTED BY HASH(`score`) BUCKETS 10;
 
--- ...load some data...
-
-select *
-from stock_ticker
-order by stock_symbol, closing_date
+INSERT INTO `scores` VALUES
+  (1, "lily", "math", NULL),
+  (1, "lily", "english", 100),
+  (1, "lily", "physics", 60),
+  (2, "tom", "math", 80),
+  (2, "tom", "english", 98),
+  (2, "tom", "physics", NULL),
+  (3, "jack", "math", 95),
+  (3, "jack", "english", NULL),
+  (3, "jack", "physics", 99),
+  (4, "amy", "math", 80),
+  (4, "amy", "english", 92),
+  (4, "amy", "physics", 99),
+  (5, "mike", "math", 70),
+  (5, "mike", "english", 85),
+  (5, "mike", "physics", 85),
+  (6, "amber", "math", 92),
+  (6, "amber", NULL, 90),
+  (6, "amber", "physics", 100);
 ```
 
-The raw data was shown as follows:
+## Function examples
 
-```plaintext
-+--------------+---------------+---------------------+
-| stock_symbol | closing_price | closing_date        |
-+--------------+---------------+---------------------+
-| JDR          | 12.86         | 2014-10-02 00:00:00 |
-| JDR          | 12.89         | 2014-10-03 00:00:00 |
-| JDR          | 12.94         | 2014-10-04 00:00:00 |
-| JDR          | 12.55         | 2014-10-05 00:00:00 |
-| JDR          | 14.03         | 2014-10-06 00:00:00 |
-| JDR          | 14.75         | 2014-10-07 00:00:00 |
-| JDR          | 13.98         | 2014-10-08 00:00:00 |
-+--------------+---------------+---------------------+
+This section describes the window functions supported in StarRocks.
+
+### AVG()
+
+Calculates the average value of a field in a given window. This function ignores NULL values.
+
+**Syntax:**
+
+```SQL
+AVG(expr) [OVER (*analytic_clause*)]
 ```
 
-This query uses the window function to generate the moving_average column whose value is the 3-day (previous day, current day, and next day) average stock price. The first day does not have the value of its previous day, and the last day does not have the value of the day after, so these two rows only calculate the average value of two days. Here `Partition By` does not take effect, because all the data is JDR data. However, if there is other stock information, `Partition By` will ensure that the window function is operated within each Partition.
+**Examples:**
+
+The following example uses stock data as an example.
+
+```SQL
+CREATE TABLE stock_ticker (
+    stock_symbol  STRING,
+    closing_price DECIMAL(8,2),
+    closing_date  DATETIME
+)
+DUPLICATE KEY(stock_symbol)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(closing_date);
+
+INSERT INTO stock_ticker VALUES 
+    ("JDR", 12.86, "2014-10-02 00:00:00"), 
+    ("JDR", 12.89, "2014-10-03 00:00:00"), 
+    ("JDR", 12.94, "2014-10-04 00:00:00"), 
+    ("JDR", 12.55, "2014-10-05 00:00:00"), 
+    ("JDR", 14.03, "2014-10-06 00:00:00"), 
+    ("JDR", 14.75, "2014-10-07 00:00:00"), 
+    ("JDR", 13.98, "2014-10-08 00:00:00")
+;
+```
+
+Calculate the average closing price in the current row and each row before and after it.
 
 ```SQL
 select stock_symbol, closing_date, closing_price,
@@ -132,210 +181,167 @@ select stock_symbol, closing_date, closing_price,
 from stock_ticker;
 ```
 
-The following data is obtained:
+Output:
 
 ```plaintext
 +--------------+---------------------+---------------+----------------+
 | stock_symbol | closing_date        | closing_price | moving_average |
 +--------------+---------------------+---------------+----------------+
-| JDR          | 2014-10-02 00:00:00 | 12.86         | 12.87          |
-| JDR          | 2014-10-03 00:00:00 | 12.89         | 12.89          |
-| JDR          | 2014-10-04 00:00:00 | 12.94         | 12.79          |
-| JDR          | 2014-10-05 00:00:00 | 12.55         | 13.17          |
-| JDR          | 2014-10-06 00:00:00 | 14.03         | 13.77          |
-| JDR          | 2014-10-07 00:00:00 | 14.75         | 14.25          |
-| JDR          | 2014-10-08 00:00:00 | 13.98         | 14.36          |
+| JDR          | 2014-10-02 00:00:00 |         12.86 |    12.87500000 |
+| JDR          | 2014-10-03 00:00:00 |         12.89 |    12.89666667 |
+| JDR          | 2014-10-04 00:00:00 |         12.94 |    12.79333333 |
+| JDR          | 2014-10-05 00:00:00 |         12.55 |    13.17333333 |
+| JDR          | 2014-10-06 00:00:00 |         14.03 |    13.77666667 |
+| JDR          | 2014-10-07 00:00:00 |         14.75 |    14.25333333 |
+| JDR          | 2014-10-08 00:00:00 |         13.98 |    14.36500000 |
 +--------------+---------------------+---------------+----------------+
 ```
 
-## Function Examples
-
-This section describes the window functions supported in StarRocks.
-
-### AVG()
-
-Syntax:
-
-```SQL
-AVG(expr) [OVER (*analytic_clause*)]
-```
-
-Example:
-
-Calculate the x-average of the current row and each row before and after it.
-
-```SQL
-select x, property,
-    avg(x)
-        over (
-            partition by property
-            order by x
-            rows between 1 preceding and 1 following
-        ) as 'moving average'
-from int_t
-where property in ('odd','even');
-```
-
-```plaintext
-+----+----------+----------------+
-| x  | property | moving average |
-+----+----------+----------------+
-| 2  | even     | 3              |
-| 4  | even     | 4              |
-| 6  | even     | 6              |
-| 8  | even     | 8              |
-| 10 | even     | 9              |
-| 1  | odd      | 2              |
-| 3  | odd      | 3              |
-| 5  | odd      | 5              |
-| 7  | odd      | 7              |
-| 9  | odd      | 8              |
-+----+----------+----------------+
-```
+For example, `12.87500000` in the first row is the average value of closing prices on "2014-10-02" (`12.86`), its previous day "2014-10-01" (null), and its following day "2014-10-03" (`12.89`).
 
 ### COUNT()
 
-Syntax:
+Calculates the total number of rows that meet the specified conditions in a give window.
+
+**Syntax:**
 
 ```SQL
 COUNT(expr) [OVER (analytic_clause)]
 ```
 
-Example:
+**Examples:**
 
-Count the occurrence of x from the current row to the first row.
+Count the occurrence of math scores that are greater than 90 from the current row to the first row in the math partition. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
-select x, property,
-    count(x)
+select *,
+    count(score)
         over (
-            partition by property
-            order by x
+            partition by subject
+            order by score
             rows between unbounded preceding and current row
-        ) as 'cumulative total'
-from int_t where property in ('odd','even');
+        ) as 'score_count'
+from scores where subject in ('math') and score > 90;
 ```
 
 ```plaintext
-+----+----------+------------------+
-| x  | property | cumulative count |
-+----+----------+------------------+
-| 2  | even     | 1                |
-| 4  | even     | 2                |
-| 6  | even     | 3                |
-| 8  | even     | 4                |
-| 10 | even     | 5                |
-| 1  | odd      | 1                |
-| 3  | odd      | 2                |
-| 5  | odd      | 3                |
-| 7  | odd      | 4                |
-| 9  | odd      | 5                |
-+----+----------+------------------+
++------+-------+---------+-------+-------------+
+| id   | name  | subject | score | score_count |
++------+-------+---------+-------+-------------+
+|    6 | amber | math    |    92 |           1 |
+|    3 | jack  | math    |    95 |           2 |
++------+-------+---------+-------+-------------+
 ```
 
+<<<<<<< HEAD
+=======
+### CUME_DIST()
+
+The CUME_DIST() function calculates the cumulative distribution of a value within a partition or window, indicating its relative position as a percentage in the partition. It is often used to calculate the distribution of highest or lowest values in a group.
+
+- If data is sorted in ascending order, this function calculates the percentage of values less than or equal to the value in the current row.
+- If data is sorted in descending order, this function calculates the percentage of values greater than or equal to the value in the current row.
+
+The cumulative distribution is in the range of 0 to 1. It is useful for percentile calculation and data distribution analysis.
+
+This function is supported from v3.2.
+
+**Syntax:**
+
+```SQL
+CUME_DIST() OVER (partition_by_clause order_by_clause)
+```
+
+- `partition_by_clause`: optional. If this clause is not specified, the entire result set is processed as a single partition.
+- `order_by_clause`: **This function must be used with ORDER BY to sort partition rows into the desired order.**
+
+CUME_DIST() contains NULL values and treats them as the lowest values.
+
+**Examples:**
+
+The following example shows the cumulative distribution of each score within each `subject` group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+```plaintext
+SELECT *, 
+    cume_dist() 
+      OVER (
+        PARTITION BY subject
+        ORDER BY score
+      ) AS cume_dist 
+FROM scores;
++------+-------+---------+-------+---------------------+
+| id   | name  | subject | score | cume_dist           |
++------+-------+---------+-------+---------------------+
+|    6 | amber | NULL    |    90 |                   1 |
+|    3 | jack  | english |  NULL |                 0.2 |
+|    5 | mike  | english |    85 |                 0.4 |
+|    4 | amy   | english |    92 |                 0.6 |
+|    2 | tom   | english |    98 |                 0.8 |
+|    1 | lily  | english |   100 |                   1 |
+|    1 | lily  | math    |  NULL | 0.16666666666666666 |
+|    5 | mike  | math    |    70 |  0.3333333333333333 |
+|    2 | tom   | math    |    80 |  0.6666666666666666 |
+|    4 | amy   | math    |    80 |  0.6666666666666666 |
+|    6 | amber | math    |    92 |  0.8333333333333334 |
+|    3 | jack  | math    |    95 |                   1 |
+|    2 | tom   | physics |  NULL | 0.16666666666666666 |
+|    1 | lily  | physics |    60 |  0.3333333333333333 |
+|    5 | mike  | physics |    85 |                 0.5 |
+|    4 | amy   | physics |    99 |  0.8333333333333334 |
+|    3 | jack  | physics |    99 |  0.8333333333333334 |
+|    6 | amber | physics |   100 |                   1 |
++------+-------+---------+-------+---------------------+
+```
+
+- For `cume_dist` in the first row, the `NULL` group has only one row, and only this row itself meets the condition of "less than or equal to the current row". The cumulative distribution is 1。
+- For `cume_dist` in the second row, the `english` group has five rows, and only this row itself (NULL) meets the condition of "less than or equal to the current row". The cumulative distribution is 0.2.
+- For `cume_dist` in the third row, the `english` group has five rows, and two rows (85 and NULL) meet the condition of "less than or equal to the current row". The cumulative distribution is 0.4.
+
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ### DENSE_RANK()
 
-The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK()**does not have vacant** numbers. For example, if there are two tied 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
+The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK() **does not have vacant** numbers. For example, if there are two 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-The following example shows the ranking of column x according to the property column grouping.
+**Examples:**
+
+The following example shows the ranking of math scores (sorted in descending order). This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
-select x, y,
+select *,
     dense_rank()
         over (
-            partition by x
-            order by y
+            partition by subject
+            order by score desc
         ) as `rank`
-from int_t;
+from scores where subject in ('math');
 ```
 
 ```plaintext
-+---+---+------+
-| x | y | rank |
-+---+---+------+
-| 1 | 1 | 1    |
-| 1 | 2 | 2    |
-| 1 | 2 | 2    |
-| 2 | 1 | 1    |
-| 2 | 2 | 2    |
-| 2 | 3 | 3    |
-| 3 | 1 | 1    |
-| 3 | 1 | 1    |
-| 3 | 2 | 2    |
-+---+---+------+
++------+-------+---------+-------+------+
+| id   | name  | subject | score | rank |
++------+-------+---------+-------+------+
+|    3 | jack  | math    |    95 |    1 |
+|    6 | amber | math    |    92 |    2 |
+|    2 | tom   | math    |    80 |    3 |
+|    4 | amy   | math    |    80 |    3 |
+|    5 | mike  | math    |    70 |    4 |
+|    1 | lily  | math    |  NULL |    5 |
++------+-------+---------+-------+------+
 ```
 
-### NTILE()
-
-NTILE() function divides the sorted rows in a partition by the specified number of `num_buckets` as equally as possible, stores the divided rows in the respective buckets, starting from 1 `[1, 2, ..., num_buckets]`, and returns the bucket number that each row is in.
-
-About the size of the bucket:
-
-* If the row counts can be divided by the specified number of `num_buckets` exactly, all the buckets will be of the same size.
-* If the row counts cannot be divided by the specified number of `num_buckets` exactly, there will be buckets of two different sizes. The difference between sizes is 1. The buckets with more rows will be listed ahead of the one with fewer rows.
-
-Syntax:
-
-```SQL
-NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
-```
-
-`num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
-
-Window clause is not allowed in NTILE() function.
-
-NTILE() function returns BIGINT type of data.
-
-Example:
-
-The following example divides all rows in the partition into 2 buckets.
-
-```sql
-select id, x, y,
-    ntile(2)
-        over (
-            partition by x
-            order by y
-        ) as bucket_id
-from t1;
-```
-
-Return data:
-
-```plaintext
-+------+------+------+-----------+
-| id   | x    | y    | bucket_id |
-+------+------+------+-----------+
-|    1 |    1 |   11 |         1 |
-|    2 |    1 |   11 |         1 |
-|    3 |    1 |   22 |         1 |
-|    4 |    1 |   33 |         2 |
-|    5 |    1 |   44 |         2 |
-|    6 |    1 |   55 |         2 |
-|    7 |    2 |   66 |         1 |
-|    8 |    2 |   77 |         1 |
-|    9 |    2 |   88 |         2 |
-|   10 |    3 |   99 |         1 |
-+------+------+------+-----------+
-```
-
-As the above example shown, when `num_buckets` is `2`:
-
-* Rows of No.1 to No.6 were classified into the first partition; rows of No.1 to No.3 were stored in the first bucket, and rows of No.4 to No.6 were stored in the second one.
-* Rows of No.7 to No.9 were classified into the second partition; rows of No.7 and No.8 were stored in the first bucket, and row No.9 was stored in the second one.
-* Row No.10 was classified into the third partition and stored in the first bucket.
+The result data has two rows whose score is 80. They all rank 3. The rank for the next score 70 is 4. This shows DENSE_RANK() **does not have vacant** numbers.
 
 ### FIRST_VALUE()
 
 FIRST_VALUE() returns the **first** value of the window range.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
@@ -343,51 +349,97 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 `IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the first value in the filtered result is NULL. If you specify IGNORE NULLS, the first non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
-Example:
+**Examples:**
 
-We have the following data:
-
-```SQL
- select name, country, greeting
- from mail_merge;
- ```
-
-```plaintext
-+---------+---------+--------------+
-| name    | country | greeting     |
-+---------+---------+--------------+
-| Pete    | USA     | Hello        |
-| John    | USA     | Hi           |
-| Boris   | Germany | Guten tag    |
-| Michael | Germany | Guten morgen |
-| Bjorn   | Sweden  | Hej          |
-| Mats    | Sweden  | Tja          |
-+---------+---------+--------------+
-```
-
-Use FIRST_VALUE() to return the first greeting value in each grouping, based on the country grouping.
+Return the first `score` value for each member in each group (descending order), grouping by `subject`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
-select country, name,
-    first_value(greeting)
+select *,
+    first_value(score IGNORE NULLS)
         over (
-            partition by country
-            order by name, greeting
-        ) as greeting
-from mail_merge;
+            partition by subject
+            order by score desc
+        ) as first
+from scores;
 ```
 
 ```plaintext
-+---------+---------+-----------+
-| country | name    | greeting  |
-+---------+---------+-----------+
-| Germany | Boris   | Guten tag |
-| Germany | Michael | Guten tag |
-| Sweden  | Bjorn   | Hej       |
-| Sweden  | Mats    | Hej       |
-| USA     | John    | Hi        |
-| USA     | Pete    | Hi        |
-+---------+---------+-----------+
++------+-------+---------+-------+-------+
+| id   | name  | subject | score | first |
++------+-------+---------+-------+-------+
+|    1 | lily  | english |   100 |   100 |
+|    2 | tom   | english |    98 |   100 |
+|    4 | amy   | english |    92 |   100 |
+|    5 | mike  | english |    85 |   100 |
+|    3 | jack  | english |  NULL |   100 |
+|    6 | amber | physics |   100 |   100 |
+|    3 | jack  | physics |    99 |   100 |
+|    4 | amy   | physics |    99 |   100 |
+|    5 | mike  | physics |    85 |   100 |
+|    1 | lily  | physics |    60 |   100 |
+|    2 | tom   | physics |  NULL |   100 |
+|    6 | amber | NULL    |    90 |    90 |
+|    3 | jack  | math    |    95 |    95 |
+|    6 | amber | math    |    92 |    95 |
+|    2 | tom   | math    |    80 |    95 |
+|    4 | amy   | math    |    80 |    95 |
+|    5 | mike  | math    |    70 |    95 |
+|    1 | lily  | math    |  NULL |    95 |
++------+-------+---------+-------+-------+
+```
+
+### LAST_VALUE()
+
+LAST_VALUE() returns the **last** value of the window range. It is the opposite of FIRST_VALUE().
+
+**Syntax:**
+
+```SQL
+LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
+```
+
+`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the last value in the filtered result is NULL. If you specify IGNORE NULLS, the last non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
+
+By default, LAST_VALUE() calculates `rows between unbounded preceding and current row`, which compares the current row with all its preceding rows. If you want to show only one value for each partition, use `rows between unbounded preceding and unbounded following` after ORDER BY.
+
+**Examples:**
+
+Returns the last `score` for each member in the group (descending order), grouping by `subject`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+```SQL
+select *,
+    last_value(score IGNORE NULLS)
+        over (
+            partition by subject
+            order by score desc
+            rows between unbounded preceding and unbounded following
+        ) as last
+from scores;
+```
+
+```plaintext
++------+-------+---------+-------+------+
+| id   | name  | subject | score | last |
++------+-------+---------+-------+------+
+|    1 | lily  | english |   100 |   85 |
+|    2 | tom   | english |    98 |   85 |
+|    4 | amy   | english |    92 |   85 |
+|    5 | mike  | english |    85 |   85 |
+|    3 | jack  | english |  NULL |   85 |
+|    6 | amber | physics |   100 |   60 |
+|    3 | jack  | physics |    99 |   60 |
+|    4 | amy   | physics |    99 |   60 |
+|    5 | mike  | physics |    85 |   60 |
+|    1 | lily  | physics |    60 |   60 |
+|    2 | tom   | physics |  NULL |   60 |
+|    6 | amber | NULL    |    90 |   90 |
+|    3 | jack  | math    |    95 |   70 |
+|    6 | amber | math    |    92 |   70 |
+|    2 | tom   | math    |    80 |   70 |
+|    4 | amy   | math    |    80 |   70 |
+|    5 | mike  | math    |    70 |   70 |
+|    1 | lily  | math    |  NULL |   70 |
++------+-------+---------+-------+------+
 ```
 
 ### LAG()
@@ -396,26 +448,26 @@ Returns the value of the row that lags the current row by `offset` rows. This fu
 
 `LAG()` can be used to query data of the following types:
 
-* Numeric: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMAL
-* String: CHAR, VARCHAR
-* Date: DATE, DATETIME
-* BITMAP and HLL are supported from StarRocks v2.5.
+- Numeric: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMAL
+- String: CHAR, VARCHAR
+- Date: DATE, DATETIME
+- BITMAP and HLL are supported from StarRocks v2.5.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 LAG(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
 
-Parameters:
+**Parameters:**
 
-* `expr`: the field you want to compute.
-* `offset`: the offset. It must be a **positive integer**. If this parameter is not specified, 1 is the default.
-* `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
-* `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
+- `expr`: the field you want to compute.
+- `offset`: the offset. It must be a **positive integer**. If this parameter is not specified, 1 is the default.
+- `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
+- `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
 
-Example 1: IGNORE NULLS is not specified
+**Example 1: IGNORE NULLS is not specified**
 
 Create a table and insert values:
 
@@ -463,7 +515,7 @@ For the first two rows, no previous two rows exist and the default value 0 is re
 
 For NULL in row 3, the value two rows backward is NULL and NULL is returned because NULL values are allowed.
 
-Example 2: IGNORE NULLS is specified
+**Example 2: IGNORE NULLS is specified**
 
 Use the preceding table and parameter settings.
 
@@ -490,64 +542,27 @@ For rows 1 to 4, the system cannot find two non-NULL values for each of them in 
 
 For value 6 in row 7, the value two rows backward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for non-null values and 2 in row 4 is returned.
 
-### LAST_VALUE()
-
-LAST_VALUE() returns the **last** value of the window range. It is the opposite of FIRST_VALUE().
-
-Syntax:
-
-```SQL
-LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
-```
-
-`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the last value in the filtered result is NULL. If you specify IGNORE NULLS, the last non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
-
-Use the data from the example:
-
-```SQL
-select country, name,
-    last_value(greeting)
-        over (
-            partition by country
-            order by name, greeting
-        ) as greeting
-from mail_merge;
-```
-
-```plaintext
-+---------+---------+--------------+
-| country | name    | greeting     |
-+---------+---------+--------------+
-| Germany | Boris   | Guten morgen |
-| Germany | Michael | Guten morgen |
-| Sweden  | Bjorn   | Tja          |
-| Sweden  | Mats    | Tja          |
-| USA     | John    | Hello        |
-| USA     | Pete    | Hello        |
-+---------+---------+--------------+
-```
-
 ### LEAD()
 
 Returns the value of the row that leads the current row by `offset` rows. This function is often used to compare values between rows and filter data.
 
-Data types that can be queried by `lead()` are the same as those supported by [lag()](#lag).
+Data types that can be queried by `LEAD()` are the same as those supported by [LAG()](#lag).
 
-Syntax
+**Syntax:**
 
 ```sql
 LEAD(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
 
-Parameters:
+**Parameters:**
 
-* `expr`: the field you want to compute.
-* `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
-* `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
-* `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
+- `expr`: the field you want to compute.
+- `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
+- `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
+- `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
 
-Example 1: IGNORE NULLS is not specified
+**Example 1: IGNORE NULLS is not specified**
 
 Create a table and insert values:
 
@@ -595,7 +610,7 @@ For the first row, the value two rows forward is NULL and NULL is returned becau
 
 For the last two rows, no subsequent two rows exist and the default value 0 is returned.
 
-Example 2: IGNORE NULLS is specified
+**Example 2: IGNORE NULLS is specified**
 
 Use the preceding table and parameter settings.
 
@@ -626,39 +641,53 @@ For the first row, the value two rows forward is NULL and NULL is ignored becaus
 
 Returns the maximum value of the specified rows in the current window.
 
-Syntax
+**Syntax:**
 
 ```SQL
 MAX(expr) [OVER (analytic_clause)]
 ```
 
-Example:
+**Examples:**
 
-Calculate the maximum value of rows from the first row to the row after the current row.
+Calculate the maximum value of rows from the first row to the row after the current row. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
-select x, property,
-    max(x)
+select *,
+    max(scores)
         over (
-            order by property, x
+            partition by subject
+            order by score
             rows between unbounded preceding and 1 following
-        ) as 'local maximum'
-from int_t
-where property in ('prime','square');
+        ) as max
+from scores
+where subject in ('math');
 ```
 
-```plaintext
-+---+----------+---------------+
-| x | property | local maximum |
-+---+----------+---------------+
-| 2 | prime    | 3             |
-| 3 | prime    | 5             |
-| 5 | prime    | 7             |
-| 7 | prime    | 7             |
-| 1 | square   | 7             |
-| 4 | square   | 9             |
-| 9 | square   | 9             |
-+---+----------+---------------+
+```plain
++------+-------+---------+-------+------+
+| id   | name  | subject | score | max  |
++------+-------+---------+-------+------+
+|    1 | lily  | math    |  NULL |   70 |
+|    5 | mike  | math    |    70 |   80 |
+|    2 | tom   | math    |    80 |   80 |
+|    4 | amy   | math    |    80 |   92 |
+|    6 | amber | math    |    92 |   95 |
+|    3 | jack  | math    |    95 |   95 |
++------+-------+---------+-------+------+
+```
+
+The following example calculates the maximum score among all rows for the `math` subject.
+
+```sql
+select *,
+    max(score)
+        over (
+            partition by subject
+            order by score
+            rows between unbounded preceding and unbounded following
+        ) as max
+from scores
+where subject in ('math');
 ```
 
 From StarRocks 2.4 onwards, you can specify the row range as `rows between n preceding and n following`, which means you can capture `n` rows before the current row and `n` rows after the current row.
@@ -666,134 +695,257 @@ From StarRocks 2.4 onwards, you can specify the row range as `rows between n pre
 Example statement:
 
 ```sql
-select x, property,
-    max(x)
+select *,
+    max(score)
         over (
-            order by property, x
-            rows between 3 preceding and 2 following) as 'local maximum'
-from int_t
-where property in ('prime','square');
+            partition by subject
+            order by score
+            rows between 3 preceding and 2 following) as max
+from scores
+where subject in ('math');
 ```
 
 ### MIN()
 
 Returns the minimum value of the specified rows in the current window.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 MIN(expr) [OVER (analytic_clause)]
 ```
 
-Example:
+**Examples:**
 
-Calculate the minimum value of rows from the first row to the row after the current row.
+Calculate the lowest score among all rows for the math subject. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
-select x, property,
-    min(x)
+select *, 
+    min(score)
         over (
-            order by property, x desc
-            rows between unbounded preceding and 1 following
-        ) as 'local minimum'
-from int_t
-where property in ('prime','square');
+            partition by subject
+            order by score
+            rows between unbounded preceding and unbounded following)
+            as min
+from scores
+where subject in ('math');
 ```
 
 ```plaintext
-+---+----------+---------------+
-| x | property | local minimum |
-+---+----------+---------------+
-| 7 | prime    | 5             |
-| 5 | prime    | 3             |
-| 3 | prime    | 2             |
-| 2 | prime    | 2             |
-| 9 | square   | 2             |
-| 4 | square   | 1             |
-| 1 | square   | 1             |
-+---+----------+---------------+
++------+-------+---------+-------+------+
+| id   | name  | subject | score | min  |
++------+-------+---------+-------+------+
+|    1 | lily  | math    |  NULL |   70 |
+|    5 | mike  | math    |    70 |   70 |
+|    2 | tom   | math    |    80 |   70 |
+|    4 | amy   | math    |    80 |   70 |
+|    6 | amber | math    |    92 |   70 |
+|    3 | jack  | math    |    95 |   70 |
++------+-------+---------+-------+------+
 ```
 
 From StarRocks 2.4 onwards, you can specify the row range as `rows between n preceding and n following`, which means you can capture `n` rows before the current row and `n` rows after the current row.
 
 Example statement:
 
-```sql
-select x, property,
-    min(x)
-    over (
-          order by property, x desc
-          rows between 3 preceding and 2 following) as 'local minimum'
-from int_t
-where property in ('prime','square');
+```SQL
+select *,
+    min(score)
+        over (
+            partition by subject
+            order by score
+            rows between 3 preceding and 2 following) as max
+from scores
+where subject in ('math');
 ```
 
+<<<<<<< HEAD
+=======
+### NTILE()
+
+NTILE() function divides the sorted rows in a partition by the specified number of `num_buckets` as equally as possible, stores the divided rows in the respective buckets, starting from 1 `[1, 2, ..., num_buckets]`, and returns the bucket number that each row is in.
+
+About the size of the bucket:
+
+- If the row counts can be divided by the specified number of `num_buckets` exactly, all the buckets will be of the same size.
+- If the row counts cannot be divided by the specified number of `num_buckets` exactly, there will be buckets of two different sizes. The difference between sizes is 1. The buckets with more rows will be listed ahead of the one with fewer rows.
+
+**Syntax:**
+
+```SQL
+NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
+```
+
+`num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
+
+Window clause is not allowed in NTILE() function.
+
+NTILE() function returns BIGINT type of data.
+
+**Examples:**
+
+The following example divides all rows in the partition into two buckets. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+```sql
+select *,
+    ntile(2)
+        over (
+            partition by subject
+            order by score
+        ) as bucket_id
+from scores;
+```
+
+Output:
+
+```plaintext
++------+-------+---------+-------+-----------+
+| id   | name  | subject | score | bucket_id |
++------+-------+---------+-------+-----------+
+|    6 | amber | NULL    |    90 |         1 |
+|    1 | lily  | math    |  NULL |         1 |
+|    5 | mike  | math    |    70 |         1 |
+|    2 | tom   | math    |    80 |         1 |
+|    4 | amy   | math    |    80 |         2 |
+|    6 | amber | math    |    92 |         2 |
+|    3 | jack  | math    |    95 |         2 |
+|    3 | jack  | english |  NULL |         1 |
+|    5 | mike  | english |    85 |         1 |
+|    4 | amy   | english |    92 |         1 |
+|    2 | tom   | english |    98 |         2 |
+|    1 | lily  | english |   100 |         2 |
+|    2 | tom   | physics |  NULL |         1 |
+|    1 | lily  | physics |    60 |         1 |
+|    5 | mike  | physics |    85 |         1 |
+|    3 | jack  | physics |    99 |         2 |
+|    4 | amy   | physics |    99 |         2 |
+|    6 | amber | physics |   100 |         2 |
++------+-------+---------+-------+-----------+
+```
+
+As the above example shown, when `num_buckets` is `2`:
+
+- For the first row, this partition has only this record and it is assigned to only one bucket.
+- For rows 2 to 7, the partition has 6 records and the first 3 records are assigned to bucket 1 and other 3 records are assigned to bucket 2.
+
+### PERCENT_RANK()
+
+Calculates the relative rank of a row within a result set as a percentage.
+
+PERCENT_RANK() is calculated using the following formula, where `Rank` represents the rank of the current row in the partition.
+
+```plaintext
+(Rank - 1)/(Rows in partition - 1)
+```
+
+The return values range from 0 to 1. This function is useful for percentile calculation and analyzing data distribution. It is supported from v3.2.
+
+**Syntax:**
+
+```SQL
+PERCENT_RANK() OVER (partition_by_clause order_by_clause)
+```
+
+**This function must be used with ORDER BY to sort partition rows into the desired order.**
+
+**Examples:**
+
+The following example shows the relative rank of each `score` within the group of `math`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+```SQL
+SELECT *,
+    PERCENT_RANK()
+        OVER (
+            PARTITION BY subject
+            ORDER BY score
+        ) AS `percent_rank`
+FROM scores where subject in ('math');
+```
+
+```plaintext
++------+-------+---------+-------+--------------+
+| id   | name  | subject | score | percent_rank |
++------+-------+---------+-------+--------------+
+|    1 | lily  | math    |  NULL |            0 |
+|    5 | mike  | math    |    70 |          0.2 |
+|    2 | tom   | math    |    80 |          0.4 |
+|    4 | amy   | math    |    80 |          0.4 |
+|    6 | amber | math    |    92 |          0.8 |
+|    3 | jack  | math    |    95 |            1 |
++------+-------+---------+-------+--------------+
+```
+
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ### RANK()
 
 The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() will **appear as a vacant** number. For example, if two tied 1s appear, the third number of RANK() will be 3 instead of 2.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-Example:
+**Examples:**
 
-Ranking according to column x:
+Ranking math scores in the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
-select x, y, rank() over(partition by x order by y) as `rank`
-from int_t;
+select *, 
+    rank() over(
+        partition by subject
+        order by score desc
+        ) as `rank`
+from scores where subject in ('math');
 ```
 
-```plaintext
-+---+---+------+
-| x | y | rank |
-+---+---+------+
-| 1 | 1 | 1    |
-| 1 | 2 | 2    |
-| 1 | 2 | 2    |
-| 2 | 1 | 1    |
-| 2 | 2 | 2    |
-| 2 | 3 | 3    |
-| 3 | 1 | 1    |
-| 3 | 1 | 1    |
-| 3 | 2 | 3    |
-+---+---+------+
+```plain
++------+-------+---------+-------+------+
+| id   | name  | subject | score | rank |
++------+-------+---------+-------+------+
+|    3 | jack  | math    |    95 |    1 |
+|    6 | amber | math    |    92 |    2 |
+|    4 | amy   | math    |    80 |    3 |
+|    2 | tom   | math    |    80 |    3 |
+|    5 | mike  | math    |    70 |    5 |
+|    1 | lily  | math    |  NULL |    6 |
++------+-------+---------+-------+------+
 ```
+
+The result data has two rows whose score is 80. They all rank 3. The rank for the next score 70 is 5.
 
 ### ROW_NUMBER()
 
 Returns a continuously increasing integer starting from 1 for each row of a Partition. Unlike RANK() and DENSE_RANK(), the value returned by ROW_NUMBER() **does not repeat or have gaps** and is **continuously incremented**.
 
-Syntax:
+**Syntax:**
 
 ```SQL
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 ```
 
-Example:
+**Examples:**
+
+Rank math scores in the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
-select x, y, row_number() over(partition by x order by y) as `rank`
-from int_t;
+select *, row_number() over(
+    partition by subject
+    order by score desc) as `rank`
+from scores where subject in ('math');
 ```
 
 ```plaintext
-+---+---+------+
-| x | y | rank |
-+---+---+------+
-| 1 | 1 | 1    |
-| 1 | 2 | 2    |
-| 1 | 2 | 3    |
-| 2 | 1 | 1    |
-| 2 | 2 | 2    |
-| 2 | 3 | 3    |
-| 3 | 1 | 1    |
-| 3 | 1 | 2    |
-| 3 | 2 | 3    |
-+---+---+------+
++------+-------+---------+-------+------+
+| id   | name  | subject | score | rank |
++------+-------+---------+-------+------+
+|    3 | jack  | math    |    95 |    1 |
+|    6 | amber | math    |    92 |    2 |
+|    2 | tom   | math    |    80 |    3 |
+|    4 | amy   | math    |    80 |    4 |
+|    5 | mike  | math    |    70 |    5 |
+|    1 | lily  | math    |  NULL |    6 |
++------+-------+---------+-------+------+
 ```
 
 ### QUALIFY()
@@ -920,55 +1072,68 @@ ORDER BY city_id;
 
 **Usage notes:**
 
-The execution order of clauses in a query with QUALIFY is evaluated in the following order:
+- QUALIFY supports only the following three window functions: ROW_NUMBER(), RANK(), and DENSE_RANK().
 
-> 1. From
-> 2. Where
-> 3. Group by
-> 4. Having
-> 5. Window
-> 6. QUALIFY
-> 7. Distinct
-> 8. Order by
-> 9. Limit
+- The execution order of clauses in a query with QUALIFY is evaluated in the following order:
+
+1. FROM
+2. WHERE
+3. GROUP BY
+4. HAVING
+5. Window
+6. QUALIFY
+7. DISTINCT
+8. ORDER BY
+9. LIMIT
 
 ### SUM()
 
-Syntax:
+Calculates the sum of specified rows.
+
+**Syntax:**
 
 ```SQL
 SUM(expr) [OVER (analytic_clause)]
 ```
 
-Example:
+**Examples:**
 
-Group by property and calculate the sum of the **current, preceding, and following rows** within the group.
+Group data by `subject` and calculate the sum of scores of all rows within the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```SQL
-select x, property,
-    sum(x)
+select *,
+    sum(score)
         over (
-            partition by property
-            order by x
-            rows between 1 preceding and 1 following
-        ) as 'moving total'
-from int_t where property in ('odd','even');
+            partition by subject
+            order by score
+            rows between unbounded preceding and unbounded following
+        ) as 'sum'
+from scores;
 ```
 
 ```plaintext
-+----+----------+--------------+
-| x  | property | moving total |
-+----+----------+--------------+
-| 2  | even     | 6            |
-| 4  | even     | 12           |
-| 6  | even     | 18           |
-| 8  | even     | 24           |
-| 10 | even     | 18           |
-| 1  | odd      | 4            |
-| 3  | odd      | 9            |
-| 5  | odd      | 15           |
-| 7  | odd      | 21           |
-+----+----------+--------------+
++------+-------+---------+-------+------+
+| id   | name  | subject | score | sum  |
++------+-------+---------+-------+------+
+|    6 | amber | NULL    |    90 |   90 |
+|    1 | lily  | math    |  NULL |  417 |
+|    5 | mike  | math    |    70 |  417 |
+|    2 | tom   | math    |    80 |  417 |
+|    4 | amy   | math    |    80 |  417 |
+|    6 | amber | math    |    92 |  417 |
+|    3 | jack  | math    |    95 |  417 |
+|    3 | jack  | english |  NULL |  375 |
+|    5 | mike  | english |    85 |  375 |
+|    4 | amy   | english |    92 |  375 |
+|    2 | tom   | english |    98 |  375 |
+|    1 | lily  | english |   100 |  375 |
+|    2 | tom   | physics |  NULL |  443 |
+|    1 | lily  | physics |    60 |  443 |
+|    5 | mike  | physics |    85 |  443 |
+|    3 | jack  | physics |    99 |  443 |
+|    4 | amy   | physics |    99 |  443 |
+|    6 | amber | physics |   100 |  443 |
++------+-------+---------+-------+------+
 ```
 
 ### VARIANCE, VAR_POP, VARIANCE_POP
@@ -981,9 +1146,15 @@ Returns the population variance of an expression. VAR_POP and VARIANCE_POP are a
 VARIANCE(expr) [OVER (partition_by_clause)]
 ```
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+=======
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -991,9 +1162,10 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 **Examples:**
 
-Suppose table `agg` has the following data:
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
+<<<<<<< HEAD
 mysql> select * from agg;
 +------+-------+-------+
 | no   | k     | v     |
@@ -1019,6 +1191,25 @@ mysql> select variance(k) over (partition by no) FROM agg;
 |                             54.6875 |
 |                             54.6875 |
 +-------------------------------------+
+=======
+select *,
+    variance(score)
+        over (
+            partition by subject
+            order by score
+        ) as 'variance'
+from scores where subject in ('math');
++------+-------+---------+-------+--------------------+
+| id   | name  | subject | score | variance           |
++------+-------+---------+-------+--------------------+
+|    1 | lily  | math    |  NULL |               NULL |
+|    5 | mike  | math    |    70 |                  0 |
+|    2 | tom   | math    |    80 | 22.222222222222225 |
+|    4 | amy   | math    |    80 | 22.222222222222225 |
+|    6 | amber | math    |    92 |  60.74999999999997 |
+|    3 | jack  | math    |    95 |  82.23999999999998 |
++------+-------+---------+-------+--------------------+
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### VAR_SAMP, VARIANCE_SAMP
@@ -1031,9 +1222,15 @@ Returns the sample variance of an expression. These functions can be used as win
 VAR_SAMP(expr) [OVER (partition_by_clause)]
 ```
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+=======
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1041,9 +1238,10 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 **Examples:**
 
-Suppose table `agg` has the following data:
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
+<<<<<<< HEAD
 mysql> select * from agg;
 +------+-------+-------+
 | no   | k     | v     |
@@ -1069,6 +1267,23 @@ mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
 |                   72.91666666666667 |
 |                   72.91666666666667 |
 +-------------------------------------+
+=======
+select *,
+    VAR_SAMP(score)
+       over (partition by subject
+            order by score) as VAR_SAMP
+from scores where subject in ('math');
++------+-------+---------+-------+--------------------+
+| id   | name  | subject | score | VAR_SAMP           |
++------+-------+---------+-------+--------------------+
+|    1 | lily  | math    |  NULL |               NULL |
+|    5 | mike  | math    |    70 |                  0 |
+|    2 | tom   | math    |    80 | 33.333333333333336 |
+|    4 | amy   | math    |    80 | 33.333333333333336 |
+|    6 | amber | math    |    92 |  80.99999999999996 |
+|    3 | jack  | math    |    95 | 102.79999999999997 |
++------+-------+---------+-------+--------------------+
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### STD, STDDEV, STDDEV_POP
@@ -1081,9 +1296,15 @@ Returns the standard deviation of an expression. These functions can be used as 
 STD(expr) [OVER (partition_by_clause)]
 ```
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+=======
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1091,9 +1312,10 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 **Examples:**
 
-Suppose table `agg` has the following data:
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
+<<<<<<< HEAD
 mysql> select * from agg;
 +------+-------+-------+
 | no   | k     | v     |
@@ -1119,6 +1341,23 @@ mysql> select STD(k) over (partition by no) FROM agg;
 |               7.39509972887452 |
 |               7.39509972887452 |
 +--------------------------------+
+=======
+select *, STD(score)
+    over (
+        partition by subject
+        order by score) as std
+from scores where subject in ('math');
++------+-------+---------+-------+-------------------+
+| id   | name  | subject | score | std               |
++------+-------+---------+-------+-------------------+
+|    1 | lily  | math    |  NULL |              NULL |
+|    5 | mike  | math    |    70 |                 0 |
+|    4 | amy   | math    |    80 | 4.714045207910317 |
+|    2 | tom   | math    |    80 | 4.714045207910317 |
+|    6 | amber | math    |    92 | 7.794228634059946 |
+|    3 | jack  | math    |    95 | 9.068627239003707 |
++------+-------+---------+-------+-------------------+
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### STDDEV_SAMP
@@ -1131,9 +1370,15 @@ Returns the sample standard deviation of an expression. This function can be use
 STDDEV_SAMP(expr) [OVER (partition_by_clause)]
 ```
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+=======
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1141,21 +1386,27 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 **Examples:**
 
-Suppose table `agg` has the following data:
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
+select *, STDDEV_SAMP(score)
+    over (
+        partition by subject
+        order by score
+        ) as STDDEV_SAMP
+from scores where subject in ('math');
++------+-------+---------+-------+--------------------+
+| id   | name  | subject | score | STDDEV_SAMP        |
++------+-------+---------+-------+--------------------+
+|    1 | lily  | math    |  NULL |               NULL |
+|    5 | mike  | math    |    70 |                  0 |
+|    2 | tom   | math    |    80 |  5.773502691896258 |
+|    4 | amy   | math    |    80 |  5.773502691896258 |
+|    6 | amber | math    |    92 |  8.999999999999998 |
+|    3 | jack  | math    |    95 | 10.139033484509259 |
++------+-------+---------+-------+--------------------+
 
+<<<<<<< HEAD
 Use the STDDEV_SAMP() window function.
 
 ```plaintext
@@ -1169,6 +1420,24 @@ mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
 |                      8.539125638299666 |
 |                      8.539125638299666 |
 +----------------------------------------+
+=======
+select *, STDDEV_SAMP(score)
+    over (
+        partition by subject
+        order by score
+        rows between unbounded preceding and 1 following) as STDDEV_SAMP
+from scores where subject in ('math');
++------+-------+---------+-------+--------------------+
+| id   | name  | subject | score | STDDEV_SAMP        |
++------+-------+---------+-------+--------------------+
+|    1 | lily  | math    |  NULL |                  0 |
+|    5 | mike  | math    |    70 | 7.0710678118654755 |
+|    2 | tom   | math    |    80 |  5.773502691896258 |
+|    4 | amy   | math    |    80 |  8.999999999999998 |
+|    6 | amber | math    |    92 | 10.139033484509259 |
+|    3 | jack  | math    |    95 | 10.139033484509259 |
++------+-------+---------+-------+--------------------+
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### COVAR_SAMP
@@ -1181,9 +1450,15 @@ Returns the sample covariance of two expressions. This function is supported fro
 COVAR_SAMP(expr1,expr2) [OVER (partition_by_clause)]
 ```
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+=======
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1191,21 +1466,26 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 **Examples:**
 
-Suppose table `agg` has the following data:
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
+select *, COVAR_SAMP(id, score) 
+    over (
+        partition by subject
+        order by score) as covar_samp
+from scores where subject in ('math');
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | covar_samp           |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL |                 NULL |
+|    5 | mike  | math    |    70 |                    0 |
+|    2 | tom   | math    |    80 |   -6.666666666666668 |
+|    4 | amy   | math    |    80 |   -6.666666666666668 |
+|    6 | amber | math    |    92 |                  4.5 |
+|    3 | jack  | math    |    95 | -0.24999999999999822 |
++------+-------+---------+-------+----------------------+
 
+<<<<<<< HEAD
 Use the COVAR_SAMP() window function.
 
 ```plaintext
@@ -1219,6 +1499,23 @@ mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
 |                       119.99999999999999 |
 |                       119.99999999999999 |
 +------------------------------------------+
+=======
+select *, COVAR_SAMP(id,score)
+    over (
+        partition by subject
+        order by score
+        rows between unbounded preceding and 1 following) as COVAR_SAMP
+from scores where subject in ('math');
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | COVAR_SAMP           |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL |                    0 |
+|    5 | mike  | math    |    70 |                   -5 |
+|    4 | amy   | math    |    80 |   -6.666666666666661 |
+|    2 | tom   | math    |    80 |    4.500000000000004 |
+|    6 | amber | math    |    92 | -0.24999999999999467 |
+|    3 | jack  | math    |    95 | -0.24999999999999467 |
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### COVAR_POP
@@ -1231,9 +1528,15 @@ Returns the population covariance of two expressions. This function is supported
 COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
 ```
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+=======
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1241,9 +1544,10 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 **Examples:**
 
-Suppose table `agg` has the following data:
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
+<<<<<<< HEAD
 mysql> select * from agg;
 +------+-------+-------+
 | no   | k     | v     |
@@ -1269,6 +1573,23 @@ mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
 |                       79.99999999999999 |
 |                       79.99999999999999 |
 +-----------------------------------------+
+=======
+select *, COVAR_POP(id, score)
+    over (
+        partition by subject
+        order by score) as covar_pop
+from scores where subject in ('math');
++------+-------+---------+-------+----------------------+
+| id   | name  | subject | score | covar_pop            |
++------+-------+---------+-------+----------------------+
+|    1 | lily  | math    |  NULL |                 NULL |
+|    5 | mike  | math    |    70 |                    0 |
+|    2 | tom   | math    |    80 |  -4.4444444444444455 |
+|    4 | amy   | math    |    80 |  -4.4444444444444455 |
+|    6 | amber | math    |    92 |                3.375 |
+|    3 | jack  | math    |    95 | -0.19999999999999857 |
++------+-------+---------+-------+----------------------+
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### CORR
@@ -1281,9 +1602,15 @@ Returns the Pearson correlation coefficient between two expressions. This functi
 CORR(expr1, expr2) [OVER (partition_by_clause)]
 ```
 
+<<<<<<< HEAD
 > **NOTE**
 >
 > In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+=======
+:::tip
+From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
+:::
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1291,9 +1618,10 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 **Examples:**
 
-Suppose table `agg` has the following data:
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
+<<<<<<< HEAD
 mysql> select * from agg;
 +------+-------+-------+
 | no   | k     | v     |
@@ -1319,4 +1647,38 @@ mysql> select CORR(k, v) over (partition by no) FROM agg;
 |                 0.9988445981121532 |
 |                 0.9988445981121532 |
 +------------------------------------+
+=======
+select *, CORR(id, score)
+    over (
+        partition by subject
+        order by score) as corr
+from scores where subject in ('math');
++------+-------+---------+-------+-----------------------+
+| id   | name  | subject | score | corr                  |
++------+-------+---------+-------+-----------------------+
+|    5 | mike  | math    |    70 | -0.015594571538795355 |
+|    1 | lily  | math    |  NULL | -0.015594571538795355 |
+|    2 | tom   | math    |    80 | -0.015594571538795355 |
+|    4 | amy   | math    |    80 | -0.015594571538795355 |
+|    3 | jack  | math    |    95 | -0.015594571538795355 |
+|    6 | amber | math    |    92 | -0.015594571538795355 |
++------+-------+---------+-------+-----------------------+
+
+select *, CORR(id,score)
+    over (
+        partition by subject
+        order by score
+        rows between unbounded preceding and 1 following) as corr 
+from scores where subject in ('math');
++------+-------+---------+-------+-------------------------+
+| id   | name  | subject | score | corr                    |
++------+-------+---------+-------+-------------------------+
+|    1 | lily  | math    |  NULL | 1.7976931348623157e+308 |
+|    5 | mike  | math    |    70 |                      -1 |
+|    2 | tom   | math    |    80 |     -0.7559289460184546 |
+|    4 | amy   | math    |    80 |     0.29277002188455997 |
+|    6 | amber | math    |    92 |   -0.015594571538795024 |
+|    3 | jack  | math    |    95 |   -0.015594571538795024 |
++------+-------+---------+-------+-------------------------+
+>>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
