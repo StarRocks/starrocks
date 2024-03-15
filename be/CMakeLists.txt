@@ -648,6 +648,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0.0")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unsafe-buffer-usage")
+        # ignore warning from geo
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-but-set-variable")
     endif ()
 else ()
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fcoroutines")
