@@ -176,6 +176,7 @@ public:
     virtual bool output_chunk_by_bucket() const { return false; }
     virtual bool is_asc_hint() const { return true; }
     virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
+    virtual bool skip_min_max_in_profile() const { return true; }
 
 protected:
     std::vector<ExprContext*> _partition_exprs;

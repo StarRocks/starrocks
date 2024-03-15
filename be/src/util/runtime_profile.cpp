@@ -832,7 +832,7 @@ RuntimeProfile::EventSequence* RuntimeProfile::add_event_sequence(const std::str
 }
 
 RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
-                                                          bool require_identical) {
+                                                          bool require_identical, bool skip_min_max) {
     DCHECK(!profiles.empty());
 
     // all metrics will be merged into the first profile
@@ -965,6 +965,9 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
 
                 counters.push_back(counter);
             }
+            if (skip_min_max) {
+                strategy.__set_min_max_type(TCounterMinMaxType::SKIP_ALL);
+            }
 
             Counter* merged_counter = nullptr;
             if (ROOT_COUNTER != parent_name && merged_profile->get_counter(parent_name) != nullptr) {
@@ -1031,7 +1034,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     }
                     sub_profiles.push_back(child);
                 }
-                auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles, require_identical);
+                auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles, require_identical, skip_min_max);
                 merged_profile->add_child(merged_child, prototype_kv.second, nullptr);
             }
             if (require_identical && !identical) {

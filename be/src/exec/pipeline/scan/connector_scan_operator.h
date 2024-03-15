@@ -116,6 +116,7 @@ public:
     void append_morsels(std::vector<MorselPtr>&& morsels);
     ConnectorScanOperatorAdaptiveProcessor* adaptive_processor() const { return _adaptive_processor; }
     bool enable_adaptive_io_tasks() const { return _enable_adaptive_io_tasks; }
+    bool chunk_source_profile_skip_min_max() const;
 
 private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);

@@ -577,7 +577,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     }
 
     ObjectPool obj_pool;
-    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false);
+    RuntimeProfile* merged_profile =
+            RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false, chunk_source_profile_skip_min_max());
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);

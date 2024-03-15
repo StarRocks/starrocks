@@ -608,6 +608,11 @@ void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     _morsel_queue->append_morsels(std::move(morsels));
 }
 
+bool ConnectorScanOperator::chunk_source_profile_skip_min_max() const {
+    ConnectorScanNode* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
+    return scan_node->data_source_provider()->skip_min_max_in_profile();
+}
+
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                            ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)

@@ -91,6 +91,7 @@ public:
     virtual bool is_running_all_io_tasks() const;
 
     virtual int64_t get_scan_table_id() const { return -1; }
+    virtual bool chunk_source_profile_skip_min_max() const { return false; }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
