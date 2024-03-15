@@ -558,6 +558,7 @@ void ThreadPool::dispatch_thread() {
 
         l.unlock();
 
+        MonoTime start_time = MonoTime::Now();
         // Execute the task
         task.runnable->run();
         current_thread->inc_finished_tasks();
@@ -569,6 +570,12 @@ void ThreadPool::dispatch_thread() {
         // In the worst case, the destructor might even try to do something
         // with this threadpool, and produce a deadlock.
         task.runnable.reset();
+        MonoTime finish_time = MonoTime::Now();
+
+        _total_executed_tasks.increment(1);
+        _total_pending_time_ns.increment(start_time.GetDeltaSince(task.submit_time).ToNanoseconds());
+        _total_execute_time_ns.increment(finish_time.GetDeltaSince(start_time).ToNanoseconds());
+
         l.lock();
         _last_active_timestamp = MonoTime::Now();
 

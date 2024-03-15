@@ -97,8 +97,7 @@ Status UpdateManager::init() {
         max_thread_cnt = config::transaction_apply_worker_count;
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
-    REGISTER_GAUGE_STARROCKS_METRIC(update_apply_queue_count,
-                                    [this]() { return _apply_thread_pool->num_queued_tasks(); });
+    REGISTER_THREAD_POOL_METRICS(update_apply, _apply_thread_pool);
 
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
