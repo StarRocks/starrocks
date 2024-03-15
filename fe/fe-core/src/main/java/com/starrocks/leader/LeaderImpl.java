@@ -390,7 +390,7 @@ public class LeaderImpl {
                                     tabletId, task.getBackendId(), replica.getId());
                         }
                     }
-                } else {
+                } else if (!RunMode.isSharedDataMode()) { // finish_tablet_infos will not be set in shared data mode
                     LOG.warn("tablet_info is not set in finishTaskRequest");
                 }
 
