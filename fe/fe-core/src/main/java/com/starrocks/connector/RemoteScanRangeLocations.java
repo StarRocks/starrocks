@@ -51,17 +51,16 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 public class RemoteScanRangeLocations {
     private static final Logger LOG = LogManager.getLogger(RemoteScanRangeLocations.class);
 
-    private final Set<TScanRangeLocations> result = new HashSet<>();
+    private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = new ArrayList<>();
     private boolean forceScheduleLocal = false;
 
@@ -177,10 +176,7 @@ public class RemoteScanRangeLocations {
             scanRangeLocations.addToLocations(scanRangeLocation);
         }
 
-        if (!result.add(scanRangeLocations)) {
-            LOG.warn("Add duplicate scan range. partition: {}, file: {}, offset: {}-{}",
-                    partition.getFullPath(), fileDesc.getFileName(), offset, length);
-        }
+        result.add(scanRangeLocations);
     }
 
     public static boolean isTextFormat(THdfsFileFormat format) {
@@ -221,10 +217,7 @@ public class RemoteScanRangeLocations {
         TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
         scanRangeLocations.addToLocations(scanRangeLocation);
 
-        if (!result.add(scanRangeLocations)) {
-            LOG.warn("Add duplicate scan range. partition: {}, file: {}, offset: {}-{}",
-                    partition.getFullPath(), fileDesc.getFileName(), 0, fileDesc.getLength());
-        }
+        result.add(scanRangeLocations);
     }
 
     private Optional<List<DataCacheOptions>> generateDataCacheOptions(final QualifiedName qualifiedName,
@@ -277,7 +270,7 @@ public class RemoteScanRangeLocations {
         return Optional.of(dataCacheOptions);
     }
 
-    public Set<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
+    public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
                                            HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
         HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
@@ -365,6 +358,9 @@ public class RemoteScanRangeLocations {
             String message = "Only Hive/Hudi table is supported.";
             throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
         }
+
+        // Shuffle scan ranges to improve probe sql
+        Collections.shuffle(result);
 
         LOG.debug("Get {} scan range locations cost: {} ms",
                 getScanRangeLocationsSize(), (System.currentTimeMillis() - start));

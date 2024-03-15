@@ -105,7 +105,7 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return new ArrayList<>(scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates));
+        return scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
     }
 
     @Override

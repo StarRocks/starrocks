@@ -86,7 +86,7 @@ public class HudiScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return new ArrayList<>(scanRangeLocations.getScanRangeLocations(descTbl, hudiTable, scanNodePredicates));
+        return scanRangeLocations.getScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
     }
 
     @Override
