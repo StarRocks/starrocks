@@ -735,6 +735,7 @@ struct TAggregationNode {
 
   // enable runtime limit, pipelines share one limit
   29: optional bool enable_runtime_limit = false
+  30: optional TStreamingPreaggregationMode streaming_agg_low_memory_mode
 }
 
 struct TRepeatNode {

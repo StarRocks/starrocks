@@ -210,6 +210,7 @@ struct AggregatorParams {
     int64_t limit;
     bool enable_runtime_limit;
     TStreamingPreaggregationMode::type streaming_preaggregation_mode;
+    TStreamingPreaggregationMode::type streaming_agg_low_memory_mode;
     TupleId intermediate_tuple_id;
     TupleId output_tuple_id;
     std::string sql_grouping_keys;
