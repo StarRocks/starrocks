@@ -135,7 +135,8 @@ public class SetExecutorTest {
         executor.execute();
         UserVariable userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().matchesType(type));
-        Assert.assertEquals(value.getStringValue(), userVariable.getEvaluatedExpression().getStringValue());
+        LiteralExpr literalExpr = (LiteralExpr) userVariable.getEvaluatedExpression();
+        Assert.assertEquals(value.getStringValue(), literalExpr.getStringValue());
         String planFragment = UtFrameUtils.getPlanAndFragment(ctx, "select @var").second.
                 getExplainString(TExplainLevel.NORMAL);
         Assert.assertTrue(planFragment.contains(value.getStringValue()));
@@ -167,7 +168,8 @@ public class SetExecutorTest {
         executor.execute();
         UserVariable userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isDecimalV3());
-        Assert.assertEquals("10", userVariable.getEvaluatedExpression().getStringValue());
+        LiteralExpr literalExpr = (LiteralExpr) userVariable.getEvaluatedExpression();
+        Assert.assertEquals("10", literalExpr.getStringValue());
 
         sql = "set @var = cast(1 as boolean)";
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
