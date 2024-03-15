@@ -2085,7 +2085,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
 }
 
 Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& path, const EditVersion& version,
-                                                           bool write_tmp_l1, bool keep_delete) {
+                                                           bool write_tmp_l1, bool keep_delete, IOStat* iostat) {
     auto writer = std::make_unique<ImmutableIndexWriter>();
     std::string idx_file_path;
     if (!write_tmp_l1) {
@@ -2118,6 +2118,10 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
         }
     }
     RETURN_IF_ERROR(writer->finish());
+    if (iostat != nullptr) {
+        iostat->flush_l1_bytes += writer->file_size();
+        iostat->total_write_l1_bytes += writer->file_size();
+    }
     return Status::OK();
 }
 
@@ -3343,7 +3347,7 @@ bool PersistentIndex::_enable_minor_compaction() {
 // both case1 and case2 will create a new l1 file and a new empty l0 file
 // case3 will write a new snapshot l0
 // case4 will append wals into l0 file
-Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) {
+Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* iostat) {
     MonotonicStopWatch watch;
     watch.start();
     DCHECK_EQ(index_meta->key_size(), _key_size);
@@ -3357,13 +3361,13 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     // if l1 is not empty,
     if (_flushed) {
         if (_enable_minor_compaction()) {
-            RETURN_IF_ERROR(_minor_compaction(index_meta));
+            RETURN_IF_ERROR(_minor_compaction(index_meta, iostat));
             do_minor_compaction = true;
         } else {
-            RETURN_IF_ERROR(_merge_compaction());
+            RETURN_IF_ERROR(_merge_compaction(iostat));
         }
-        if (stat != nullptr) {
-            stat->compaction_cost += watch.elapsed_time();
+        if (iostat != nullptr) {
+            iostat->compaction_cost += watch.elapsed_time();
             watch.reset();
         }
     } else {
@@ -3373,13 +3377,13 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
                 // do l0 l1 merge compaction
                 _flushed = true;
                 if (_enable_minor_compaction()) {
-                    RETURN_IF_ERROR(_minor_compaction(index_meta));
+                    RETURN_IF_ERROR(_minor_compaction(index_meta, iostat));
                     do_minor_compaction = true;
                 } else {
-                    RETURN_IF_ERROR(_merge_compaction());
+                    RETURN_IF_ERROR(_merge_compaction(iostat));
                 }
-                if (stat != nullptr) {
-                    stat->compaction_cost += watch.elapsed_time();
+                if (iostat != nullptr) {
+                    iostat->compaction_cost += watch.elapsed_time();
                     watch.reset();
                 }
             }
@@ -3387,9 +3391,9 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         } else if (_l0_is_full()) {
             // do flush l0
             _flushed = true;
-            RETURN_IF_ERROR(_flush_l0());
-            if (stat != nullptr) {
-                stat->flush_or_wal_cost += watch.elapsed_time();
+            RETURN_IF_ERROR(_flush_l0(iostat));
+            if (iostat != nullptr) {
+                iostat->flush_or_wal_cost += watch.elapsed_time();
                 watch.reset();
             }
         }
@@ -3420,6 +3424,9 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
+        if (iostat != nullptr) {
+            iostat->dump_snapshot_bytes += _l0->file_size();
+        }
     } else {
         index_meta->set_size(_size);
         index_meta->set_usage(_usage);
@@ -3428,8 +3435,8 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
     }
-    if (stat != nullptr) {
-        stat->reload_meta_cost += watch.elapsed_time();
+    if (iostat != nullptr) {
+        iostat->reload_meta_cost += watch.elapsed_time();
     }
 
     LOG(INFO) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
@@ -3630,23 +3637,36 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
 }
 
 Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
-                                                     std::vector<size_t>* replace_idxes) {
+                                                     std::vector<size_t>* replace_idxes, IOStat* iostat) {
     bool need_flush_advance = _need_flush_advance();
     _flushed |= need_flush_advance;
 
     if (need_flush_advance) {
         RETURN_IF_ERROR(flush_advance());
+        if (iostat != nullptr) {
+            iostat->total_write_l1_bytes += _l1_vec.back()->file_size();
+            iostat->flush_l1_bytes += _l1_vec.back()->file_size();
+        }
     }
 
     if (_need_merge_advance()) {
         RETURN_IF_ERROR(_merge_compaction_advance());
+        if (iostat != nullptr) {
+            iostat->total_write_l1_bytes += _l1_vec.back()->file_size();
+            iostat->merge_advance_bytes += _l1_vec.back()->file_size();
+        }
     } else if (!_flushed) {
         _dump_snapshot |= _can_dump_directly();
         if (!_dump_snapshot) {
+            size_t wal_size_before = _l0->file_size();
             if (replace_idxes == nullptr) {
                 RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
             } else {
                 RETURN_IF_ERROR(_l0->append_wal(keys, values, *replace_idxes));
+            }
+            size_t wal_size_after = _l0->file_size();
+            if (iostat != nullptr) {
+                iostat->append_wal_bytes += wal_size_after - wal_size_before;
             }
         }
     }
@@ -3702,23 +3722,23 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
 }
 
 Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                               IOStat* stat) {
+                               IOStat* iostat) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     MonotonicStopWatch watch;
     watch.start();
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size));
-    if (stat != nullptr) {
-        stat->l0_write_cost += watch.elapsed_time();
+    if (iostat != nullptr) {
+        iostat->l0_write_cost += watch.elapsed_time();
         watch.reset();
     }
     if (config::enable_parallel_get_and_bf) {
         RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
     } else {
-        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, stat));
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, iostat));
     }
-    if (stat != nullptr) {
-        stat->l1_l2_read_cost += watch.elapsed_time();
+    if (iostat != nullptr) {
+        iostat->l1_l2_read_cost += watch.elapsed_time();
         watch.reset();
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
@@ -3734,14 +3754,14 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     }
 
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
-    Status st = _flush_advance_or_append_wal(n, keys, values, nullptr);
-    if (stat != nullptr) {
-        stat->flush_or_wal_cost += watch.elapsed_time();
+    Status st = _flush_advance_or_append_wal(n, keys, values, nullptr, iostat);
+    if (iostat != nullptr) {
+        iostat->flush_or_wal_cost += watch.elapsed_time();
     }
     return st;
 }
 
-Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
+Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1, IOStat* iostat) {
     std::set<size_t> check_l1_l2_key_sizes;
     RETURN_IF_ERROR(_l0->insert(n, keys, values, check_l1_l2_key_sizes));
     if (!_l1_vec.empty()) {
@@ -3773,10 +3793,10 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
-    return _flush_advance_or_append_wal(n, keys, values, nullptr);
+    return _flush_advance_or_append_wal(n, keys, values, nullptr, iostat);
 }
 
-Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
+Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, IOStat* iostat) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_erased = 0;
     RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, not_founds_by_key_size));
@@ -3799,7 +3819,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
-    return _flush_advance_or_append_wal(n, keys, nullptr, nullptr);
+    return _flush_advance_or_append_wal(n, keys, nullptr, nullptr, iostat);
 }
 
 [[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
@@ -3822,7 +3842,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
 }
 
 Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
-                                    std::vector<uint32_t>* failed) {
+                                    std::vector<uint32_t>* failed, IOStat* iostat) {
     std::vector<IndexValue> found_values;
     found_values.resize(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
@@ -3836,7 +3856,7 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes);
+    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes, iostat);
 }
 
 Status PersistentIndex::flush_advance() {
@@ -3844,7 +3864,7 @@ Status PersistentIndex::flush_advance() {
     int idx = _l1_vec.size();
     std::string l1_tmp_file = strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major_number(),
                                                   _version.minor_number(), idx);
-    RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true));
+    RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true, nullptr));
 
     VLOG(1) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
     // load _l1_vec
@@ -3867,9 +3887,9 @@ Status PersistentIndex::flush_advance() {
     return Status::OK();
 }
 
-Status PersistentIndex::_flush_l0() {
+Status PersistentIndex::_flush_l0(IOStat* iostat) {
     // when l1 or l2 exist, must flush l0 with Delete Flag
-    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty() || !_l1_vec.empty());
+    return _l0->flush_to_immutable_index(_path, _version, false, !_l2_vec.empty() || !_l1_vec.empty(), iostat);
 }
 
 Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
@@ -4422,7 +4442,7 @@ size_t PersistentIndex::_get_tmp_l1_count() {
 //    d. if there is not l1 file exists, flush l0 to l1 file.
 // 2. move old l1 to l2. only if old l1 exist
 // 3. modify PersistentIndex meta
-Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
+Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta, IOStat* iostat) {
     // 1. flush l0 to l1
     const std::string new_l1_filename =
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
@@ -4454,17 +4474,21 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), _has_l1 ? 1 : 0, _l1_vec.size(),
                                                    _usage_and_size_by_key_length, !_l2_vec.empty() || _has_l1));
         RETURN_IF_ERROR(writer->finish());
+        if (iostat != nullptr) {
+            iostat->merge_compaction_bytes += writer->file_size();
+            iostat->total_write_l1_bytes += writer->file_size();
+        }
         LOG(INFO) << "PersistentIndex minor compaction, merge tmp l1, merge cnt: " << _l1_vec.size()
                   << ", output: " << new_l1_filename;
     } else if (_l1_vec.size() == 1) {
         // step 1.c
-        RETURN_IF_ERROR(_flush_l0());
+        RETURN_IF_ERROR(_flush_l0(iostat));
         DCHECK(_has_l1);
         LOG(INFO) << "PersistentIndex minor compaction, flush l0, old l1: " << _l1_version
                   << ", output: " << new_l1_filename;
     } else {
         // step 1.d
-        RETURN_IF_ERROR(_flush_l0());
+        RETURN_IF_ERROR(_flush_l0(iostat));
         DCHECK(!_has_l1);
         LOG(INFO) << "PersistentIndex minor compaction, flush l0, "
                   << "output: " << new_l1_filename;
@@ -4494,7 +4518,7 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
     return Status::OK();
 }
 
-Status PersistentIndex::_merge_compaction() {
+Status PersistentIndex::_merge_compaction(IOStat* iostat) {
     if (_l1_vec.empty()) {
         return Status::InternalError("cannot do merge_compaction without l1");
     }
@@ -4516,6 +4540,10 @@ Status PersistentIndex::_merge_compaction() {
                                     writer->total_kv_num(), _size, writer->index_file());
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
+    }
+    if (iostat != nullptr) {
+        iostat->merge_compaction_bytes += writer->file_size();
+        iostat->total_write_l1_bytes += writer->file_size();
     }
     return writer->finish();
 }

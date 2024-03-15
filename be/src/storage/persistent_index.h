@@ -94,13 +94,22 @@ struct IOStat {
     uint64_t flush_or_wal_cost = 0;
     uint64_t compaction_cost = 0;
     uint64_t reload_meta_cost = 0;
+    uint64_t dump_snapshot_bytes = 0;
+    uint64_t append_wal_bytes = 0;
+    uint64_t total_write_l1_bytes = 0;
+    uint64_t flush_l1_bytes = 0;
+    uint64_t merge_advance_bytes = 0;
+    uint64_t merge_compaction_bytes = 0;
 
     std::string print_str() {
         return fmt::format(
                 "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
-                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
+                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {} "
+                "dump_snapshot_bytes: {} append_wal_bytes: {} total_write_l1_bytes: {} flush_l1_bytes: {} "
+                "merge_advance_bytes: {} merge_compaction_bytes: {}",
                 get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
-                compaction_cost, reload_meta_cost);
+                compaction_cost, reload_meta_cost, dump_snapshot_bytes, append_wal_bytes, total_write_l1_bytes,
+                flush_l1_bytes, merge_advance_bytes, merge_compaction_bytes);
     }
 };
 
@@ -378,7 +387,7 @@ public:
                                                          const std::vector<size_t>& idxes);
 
     Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1,
-                                    bool keep_delete);
+                                    bool keep_delete, IOStat* iostat);
 
     // get the number of entries in the index (including NullIndexValue)
     size_t size();
@@ -690,7 +699,7 @@ public:
     Status abort();
 
     // commit modification
-    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
+    Status commit(PersistentIndexMetaPB* index_meta, IOStat* iostat = nullptr);
 
     // apply modification
     Status on_commited();
@@ -713,20 +722,21 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* iostat = nullptr);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
+    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1,
+                          IOStat* iostat = nullptr);
 
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values);
+    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values, IOStat* iostat = nullptr);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
@@ -734,7 +744,6 @@ public:
     // |keys|: key array as raw buffer
     // |values|: value array
     // |src_rssid|: rssid array
-    // |failed|: return not match rowid
     [[maybe_unused]] Status try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                         const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed);
 
@@ -745,7 +754,7 @@ public:
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
     virtual Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
-                               std::vector<uint32_t>* failed);
+                               std::vector<uint32_t>* failed, IOStat* iostat = nullptr);
 
     Status flush_advance();
 
@@ -808,18 +817,18 @@ private:
     bool _need_flush_advance();
     bool _need_merge_advance();
     Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
-                                        std::vector<size_t>* replace_idxes);
+                                        std::vector<size_t>* replace_idxes, IOStat* iostat = nullptr);
     Status _delete_major_compaction_tmp_index_file();
     Status _delete_tmp_index_file();
 
-    Status _flush_l0();
+    Status _flush_l0(IOStat* iostat = nullptr);
 
     Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
                                       std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat,
                                       bool keep_delete);
     Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
-    Status _merge_compaction();
+    Status _merge_compaction(IOStat* iostat);
 
     Status _load(const PersistentIndexMetaPB& index_meta, bool reload = false);
     Status _reload(const PersistentIndexMetaPB& index_meta);
@@ -841,7 +850,7 @@ private:
     void _get_stat_from_immutable_index(ImmutableIndex* immu_index, uint32_t key_size, size_t& total_size,
                                         size_t& total_usage);
 
-    Status _minor_compaction(PersistentIndexMetaPB* index_meta);
+    Status _minor_compaction(PersistentIndexMetaPB* index_meta, IOStat* iostat);
 
     uint64_t _l1_l2_file_size() const;
 
