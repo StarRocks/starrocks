@@ -507,4 +507,19 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         assertNotContains(plan, "dict_col=");
         assertContains(plan, "PredicateAccessPath: [/S_ADDRESS/OFFSET]");
     }
+
+    @Test
+    public void testUnnestArray() throws Exception {
+        String sql = "select S_ADDRESS[2], col.unnest from supplier_nullable, unnest(S_ADDRESS) col;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [INT]\n");
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  10 <-> DictDecode(12: S_ADDRESS, [<place-holder>], 12: S_ADDRESS[2])\n" +
+                "  |  13 <-> [13: unnest, INT, true]");
+    }
+
 }
