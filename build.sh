@@ -162,20 +162,6 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
-# This option will soon be deprecated.
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    # force turn off cachelib on arm platform
-    WITH_CACHELIB=OFF
-elif [[ -z ${WITH_CACHELIB} ]]; then
-    WITH_CACHELIB=OFF
-fi
-
-if [[ "${WITH_CACHELIB}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
-    echo "WITH_CACHELIB=ON but missing depdency libraries(cachelib)"
-    exit 1
-fi
-
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
@@ -256,8 +242,14 @@ echo "Get params:
     USE_SSE4_2          -- $USE_SSE4_2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
+<<<<<<< HEAD
     WITH_CACHELIB       -- $WITH_CACHELIB
     USE_JEMALLOC        -- $USE_JEMALLOC
+=======
+    ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
+    OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
+>>>>>>> 30e7e97cae ([Enhancement] Remove cachelib library and dependencies to reduce the thirdparty space. (#42660))
 "
 
 check_tool()
@@ -345,8 +337,11 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DUSE_JEMALLOC=$USE_JEMALLOC                          \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
+<<<<<<< HEAD
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
+=======
+>>>>>>> 30e7e97cae ([Enhancement] Remove cachelib library and dependencies to reduce the thirdparty space. (#42660))
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
 
@@ -490,6 +485,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
 
+<<<<<<< HEAD
     if [ "${WITH_CACHELIB}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
@@ -505,6 +501,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/
+=======
+>>>>>>> 30e7e97cae ([Enhancement] Remove cachelib library and dependencies to reduce the thirdparty space. (#42660))
     MSG="${MSG} √ ${MSG_BE}"
 fi
 
