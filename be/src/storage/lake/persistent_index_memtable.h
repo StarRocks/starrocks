@@ -21,28 +21,27 @@
 namespace starrocks::lake {
 
 using IndexValueInfo = std::pair<int64_t, IndexValue>;
-static constexpr uint64_t LatestVersion = -1;
 
 class PersistentIndexMemtable {
 public:
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  KeyIndexesInfo* not_found, size_t* num_found, int64_t version = LatestVersion);
+                  KeyIndexesInfo* not_found, size_t* num_found, int64_t version);
 
     // |version|: version of index values
-    Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version = LatestVersion);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
     // |version|: version of index values
     Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexesInfo* not_found, size_t* num_found,
-                 int64_t version = LatestVersion);
+                 int64_t version);
 
     // |version|: version of index values
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes,
-                   int64_t version = LatestVersion);
+                   int64_t version);
 
     // |version|: version of index values
     Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found, size_t* num_found,
-               int64_t version = LatestVersion);
+               int64_t version);
 
     void clear();
 
