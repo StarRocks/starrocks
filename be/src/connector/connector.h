@@ -156,6 +156,8 @@ public:
         *max_value = MAX_DATA_SOURCE_MEM_BYTES;
     }
 
+    virtual bool skip_min_max_in_profile() const { return true; }
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
 };
