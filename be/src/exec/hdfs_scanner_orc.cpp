@@ -505,7 +505,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
 
-    std::unique_ptr<OrcPredicates> orc_predicates = nullptr;
     std::vector<Expr*> conjuncts{};
     if (_use_orc_sargs) {
         for (const auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
@@ -514,8 +513,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             }
         }
     }
-    orc_predicates = std::make_unique<OrcPredicates>(&conjuncts, _scanner_ctx.runtime_filter_collector);
-    RETURN_IF_ERROR(_orc_reader->init(std::move(reader), orc_predicates.get()));
+    const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
+    RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
 
     // create iceberg delete builder at last
     RETURN_IF_ERROR(build_iceberg_delete_builder());
@@ -662,23 +661,23 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     const std::string orcProfileSectionPrefix = "ORC";
 
-    RuntimeProfile* root = profile->runtime_profile;
-    ADD_COUNTER(root, orcProfileSectionPrefix, TUnit::NONE);
+    RuntimeProfile* root_profile = profile->runtime_profile;
+    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
 
-    do_update_iceberg_v2_counter(root, orcProfileSectionPrefix);
+    do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
 
     size_t total_stripe_size = 0;
     for (const auto& v : _app_stats.orc_stripe_sizes) {
         total_stripe_size += v;
     }
 
-    RuntimeProfile::Counter* total_stripe_size_counter = root->add_child_counter(
+    RuntimeProfile::Counter* total_stripe_size_counter = root_profile->add_child_counter(
             "TotalStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
             orcProfileSectionPrefix);
-    RuntimeProfile::Counter* total_stripe_number_counter = root->add_child_counter(
+    RuntimeProfile::Counter* total_stripe_number_counter = root_profile->add_child_counter(
             "TotalStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
             orcProfileSectionPrefix);
-    RuntimeProfile::Counter* total_tiny_stripe_size_counter = root->add_child_counter(
+    RuntimeProfile::Counter* total_tiny_stripe_size_counter = root_profile->add_child_counter(
             "TotalTinyStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
             orcProfileSectionPrefix);
 
@@ -686,10 +685,10 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(total_stripe_number_counter, _app_stats.orc_stripe_sizes.size());
     COUNTER_UPDATE(total_tiny_stripe_size_counter, _app_stats.orc_total_tiny_stripe_size);
 
-    RuntimeProfile::Counter* stripe_active_lazy_coalesce_together_counter = root->add_child_counter(
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_together_counter = root_profile->add_child_counter(
             "StripeActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
-    RuntimeProfile::Counter* stripe_active_lazy_coalesce_seperately_counter = root->add_child_counter(
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_seperately_counter = root_profile->add_child_counter(
             "StripeActiveLazyColumnIOCoalesceSeperately", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
     COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.orc_stripe_active_lazy_coalesce_together);
@@ -698,7 +697,7 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
 
     if (_orc_reader != nullptr) {
         // _orc_reader is nullptr for split task
-        root->add_info_string("ORCSearchArgument: ", _orc_reader->get_search_argument_string());
+        root_profile->add_info_string("ORCSearchArgument: ", _orc_reader->get_search_argument_string());
     }
 }
 
