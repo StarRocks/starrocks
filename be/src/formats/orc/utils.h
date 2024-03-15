@@ -20,6 +20,7 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/operator.h"
 #include "formats/orc/orc_mapping.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "io/shared_buffered_input_stream.h"
@@ -27,6 +28,14 @@
 #include "types/timestamp_value.h"
 
 namespace starrocks {
+
+class OrcPredicates {
+public:
+    OrcPredicates(const std::vector<Expr*>* conjuncts, const RuntimeFilterProbeCollector* rf_collector)
+            : conjuncts(conjuncts), rf_collector(rf_collector) {}
+    const std::vector<Expr*>* conjuncts;
+    const RuntimeFilterProbeCollector* rf_collector;
+};
 
 class DiskRange {
 public:

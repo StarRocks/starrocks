@@ -18,7 +18,6 @@
 
 #include "TypeImpl.hh"
 
-#include <iostream>
 #include <sstream>
 
 #include "Adaptor.hh"
@@ -112,21 +111,6 @@ uint64_t TypeImpl::getSubtypeCount() const {
 
 const Type* TypeImpl::getSubtype(uint64_t i) const {
     return subTypes[i].get();
-}
-
-const Type* TypeImpl::getSubtypeByColumnId(uint64_t id) const {
-    ensureIdAssigned();
-    if (id == columnId) {
-        return this;
-    }
-
-    buildColumnIdToPosMap();
-
-    auto it = columnIdToPos.find(id);
-    if (it == columnIdToPos.end()) {
-        throw std::range_error("Error column id range: " + std::to_string(id));
-    }
-    return subTypes[it->second].get();
 }
 
 const std::string& TypeImpl::getFieldName(uint64_t i) const {
