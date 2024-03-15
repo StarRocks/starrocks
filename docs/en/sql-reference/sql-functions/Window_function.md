@@ -1124,15 +1124,9 @@ Returns the population variance of an expression. VAR_POP and VARIANCE_POP are a
 VARIANCE(expr) [OVER (partition_by_clause)]
 ```
 
-<<<<<<< HEAD
-> **NOTE**
->
-> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
-=======
 :::tip
 From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 :::
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1142,34 +1136,6 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
-```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-Use the VARIANCE() function.
-
-```plaintext
-mysql> select variance(k) over (partition by no) FROM agg;
-+-------------------------------------+
-| variance(k) OVER (PARTITION BY no ) |
-+-------------------------------------+
-|                                   0 |
-|                             54.6875 |
-|                             54.6875 |
-|                             54.6875 |
-|                             54.6875 |
-+-------------------------------------+
-=======
 select *,
     variance(score)
         over (
@@ -1187,7 +1153,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |  60.74999999999997 |
 |    3 | jack  | math    |    95 |  82.23999999999998 |
 +------+-------+---------+-------+--------------------+
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### VAR_SAMP, VARIANCE_SAMP
@@ -1200,15 +1165,9 @@ Returns the sample variance of an expression. These functions can be used as win
 VAR_SAMP(expr) [OVER (partition_by_clause)]
 ```
 
-<<<<<<< HEAD
-> **NOTE**
->
-> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
-=======
 :::tip
 From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 :::
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1219,33 +1178,6 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-Use the VAR_SAMP() window function.
-
-```plaintext
-mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
-+-------------------------------------+
-| var_samp(k) OVER (PARTITION BY no ) |
-+-------------------------------------+
-|                                   0 |
-|                   72.91666666666667 |
-|                   72.91666666666667 |
-|                   72.91666666666667 |
-|                   72.91666666666667 |
-+-------------------------------------+
-=======
 select *,
     VAR_SAMP(score)
        over (partition by subject
@@ -1261,7 +1193,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |  80.99999999999996 |
 |    3 | jack  | math    |    95 | 102.79999999999997 |
 +------+-------+---------+-------+--------------------+
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### STD, STDDEV, STDDEV_POP
@@ -1274,15 +1205,9 @@ Returns the standard deviation of an expression. These functions can be used as 
 STD(expr) [OVER (partition_by_clause)]
 ```
 
-<<<<<<< HEAD
-> **NOTE**
->
-> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
-=======
 :::tip
 From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 :::
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1293,33 +1218,6 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-Use the STD() window function.
-
-```plaintext
-mysql> select STD(k) over (partition by no) FROM agg;
-+--------------------------------+
-| std(k) OVER (PARTITION BY no ) |
-+--------------------------------+
-|                              0 |
-|               7.39509972887452 |
-|               7.39509972887452 |
-|               7.39509972887452 |
-|               7.39509972887452 |
-+--------------------------------+
-=======
 select *, STD(score)
     over (
         partition by subject
@@ -1335,7 +1233,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 | 7.794228634059946 |
 |    3 | jack  | math    |    95 | 9.068627239003707 |
 +------+-------+---------+-------+-------------------+
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### STDDEV_SAMP
@@ -1348,15 +1245,9 @@ Returns the sample standard deviation of an expression. This function can be use
 STDDEV_SAMP(expr) [OVER (partition_by_clause)]
 ```
 
-<<<<<<< HEAD
-> **NOTE**
->
-> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
-=======
 :::tip
 From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 :::
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1384,21 +1275,6 @@ from scores where subject in ('math');
 |    3 | jack  | math    |    95 | 10.139033484509259 |
 +------+-------+---------+-------+--------------------+
 
-<<<<<<< HEAD
-Use the STDDEV_SAMP() window function.
-
-```plaintext
-mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
-+----------------------------------------+
-| stddev_samp(k) OVER (PARTITION BY no ) |
-+----------------------------------------+
-|                                      0 |
-|                      8.539125638299666 |
-|                      8.539125638299666 |
-|                      8.539125638299666 |
-|                      8.539125638299666 |
-+----------------------------------------+
-=======
 select *, STDDEV_SAMP(score)
     over (
         partition by subject
@@ -1415,7 +1291,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 | 10.139033484509259 |
 |    3 | jack  | math    |    95 | 10.139033484509259 |
 +------+-------+---------+-------+--------------------+
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### COVAR_SAMP
@@ -1428,15 +1303,9 @@ Returns the sample covariance of two expressions. This function is supported fro
 COVAR_SAMP(expr1,expr2) [OVER (partition_by_clause)]
 ```
 
-<<<<<<< HEAD
-> **NOTE**
->
-> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
-=======
 :::tip
 From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 :::
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1463,21 +1332,6 @@ from scores where subject in ('math');
 |    3 | jack  | math    |    95 | -0.24999999999999822 |
 +------+-------+---------+-------+----------------------+
 
-<<<<<<< HEAD
-Use the COVAR_SAMP() window function.
-
-```plaintext
-mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
-+------------------------------------------+
-| covar_samp(k, v) OVER (PARTITION BY no ) |
-+------------------------------------------+
-|                                     NULL |
-|                       119.99999999999999 |
-|                       119.99999999999999 |
-|                       119.99999999999999 |
-|                       119.99999999999999 |
-+------------------------------------------+
-=======
 select *, COVAR_SAMP(id,score)
     over (
         partition by subject
@@ -1493,7 +1347,6 @@ from scores where subject in ('math');
 |    2 | tom   | math    |    80 |    4.500000000000004 |
 |    6 | amber | math    |    92 | -0.24999999999999467 |
 |    3 | jack  | math    |    95 | -0.24999999999999467 |
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### COVAR_POP
@@ -1506,15 +1359,9 @@ Returns the population covariance of two expressions. This function is supported
 COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
 ```
 
-<<<<<<< HEAD
-> **NOTE**
->
-> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
-=======
 :::tip
 From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 :::
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1525,33 +1372,6 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-Use the COVAR_POP() window function.
-
-```plaintext
-mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
-+-----------------------------------------+
-| covar_pop(k, v) OVER (PARTITION BY no ) |
-+-----------------------------------------+
-|                                    NULL |
-|                       79.99999999999999 |
-|                       79.99999999999999 |
-|                       79.99999999999999 |
-|                       79.99999999999999 |
-+-----------------------------------------+
-=======
 select *, COVAR_POP(id, score)
     over (
         partition by subject
@@ -1567,7 +1387,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |                3.375 |
 |    3 | jack  | math    |    95 | -0.19999999999999857 |
 +------+-------+---------+-------+----------------------+
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
 
 ### CORR
@@ -1580,15 +1399,9 @@ Returns the Pearson correlation coefficient between two expressions. This functi
 CORR(expr1, expr2) [OVER (partition_by_clause)]
 ```
 
-<<<<<<< HEAD
-> **NOTE**
->
-> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
-=======
 :::tip
 From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 :::
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 
 **Parameters:**
 
@@ -1599,33 +1412,6 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
 ```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-Use the CORR() window function.
-
-```plaintext
-mysql> select CORR(k, v) over (partition by no) FROM agg;
-+------------------------------------+
-| corr(k, v) OVER (PARTITION BY no ) |
-+------------------------------------+
-|                               NULL |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-+------------------------------------+
-=======
 select *, CORR(id, score)
     over (
         partition by subject
@@ -1658,5 +1444,4 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |   -0.015594571538795024 |
 |    3 | jack  | math    |    95 |   -0.015594571538795024 |
 +------+-------+---------+-------+-------------------------+
->>>>>>> 26e8012bc8 ([Doc] add a universal CREATE TABLE sample for window function examples (#42405))
 ```
