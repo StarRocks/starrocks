@@ -18,7 +18,6 @@ However, in some special scenarios, such as partitioning historical data into pa
 
 ```sql
 PARTITION BY expression
-...
 
 expression ::=
     { date_trunc ( <time_unit> , <partition_column> ) |
@@ -123,7 +122,6 @@ However, in some special scenarios, such as when the table contains a column `ci
 
 ```sql
 PARTITION BY expression
-...
 
 expression ::=
     ( partition_columns )
