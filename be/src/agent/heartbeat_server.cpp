@@ -201,6 +201,7 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
                 Status status = hostname_to_ip(master_info.backend_ip, ip, BackendOptions::is_bind_ipv6());
                 if (!status.ok()) {
                     LOG(WARNING) << "Can not get ip from fqdn, fqdn is: " << master_info.backend_ip
+                                 << ", binding ipv6: " << BackendOptions::is_bind_ipv6()
                                  << ", status: " << status.to_string();
                     return status;
                 }
