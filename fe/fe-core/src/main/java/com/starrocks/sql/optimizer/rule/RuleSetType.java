@@ -38,5 +38,8 @@ public enum RuleSetType {
     ALL_MV_REWRITE,
     PRUNE_EMPTY_OPERATOR,
     SHORT_CIRCUIT_SET,
+
+    ELIMINATE_GROUP_BY,
+
     NUM_RULE_SET
 }
