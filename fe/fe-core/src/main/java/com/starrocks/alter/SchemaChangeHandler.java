@@ -1179,7 +1179,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // check warehouse
         long warehouseId = ConnectContext.get().getCurrentWarehouseId();
         Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-        if (warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds().isEmpty()) {
+        if (warehouse.getAnyAvailableCluster().getComputeNodeIds().isEmpty()) {
             throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
         }
 

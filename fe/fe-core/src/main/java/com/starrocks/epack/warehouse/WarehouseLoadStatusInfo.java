@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.warehouse;
+package com.starrocks.epack.warehouse;
 
 public class WarehouseLoadStatusInfo {
     private long numUnfinishedJobs = 0L;

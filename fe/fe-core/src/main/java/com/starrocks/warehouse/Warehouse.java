@@ -15,28 +15,20 @@
 package com.starrocks.warehouse;
 
 import com.google.gson.annotations.SerializedName;
-import com.staros.util.LockCloseable;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public abstract class Warehouse implements Writable {
-
     @SerializedName(value = "name")
     protected String name;
     @SerializedName(value = "id")
     private long id;
+    @SerializedName(value = "comment")
+    protected String comment;
 
     public enum WarehouseState {
         AVAILABLE,
@@ -46,33 +38,11 @@ public abstract class Warehouse implements Writable {
     @SerializedName(value = "state")
     protected WarehouseState state = WarehouseState.AVAILABLE;
 
-    @SerializedName(value = "comment")
-    private String comment;
-
-    @SerializedName(value = "ctime")
-    private volatile long createdTime;
-
-    @SerializedName(value = "rtime")
-    private volatile long resumedTime;
-
-    @SerializedName(value = "mtime")
-    private volatile long updatedTime;
-
-    protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-
-    public Warehouse() {
-    }
-
     public Warehouse(long id, String name, String comment) {
         this.id = id;
         this.name = name;
         this.comment = comment;
-        this.createdTime = System.currentTimeMillis();
-        this.resumedTime = -1L;
-        this.updatedTime = createdTime;
     }
-
-    public abstract void initCluster() throws DdlException;
 
     public long getId() {
         return id;
@@ -82,74 +52,19 @@ public abstract class Warehouse implements Writable {
         return name;
     }
 
-    public String getComment() {
-        return comment;
-    }
-
     public void setState(WarehouseState state) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            this.state = state;
-        }
+        this.state = state;
     }
 
     public WarehouseState getState() {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return state;
-        }
+        return state;
     }
-
-    public boolean isAvailable() {
-        return getState() == WarehouseState.AVAILABLE;
-    }
-
-    public abstract void getProcNodeData(BaseProcResult result);
-
-    public abstract Map<Long, Cluster> getClusters() throws DdlException;
 
     public abstract Cluster getAnyAvailableCluster();
-
-    public List<List<String>> getClusterInfo() {
-        return getClusterProcData().getRows();
-    }
-
-    public abstract ProcResult getClusterProcData();
-
-    public abstract List<List<String>> getNodesInfo();
-
-    public abstract void dropSelf() throws DdlException;
-
-    public abstract void suspendSelf();
-
-    public abstract void resumeSelf();
-
-    public long getCreatedTime() {
-        return createdTime;
-    }
-
-    public long getResumedTime() {
-        return resumedTime;
-    }
-
-    public long getUpdatedTime() {
-        return updatedTime;
-    }
-
-    public void setResumedTime(long time) {
-        this.resumedTime = time;
-    }
-
-    public void setUpdatedTime(long time) {
-        this.updatedTime = time;
-    }
 
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
-    }
-
-    public static Warehouse read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Warehouse.class);
     }
 }

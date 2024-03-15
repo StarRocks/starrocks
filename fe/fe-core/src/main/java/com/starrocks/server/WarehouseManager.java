@@ -14,36 +14,24 @@
 
 package com.starrocks.server;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.staros.util.LockCloseable;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.epack.persist.SRMetaBlockIDEPack;
+import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.persist.metablock.SRMetaBlockEOFException;
-import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.WarehouseProcDir;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +39,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
@@ -78,9 +65,8 @@ public class WarehouseManager implements Writable {
         // NOTE: default warehouse use DEFAULT_WORKER_GROUP_ID, which is 0,
         // so it is unnecessary to create a worker group for it.
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
-                    DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID,
-                    "An internal warehouse init after FE is ready");
+            Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID,
+                    DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID);
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
         }
@@ -136,7 +122,7 @@ public class WarehouseManager implements Writable {
     }
 
     public List<Warehouse> getAllWarehouses() {
-        return nameToWh.values().stream().collect(Collectors.toList());
+        return new ArrayList<>(nameToWh.values());
     }
 
     public List<Long> getWarehouseIds() {
@@ -163,70 +149,10 @@ public class WarehouseManager implements Writable {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
         Warehouse warehouse = getAvailbleWarehouse(warehouseId);
         // check if warehouse available
-        warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds().forEach(
+        warehouse.getAnyAvailableCluster().getComputeNodeIds().forEach(
                 nodeId -> builder.put(nodeId,
                         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
         return builder.build();
-    }
-
-    // warehouse meta persistence api
-    public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
-        checksum ^= 0;
-        write(out);
-        return checksum;
-    }
-
-    public long loadWarehouses(DataInputStream dis, long checksum) throws IOException, DdlException {
-        int warehouseCount = 0;
-        try {
-            String s = Text.readString(dis);
-            WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
-            if (data != null && data.idToWh != null) {
-                warehouseCount = data.idToWh.size();
-            }
-            checksum ^= warehouseCount;
-            LOG.info("finished replaying WarehouseMgr from image");
-        } catch (EOFException e) {
-            LOG.info("no WarehouseMgr to replay.");
-        }
-        return checksum;
-    }
-
-    public List<List<String>> getWarehousesInfo() {
-        return new WarehouseProcDir(this).fetchResult().getRows();
-    }
-
-    public List<WarehouseInfo> getWarehouseInfos() {
-        return getWarehouses().stream()
-                .map(WarehouseInfo::fromWarehouse)
-                .collect(Collectors.toList());
-    }
-
-    // new image persist func
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockIDEPack.WAREHOUSE_MGR, nameToWh.size() + 1);
-        writer.writeJson(nameToWh.size());
-        for (Warehouse warehouse : nameToWh.values()) {
-            writer.writeJson(warehouse);
-        }
-        writer.close();
-    }
-
-    public void load(SRMetaBlockReader reader)
-            throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
-        int nameToWhSize = reader.readJson(int.class);
-        for (int i = 0; i != nameToWhSize; ++i) {
-            Warehouse warehouse = reader.readJson(Warehouse.class);
-            this.nameToWh.put(warehouse.getName(), warehouse);
-            this.idToWh.put(warehouse.getId(), warehouse);
-        }
-    }
-
-    @VisibleForTesting
-    protected Collection<Warehouse> getWarehouses() {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return idToWh.values();
-        }
     }
 
     @Override

@@ -36,6 +36,7 @@ package com.starrocks.http;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
+import com.starrocks.epack.http.WarehouseAction;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.IndexAction;
@@ -91,7 +92,6 @@ import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
-import com.starrocks.http.rest.WarehouseAction;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;

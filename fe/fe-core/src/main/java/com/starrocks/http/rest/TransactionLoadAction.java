@@ -305,7 +305,7 @@ public class TransactionLoadAction extends RestBaseAction {
                         "The warehouse should not be null under SHARED_DATA mode, label: %s, op: %s",
                         label, txnOperation);
                 Warehouse warehouse = warehouseOptional.get();
-                for (long id : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
+                for (long id : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                     ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr()
                             .getClusterInfo().getBackendOrComputeNode(id);
                     if (node != null && node.isAvailable()) {

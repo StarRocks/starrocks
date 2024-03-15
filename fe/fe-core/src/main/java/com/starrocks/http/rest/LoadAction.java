@@ -123,7 +123,7 @@ public class LoadAction extends RestBaseAction {
             if (warehouse == null) {
                 throw new DdlException("Warehouse " + warehouseName + " not exists.");
             }
-            for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAvailable()) {
                     nodeIds.add(nodeId);

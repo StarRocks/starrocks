@@ -390,7 +390,7 @@ public class TableFunctionTable extends Table {
             if (RunMode.isSharedDataMode()) {
                 long warehouseId = ConnectContext.get().getCurrentWarehouseId();
                 Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-                nodeIds = warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds();
+                nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
             }
 
             if (nodeIds.isEmpty()) {

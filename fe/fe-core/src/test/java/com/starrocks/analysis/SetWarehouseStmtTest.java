@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -25,7 +26,6 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;

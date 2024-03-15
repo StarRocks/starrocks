@@ -230,7 +230,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         if (RunMode.isSharedDataMode()) {
             Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             aliveNodeNum = 0;
-            for (long nodeId : currentWh.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
+            for (long nodeId : currentWh.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
                     ++aliveNodeNum;

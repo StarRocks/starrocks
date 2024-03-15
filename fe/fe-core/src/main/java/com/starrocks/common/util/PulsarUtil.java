@@ -159,7 +159,7 @@ public class PulsarUtil {
                     }
 
                     Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                    for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
+                    for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                         ComputeNode node =
                                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                         if (node != null && node.isAlive()) {

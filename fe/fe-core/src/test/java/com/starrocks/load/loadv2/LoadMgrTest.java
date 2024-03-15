@@ -39,12 +39,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.LocalWarehouse;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -146,9 +146,9 @@ public class LoadMgrTest {
 
     @Test
     public void testDeserializationWithJobRemoved(@Mocked MetaContext metaContext,
-                                                @Mocked GlobalStateMgr globalStateMgr,
-                                                @Injectable Database database,
-                                                @Injectable Table table) throws Exception {
+                                                  @Mocked GlobalStateMgr globalStateMgr,
+                                                  @Injectable Database database,
+                                                  @Injectable Table table) throws Exception {
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);

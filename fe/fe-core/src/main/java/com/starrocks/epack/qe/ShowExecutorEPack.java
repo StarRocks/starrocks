@@ -43,6 +43,7 @@ import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
+import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -63,6 +64,9 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -111,17 +115,20 @@ public class ShowExecutorEPack extends ShowExecutor {
                         CaseSensibility.WAREHOUSE.getCaseSensibility());
             }
             PatternMatcher finalMatcher = matcher;
-            List<List<String>> rowSet = warehouseMgr.getWarehousesInfo().stream()
-                    .filter(row -> finalMatcher == null || finalMatcher.match(row.get(1)))
-                    .filter(row -> {
+
+            List<List<String>> rowSet = warehouseMgr.getAllWarehouses().stream()
+                    .filter(warehouse -> finalMatcher == null || finalMatcher.match(warehouse.getName()))
+                    .filter(warehouse -> {
                         try {
                             AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
-                                    context.getCurrentRoleIds(), row.get(1));
+                                    context.getCurrentRoleIds(), warehouse.getName());
                         } catch (AccessDeniedException e) {
                             return false;
                         }
                         return true;
-                    }).sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
+                    }).sorted(Comparator.comparing(Warehouse::getId))
+                    .map(warehouse -> ((LocalWarehouse) warehouse).getWarehouseInfo())
+                    .collect(Collectors.toList());
             return new ShowResultSet(statement.getMetaData(), rowSet);
         }
 
@@ -161,7 +168,49 @@ public class ShowExecutorEPack extends ShowExecutor {
                     continue;
                 }
 
-                rows.addAll(wh.getNodesInfo());
+                LocalWarehouse localWarehouse = (LocalWarehouse) wh;
+                for (Cluster cluster : localWarehouse.getClusters().values()) {
+                    List<Long> computeNodes = cluster.getComputeNodeIds();
+                    for (Long computeNodeId : computeNodes) {
+                        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getComputeNode(computeNodeId);
+
+                        List<String> computeNodeInfo = Lists.newArrayList();
+                        long warehouseId = node.getWarehouseId();
+                        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                        computeNodeInfo.add(warehouse.getName());
+
+                        computeNodeInfo.add(String.valueOf(cluster.getId()));
+                        computeNodeInfo.add(String.valueOf(cluster.getWorkerGroupId()));
+                        long nodeId = node.getId();
+                        long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(nodeId);
+                        computeNodeInfo.add(String.valueOf(nodeId));
+                        computeNodeInfo.add(String.valueOf(workerId));
+
+                        computeNodeInfo.add(node.getHost());
+
+                        computeNodeInfo.add(String.valueOf(node.getHeartbeatPort()));
+                        computeNodeInfo.add(String.valueOf(node.getBePort()));
+                        computeNodeInfo.add(String.valueOf(node.getHttpPort()));
+                        computeNodeInfo.add(String.valueOf(node.getBrpcPort()));
+                        computeNodeInfo.add(String.valueOf(node.getStarletPort()));
+
+                        computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastStartTime()));
+                        computeNodeInfo.add(TimeUtils.longToTimeString(node.getLastUpdateMs()));
+                        computeNodeInfo.add(String.valueOf(node.isAlive()));
+
+                        computeNodeInfo.add(node.getHeartbeatErrMsg());
+                        computeNodeInfo.add(String.valueOf(node.getVersion()));
+
+                        computeNodeInfo.add(String.valueOf(node.getNumRunningQueries()));
+                        computeNodeInfo.add(String.valueOf(BackendCoreStat.getCoresOfBe(nodeId)));
+                        double memUsedPct = node.getMemUsedPct();
+                        computeNodeInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
+                        computeNodeInfo.add(String.format("%.1f", node.getCpuUsedPermille() / 10.0) + " %");
+
+                        rows.add(computeNodeInfo);
+                    }
+                }
             }
             return new ShowResultSet(statement.getMetaData(), rows);
         }

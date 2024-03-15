@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.warehouse;
+package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -21,7 +21,8 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.server.WarehouseManager;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.List;
 
@@ -42,12 +43,6 @@ public class WarehouseProcDir implements ProcDirInterface {
             .add("Comment")
             .build();
 
-    private final WarehouseManager warehouseManager;
-
-    public WarehouseProcDir(WarehouseManager manager) {
-        this.warehouseManager = manager;
-    }
-
     @Override
     public boolean register(String name, ProcNodeInterface node) {
         return true;
@@ -60,9 +55,9 @@ public class WarehouseProcDir implements ProcDirInterface {
         }
         Warehouse warehouse;
         try {
-            warehouse = warehouseManager.getWarehouse(Long.parseLong(idOrName));
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(Long.parseLong(idOrName));
         } catch (NumberFormatException e) {
-            warehouse = warehouseManager.getWarehouse(idOrName);
+            warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(idOrName);
         }
         if (warehouse == null) {
             throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + ".\"");
@@ -74,11 +69,11 @@ public class WarehouseProcDir implements ProcDirInterface {
     public ProcResult fetchResult() {
         BaseProcResult result = new BaseProcResult();
         result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
-        List<Long> warehouseIds = warehouseManager.getWarehouseIds();
+        List<Long> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseIds();
         warehouseIds.forEach(x -> {
-            Warehouse wh = warehouseManager.getWarehouse(x);
+            LocalWarehouse wh = (LocalWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(x);
             if (wh != null) {
-                wh.getProcNodeData(result);
+                result.addRow(wh.getWarehouseInfo());
             }
         });
         return result;

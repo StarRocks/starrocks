@@ -7,22 +7,46 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.DropWarehouseLog;
+import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 
 public class WarehouseManagerEpack extends WarehouseManager {
     private static final Logger LOG = LogManager.getLogger(WarehouseManagerEpack.class);
+
+    @Override
+    public void initDefaultWarehouse() {
+        // gen a default warehouse
+        // NOTE: default warehouse use DEFAULT_WORKER_GROUP_ID, which is 0,
+        // so it is unnecessary to create a worker group for it.
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
+                    DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID,
+                    "An internal warehouse init after FE is ready");
+            nameToWh.put(wh.getName(), wh);
+            idToWh.put(wh.getId(), wh);
+        }
+    }
 
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
@@ -34,7 +58,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (nameToWh.containsKey(warehouseName)) {
                 if (stmt.isSetIfNotExists()) {
-                    LOG.info("Warehouse '%s' already exists", warehouseName);
+                    LOG.info("Warehouse {} already exists", warehouseName);
                     return;
                 }
                 ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS, warehouseName);
@@ -43,12 +67,16 @@ public class WarehouseManagerEpack extends WarehouseManager {
             long id = GlobalStateMgr.getCurrentState().getNextId();
             long clusterId = GlobalStateMgr.getCurrentState().getNextId();
             String comment = stmt.getComment();
-            Warehouse wh = new LocalWarehouse(id, warehouseName, clusterId, comment);
-            try {
-                wh.initCluster();
-            } catch (DdlException e) {
-                LOG.warn(e);
-                throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);
+            LocalWarehouse wh = new LocalWarehouse(id, warehouseName, clusterId, comment);
+
+            for (Cluster cluster : wh.getClusters().values()) {
+                try {
+                    StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentState().getStarOSAgent();
+                    cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0"));
+                } catch (DdlException e) {
+                    LOG.warn(e);
+                    throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);
+                }
             }
 
             nameToWh.put(wh.getName(), wh);
@@ -76,7 +104,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
         String warehouseName = stmt.getWarehouseName();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
 
-            Warehouse warehouse = nameToWh.get(warehouseName);
+            LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse == null) {
                 if (stmt.isSetIfExists()) {
                     return;
@@ -112,7 +140,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
             Preconditions.checkState(nameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
 
-            Warehouse warehouse = nameToWh.get(warehouseName);
+            LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouseName);
             }
@@ -137,7 +165,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
-            Warehouse warehouse = nameToWh.get(warehouseName);
+            LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse.getState() == Warehouse.WarehouseState.AVAILABLE) {
                 ErrorReport.reportDdlException("Can't resume an available warehouse");
             }
@@ -146,5 +174,23 @@ public class WarehouseManagerEpack extends WarehouseManager {
         }
     }
 
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockIDEPack.WAREHOUSE_MGR, nameToWh.size() + 1);
+        writer.writeJson(nameToWh.size());
+        for (Warehouse warehouse : nameToWh.values()) {
+            writer.writeJson(warehouse);
+        }
+        writer.close();
+    }
+
+    public void load(SRMetaBlockReader reader)
+            throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+        int nameToWhSize = reader.readJson(int.class);
+        for (int i = 0; i != nameToWhSize; ++i) {
+            Warehouse warehouse = reader.readJson(Warehouse.class);
+            this.nameToWh.put(warehouse.getName(), warehouse);
+            this.idToWh.put(warehouse.getId(), warehouse);
+        }
+    }
 }
 

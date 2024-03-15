@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.warehouse;
+package com.starrocks.epack.warehouse;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -20,16 +20,19 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Cluster;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
@@ -37,6 +40,25 @@ public class LocalWarehouse extends Warehouse {
 
     @SerializedName(value = "cluster")
     Cluster cluster;
+
+    public enum WarehouseState {
+        AVAILABLE,
+        SUSPENDED,
+    }
+
+    @SerializedName(value = "state")
+    protected WarehouseState state = WarehouseState.AVAILABLE;
+
+    @SerializedName(value = "ctime")
+    private volatile long createdTime;
+
+    @SerializedName(value = "rtime")
+    private volatile long resumedTime;
+
+    @SerializedName(value = "mtime")
+    private volatile long updatedTime;
+
+    protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public static final ImmutableList<String> CLUSTER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("ClusterId")
@@ -47,6 +69,7 @@ public class LocalWarehouse extends Warehouse {
             .build();
 
     public LocalWarehouse() {
+        super(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME, "");
     }
 
     public LocalWarehouse(long id, String name, long clusterId, String comment) {
@@ -54,31 +77,24 @@ public class LocalWarehouse extends Warehouse {
         cluster = new Cluster(clusterId);
     }
 
-    @Override
-    public void initCluster() throws DdlException {
-        cluster.init();
-    }
-
-    @Override
-    public void getProcNodeData(BaseProcResult result) {
-        result.addRow(Lists.newArrayList(
-                String.valueOf(this.getId()),
-                this.getName(),
-                this.getState().toString(),
-                String.valueOf(cluster.getAllComputeNodes().size()),
+    public List<String> getWarehouseInfo() {
+        return Lists.newArrayList(
+                String.valueOf(getId()),
+                getName(),
+                getState().toString(),
+                String.valueOf(cluster.getComputeNodeIds().size()),
                 String.valueOf(1L),
                 String.valueOf(1L),
                 String.valueOf(1L),
                 String.valueOf(0L),   //TODO: need to be filled after
                 String.valueOf(0L),   //TODO: need to be filled after
-                TimeUtils.longToTimeString(this.getCreatedTime()),
-                TimeUtils.longToTimeString(this.getResumedTime()),
-                TimeUtils.longToTimeString(this.getUpdatedTime()),
-                this.getComment()));
+                TimeUtils.longToTimeString(createdTime),
+                TimeUtils.longToTimeString(resumedTime),
+                TimeUtils.longToTimeString(updatedTime),
+                comment);
     }
 
-    @Override
-    public Map<Long, Cluster> getClusters() throws DdlException {
+    public Map<Long, Cluster> getClusters() {
         return ImmutableMap.of(cluster.getId(), cluster);
     }
 
@@ -87,43 +103,24 @@ public class LocalWarehouse extends Warehouse {
         return cluster;
     }
 
-    @Override
-    public ProcResult getClusterProcData() {
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(CLUSTER_PROC_NODE_TITLE_NAMES);
-        cluster.getProcNodeData(result);
-        return result;
-    }
-
-    @Override
-    public List<List<String>> getNodesInfo() {
-        BaseProcResult result = new BaseProcResult();
-        cluster.getProcNodesDataV2(result);
-        return result.getRows();
-    }
-
-    @Override
     public void dropSelf() throws DdlException {
         deleteWorkerFromStarMgr();
         dropNodeFromSystem();
     }
 
-    @Override
     public void suspendSelf() {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             this.state = WarehouseState.SUSPENDED;
             long currentTime = System.currentTimeMillis();
-            setResumedTime(currentTime);
-            setUpdatedTime(currentTime);
+            resumedTime = currentTime;
+            updatedTime = currentTime;
         }
     }
 
-    @Override
     public void resumeSelf() {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             this.state = WarehouseState.AVAILABLE;
-            long currentTime = System.currentTimeMillis();
-            setUpdatedTime(currentTime);
+            resumedTime = System.currentTimeMillis();
         }
     }
 
@@ -136,5 +133,4 @@ public class LocalWarehouse extends Warehouse {
     private void dropNodeFromSystem() throws DdlException {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropNodes(this.getId());
     }
-
 }

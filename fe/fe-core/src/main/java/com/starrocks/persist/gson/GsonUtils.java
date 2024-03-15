@@ -122,6 +122,7 @@ import com.starrocks.epack.privilege.LDAPRoleMapping;
 import com.starrocks.epack.privilege.PolicyPEntryObject;
 import com.starrocks.epack.privilege.RoleMapping;
 import com.starrocks.epack.privilege.WarehousePEntryObject;
+import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -184,7 +185,7 @@ import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 
 import java.io.IOException;
@@ -343,6 +344,7 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
+            .registerSubtype(DefaultWarehouse.class, "DefaultWarehouse")
             .registerSubtype(LocalWarehouse.class, "LocalWarehouse");
 
     public static final RuntimeTypeAdapterFactory<LoadJob> LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY =

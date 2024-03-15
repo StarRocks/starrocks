@@ -119,6 +119,7 @@ import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
+import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -217,7 +218,6 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
-import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -484,7 +484,7 @@ public class GlobalStateMgr {
         // TODO: need to refactor after be split into cn + dn
         if (warehouse != null && RunMode.isSharedDataMode()) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
-            for (Long cnId : cluster.getAvailableComputeNodeIds()) {
+            for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
             }
@@ -1451,7 +1451,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                 .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                 .put(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, securityPolicyManager::load)
-                .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, warehouseMgr::load)
+                .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, ((WarehouseManagerEpack) warehouseMgr)::load)
                 .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
                 .build();
 
@@ -1623,7 +1623,7 @@ public class GlobalStateMgr {
                 dictionaryMgr.save(dos);
                 replicationMgr.save(dos);
                 securityPolicyManager.save(dos);
-                warehouseMgr.save(dos);
+                ((WarehouseManagerEpack) warehouseMgr).save(dos);
                 failoverGroupMgr.save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);

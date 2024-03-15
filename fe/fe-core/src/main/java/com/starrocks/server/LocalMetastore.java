@@ -1896,7 +1896,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (RunMode.isSharedDataMode()) {
             numAliveNodes = 0;
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId).isAlive()) {
                     ++numAliveNodes;
                 }

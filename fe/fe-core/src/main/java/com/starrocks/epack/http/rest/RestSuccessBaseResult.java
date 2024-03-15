@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.http.rest;
+package com.starrocks.epack.http.rest;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.starrocks.http.rest.RestBaseResult;
 
 import java.io.Reader;
 import java.lang.reflect.Type;

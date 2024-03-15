@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.warehouse;
+package com.starrocks.epack.http.rest;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.epack.warehouse.WarehouseInfo;
+import com.starrocks.epack.warehouse.WarehouseLoadStatusInfo;
 import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.Map;
 
@@ -27,9 +30,9 @@ public class WarehouseInfosBuilder {
     public static WarehouseInfosBuilder makeBuilderFromMetricAndMgrs() {
         WarehouseInfosBuilder builder = new WarehouseInfosBuilder();
 
-        GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .getWarehouseInfos()
-                .forEach(builder::withWarehouseInfo);
+        for (Warehouse warehouse : GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses()) {
+            builder.withWarehouseInfo(new WarehouseInfo(warehouse.getId(), warehouse.getName()));
+        }
 
         return builder
                 .withNumUnfinishedQueries(WarehouseMetricMgr.getUnfinishedQueries())

@@ -1215,7 +1215,7 @@ public class JournalEntity implements Writable {
                 break;
             case OperationTypeEPack.OP_CREATE_WAREHOUSE:
             case OperationTypeEPack.OP_ALTER_WAREHOUSE:
-                data = Warehouse.read(in);
+                data = GsonUtils.GSON.fromJson(Text.readString(in), Warehouse.class);
                 isRead = true;
                 break;
             case OperationTypeEPack.OP_DROP_WAREHOUSE:

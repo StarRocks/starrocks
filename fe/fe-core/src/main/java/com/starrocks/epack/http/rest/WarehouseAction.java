@@ -12,16 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.http.rest;
+package com.starrocks.epack.http.rest;
 
+import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
+import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.warehouse.WarehouseInfo;
-import com.starrocks.warehouse.WarehouseInfosBuilder;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TGetWarehousesRequest;
+import com.starrocks.thrift.TGetWarehousesResponse;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStatusCode;
 import io.netty.handler.codec.http.HttpMethod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.List;
@@ -29,6 +39,8 @@ import java.util.Map;
 
 public class WarehouseAction extends RestBaseAction {
     public static final String URI = "/api/v1/warehouses";
+    private static final Logger LOG = LogManager.getLogger(WarehouseAction.class);
+
 
     public WarehouseAction(ActionController controller) {
         super(controller);
@@ -42,7 +54,7 @@ public class WarehouseAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         WarehouseInfosBuilder warehouseInfoBuilder = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs();
 
-        List<WarehouseInfo> infosFromOtherFEs = GlobalStateMgr.getCurrentState().getWarehouseInfosFromOtherFEs();
+        List<WarehouseInfo> infosFromOtherFEs = getWarehouseInfosFromOtherFEs();
         infosFromOtherFEs.forEach(warehouseInfoBuilder::withWarehouseInfo);
 
         Map<Long, WarehouseInfo> warehouseInfo = warehouseInfoBuilder.build();
@@ -51,6 +63,37 @@ public class WarehouseAction extends RestBaseAction {
         response.setContentType("application/json");
         response.getContent().append(res.toJsonString());
         sendResult(request, response);
+    }
+
+    public List<WarehouseInfo> getWarehouseInfosFromOtherFEs() {
+        List<WarehouseInfo> warehouseInfos = Lists.newArrayList();
+        TGetWarehousesRequest request = new TGetWarehousesRequest();
+
+        List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends();
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
+                continue;
+            }
+
+            try {
+                TGetWarehousesResponse response = FrontendServiceProxy
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                Config.thrift_rpc_timeout_ms,
+                                Config.thrift_rpc_retry_times,
+                                client -> client.getWarehouses(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("getWarehouseInfos to remote fe: {} failed", fe.getHost());
+                } else if (response.isSetWarehouse_infos()) {
+                    response.getWarehouse_infos().stream()
+                            .map(WarehouseInfo::fromThrift)
+                            .forEach(warehouseInfos::add);
+                }
+            } catch (Exception e) {
+                LOG.warn("getWarehouseInfos to remote fe: {} failed", fe.getHost(), e);
+            }
+        }
+
+        return warehouseInfos;
     }
 
     public static class Result {
