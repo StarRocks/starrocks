@@ -506,20 +506,19 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     std::unique_ptr<OrcPredicates> orc_predicates = nullptr;
+    std::vector<Expr*> conjuncts{};
     if (_use_orc_sargs) {
-        std::vector<Expr*> conjuncts;
         for (const auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
             for (const auto& it2 : it.second) {
                 conjuncts.push_back(it2->root());
             }
         }
-        orc_predicates = std::make_unique<OrcPredicates>(&conjuncts, _scanner_ctx.runtime_filter_collector);
     }
+    orc_predicates = std::make_unique<OrcPredicates>(&conjuncts, _scanner_ctx.runtime_filter_collector);
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), orc_predicates.get()));
 
     // create iceberg delete builder at last
     RETURN_IF_ERROR(build_iceberg_delete_builder());
-
     return Status::OK();
 }
 
