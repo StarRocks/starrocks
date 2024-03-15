@@ -88,6 +88,11 @@ public:
     struct SHA2Ctx {
         ScalarFunction function;
     };
+
+    DEFINE_VECTORIZED_FN(fpe_ff1_encrypt);
+    DEFINE_VECTORIZED_FN(fpe_encrypt);
+    DEFINE_VECTORIZED_FN(fpe_ff1_decrypt);
+    DEFINE_VECTORIZED_FN(fpe_decrypt);
 };
 
 } // namespace starrocks
