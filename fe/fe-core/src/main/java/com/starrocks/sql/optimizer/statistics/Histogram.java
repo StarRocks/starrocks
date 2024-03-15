@@ -53,8 +53,8 @@ public class Histogram {
         sb.append("MCV: [");
         mcv.entrySet().stream().sorted(Map.Entry.comparingByValue(
                 Comparator.reverseOrder())).limit(printMcvSize).forEach(entry -> {
-            sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]");
-        });
+                    sb.append("[").append(entry.getKey()).append(":").append(entry.getValue()).append("]");
+                });
         sb.append("]");
         return sb.toString();
     }

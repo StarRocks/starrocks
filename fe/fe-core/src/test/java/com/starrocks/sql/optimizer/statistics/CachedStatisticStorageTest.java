@@ -27,7 +27,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
-import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -348,7 +347,8 @@ public class CachedStatisticStorageTest {
             }
         };
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-        Map<String, Histogram> histogramMap = cachedStatisticStorage.getConnectorHistogramStatistics(table, ImmutableList.of("c1"));
+        Map<String, Histogram> histogramMap =
+                cachedStatisticStorage.getConnectorHistogramStatistics(table, ImmutableList.of("c1"));
         Assert.assertEquals(0, histogramMap.size());
     }
 
