@@ -12,7 +12,6 @@ keywords: ['analytic']
   - [窗口函数建表示例](#窗口函数建表示例)
   - [使用 AVG() 窗口函数](#使用-avg-窗口函数)
   - [使用 COUNT() 窗口函数](#使用-count-窗口函数)
-  - [使用 CUME\_DIST() 窗口函数](#使用-cume_dist-窗口函数)
   - [使用 DENSE\_RANK() 窗口函数](#使用-dense_rank-窗口函数)
   - [使用 FIRST\_VALUE() 窗口函数](#使用-first_value-窗口函数)
   - [使用 LAST\_VALUE() 窗口函数](#使用-last_value-窗口函数)
@@ -21,7 +20,6 @@ keywords: ['analytic']
   - [使用 MAX() 窗口函数](#使用-max-窗口函数)
   - [使用 MIN() 窗口函数](#使用-min-窗口函数)
   - [使用 NTILE() 窗口函数](#使用-ntile-窗口函数)
-  - [使用 PERCENT\_RANK() 函数](#使用-percent_rank-函数)
   - [使用 RANK() 窗口函数](#使用-rank-窗口函数)
   - [使用 ROW\_NUMBER() 窗口函数](#使用-row_number-窗口函数)
   - [使用 QUALIFY 窗口函数](#使用-qualify-窗口函数)
@@ -40,16 +38,6 @@ keywords: ['analytic']
 
 窗口函数在金融和科学计算领域较为常用，常被用来分析趋势、计算离群值以及对大量数据进行分桶分析等。
 
-<<<<<<< HEAD
-当前 StarRocks 支持的窗口函数包括：
-
-* `MIN()`, `MAX()`, `COUNT()`, `SUM()`, `AVG()`
-* `FIRST_VALUE()`, `LAST_VALUE()`, `LEAD()`, `LAG()`
-* `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()`, `QUALIFY()`
-* `NTILE()`
-
-=======
->>>>>>> 74ed25055c ([Doc] add a universal CREATE TABLE sample for window function examples (backport #42405) (#42663))
 ## 窗口函数语法及参数
 
 ### 语法
@@ -1146,33 +1134,6 @@ VARIANCE(expr) [OVER (partition_by_clause)]
 该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-使用 VARIANCE() 窗口函数。
-
-```plaintext
-mysql> select variance(k) over (partition by no) FROM agg;
-+-------------------------------------+
-| variance(k) OVER (PARTITION BY no ) |
-+-------------------------------------+
-|                                   0 |
-|                             54.6875 |
-|                             54.6875 |
-|                             54.6875 |
-|                             54.6875 |
-+-------------------------------------+
-=======
 select *,
     variance(score)
         over (
@@ -1190,7 +1151,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |  60.74999999999997 |
 |    3 | jack  | math    |    95 |  82.23999999999998 |
 +------+-------+---------+-------+--------------------+
->>>>>>> 74ed25055c ([Doc] add a universal CREATE TABLE sample for window function examples (backport #42405) (#42663))
 ```
 
 ## 使用 VAR_SAMP, VARIANCE_SAMP 窗口函数
@@ -1221,22 +1181,6 @@ select *,
        over (partition by subject
             order by score) as VAR_SAMP
 from scores where subject in ('math');
-
-<<<<<<< HEAD
-使用 VAR_SAMP() 窗口函数。
-
-```plaintext
-mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
-+-------------------------------------+
-| var_samp(k) OVER (PARTITION BY no ) |
-+-------------------------------------+
-|                                   0 |
-|                   72.91666666666667 |
-|                   72.91666666666667 |
-|                   72.91666666666667 |
-|                   72.91666666666667 |
-+-------------------------------------+
-=======
 +------+-------+---------+-------+--------------------+
 | id   | name  | subject | score | VAR_SAMP           |
 +------+-------+---------+-------+--------------------+
@@ -1247,7 +1191,6 @@ mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
 |    6 | amber | math    |    92 |  80.99999999999996 |
 |    3 | jack  | math    |    95 | 102.79999999999997 |
 +------+-------+---------+-------+--------------------+
->>>>>>> 74ed25055c ([Doc] add a universal CREATE TABLE sample for window function examples (backport #42405) (#42663))
 ```
 
 ## 使用 STD, STDDEV, STDDEV_POP 窗口函数
@@ -1273,33 +1216,6 @@ STD(expr) [OVER (partition_by_clause)]
 该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-使用 STD() 窗口函数。
-
-```plaintext
-mysql> select STD(k) over (partition by no) FROM agg;
-+--------------------------------+
-| std(k) OVER (PARTITION BY no ) |
-+--------------------------------+
-|                              0 |
-|               7.39509972887452 |
-|               7.39509972887452 |
-|               7.39509972887452 |
-|               7.39509972887452 |
-+--------------------------------+
-=======
 select *, STD(score)
     over (
         partition by subject
@@ -1315,7 +1231,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 | 7.794228634059946 |
 |    3 | jack  | math    |    95 | 9.068627239003707 |
 +------+-------+---------+-------+-------------------+
->>>>>>> 74ed25055c ([Doc] add a universal CREATE TABLE sample for window function examples (backport #42405) (#42663))
 ```
 
 ## 使用 STDDEV_SAMP 窗口函数
@@ -1358,21 +1273,6 @@ from scores where subject in ('math');
 |    3 | jack  | math    |    95 | 10.139033484509259 |
 +------+-------+---------+-------+--------------------+
 
-<<<<<<< HEAD
-使用 STDDEV_SAMP() 窗口函数。
-
-```plaintext
-mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
-+----------------------------------------+
-| stddev_samp(k) OVER (PARTITION BY no ) |
-+----------------------------------------+
-|                                      0 |
-|                      8.539125638299666 |
-|                      8.539125638299666 |
-|                      8.539125638299666 |
-|                      8.539125638299666 |
-+----------------------------------------+
-=======
 select *, STDDEV_SAMP(score)
     over (
         partition by subject
@@ -1389,7 +1289,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 | 10.139033484509259 |
 |    3 | jack  | math    |    95 | 10.139033484509259 |
 +------+-------+---------+-------+--------------------+
->>>>>>> 74ed25055c ([Doc] add a universal CREATE TABLE sample for window function examples (backport #42405) (#42663))
 ```
 
 ## 使用 COVAR_SAMP 窗口函数
@@ -1431,21 +1330,6 @@ from scores where subject in ('math');
 |    3 | jack  | math    |    95 | -0.24999999999999822 |
 +------+-------+---------+-------+----------------------+
 
-<<<<<<< HEAD
-使用 COVAR_SAMP() 窗口函数。
-
-```plaintext
-mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
-+------------------------------------------+
-| covar_samp(k, v) OVER (PARTITION BY no ) |
-+------------------------------------------+
-|                                     NULL |
-|                       119.99999999999999 |
-|                       119.99999999999999 |
-|                       119.99999999999999 |
-|                       119.99999999999999 |
-+------------------------------------------+
-=======
 select *, COVAR_SAMP(id,score)
     over (
         partition by subject
@@ -1462,7 +1346,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 | -0.24999999999999467 |
 |    3 | jack  | math    |    95 | -0.24999999999999467 |
 +------+-------+---------+-------+----------------------+
->>>>>>> 74ed25055c ([Doc] add a universal CREATE TABLE sample for window function examples (backport #42405) (#42663))
 ```
 
 ## 使用 COVAR_POP 窗口函数
@@ -1488,33 +1371,6 @@ COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
 该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-使用 COVAR_POP() 窗口函数。
-
-```plaintext
-mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
-+-----------------------------------------+
-| covar_pop(k, v) OVER (PARTITION BY no ) |
-+-----------------------------------------+
-|                                    NULL |
-|                       79.99999999999999 |
-|                       79.99999999999999 |
-|                       79.99999999999999 |
-|                       79.99999999999999 |
-+-----------------------------------------+
-=======
 select *, COVAR_POP(id, score)
     over (
         partition by subject
@@ -1530,7 +1386,6 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |                3.375 |
 |    3 | jack  | math    |    95 | -0.19999999999999857 |
 +------+-------+---------+-------+----------------------+
->>>>>>> 74ed25055c ([Doc] add a universal CREATE TABLE sample for window function examples (backport #42405) (#42663))
 ```
 
 ## 使用 CORR 窗口函数
@@ -1556,33 +1411,6 @@ CORR(expr1, expr2) [OVER (partition_by_clause)]
 该示例使用 [`scores`](#窗口函数建表示例) 表中的数据。
 
 ```plaintext
-<<<<<<< HEAD
-mysql> select * from agg;
-+------+-------+-------+
-| no   | k     | v     |
-+------+-------+-------+
-|    1 | 10.00 |  NULL |
-|    2 | 10.00 | 11.00 |
-|    2 | 20.00 | 22.00 |
-|    2 | 25.00 |  NULL |
-|    2 | 30.00 | 35.00 |
-+------+-------+-------+
-```
-
-使用 CORR() 窗口函数。
-
-```plaintext
-mysql> select CORR(k, v) over (partition by no) FROM agg;
-+------------------------------------+
-| corr(k, v) OVER (PARTITION BY no ) |
-+------------------------------------+
-|                               NULL |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-|                 0.9988445981121532 |
-+------------------------------------+
-=======
 select *, CORR(id, score)
     over (
         partition by subject
@@ -1615,5 +1443,4 @@ from scores where subject in ('math');
 |    6 | amber | math    |    92 |   -0.015594571538795024 |
 |    3 | jack  | math    |    95 |   -0.015594571538795024 |
 +------+-------+---------+-------+-------------------------+
->>>>>>> 74ed25055c ([Doc] add a universal CREATE TABLE sample for window function examples (backport #42405) (#42663))
 ```
