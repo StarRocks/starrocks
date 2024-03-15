@@ -172,6 +172,15 @@ public:
 
     METRIC_DEFINE_INT_COUNTER(memtable_flush_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_duration_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(memtable_flush_io_time_us, MetricUnit::MICROSECONDS);
+    // total memory size of memtables
+    METRIC_DEFINE_INT_COUNTER(memtable_flush_memory_bytes_total, MetricUnit::BYTES);
+    // total disk size of memtables which is smaller than memtable_flush_memory_bytes_total because of compression
+    METRIC_DEFINE_INT_COUNTER(memtable_flush_disk_bytes_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(segment_flush_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(segment_flush_duration_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(segment_flush_io_time_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(segment_flush_bytes_total, MetricUnit::BYTES);
 
     METRIC_DEFINE_INT_COUNTER(update_rowset_commit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(update_rowset_commit_request_failed, MetricUnit::REQUESTS);
