@@ -20,8 +20,8 @@
 #include <memory>
 
 #include "common/status.h"
+#include "compaction_task_context.h"
 #include "gutil/macros.h"
-#include "storage/lake/compaction_task.h"
 #include "util/blocking_queue.hpp"
 #include "util/stack_trace_mutex.h"
 
@@ -39,7 +39,7 @@ namespace starrocks::lake {
 class CompactRequest;
 class CompactResponse;
 class CompactionScheduler;
-struct CompactionTaskContext;
+class CompactionTask;
 class TabletManager;
 
 // For every `CompactRequest` a new `CompactionTaskCallback` instance will be created.
@@ -88,30 +88,6 @@ private:
     Status _status;
     int64_t _timeout_deadline_ms;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
-};
-
-// Context of a single tablet compaction task.
-struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
-    explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_,
-                                   std::shared_ptr<CompactionTaskCallback> cb_)
-            : txn_id(txn_id_), tablet_id(tablet_id_), version(version_), callback(std::move(cb_)) {}
-
-#ifndef NDEBUG
-    ~CompactionTaskContext() {
-        CHECK(next() == this && previous() == this) << "Must remove CompactionTaskContext from list before destructor";
-    }
-#endif
-
-    const int64_t txn_id;
-    const int64_t tablet_id;
-    const int64_t version;
-    std::atomic<int64_t> start_time{0};
-    std::atomic<int64_t> finish_time{0};
-    std::atomic<bool> skipped{false};
-    std::atomic<int> runs{0};
-    Status status;
-    lake::CompactionTask::Progress progress;
-    std::shared_ptr<CompactionTaskCallback> callback;
 };
 
 struct CompactionTaskInfo {

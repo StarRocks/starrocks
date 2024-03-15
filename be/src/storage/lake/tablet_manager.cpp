@@ -487,17 +487,17 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t t
     }
 }
 
-StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
-    ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id, version));
+StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
+    ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     auto tablet_metadata = tablet.metadata();
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create(this, tablet_metadata));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     if (algorithm == VERTICAL_COMPACTION) {
-        return std::make_shared<VerticalCompactionTask>(txn_id, std::move(tablet), std::move(input_rowsets));
+        return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context);
     } else {
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
-        return std::make_shared<HorizontalCompactionTask>(txn_id, std::move(tablet), std::move(input_rowsets));
+        return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context);
     }
 }
 
