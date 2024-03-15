@@ -80,6 +80,7 @@ import com.starrocks.analysis.TaskName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserDesc;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateType;
@@ -3340,7 +3341,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSetUserVar(StarRocksParser.SetUserVarContext context) {
-        VariableExpr variableDesc = (VariableExpr) visit(context.userVariable());
+        UserVariableExpr variableDesc = (UserVariableExpr) visit(context.userVariable());
         Expr expr = (Expr) visit(context.expression());
         return new UserVariable(variableDesc.getName(), expr, createPos(context));
     }
@@ -6535,7 +6536,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUserVariable(StarRocksParser.UserVariableContext context) {
         String variable = ((Identifier) visit(context.identifierOrString())).getValue();
-        return new VariableExpr(variable, SetType.USER, createPos(context));
+        return new UserVariableExpr(variable, createPos(context));
     }
 
     @Override
@@ -7017,7 +7018,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.identifierOrString() != null) {
             queryStatementContext.forEach(varNameContext -> {
                 Identifier identifier = (Identifier) visit(varNameContext);
-                variableExprs.add(new VariableExpr(identifier.getValue(), SetType.USER));
+                variableExprs.add(new UserVariableExpr(identifier.getValue(), identifier.getPos()));
             });
         }
         return new ExecuteStmt(stmtName, variableExprs);
