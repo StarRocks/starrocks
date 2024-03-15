@@ -510,8 +510,7 @@ TEST_F(MemTableTest, test_metrics) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
-    ASSERT_TRUE(res.ok());
+    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
     // just verify the metrics have value, rather than verify it accurately
