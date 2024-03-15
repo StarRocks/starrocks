@@ -608,9 +608,9 @@ void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     _morsel_queue->append_morsels(std::move(morsels));
 }
 
-bool ConnectorScanOperator::chunk_source_profile_skip_min_max() const {
+const RuntimeProfile::MergeIsomorphicProfileOptions* ConnectorScanOperator::merge_chunk_source_profile_options() const {
     ConnectorScanNode* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
-    return scan_node->data_source_provider()->skip_min_max_in_profile();
+    return scan_node->data_source_provider()->merge_chunk_source_profile_options();
 }
 
 // ==================== ConnectorChunkSource ====================

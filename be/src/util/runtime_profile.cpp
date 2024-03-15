@@ -832,7 +832,7 @@ RuntimeProfile::EventSequence* RuntimeProfile::add_event_sequence(const std::str
 }
 
 RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
-                                                          bool require_identical, bool skip_min_max) {
+                                                          const MergeIsomorphicProfileOptions* options) {
     DCHECK(!profiles.empty());
 
     // all metrics will be merged into the first profile
@@ -965,8 +965,11 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
 
                 counters.push_back(counter);
             }
-            if (skip_min_max) {
+            if (options->skip_min_max) {
                 strategy.__set_min_max_type(TCounterMinMaxType::SKIP_ALL);
+            }
+            if (options->skip_avg) {
+                strategy.__set_aggregate_type(TCounterAggregateType::SUM);
             }
 
             Counter* merged_counter = nullptr;
@@ -983,7 +986,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
             if (skip_merge) {
                 merged_counter->set(skip_merge_counter->value());
             } else {
-                const auto merged_info = merge_isomorphic_counters(counters);
+                const auto merged_info = merge_isomorphic_counters(counters, options);
                 const auto merged_value = std::get<0>(merged_info);
                 if (!already_merged) {
                     min_value = std::get<1>(merged_info);
@@ -1026,7 +1029,7 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     auto* child = profile->get_child(child_name);
                     if (child == nullptr) {
                         identical = false;
-                        if (require_identical) {
+                        if (options->require_identical) {
                             LOG(INFO) << "find non-isomorphic children, profile_name=" << profile->name()
                                       << ", required_child_name=" << child_name;
                         }
@@ -1034,10 +1037,10 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
                     }
                     sub_profiles.push_back(child);
                 }
-                auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles, require_identical, skip_min_max);
+                auto* merged_child = merge_isomorphic_profiles(obj_pool, sub_profiles, options);
                 merged_profile->add_child(merged_child, prototype_kv.second, nullptr);
             }
-            if (require_identical && !identical) {
+            if (options->require_identical && !identical) {
                 merged_profile->add_info_string("NotIdentical");
             }
         }
@@ -1046,7 +1049,8 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
     return merged_profile;
 }
 
-RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(std::vector<Counter*>& counters) {
+RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(std::vector<Counter*>& counters,
+                                                                     const MergeIsomorphicProfileOptions* options) {
     DCHECK_GE(counters.size(), 0);
     int64_t merged_value = 0;
     int64_t min_value = std::numeric_limits<int64_t>::max();
@@ -1064,7 +1068,7 @@ RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(std::vector
         merged_value += counter->value();
     }
 
-    if (counters[0]->is_avg()) {
+    if (!options->skip_avg && counters[0]->is_avg()) {
         merged_value /= counters.size();
     }
 
@@ -1108,5 +1112,16 @@ std::string RuntimeProfile::get_children_name_string() {
 
     return ss.str();
 }
+
+static RuntimeProfile::MergeIsomorphicProfileOptions kDefaultMergeOptions;
+static RuntimeProfile::MergeIsomorphicProfileOptions kNotRequireIdenticalMergeOptions = {.require_identical = false};
+static RuntimeProfile::MergeIsomorphicProfileOptions kSkipMinMaxAvgMergeOptions = {
+        .require_identical = false, .skip_min_max = true, .skip_avg = true};
+RuntimeProfile::MergeIsomorphicProfileOptions* RuntimeProfile::MergeIsomorphicProfileOptions::DEFAULT =
+        &kDefaultMergeOptions;
+RuntimeProfile::MergeIsomorphicProfileOptions* RuntimeProfile::MergeIsomorphicProfileOptions::NOT_REQUIRE_IDENTICAL =
+        &kNotRequireIdenticalMergeOptions;
+RuntimeProfile::MergeIsomorphicProfileOptions* RuntimeProfile::MergeIsomorphicProfileOptions::SKIP_MIN_MAX_AVG =
+        &kSkipMinMaxAvgMergeOptions;
 
 } // namespace starrocks

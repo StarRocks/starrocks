@@ -185,8 +185,6 @@ public:
     // Make cloud native table behavior same as olap table
     bool always_shared_scan() const override { return false; }
 
-    bool skip_min_max_in_profile() const override { return false; }
-
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;

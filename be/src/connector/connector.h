@@ -177,6 +177,9 @@ public:
     virtual bool is_asc_hint() const { return true; }
     virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
     virtual bool skip_min_max_in_profile() const { return true; }
+    virtual const RuntimeProfile::MergeIsomorphicProfileOptions* merge_chunk_source_profile_options() const {
+        return RuntimeProfile::MergeIsomorphicProfileOptions::SKIP_MIN_MAX_AVG;
+    }
 
 protected:
     std::vector<ExprContext*> _partition_exprs;

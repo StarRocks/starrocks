@@ -650,14 +650,25 @@ public:
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
-    static RuntimeProfile* merge_isomorphic_profiles(ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
-                                                     bool require_identical = true, bool skip_min_max = false);
+    struct MergeIsomorphicProfileOptions {
+        static MergeIsomorphicProfileOptions* DEFAULT;
+        static MergeIsomorphicProfileOptions* NOT_REQUIRE_IDENTICAL;
+        static MergeIsomorphicProfileOptions* SKIP_MIN_MAX_AVG;
+
+        bool require_identical = true;
+        bool skip_min_max = false;
+        bool skip_avg = false;
+    };
+    static RuntimeProfile* merge_isomorphic_profiles(
+            ObjectPool* obj_pool, std::vector<RuntimeProfile*>& profiles,
+            const MergeIsomorphicProfileOptions* options = MergeIsomorphicProfileOptions::DEFAULT);
 
 private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
     // Merge all the isomorphic counters
     typedef std::tuple<int64_t, int64_t, int64_t> MergedInfo;
-    static MergedInfo merge_isomorphic_counters(std::vector<Counter*>& counters);
+    static MergedInfo merge_isomorphic_counters(std::vector<Counter*>& counters,
+                                                const MergeIsomorphicProfileOptions* options);
 
     static bool is_time_type(TUnit::type type) {
         return TUnit::type::CPU_TICKS == type || TUnit::type::TIME_NS == type || TUnit::type::TIME_MS == type ||
