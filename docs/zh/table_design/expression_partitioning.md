@@ -198,6 +198,26 @@ LastConsistencyCheckTime: NULL
 1 row in set (0.00 sec)
 ```
 
+<!--
+示例二：您也可以在建表时配置参数 `partition_live_number` 进行分区生命周期管理，例如指定该表只保留最近 3 个分区。
+
+```SQL
+CREATE TABLE t_recharge_detail2 (
+    id bigint,
+    user_id bigint,
+    recharge_money decimal(32,2), 
+    city varchar(20) not null,
+    dt varchar(20) not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (dt,city)
+DISTRIBUTED BY HASH(`id`) 
+PROPERTIES(
+    "partition_live_number" = "3" -- 只保留最近 3 个分区。
+);
+```
+-->
+
 ## 管理分区
 
 ### 导入数据至分区
