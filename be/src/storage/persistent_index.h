@@ -720,7 +720,7 @@ public:
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase
     // |n|: size of key/value array

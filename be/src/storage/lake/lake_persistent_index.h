@@ -43,13 +43,6 @@ public:
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   IOStat* stat = nullptr) override;
 
-    // batch insert, return error if key already exists
-    // |n|: size of key/value array
-    // |keys|: key array as raw buffer
-    // |values|: value array
-    // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) override;
-
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -64,6 +57,13 @@ public:
     // |failed|: return not match rowid
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed) override;
+
+    // batch insert, return error if key already exists
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |version|: version of values
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
     Status minor_compact();
 
