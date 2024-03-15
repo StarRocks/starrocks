@@ -54,8 +54,6 @@ public:
         return _state->wait_until(abs);
     }
 
-    SharedFuture<R> share() { return SharedFuture<R>(std::move(_state)); }
-
 protected:
     constexpr FutureBase() noexcept : _state() {}
 
@@ -76,6 +74,8 @@ protected:
         ~Reset() { _future._state.reset(); }
         FutureBase& _future;
     };
+
+    SharedFuture<R> share() { return SharedFuture<R>(std::move(_state)); }
 
     std::shared_ptr<SharedState<R>> _state;
 };
@@ -110,6 +110,8 @@ public:
         this->wait_and_check_exception();
         return std::move(this->_state->value());
     }
+
+    using BaseType::share;
 
 private:
     friend class Promise<R>;
@@ -231,7 +233,7 @@ private:
     friend class Future<R>;
 
     using BaseType = FutureBase<R>;
-    using BaseType::share;
+
     explicit SharedFuture(std::shared_ptr<SharedState<R>> state) : BaseType(std::move(state)) {}
 };
 
