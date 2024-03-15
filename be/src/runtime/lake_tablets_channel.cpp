@@ -350,7 +350,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
         // back pressure OlapTableSink since there are too many memtables need to flush
         while (dw->queueing_memtable_num() >= config::max_queueing_memtable_per_tablet) {
-            auto t1 = watch.elapsed_time();
             if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
                 LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                           << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
@@ -358,7 +357,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                 break;
             }
             bthread_usleep(10000); // 10ms
-            wait_memtable_flush_time_ns += watch.elapsed_time() - t1;
+            wait_memtable_flush_time_ns += 10000000;
         }
 
         if (auto st = dw->open(); !st.ok()) { // Fail to `open()` AsyncDeltaWriter

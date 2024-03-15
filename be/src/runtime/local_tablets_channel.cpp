@@ -146,8 +146,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     MonotonicStopWatch watch;
     watch.start();
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
-    auto t0 = std::chrono::steady_clock::now();
-    int64_t wait_memtable_flush_time_us = 0;
 
     if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -238,6 +236,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     std::unordered_map<int64_t, std::vector<int64_t>> node_id_to_abort_tablets;
     context->set_node_id_to_abort_tablets(&node_id_to_abort_tablets);
 
+    int64_t wait_memtable_flush_time_us = 0;
     int32_t total_row_num = 0;
     for (int i = 0; i < channel_size; ++i) {
         size_t from = channel_row_idx_start_points[i];
@@ -253,8 +252,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
         // back pressure OlapTableSink since there are too many memtables need to flush
         while (delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
-            auto t1 = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 > request.timeout_ms()) {
+            if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
                 LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                           << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
                           << "ms still has queueing num " << delta_writer->get_flush_stats().queueing_memtable_num;
@@ -320,9 +318,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     i++;
                     // only sleep in bthread
                     bthread_usleep(10000); // 10ms
-                    auto t1 = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 >
-                        request.timeout_ms()) {
+                    auto elapse_time_ms = watch.elapsed_time() / 1000000;
+                    if (elapse_time_ms > request.timeout_ms()) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                                   << " wait tablet " << tablet_id << " secondary replica finish timeout "
                                   << request.timeout_ms() << "ms still in state " << state;
@@ -333,8 +330,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                     if (i % 6000 == 0) {
                         LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                                   << " wait tablet " << tablet_id << " secondary replica finish already "
-                                  << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000
-                                  << "ms still in state " << state;
+                                  << elapse_time_ms << "ms still in state " << state;
                     }
                 } while (true);
             }
@@ -396,7 +392,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         _num_initial_senders.fetch_sub(1);
         std::string msg = fmt::format("LocalTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
         auto remain = request.timeout_ms();
-        remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+        remain -= watch.elapsed_time() / 1000000;
 
         // unlock write lock so that incremental open can aquire read lock
         lk.unlock();
@@ -408,9 +404,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     if (response->has_execution_time_us()) {
         last_execution_time_us = response->execution_time_us();
     }
-    auto t1 = std::chrono::steady_clock::now();
-    response->set_execution_time_us(last_execution_time_us +
-                                    std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+    response->set_execution_time_us(last_execution_time_us + watch.elapsed_time() / 1000);
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
     response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
