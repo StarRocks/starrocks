@@ -47,6 +47,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
@@ -1200,7 +1201,15 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+<<<<<<< HEAD
     public R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+=======
+    default R visitUserVariableExpr(UserVariableExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+>>>>>>> 18c453eafd ([Enhancement] user variable support array type (#42613))
         return visitExpression(node, context);
     }
 
