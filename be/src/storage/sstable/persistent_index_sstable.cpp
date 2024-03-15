@@ -35,7 +35,7 @@ Status PersistentIndexSstable::init(RandomAccessFile* rf, const int64_t filesz, 
     return Status::OK();
 }
 
-Status PersistentIndexSstable::build_sstable(phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                              WritableFile* wf, uint64_t* filesz) {
     std::unique_ptr<FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<FilterPolicy*>(NewBloomFilterPolicy(10)));
@@ -53,16 +53,15 @@ Status PersistentIndexSstable::build_sstable(phmap::btree_map<std::string, Index
     return Status::OK();
 }
 
-Status PersistentIndexSstable::multi_get(size_t n, const Slice* keys, IndexValue* values,
-                                         KeyIndexesInfo* key_indexes_info, KeyIndexesInfo* found_keys_info,
-                                         int64_t version) {
+Status PersistentIndexSstable::multi_get(size_t n, const Slice* keys, const KeyIndexesInfo& key_indexes_info,
+                                         int64_t version, IndexValue* values, KeyIndexesInfo* found_keys_info) {
     std::vector<std::string> index_value_infos(n);
     ReadOptions options;
     auto start_ts = butil::gettimeofday_us();
-    RETURN_IF_ERROR(_sst->MultiGet(options, n, keys, key_indexes_info, index_value_infos));
+    RETURN_IF_ERROR(_sst->MultiGet(options, n, keys, key_indexes_info, &index_value_infos));
     auto end_ts = butil::gettimeofday_us();
     TRACE_COUNTER_INCREMENT("multi_get", end_ts - start_ts);
-    const auto& key_index_infos = key_indexes_info->key_index_infos;
+    const auto& key_index_infos = key_indexes_info.key_index_infos;
     for (size_t i = 0; i < key_index_infos.size(); ++i) {
         if (!index_value_infos[key_index_infos[i]].empty()) {
             IndexValueWithVerPB index_value_with_ver_pb;

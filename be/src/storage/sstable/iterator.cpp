@@ -40,7 +40,7 @@ void Iterator::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
 
 class EmptyIterator : public Iterator {
 public:
-    EmptyIterator(const Status& s) : status_(s) {}
+    EmptyIterator(Status s) : status_(std::move(s)) {}
     ~EmptyIterator() override = default;
 
     bool Valid() const override { return false; }
@@ -51,11 +51,11 @@ public:
     void Prev() override { assert(false); }
     Slice key() const override {
         assert(false);
-        return Slice();
+        return {};
     }
     Slice value() const override {
         assert(false);
-        return Slice();
+        return {};
     }
     Status status() const override { return status_; }
 

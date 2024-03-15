@@ -173,5 +173,5 @@ message IsNullPredicatePB {
 
 message IndexValueWithVerPB {
     repeated int64 versions = 1;
-    repeated int64 values = 2;
+    repeated uint64 values = 2;
 }

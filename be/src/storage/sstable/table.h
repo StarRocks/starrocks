@@ -54,8 +54,8 @@ public:
     // Calls (*handle_result)(arg, ...) with the entry found after a call
     // to Seek(key).  May not make such a call if filter policy says
     // that key is not present.
-    Status MultiGet(const ReadOptions&, size_t n, const Slice* keys, KeyIndexesInfo* keys_info,
-                    std::vector<std::string>& values);
+    Status MultiGet(const ReadOptions&, size_t n, const Slice* keys, const KeyIndexesInfo& keys_info,
+                    std::vector<std::string>* values);
 
 private:
     struct Rep;

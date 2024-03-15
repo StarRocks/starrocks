@@ -40,13 +40,20 @@ public:
 
     Status init(RandomAccessFile* rf, const int64_t filesz, Cache* cache);
 
-    static Status build_sstable(phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map, WritableFile* wf,
-                                uint64_t* filesz);
+    static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+                                WritableFile* wf, uint64_t* filesz);
 
-    Status multi_get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* key_indexes_info,
-                     KeyIndexesInfo* found_keys_info, int64_t version);
+    // multi_get can get multi keys at onces
+    // |n| : key count that we want to get
+    // |keys| : Address point to first element of key array.
+    // |key_indexes_info| : the index of key array that we actually want to get.
+    // |version| : when < 0, means we want the latest version.
+    // |values| : result array of get, should have some count as keys.
+    // |found_keys_info| : the index of key array that we found, it should be the subset of key_indexes_info
+    Status multi_get(size_t n, const Slice* keys, const KeyIndexesInfo& key_indexes_info, int64_t version,
+                     IndexValue* values, KeyIndexesInfo* found_keys_info);
 
-    Iterator* iterator(const ReadOptions& options) { return _sst->NewIterator(options); }
+    Iterator* new_iterator(const ReadOptions& options) { return _sst->NewIterator(options); }
 
 private:
     std::unique_ptr<Table> _sst{nullptr};
