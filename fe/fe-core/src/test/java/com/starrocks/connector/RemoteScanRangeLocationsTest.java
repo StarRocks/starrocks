@@ -39,12 +39,14 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
         AnalyzeTestUtil.setConnectContext(connectContext);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         Config.hive_max_split_size = 512 * 1024 * 1024;
+        connectContext.getSessionVariable().setConnectorMaxSplitSize(Config.hive_max_split_size);
     }
 
     @AfterClass
     public static void afterClass() {
         // reset all configures
         Config.hive_max_split_size = 64 * 1024 * 1024;
+        connectContext.getSessionVariable().setConnectorMaxSplitSize(Config.hive_max_split_size);
         connectContext.getSessionVariable().setForceScheduleLocal(false);
     }
 

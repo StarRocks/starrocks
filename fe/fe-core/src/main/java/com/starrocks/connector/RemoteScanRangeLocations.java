@@ -93,7 +93,8 @@ public class RemoteScanRangeLocations {
             splitSize = connectContext.getSessionVariable().getConnectorMaxSplitSize();
             splitIOTasksOnBackend = connectContext.getSessionVariable().isEnableConnectorSplitIoTasks();
         }
-        if (!fileDesc.getInputFormat().isBackendSplittable()) {
+
+        if (partition.getFormat().isBackendSplittable()) {
             splitIOTasksOnBackend = false;
         }
 

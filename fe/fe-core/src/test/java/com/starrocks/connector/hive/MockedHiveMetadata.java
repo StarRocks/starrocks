@@ -431,10 +431,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         );
         RemoteFileDesc fileDesc1 = new RemoteFileDesc("file1", "zlib", oneGigabytes, 0, blockDescs, ImmutableList.of());
         fileDesc1.setSplittable(true);
-        fileDesc1.setInputFormat(RemoteFileInputFormat.ORC);
         RemoteFileDesc fileDesc2 = new RemoteFileDesc("file2", "zlib", oneGigabytes, 0, blockDescs, ImmutableList.of());
         fileDesc2.setSplittable(true);
-        fileDesc2.setInputFormat(RemoteFileInputFormat.ORC);
         List<RemoteFileInfo> files =
                 ImmutableList.of(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(
                         fileDesc1, fileDesc2), null));

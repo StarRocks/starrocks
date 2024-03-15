@@ -34,7 +34,6 @@ public class RemoteFileDesc {
     private long modificationTime;
     private ImmutableList<RemoteFileBlockDesc> blockDescs;
     private boolean splittable;
-    private RemoteFileInputFormat inputFormat;
     private TextFileFormatDesc textFileFormatDesc;
     private ImmutableList<String> hudiDeltaLogs;
 
@@ -111,15 +110,6 @@ public class RemoteFileDesc {
 
     public RemoteFileDesc setSplittable(boolean splittable) {
         this.splittable = splittable;
-        return this;
-    }
-
-    public RemoteFileInputFormat getInputFormat() {
-        return inputFormat;
-    }
-
-    public RemoteFileDesc setInputFormat(RemoteFileInputFormat inputFormat) {
-        this.inputFormat = inputFormat;
         return this;
     }
 

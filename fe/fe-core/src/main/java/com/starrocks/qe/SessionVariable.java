@@ -3457,6 +3457,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return connectorMaxSplitSize;
     }
 
+    public void setConnectorMaxSplitSize(long size) {
+        connectorMaxSplitSize = size;
+    }
+
     public boolean isEnableConnectorSplitIoTasks() {
         return enableConnectorSplitIoTasks;
     }
