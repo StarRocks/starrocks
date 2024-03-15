@@ -430,17 +430,10 @@ public class RuleSet {
                 new PruneProjectRule(),
                 new PartitionPruneRule(),
                 new DistributionPruneRule()));
-<<<<<<< HEAD
-=======
-
-        REWRITE_RULES.put(RuleSetType.FINE_GRAINED_RANGE_PREDICATE, ImmutableList.of(
-                FineGrainedRangePredicateRule.INSTANCE,
-                FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
 
         REWRITE_RULES.put(RuleSetType.ELIMINATE_GROUP_BY, ImmutableList.of(
                 EliminateGroupByConstantRule.INSTANCE
         ));
->>>>>>> f39ccca32b ([BugFix] eliminate constant in group by key (#42353))
     }
 
     public RuleSet() {

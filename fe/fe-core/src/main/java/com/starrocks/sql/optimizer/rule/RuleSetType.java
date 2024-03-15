@@ -38,12 +38,8 @@ public enum RuleSetType {
     ALL_MV_REWRITE,
     PRUNE_EMPTY_OPERATOR,
     SHORT_CIRCUIT_SET,
-<<<<<<< HEAD
-=======
-
-    FINE_GRAINED_RANGE_PREDICATE,
 
     ELIMINATE_GROUP_BY,
->>>>>>> f39ccca32b ([BugFix] eliminate constant in group by key (#42353))
+
     NUM_RULE_SET
 }
