@@ -36,9 +36,9 @@ TEST(LakePersistentIndexTest, test_basic_api) {
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
     auto index = std::make_unique<LakePersistentIndex>("");
-    ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
+    ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
     // insert duplicate should return error
-    ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), false).ok());
+    ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), 0).ok());
 
     // test get
     vector<IndexValue> get_values(keys.size());
