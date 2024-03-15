@@ -94,6 +94,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_file_metacache) {
         _use_file_metacache = state->query_options().enable_file_metacache;
     }
+    if (state->query_options().__isset.enable_connector_split_io_tasks) {
+        _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
+    }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
@@ -739,6 +742,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
+    scanner_params.split_context = _split_context;
+    scanner_params.enable_split_tasks = _enable_split_tasks;
 
     if (!_equality_delete_slots.empty()) {
         MORParams& mor_params = scanner_params.mor_params;
@@ -920,6 +925,11 @@ void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, i
     // here we compute as default mem bytes = max(MIN_SIZE, min(max_file_length, MAX_SIZE))
     int64_t size = std::max(*min_value, std::min(_max_file_length * 3 / 2, *max_value));
     *min_value = *max_value = size;
+}
+
+void HiveDataSource::get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+    if (_scanner == nullptr) return;
+    _scanner->get_split_tasks(split_tasks);
 }
 
 } // namespace starrocks::connector

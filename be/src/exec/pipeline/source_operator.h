@@ -143,7 +143,7 @@ public:
     }
 
     virtual void add_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; };
-    const MorselQueue* morsel_queue() const { return _morsel_queue; }
+    MorselQueue* morsel_queue() const { return _morsel_queue; }
 
     size_t degree_of_parallelism() const { return _source_factory()->degree_of_parallelism(); }
     const std::vector<const Pipeline*>& group_dependent_pipelines() const {

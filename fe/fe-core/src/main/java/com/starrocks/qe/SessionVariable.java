@@ -435,6 +435,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
     public static final String CONNECTOR_SINK_COMPRESSION_CODEC = "connector_sink_compression_codec";
+    public static final String ENABLE_CONNECTOR_SPLIT_IO_TASKS = "enable_connector_split_io_tasks";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -1350,6 +1351,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS)
     private boolean enableConnectorAdaptiveIoTasks = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SPLIT_IO_TASKS)
+    private boolean enableConnectorSplitIoTasks = false;
 
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
     private int connectorIoTasksSlowIoLatency = 50;
@@ -3335,6 +3339,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setUse_page_cache(usePageCache);
 
         tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);
+        tResult.setEnable_connector_split_io_tasks(enableConnectorSplitIoTasks);
         tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
