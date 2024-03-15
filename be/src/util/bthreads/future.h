@@ -231,7 +231,7 @@ private:
     friend class Future<R>;
 
     using BaseType = FutureBase<R>;
-
+    using BaseType::share;
     explicit SharedFuture(std::shared_ptr<SharedState<R>> state) : BaseType(std::move(state)) {}
 };
 
