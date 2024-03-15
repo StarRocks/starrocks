@@ -162,20 +162,6 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
-# This option will soon be deprecated.
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    # force turn off cachelib on arm platform
-    WITH_CACHELIB=OFF
-elif [[ -z ${WITH_CACHELIB} ]]; then
-    WITH_CACHELIB=OFF
-fi
-
-if [[ "${WITH_CACHELIB}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
-    echo "WITH_CACHELIB=ON but missing depdency libraries(cachelib)"
-    exit 1
-fi
-
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
@@ -256,7 +242,6 @@ echo "Get params:
     USE_SSE4_2          -- $USE_SSE4_2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    WITH_CACHELIB       -- $WITH_CACHELIB
     USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
@@ -345,7 +330,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DUSE_JEMALLOC=$USE_JEMALLOC                          \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
-                  -DWITH_CACHELIB=${WITH_CACHELIB}                      \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
@@ -489,11 +473,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
-
-    if [ "${WITH_CACHELIB}" == "ON"  ]; then
-        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
-        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
-    fi
 
     # note: do not use oracle jdk to avoid commercial dispute
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
