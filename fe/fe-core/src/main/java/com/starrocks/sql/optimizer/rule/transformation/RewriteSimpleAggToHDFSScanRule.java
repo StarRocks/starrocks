@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -67,11 +68,19 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
 
         // select out partition columns.
+        int tableRelationId = -1;
         for (ColumnRefOperator c : scanOperator.getColRefToColumnMetaMap().keySet()) {
+            int relationId = columnRefFactory.getRelationId(c.getId());
+            if (tableRelationId == -1) {
+                tableRelationId = relationId;
+            } else {
+                Preconditions.checkState(tableRelationId == relationId, "Table relation id is different across columns");
+            }
             if (scanOperator.getPartitionColumns().contains(c.getName())) {
                 newScanColumnRefs.put(c, scanOperator.getColRefToColumnMetaMap().get(c));
             }
         }
+        Preconditions.checkState(tableRelationId != -1, "Can not find table relation id in scan operator");
 
         ColumnRefOperator placeholderColumn = null;
 
@@ -82,10 +91,12 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             Type columnType = aggCall.getType();
 
             if (placeholderColumn == null) {
-                placeholderColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
                 Column c = new Column();
                 c.setName(metaColumnName);
                 c.setIsAllowNull(true);
+                placeholderColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
+                columnRefFactory.updateColumnToRelationIds(placeholderColumn.getId(), tableRelationId);
+                columnRefFactory.updateColumnRefToColumns(placeholderColumn, c, scanOperator.getTable());
                 newScanColumnRefs.put(placeholderColumn, c);
             }
 
