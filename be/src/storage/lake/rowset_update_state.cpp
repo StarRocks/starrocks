@@ -348,7 +348,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(const Tx
         }
 
         RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, tablet_schema, column_id,
-                                                                new_rows > 0, rowids_by_rssid, &read_column[i],
+                                                                new_rows > 0, false, rowids_by_rssid, &read_column[i],
                                                                 &_auto_increment_partial_update_states[i]));
 
         _auto_increment_partial_update_states[i].write_column->append_selective(*read_column[i][0], idxes.data(), 0,
@@ -435,8 +435,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
         total_nondefault_rows += _partial_update_states[i].src_rss_rowids.size() - num_default;
         // get column values by rowid, also get default values if needed
         RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, tablet_schema,
-                                                                read_column_ids, num_default > 0, rowids_by_rssid,
-                                                                &read_columns[i]));
+                                                                read_column_ids, num_default > 0, false,
+                                                                rowids_by_rssid, &read_columns[i]));
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             _partial_update_states[i].write_columns[col_idx]->append_selective(*read_columns[i][col_idx], idxes.data(),
                                                                                0, idxes.size());
@@ -650,8 +650,8 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const TxnLogPB_OpWrit
         plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
         DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
         RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, tablet_schema,
-                                                                read_column_ids, num_default > 0, rowids_by_rssid,
-                                                                &read_columns));
+                                                                read_column_ids, num_default > 0, false,
+                                                                rowids_by_rssid, &read_columns));
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
             std::unique_ptr<Column> new_write_column =
@@ -731,7 +731,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const TxnLogPB_OpWrit
         auto_increment_read_column.resize(1);
         auto_increment_read_column[0] = _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
         RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(
-                tablet, metadata, op_write, tablet_schema, column_id, new_rows > 0, rowids_by_rssid,
+                tablet, metadata, op_write, tablet_schema, column_id, new_rows > 0, false, rowids_by_rssid,
                 &auto_increment_read_column, &_auto_increment_partial_update_states[segment_id]));
 
         std::unique_ptr<Column> new_write_column =

@@ -290,7 +290,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
                 ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_columns[0] = old_unordered_column->clone_empty();
         RETURN_IF_ERROR(get_column_values(tablet, metadata, op_write, tablet_schema, read_column_ids, num_default > 0,
-                                          old_rowids_by_rssid, &old_columns));
+                                          true, old_rowids_by_rssid, &old_columns));
         auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -304,7 +304,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
         std::vector<std::unique_ptr<Column>> new_columns(1);
         auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         new_columns[0] = new_column->clone_empty();
-        RETURN_IF_ERROR(get_column_values(tablet, metadata, op_write, tablet_schema, read_column_ids, false,
+        RETURN_IF_ERROR(get_column_values(tablet, metadata, op_write, tablet_schema, read_column_ids, false, true,
                                           new_rowids_by_rssid, &new_columns));
 
         int idx_begin = 0;
@@ -400,7 +400,7 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, int64_t base_versi
 
 Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& metadata,
                                         const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
-                                        std::vector<uint32_t>& column_ids, bool with_default,
+                                        std::vector<uint32_t>& column_ids, bool with_default, bool include_op_write,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns,
                                         AutoIncrementPartialUpdateState* auto_increment_state) {
@@ -430,7 +430,9 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     watch.reset();
 
     std::unordered_map<uint32_t, FileInfo> rssid_to_file_info;
-    rowset_rssid_to_path(metadata, op_write, rssid_to_file_info);
+    // When `include_op_write` is true, that means we want to get columns from segment in op_write log too.
+    // It happens when using condition update.
+    rowset_rssid_to_path(metadata, include_op_write ? &op_write : nullptr, rssid_to_file_info);
     cost_str << " [catch rssid_to_path] " << watch.elapsed_time();
     watch.reset();
 
@@ -472,6 +474,11 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
         }
 
+        if (rssid_to_file_info.count(rssid) == 0) {
+            // It may happen when preload partial update state by old tablet meta
+            return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist", metadata.id(),
+                                                 metadata.version(), rssid));
+        }
         // use 0 segment_id is safe, because we need not get either delvector or dcg here
         RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_file_info[rssid], 0, tablet_schema, rowids));
     }
