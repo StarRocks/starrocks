@@ -385,7 +385,6 @@ public class DDLStmtExecutor {
             return null;
         }
 
-
         @Override
         public ShowResultSet visitCancelCompactionStatement(CancelCompactionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {

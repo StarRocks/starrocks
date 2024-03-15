@@ -38,13 +38,11 @@ public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
-
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
-
     public static final long DEFAULT_CLUSTER_ID = 0L;
 
-    private Map<Long, Warehouse> idToWh = new HashMap<>();
-    private Map<String, Warehouse> nameToWh = new HashMap<>();
+    private final Map<Long, Warehouse> idToWh = new HashMap<>();
+    private final Map<String, Warehouse> nameToWh = new HashMap<>();
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -58,7 +56,6 @@ public class WarehouseManager implements Writable {
                     DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID);
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
-            wh.setExist(true);
         }
     }
 
