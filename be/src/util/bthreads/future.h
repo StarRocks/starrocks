@@ -146,6 +146,8 @@ public:
         return this->_state->value();
     }
 
+    using BaseType::share;
+
 private:
     friend class Promise<R&>;
 
@@ -176,6 +178,8 @@ public:
         typename BaseType::Reset reset(*this);
         this->wait_and_check_exception();
     }
+
+    using BaseType::share;
 
 private:
     friend class Promise<void>;
@@ -228,6 +232,8 @@ public:
 
     bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
 
+    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+
 private:
     friend class Promise<R>;
     friend class Future<R>;
@@ -273,6 +279,10 @@ public:
         return this->_state->value();
     }
 
+    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+
+    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
+
 private:
     friend class Promise<R&>;
 
@@ -314,6 +324,10 @@ public:
         SharedStateBase::check_state(this->_state);
         this->wait_and_check_exception();
     }
+
+    bool operator==(const SharedFuture rhs) const { return this->_state == rhs._state; }
+
+    bool operator<(const SharedFuture rhs) const { return this->_state < rhs._state; }
 
 private:
     friend class Promise<void>;
