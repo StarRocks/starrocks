@@ -156,7 +156,9 @@ public:
         *max_value = MAX_DATA_SOURCE_MEM_BYTES;
     }
 
-    virtual bool skip_min_max_in_profile() const { return true; }
+    virtual const RuntimeProfile::MergeIsomorphicProfileOptions* merge_chunk_source_profile_options() const {
+        return RuntimeProfile::MergeIsomorphicProfileOptions::SKIP_MIN_MAX_AVG;
+    }
 
 protected:
     std::vector<ExprContext*> _partition_exprs;
