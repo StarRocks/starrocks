@@ -18,11 +18,7 @@
 #include <string>
 #include <unordered_map>
 
-<<<<<<< HEAD
-=======
 #include "exec/pipeline/scan/morsel.h"
-#include "exprs/runtime_filter_bank.h"
->>>>>>> 8deabb826f ([Feature] add split context to connector framework (#38580))
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
@@ -94,12 +90,8 @@ protected:
     const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
-<<<<<<< HEAD
     virtual void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
-=======
     pipeline::ScanSplitContext* _split_context = nullptr;
-    void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
->>>>>>> 8deabb826f ([Feature] add split context to connector framework (#38580))
 };
 
 class StreamDataSource : public DataSource {

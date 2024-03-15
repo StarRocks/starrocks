@@ -255,12 +255,7 @@ struct TQueryOptions {
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
 
   119: optional bool enable_result_sink_accumulate;
-<<<<<<< HEAD
-=======
   120: optional bool enable_connector_split_io_tasks = false;
-
-  130: optional bool enable_wait_dependent_event = false;
->>>>>>> 8deabb826f ([Feature] add split context to connector framework (#38580))
 }
 
 
