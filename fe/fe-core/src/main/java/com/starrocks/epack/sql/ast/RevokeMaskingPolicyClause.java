@@ -21,6 +21,10 @@ public class RevokeMaskingPolicyClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorEPack<R, C>) visitor).visitRevokeMaskingPolicyClause(this, context);
+        if (visitor instanceof AstVisitorEPack) {
+            return ((AstVisitorEPack<R, C>) visitor).visitRevokeMaskingPolicyClause(this, context);
+        } else {
+            return null;
+        }
     }
 }

@@ -21,6 +21,7 @@ import com.starrocks.epack.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.RoleMappingMetaMgr;
 import com.starrocks.epack.qe.DDLStmtExecutorEPack;
+import com.starrocks.epack.qe.ShowExecutorEPack;
 import com.starrocks.epack.sql.analyzer.RoleMappingStatementAnalyzer;
 import com.starrocks.epack.sql.analyzer.SecurityIntegrationStatementAnalyzer;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
@@ -32,7 +33,6 @@ import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -413,7 +413,7 @@ public class SecurityIntegrationTest {
         ShowSecurityIntegrationStatement showStmt = (ShowSecurityIntegrationStatement) UtFrameUtils
                 .parseStmtWithNewParser("SHOW security integrations", connectContext);
         SecurityIntegrationStatementAnalyzer.analyze(showStmt, connectContext);
-        ShowResultSet res = new ShowExecutor().execute(showStmt, connectContext);
+        ShowResultSet res = new ShowExecutorEPack().execute(showStmt, connectContext);
         System.out.println(res.getResultRows());
         Assert.assertEquals("[ldap1forshow, ldap, \\N]", res.getResultRows().get(0).toString());
         Assert.assertEquals("[ldap2forshow, ldap, \\N]", res.getResultRows().get(1).toString());
@@ -434,7 +434,7 @@ public class SecurityIntegrationTest {
         ShowCreateSecurityIntegrationStatement showStmt = (ShowCreateSecurityIntegrationStatement) UtFrameUtils
                 .parseStmtWithNewParser("SHOW create security integration ldap1forshowcreate", connectContext);
         SecurityIntegrationStatementAnalyzer.analyze(showStmt, connectContext);
-        ShowResultSet res = new ShowExecutor().execute(showStmt, connectContext);
+        ShowResultSet res = new ShowExecutorEPack().execute(showStmt, connectContext);
         System.out.println(res.getResultRows());
         Assert.assertTrue(res.getResultRows().get(0).get(1).contains("\"ldap_user_group_match_attr\" = \"memberUid\""));
         // test the show create result can actually work

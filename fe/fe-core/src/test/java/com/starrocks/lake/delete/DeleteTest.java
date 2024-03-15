@@ -40,6 +40,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.persist.EditLog;
@@ -51,6 +52,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
@@ -68,14 +70,20 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 
 public class DeleteTest {
     private final long dbId = 1L;
@@ -97,6 +105,8 @@ public class DeleteTest {
     private EditLog editLog;
     @Mocked
     private SystemInfoService systemInfoService;
+    @Mocked
+    private NodeMgr nodeMgr;
     @Mocked
     private LakeService lakeService;
 
@@ -154,11 +164,14 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                result = systemInfoService;
+                //GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                //result = systemInfoService;
 
-                systemInfoService.getBackendOrComputeNode(anyLong);
-                result = backend;
+                //systemInfoService.getBackendOrComputeNode(anyLong);
+                //result = backend;
+
+                //Utils.chooseNodeId((LakeTablet) any, anyLong);
+                //result = backend.getId();
             }
         };
     }
@@ -182,10 +195,10 @@ public class DeleteTest {
                 return lakeService;
             }
         };
-        new Expectations() {
-            {
-                lakeService.deleteData((DeleteDataRequest) any);
-                result = new Future<DeleteDataResponse>() {
+        new MockUp<LakeService>() {
+            @Mock
+            Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+                return new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
                         return false;
@@ -203,7 +216,9 @@ public class DeleteTest {
 
                     @Override
                     public DeleteDataResponse get() throws InterruptedException, ExecutionException {
-                        return null;
+                        DeleteDataResponse response = new DeleteDataResponse();
+                        response.failedTablets = Lists.newArrayList(tablet1Id);
+                        return response;
                     }
 
                     @Override
@@ -212,7 +227,11 @@ public class DeleteTest {
                         return null;
                     }
                 };
+            }
+        };
 
+        new Expectations() {
+            {
                 globalTransactionMgr.commitAndPublishTransaction(db, anyLong, (List) any, (List) any, anyLong);
                 result = true;
 
@@ -233,6 +252,9 @@ public class DeleteTest {
             Assert.fail();
         }
 
+        MockedStatic<Utils> utilsMockedStatic = Mockito.mockStatic(Utils.class);
+        utilsMockedStatic.when(() -> Utils.groupTabletID(any(), any(), anyLong())).thenReturn(new HashMap<Long, List<Long>>());
+
         try {
             deleteHandler.process(deleteStmt);
         } catch (QueryStateException e) {
@@ -252,10 +274,11 @@ public class DeleteTest {
                 return lakeService;
             }
         };
-        new Expectations() {
-            {
-                lakeService.deleteData((DeleteDataRequest) any);
-                result = new Future<DeleteDataResponse>() {
+
+        new MockUp<LakeService>() {
+            @Mock
+            Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+                return new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
                         return false;

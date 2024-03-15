@@ -37,7 +37,11 @@ public class SetWarehouseStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorEPack<R, C>) visitor).visitSetWarehouseStatement(this, context);
+        if (visitor instanceof AstVisitorEPack) {
+            return ((AstVisitorEPack<R, C>) visitor).visitSetWarehouseStatement(this, context);
+        } else {
+            return null;
+        }
     }
 
     @Override

@@ -14,6 +14,7 @@
 package com.starrocks.epack.policy;
 
 import com.starrocks.epack.qe.DDLStmtExecutorEPack;
+import com.starrocks.epack.qe.ShowExecutorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -71,11 +72,11 @@ public class DropPolicyTest {
 
         DDLStmtExecutorEPack.execute(analyzeSuccess("drop row access  policy if exists rp"), starRocksAssert.getCtx());
 
-        ShowExecutor showExecutor = new ShowExecutor();
+        ShowExecutor showExecutor = new ShowExecutorEPack();
         Assert.assertEquals(0, showExecutor.execute((ShowStmt) analyzeSuccess("show masking policies"),
                 starRocksAssert.getCtx()).getResultRows().size());
 
-        showExecutor = new ShowExecutor();
+        showExecutor = new ShowExecutorEPack();
         Assert.assertEquals(0, showExecutor.execute((ShowStmt) analyzeSuccess("show row access policies"),
                 starRocksAssert.getCtx()).getResultRows().size());
     }

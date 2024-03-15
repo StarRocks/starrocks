@@ -25,6 +25,7 @@ import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
 import com.starrocks.epack.qe.DDLStmtExecutorEPack;
+import com.starrocks.epack.qe.ShowExecutorEPack;
 import com.starrocks.epack.sql.analyzer.RoleMappingStatementAnalyzer;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -33,7 +34,6 @@ import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -435,7 +435,7 @@ public class RoleMappingTest {
         ShowRoleMappingStatement showStmt = (ShowRoleMappingStatement) UtFrameUtils
                 .parseStmtWithNewParser("SHOW role mappings", connectContext);
         RoleMappingStatementAnalyzer.analyze(showStmt, connectContext);
-        ShowResultSet res = new ShowExecutor().execute(showStmt, connectContext);
+        ShowResultSet res = new ShowExecutorEPack().execute(showStmt, connectContext);
         System.out.println(res.getResultRows());
 
         Assert.assertEquals(2, res.getResultRows().size());

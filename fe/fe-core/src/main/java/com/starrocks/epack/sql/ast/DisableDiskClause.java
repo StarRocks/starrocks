@@ -33,6 +33,10 @@ public class DisableDiskClause extends AlterClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorEPack<R, C>) visitor).visitDisableDiskClause(this, context);
+        if (visitor instanceof AstVisitorEPack) {
+            return ((AstVisitorEPack<R, C>) visitor).visitDisableDiskClause(this, context);
+        } else {
+            return null;
+        }
     }
 }
