@@ -172,6 +172,7 @@ public enum RuleType {
 
     TF_CONVERT_TO_EQUAL_FOR_NULL_RULE,
     TF_ARRAY_DISTINCT_AFTER_AGG,
+    TF_ELIMINATE_GROUP_BY_CONSTANT,
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,

@@ -58,6 +58,7 @@ import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateGroupByConstantRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
@@ -379,6 +380,9 @@ public class RuleSet {
                 OnlyJoinRule.getInstance()
         ));
 
+        REWRITE_RULES.put(RuleSetType.ELIMINATE_GROUP_BY, ImmutableList.of(
+                EliminateGroupByConstantRule.INSTANCE
+        ));
     }
 
     public RuleSet() {
