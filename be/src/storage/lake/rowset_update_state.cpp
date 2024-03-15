@@ -72,7 +72,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
 Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
                                    bool need_lock) {
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
-    Rowset rowset(tablet->tablet_mgr(), tablet->id(), &op_write.rowset(), -1 /*unused*/, tablet_schema);
+    Rowset rowset(tablet->tablet_mgr(), tablet->id(), &op_write.rowset(), -1 /*unused*/, tablet_schema, -1 /*unused*/);
 
     RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, tablet_schema, tablet, &rowset));
 

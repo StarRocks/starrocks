@@ -20,10 +20,11 @@
 namespace starrocks::lake {
 
 CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
-                               CompactionTaskContext* context)
+                               CompactionTaskContext* context, std::vector<PersistentIndexSstablePB> input_ssts)
         : _txn_id(context->txn_id),
           _tablet(std::move(tablet)),
           _input_rowsets(std::move(input_rowsets)),
+          _input_ssts(std::move(input_ssts)),
           _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
                                                     GlobalEnv::GetInstance()->compaction_mem_tracker())),

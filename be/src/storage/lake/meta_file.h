@@ -30,6 +30,7 @@ class DelVector;
 
 namespace lake {
 
+struct SstableInfo;
 class UpdateManager;
 
 enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
@@ -41,8 +42,9 @@ public:
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
-                       const std::vector<std::string>& orphan_files);
-    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id);
+                       const std::vector<std::string>& orphan_files, int64_t version);
+    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
+                            int64_t version);
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
     // the garbage collection module relies on this value to check if a delvec file can be safely
@@ -53,6 +55,10 @@ public:
 
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
+
+    void add_sstable(PersistentIndexSstablePB& sstable);
+
+    PersistentIndexSstableMetaPB get_sstable_meta();
 
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
@@ -75,6 +81,7 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
+    std::shared_ptr<PersistentIndexSstablePB> _sstable;
 };
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);
@@ -84,6 +91,8 @@ bool is_primary_key(const TabletMetadata& metadata);
 // TODO(yixin): cache rowset_rssid_to_path
 void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite* op_write,
                           std::unordered_map<uint32_t, FileInfo>& rssid_to_path);
+
+bool is_cloud_native_pindex(const TabletMetadata& metadata);
 
 } // namespace lake
 } // namespace starrocks

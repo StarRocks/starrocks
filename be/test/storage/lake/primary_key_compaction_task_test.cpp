@@ -51,6 +51,7 @@ public:
         _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
         _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _tablet_metadata->set_persistent_index_type(GetParam().index_type);
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -177,6 +178,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
+    if (GetParam().enable_persistent_index && GetParam().index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
+        config::l0_max_mem_usage = 1;
+    }
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -222,7 +226,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 
@@ -278,7 +282,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 
@@ -342,7 +346,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
     ASSERT_EQ(kChunkSize * 2, read(version));
@@ -644,7 +648,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     // check compaction state
     ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
     Rowset output_rowset(_tablet_mgr.get(), _tablet_metadata->id(), &txn_log->op_compaction().output_rowset(), -1,
-                         _tablet_schema);
+                         _tablet_schema, -1);
     {
         auto compaction_state = std::make_unique<CompactionState>();
         EXPECT_TRUE(_update_mgr->compaction_state_mem_tracker() != nullptr);
@@ -685,6 +689,10 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
         indexes[i] = i;
+    }
+
+    if (GetParam().enable_persistent_index && GetParam().index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
+        config::l0_max_mem_usage = 1;
     }
 
     auto version = 1;
@@ -733,6 +741,10 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
+
+    // remove pk index, to make it reload again
+    _update_mgr->try_remove_primary_index_cache(tablet_id);
+
     // write again
     {
         auto txn_id = next_id();
@@ -875,7 +887,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
     config::vector_chunk_size = 4096;
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 
@@ -938,7 +950,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
     EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     version++;
     ASSERT_EQ(3 * kChunkSize, read(version));
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 
@@ -1082,11 +1094,14 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     config::enable_pk_size_tiered_compaction_strategy = old_val;
 }
 
-INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
-                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
-                                           CompactionParam{VERTICAL_COMPACTION, 1, false},
-                                           CompactionParam{HORIZONTAL_COMPACTION, 5, true},
-                                           CompactionParam{VERTICAL_COMPACTION, 1, true}),
-                         to_string_param_name);
+INSTANTIATE_TEST_SUITE_P(
+        LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
+        ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
+                          CompactionParam{VERTICAL_COMPACTION, 1, false},
+                          CompactionParam{HORIZONTAL_COMPACTION, 5, true},
+                          CompactionParam{VERTICAL_COMPACTION, 1, true},
+                          CompactionParam{HORIZONTAL_COMPACTION, 5, true, PersistentIndexTypePB::CLOUD_NATIVE},
+                          CompactionParam{VERTICAL_COMPACTION, 1, true, PersistentIndexTypePB::CLOUD_NATIVE}),
+        to_string_param_name);
 
 } // namespace starrocks::lake

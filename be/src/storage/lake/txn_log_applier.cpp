@@ -92,7 +92,7 @@ public:
         // Must call `commit_primary_index` before `finalize`,
         // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
-        RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
+        RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, _metadata, &_builder));
         Status st = _builder.finalize(_max_txn_id);
         if (st.ok()) {
             _has_finalized = true;
@@ -148,7 +148,7 @@ private:
             return Status::OK();
         }
         return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, *_metadata, &_tablet, _index_entry,
-                                                                &_builder, _base_version);
+                                                                &_builder, _base_version, _new_version);
     }
 
     Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id) {
@@ -167,7 +167,7 @@ private:
             return Status::OK();
         }
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
-                                                                _index_entry, &_builder, _base_version);
+                                                                _index_entry, &_builder, _base_version, _new_version);
     }
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {

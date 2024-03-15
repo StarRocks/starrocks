@@ -26,6 +26,7 @@
 namespace starrocks::lake {
 
 class Rowset;
+class PersistentIndexSstablePB;
 
 class CompactionTask {
 public:
@@ -34,7 +35,7 @@ public:
     using CancelFunc = std::function<bool()>;
 
     explicit CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
-                            CompactionTaskContext* context);
+                            CompactionTaskContext* context, std::vector<PersistentIndexSstablePB> input_ssts);
     virtual ~CompactionTask() = default;
 
     virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
@@ -46,6 +47,7 @@ protected:
     int64_t _txn_id;
     VersionedTablet _tablet;
     std::vector<std::shared_ptr<Rowset>> _input_rowsets;
+    std::vector<PersistentIndexSstablePB> _input_ssts;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     CompactionTaskContext* _context;
 };

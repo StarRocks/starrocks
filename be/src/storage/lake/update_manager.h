@@ -63,7 +63,7 @@ public:
     // publish primary key tablet, update primary index and delvec, then update meta file
     Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadata& metadata,
                                       Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
-                                      int64_t base_version);
+                                      int64_t base_version, int64_t new_version = -1);
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
@@ -93,7 +93,7 @@ public:
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                       const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
-                                      MetaFileBuilder* builder, int64_t base_version);
+                                      MetaFileBuilder* builder, int64_t base_version, int64_t new_version = -1);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
@@ -136,8 +136,8 @@ public:
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::mutex>>& lock);
 
-    // commit primary index, only take affect when it is local persistent index
-    Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
+    // commit primary index, only take affect when it is persistent index
+    Status commit_primary_index(IndexEntry* index_entry, const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
@@ -145,6 +145,9 @@ public:
     void remove_primary_index_cache(IndexEntry* index_entry);
 
     void unload_and_remove_primary_index(int64_t tablet_id);
+
+    Status compact_ssts(int64_t tablet, const std::vector<PersistentIndexSstablePB>& ssts,
+                        std::shared_ptr<TxnLogPB>& txn_log);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
@@ -164,12 +167,12 @@ private:
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
-                      PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
+                      PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes, int64_t version);
 
     Status _do_update_with_condition(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
                                      const TabletSchemaCSPtr& tablet_schema, uint32_t rowset_id, int32_t upsert_idx,
                                      int32_t condition_column, const std::vector<ColumnUniquePtr>& upserts,
-                                     PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
+                                     PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes, int64_t version);
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 

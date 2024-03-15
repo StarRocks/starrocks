@@ -14,12 +14,14 @@
 
 #include "meta_file.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "fs/fs_util.h"
 #include "storage/del_vector.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "util/coding.h"
@@ -53,7 +55,7 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
 }
 
 void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
-                                    const std::vector<std::string>& orphan_files) {
+                                    const std::vector<std::string>& orphan_files, int64_t version) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
 
@@ -73,6 +75,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     }
 
     rowset->set_id(_tablet_meta->next_rowset_id());
+    rowset->set_version(version);
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     // collect trash files
@@ -90,7 +93,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
 }
 
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
-                                         uint32_t max_compact_input_rowset_id) {
+                                         uint32_t max_compact_input_rowset_id, int64_t version) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
@@ -138,7 +141,42 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         rowset->CopyFrom(op_compaction.output_rowset());
         rowset->set_id(_tablet_meta->next_rowset_id());
         rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
+        rowset->set_version(version);
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
+    }
+
+    if (op_compaction.has_output_sstable()) {
+        auto pindex_sst_meta = _tablet_meta->mutable_pindex_sstable_meta();
+        std::unordered_set<int64> versions;
+        for (auto& input_sst : op_compaction.input_sstables()) {
+            versions.insert(input_sst.version());
+            for (auto& sstable : input_sst.sstables()) {
+                FileMetaPB file_meta;
+                file_meta.set_name(sstable.filename());
+                file_meta.set_size(sstable.filesz());
+                _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+        }
+        for (auto it = pindex_sst_meta->mutable_sstables()->begin();
+             it != pindex_sst_meta->mutable_sstables()->end();) {
+            if (versions.contains(it->version())) {
+                pindex_sst_meta->mutable_sstables()->erase(it);
+            } else {
+                ++it;
+            }
+        }
+        PersistentIndexSstableMetaPB new_sst_meta;
+        auto sst_meta = new_sst_meta.add_sstables();
+        auto* sst = sst_meta->add_sstables();
+        sst->CopyFrom(op_compaction.output_sstable());
+        sst_meta->set_version(*std::max_element(versions.begin(), versions.end()));
+        for (auto it = pindex_sst_meta->mutable_sstables()->begin(); it != pindex_sst_meta->mutable_sstables()->end();
+             ++it) {
+            sst_meta = new_sst_meta.add_sstables();
+            sst_meta->CopyFrom(*it);
+        }
+        _tablet_meta->mutable_pindex_sstable_meta()->CopyFrom(new_sst_meta);
+        LOG(INFO) << _tablet_meta->pindex_sstable_meta().DebugString();
     }
 
     VLOG(2) << fmt::format("MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} output:{}",
@@ -237,6 +275,14 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     }
 
     return Status::OK();
+}
+
+void MetaFileBuilder::add_sstable(PersistentIndexSstablePB& sstable) {
+    _tablet_meta->mutable_pindex_sstable_meta()->mutable_sstables()->Add(std::move(sstable));
+}
+
+PersistentIndexSstableMetaPB MetaFileBuilder::get_sstable_meta() {
+    return _tablet_meta->pindex_sstable_meta();
 }
 
 Status MetaFileBuilder::finalize(int64_t txn_id) {
@@ -343,6 +389,11 @@ void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite
             get_file_info_from_rowset(op_write->rowset(), rowset_id);
         }
     }
+}
+
+bool is_cloud_native_pindex(const TabletMetadata& metadata) {
+    return metadata.enable_persistent_index() &&
+           metadata.persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
 }
 
 } // namespace starrocks::lake
