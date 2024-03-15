@@ -9,8 +9,6 @@
 namespace starrocks {
 class Slice;
 
-namespace lake {
-
 namespace sstable {
 
 // A Comparator object provides a total order across slices that are
@@ -59,5 +57,4 @@ public:
 const Comparator* BytewiseComparator();
 
 } // namespace sstable
-} // namespace lake
 } // namespace starrocks

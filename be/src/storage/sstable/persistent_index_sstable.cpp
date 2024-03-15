@@ -12,23 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/sstable/lake_persistent_index_sst.h"
+#include "storage/sstable/persistent_index_sstable.h"
 
 #include <butil/time.h> // NOLINT
 
 #include "fs/fs.h"
 #include "storage/lake/persistent_index_memtable.h"
-#include "storage/lake/sstable/table_builder.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/sstable/table_builder.h"
 #include "util/trace.h"
 
-namespace starrocks {
+namespace starrocks::sstable {
 
-namespace lake {
-
-namespace sstable {
-
-Status LakePersistentIndexSstable::init(RandomAccessFile* rf, const int64_t filesz, Cache* cache) {
+Status PersistentIndexSstable::init(RandomAccessFile* rf, const int64_t filesz, Cache* cache) {
     Options options;
     _filter_policy.reset(const_cast<FilterPolicy*>(NewBloomFilterPolicy(10)));
     options.filter_policy = _filter_policy.get();
@@ -39,8 +35,8 @@ Status LakePersistentIndexSstable::init(RandomAccessFile* rf, const int64_t file
     return Status::OK();
 }
 
-Status LakePersistentIndexSstable::build_sstable(phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                                 WritableFile* wf, uint64_t* filesz) {
+Status PersistentIndexSstable::build_sstable(phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+                                             WritableFile* wf, uint64_t* filesz) {
     std::unique_ptr<FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<FilterPolicy*>(NewBloomFilterPolicy(10)));
     Options options;
@@ -57,9 +53,9 @@ Status LakePersistentIndexSstable::build_sstable(phmap::btree_map<std::string, I
     return Status::OK();
 }
 
-Status LakePersistentIndexSstable::multi_get(size_t n, const Slice* keys, IndexValue* values,
-                                             KeyIndexesInfo* key_indexes_info, KeyIndexesInfo* found_keys_info,
-                                             int64_t version) {
+Status PersistentIndexSstable::multi_get(size_t n, const Slice* keys, IndexValue* values,
+                                         KeyIndexesInfo* key_indexes_info, KeyIndexesInfo* found_keys_info,
+                                         int64_t version) {
     std::vector<std::string> index_value_infos(n);
     ReadOptions options;
     auto start_ts = butil::gettimeofday_us();
@@ -70,13 +66,9 @@ Status LakePersistentIndexSstable::multi_get(size_t n, const Slice* keys, IndexV
     for (size_t i = 0; i < key_index_infos.size(); ++i) {
         if (!index_value_infos[key_index_infos[i]].empty()) {
             IndexValueWithVerPB index_value_with_ver_pb;
-            start_ts = butil::gettimeofday_us();
             if (!index_value_with_ver_pb.ParseFromString(index_value_infos[key_index_infos[i]])) {
                 return Status::InternalError("parse index value info failed");
             }
-            end_ts = butil::gettimeofday_us();
-            TRACE_COUNTER_INCREMENT("parse_from_string", end_ts - start_ts);
-            start_ts = butil::gettimeofday_us();
             if (version < 0 && index_value_with_ver_pb.values_size() > 0) {
                 values[key_index_infos[i]] = IndexValue(index_value_with_ver_pb.values(0));
                 found_keys_info->key_index_infos.emplace_back(key_index_infos[i]);
@@ -89,13 +81,9 @@ Status LakePersistentIndexSstable::multi_get(size_t n, const Slice* keys, IndexV
                     }
                 }
             }
-            end_ts = butil::gettimeofday_us();
-            TRACE_COUNTER_INCREMENT("set_found_keys_info", end_ts - start_ts);
         }
     }
     return Status::OK();
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

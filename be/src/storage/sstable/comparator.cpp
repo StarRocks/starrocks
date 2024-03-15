@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/comparator.h"
+#include "storage/sstable/comparator.h"
 
 #include <string>
 
 #include "util/slice.h"
 
-namespace starrocks {
-namespace lake {
-namespace sstable {
+namespace starrocks::sstable {
 
 Comparator::~Comparator() = default;
 
@@ -62,6 +60,4 @@ const Comparator* BytewiseComparator() {
     return &singleton;
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

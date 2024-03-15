@@ -2,18 +2,12 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/options.h"
+#include "storage/sstable/options.h"
 
-#include "storage/lake/sstable/comparator.h"
+#include "storage/sstable/comparator.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 Options::Options() : comparator(BytewiseComparator()) {}
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

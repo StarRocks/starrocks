@@ -7,13 +7,11 @@
 #include <string>
 
 #include "common/status.h"
-#include "storage/lake/sstable/options.h"
+#include "storage/sstable/options.h"
 #include "util/slice.h"
 
 namespace starrocks {
 class RandomAccessFile;
-
-namespace lake {
 
 namespace sstable {
 
@@ -95,5 +93,4 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options, const Block
 inline BlockHandle::BlockHandle() : offset_(~static_cast<uint64_t>(0)), size_(~static_cast<uint64_t>(0)) {}
 
 } // namespace sstable
-} // namespace lake
 } // namespace starrocks

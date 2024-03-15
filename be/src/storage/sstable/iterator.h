@@ -7,11 +7,7 @@
 #include "common/status.h"
 #include "util/slice.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 class Iterator {
 public:
@@ -99,6 +95,4 @@ Iterator* NewEmptyIterator();
 // Return an empty iterator with the specified status.
 Iterator* NewErrorIterator(const Status& status);
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

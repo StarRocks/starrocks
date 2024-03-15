@@ -10,11 +10,7 @@
 
 #include "util/slice.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 // Standard Put... routines append to a string
 void PutFixed32(std::string* dst, uint32_t value);
@@ -106,6 +102,4 @@ inline const char* GetVarint32Ptr(const char* p, const char* limit, uint32_t* va
     return GetVarint32PtrFallback(p, limit, value);
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

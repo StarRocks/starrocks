@@ -2,27 +2,23 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/table_builder.h"
+#include "storage/sstable/table_builder.h"
 
 #include <snappy/snappy-sinksource.h>
 #include <snappy/snappy.h>
 
 #include "common/status.h"
 #include "fs/fs.h"
-#include "storage/lake/sstable/block_builder.h"
-#include "storage/lake/sstable/coding.h"
-#include "storage/lake/sstable/comparator.h"
-#include "storage/lake/sstable/filter_block.h"
-#include "storage/lake/sstable/filter_policy.h"
-#include "storage/lake/sstable/format.h"
+#include "storage/sstable/block_builder.h"
+#include "storage/sstable/coding.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/filter_block.h"
+#include "storage/sstable/filter_policy.h"
+#include "storage/sstable/format.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 struct TableBuilder::Rep {
     Rep(const Options& opt, WritableFile* f)
@@ -280,6 +276,4 @@ uint64_t TableBuilder::FileSize() const {
     return rep_->offset;
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

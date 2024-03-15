@@ -7,14 +7,12 @@
 #include <string>
 
 #include "common/status.h"
-#include "storage/lake/sstable/options.h"
+#include "storage/sstable/options.h"
 
 namespace starrocks {
 
 class WritableFile;
 class Slice;
-
-namespace lake {
 
 namespace sstable {
 
@@ -86,5 +84,4 @@ private:
 };
 
 } // namespace sstable
-} // namespace lake
 } // namespace starrocks

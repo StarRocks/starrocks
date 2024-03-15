@@ -21,28 +21,28 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
-#include "storage/lake/sstable/iterator.h"
-#include "storage/lake/sstable/merger.h"
-#include "storage/lake/sstable/options.h"
-#include "storage/lake/sstable/table.h"
-#include "storage/lake/sstable/table_builder.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/iterator.h"
+#include "storage/sstable/merger.h"
+#include "storage/sstable/options.h"
+#include "storage/sstable/table.h"
+#include "storage/sstable/table_builder.h"
 #include "testutil/assert.h"
 #include "util/phmap/btree.h"
 
-namespace starrocks::lake {
+namespace starrocks {
 
-class LakePersistentIndexSstableTest : public ::testing::Test {
+class PersistentIndexSstableTest : public ::testing::Test {
 public:
     static void SetUpTestCase() { CHECK_OK(fs::create_directories(kTestDir)); }
 
     static void TearDownTestCase() { (void)fs::remove_all(kTestDir); }
 
 protected:
-    constexpr static const char* const kTestDir = "./lake_persistent_index_sstable_test";
+    constexpr static const char* const kTestDir = "./persistent_index_sstable_test";
 };
 
-TEST_F(LakePersistentIndexSstableTest, test_generate_sst_scan_and_check) {
+TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     const int N = 10000;
     sstable::Options options;
     const std::string filename = "test1.sst";
@@ -72,7 +72,7 @@ TEST_F(LakePersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     ASSERT_TRUE(count == N);
 }
 
-TEST_F(LakePersistentIndexSstableTest, test_generate_sst_seek_and_check) {
+TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
     const int N = 10000;
     sstable::Options options;
     const std::string filename = "test2.sst";
@@ -102,7 +102,7 @@ TEST_F(LakePersistentIndexSstableTest, test_generate_sst_seek_and_check) {
     }
 }
 
-TEST_F(LakePersistentIndexSstableTest, test_merge) {
+TEST_F(PersistentIndexSstableTest, test_merge) {
     std::vector<sstable::Iterator*> list;
     std::vector<std::unique_ptr<RandomAccessFile>> read_files;
     std::vector<uint64_t> fileszs;
@@ -181,4 +181,8 @@ TEST_F(LakePersistentIndexSstableTest, test_merge) {
     read_files.clear();
 }
 
-} // namespace starrocks::lake
+TEST_F(PersistentIndexSstableTest, test_persistent_index_sstableable) {
+    std::unique_ptr<PersistentIndexSstable>
+}
+
+} // namespace starrocks

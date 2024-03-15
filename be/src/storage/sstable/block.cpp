@@ -2,21 +2,17 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/block.h"
+#include "storage/sstable/block.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <vector>
 
-#include "storage/lake/sstable/coding.h"
-#include "storage/lake/sstable/comparator.h"
-#include "storage/lake/sstable/format.h"
+#include "storage/sstable/coding.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/format.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 inline uint32_t Block::NumRestarts() const {
     assert(size_ >= sizeof(uint32_t));
@@ -280,6 +276,4 @@ Iterator* Block::NewIterator(const Comparator* comparator) {
     }
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

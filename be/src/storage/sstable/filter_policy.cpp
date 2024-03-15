@@ -2,14 +2,12 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/filter_policy.h"
+#include "storage/sstable/filter_policy.h"
 
 #include "util/murmur_hash3.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace lake {
-namespace sstable {
+namespace starrocks::sstable {
 
 static uint32_t BloomHash(const Slice& key) {
     uint32_t hash = 0;
@@ -91,6 +89,4 @@ const FilterPolicy* NewBloomFilterPolicy(int bits_per_key) {
     return new BloomFilterPolicy(bits_per_key);
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

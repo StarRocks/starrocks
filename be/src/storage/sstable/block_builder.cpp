@@ -27,20 +27,16 @@
 //     num_restarts: uint32
 // restarts[i] contains the offset within the block of the ith restart point.
 
-#include "storage/lake/sstable/block_builder.h"
+#include "storage/sstable/block_builder.h"
 
 #include <algorithm>
 #include <cassert>
 
-#include "storage/lake/sstable/coding.h"
-#include "storage/lake/sstable/comparator.h"
-#include "storage/lake/sstable/options.h"
+#include "storage/sstable/coding.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/options.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 BlockBuilder::BlockBuilder(const Options* options) : options_(options), restarts_(), counter_(0), finished_(false) {
     assert(options->block_restart_interval >= 1);
@@ -69,7 +65,7 @@ Slice BlockBuilder::Finish() {
     }
     PutFixed32(&buffer_, restarts_.size());
     finished_ = true;
-    return Slice(buffer_);
+    return {buffer_};
 }
 
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
@@ -108,6 +104,4 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
     counter_++;
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

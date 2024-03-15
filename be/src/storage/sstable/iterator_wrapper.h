@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/iterator.h"
+#include "storage/sstable/iterator.h"
 
 namespace starrocks {
 class Slice;
-namespace lake {
 namespace sstable {
 
 // A internal wrapper class with an interface similar to Iterator that
@@ -87,5 +86,4 @@ private:
 };
 
 } // namespace sstable
-} // namespace lake
 } // namespace starrocks

@@ -9,11 +9,7 @@
 
 #include "util/slice.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 struct Options;
 
@@ -52,6 +48,4 @@ private:
     std::string last_key_;
 };
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

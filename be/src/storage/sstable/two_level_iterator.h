@@ -7,7 +7,6 @@
 
 namespace starrocks {
 class Slice;
-namespace lake {
 namespace sstable {
 
 struct ReadOptions;
@@ -28,5 +27,4 @@ Iterator* NewTwoLevelIterator(Iterator* index_iter,
                               void* arg, const ReadOptions& options);
 
 } // namespace sstable
-} // namespace lake
 } // namespace starrocks

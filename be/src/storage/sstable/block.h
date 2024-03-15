@@ -4,13 +4,9 @@
 
 #pragma once
 
-#include "storage/lake/sstable/iterator.h"
+#include "storage/sstable/iterator.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 class BlockContents;
 class Comparator;
@@ -39,6 +35,4 @@ private:
     bool owned_;              // Block owns data_[]
 };
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

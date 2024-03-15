@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/table.h"
+#include "storage/sstable/table.h"
 
 #include <butil/time.h> // NOLINT
 
@@ -10,21 +10,19 @@
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/key_index.h"
-#include "storage/lake/sstable/block.h"
-#include "storage/lake/sstable/comparator.h"
-#include "storage/lake/sstable/filter_block.h"
-#include "storage/lake/sstable/filter_policy.h"
-#include "storage/lake/sstable/format.h"
-#include "storage/lake/sstable/options.h"
-#include "storage/lake/sstable/two_level_iterator.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/sstable/block.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/filter_block.h"
+#include "storage/sstable/filter_policy.h"
+#include "storage/sstable/format.h"
+#include "storage/sstable/options.h"
+#include "storage/sstable/two_level_iterator.h"
 #include "util/coding.h"
 #include "util/lru_cache.h"
 #include "util/trace.h"
 
-namespace starrocks {
-namespace lake {
-namespace sstable {
+namespace starrocks::sstable {
 
 struct Table::Rep {
     ~Rep() {
@@ -130,8 +128,6 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
     // We might want to unify with ReadBlock() if we start
     // requiring checksum verification in Table::Open.
     ReadOptions opt;
-    ReadIOStat iostat;
-    opt.stat = &iostat;
     if (rep_->options.paranoid_checks) {
         opt.verify_checksums = true;
     }
@@ -191,6 +187,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
                 if (options.stat != nullptr) {
                     options.stat->block_cnt_from_cache++;
                 }
+                TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", 1);
             } else {
                 s = ReadBlock(table->rep_->file, options, handle, &contents);
                 if (s.ok()) {
@@ -202,6 +199,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
                 if (options.stat != nullptr) {
                     options.stat->block_cnt_from_file++;
                 }
+                TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", 1);
             }
         } else {
             BlockContents contents;
@@ -212,6 +210,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
             if (options.stat != nullptr) {
                 options.stat->block_cnt_from_file++;
             }
+            TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", 1);
         }
     }
 
@@ -237,26 +236,17 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
 Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, KeyIndexesInfo* key_indexes_info,
                        std::vector<std::string>& values) {
     Status s;
-    auto start_ts = butil::gettimeofday_us();
     Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-    auto end_ts = butil::gettimeofday_us();
-    TRACE_COUNTER_INCREMENT("index_block_new_iterator", end_ts - start_ts);
     const auto& key_index_infos = key_indexes_info->key_index_infos;
     std::unique_ptr<Iterator> current_block_itr_ptr;
 
     // return true if find k
     auto search_in_block = [&](const Slice& k, const KeyIndexInfo& index_info) {
-        start_ts = butil::gettimeofday_us();
         current_block_itr_ptr->Seek(k);
-        end_ts = butil::gettimeofday_us();
-        TRACE_COUNTER_INCREMENT("seek2", end_ts - start_ts);
-        start_ts = butil::gettimeofday_us();
         if (current_block_itr_ptr->Valid() && k == current_block_itr_ptr->key()) {
             values[index_info] = current_block_itr_ptr->value().to_string();
             return true;
         }
-        end_ts = butil::gettimeofday_us();
-        TRACE_COUNTER_INCREMENT("key_compare", end_ts - start_ts);
         s = current_block_itr_ptr->status();
         return false;
     };
@@ -272,26 +262,20 @@ Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, 
                 current_block_itr_ptr.reset(nullptr);
             }
         }
-        start_ts = butil::gettimeofday_us();
         iiter->Seek(k);
-        end_ts = butil::gettimeofday_us();
-        TRACE_COUNTER_INCREMENT("seek1", end_ts - start_ts);
         if (iiter->Valid()) {
             Slice handle_value = iiter->value();
             FilterBlockReader* filter = rep_->filter;
             BlockHandle handle;
-            start_ts = butil::gettimeofday_us();
             if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
                 !filter->KeyMayMatch(handle.offset(), k)) {
                 // Not found
-                TRACE_COUNTER_INCREMENT("bloom_filter", 1);
+                TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", 1);
             } else {
-                end_ts = butil::gettimeofday_us();
-                TRACE_COUNTER_INCREMENT("decode_and_key_match", end_ts - start_ts);
-                start_ts = butil::gettimeofday_us();
+                auto start_ts = butil::gettimeofday_us();
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
-                end_ts = butil::gettimeofday_us();
-                TRACE_COUNTER_INCREMENT("new_block_reader", end_ts - start_ts);
+                auto end_ts = butil::gettimeofday_us();
+                TRACE_COUNTER_INCREMENT("read_block", end_ts - start_ts);
                 (void)search_in_block(k, key_index_infos[i]);
             }
         }
@@ -303,6 +287,4 @@ Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, 
     return s;
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

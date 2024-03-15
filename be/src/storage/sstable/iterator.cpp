@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/iterator.h"
+#include "storage/sstable/iterator.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 Iterator::Iterator() {
     cleanup_head_.function = nullptr;
@@ -75,6 +71,4 @@ Iterator* NewErrorIterator(const Status& status) {
     return new EmptyIterator(status);
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

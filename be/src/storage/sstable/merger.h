@@ -4,9 +4,7 @@
 
 #pragma once
 
-namespace starrocks {
-namespace lake {
-namespace sstable {
+namespace starrocks::sstable {
 
 class Comparator;
 class Iterator;
@@ -21,6 +19,4 @@ class Iterator;
 // REQUIRES: n >= 0
 Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children, int n);
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

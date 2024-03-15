@@ -2,16 +2,12 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/filter_block.h"
+#include "storage/sstable/filter_block.h"
 
-#include "storage/lake/sstable/coding.h"
-#include "storage/lake/sstable/filter_policy.h"
+#include "storage/sstable/coding.h"
+#include "storage/sstable/filter_policy.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 // Generate new filter every 2KB of data
 static const size_t kFilterBaseLg = 11;
@@ -46,7 +42,7 @@ Slice FilterBlockBuilder::Finish() {
 
     PutFixed32(&result_, array_offset);
     result_.push_back(kFilterBaseLg); // Save encoding parameter in result
-    return Slice(result_);
+    return {result_};
 }
 
 void FilterBlockBuilder::GenerateFilter() {
@@ -103,6 +99,4 @@ bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key) {
     return true; // Errors are treated as potential matches
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

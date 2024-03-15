@@ -8,8 +8,6 @@
 namespace starrocks {
 class Slice;
 class RandomAccessFile;
-namespace lake {
-struct KeyIndexesInfo;
 namespace sstable {
 class Block;
 class BlockHandle;
@@ -17,6 +15,12 @@ class Footer;
 struct Options;
 struct ReadOptions;
 class Iterator;
+
+using KeyIndexInfo = uint32_t;
+struct KeyIndexesInfo {
+    std::vector<KeyIndexInfo> key_index_infos;
+    size_t size() const { return key_index_infos.size(); }
+};
 
 // A Table is a sorted map from strings to strings.  Tables are
 // immutable and persistent.  A Table may be safely accessed from
@@ -66,5 +70,4 @@ private:
     Rep* const rep_;
 };
 } // namespace sstable
-} // namespace lake
 } // namespace starrocks

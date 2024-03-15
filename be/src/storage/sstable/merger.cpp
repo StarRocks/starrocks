@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/merger.h"
+#include "storage/sstable/merger.h"
 
-#include "storage/lake/sstable/comparator.h"
-#include "storage/lake/sstable/iterator.h"
-#include "storage/lake/sstable/iterator_wrapper.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/iterator.h"
+#include "storage/sstable/iterator_wrapper.h"
 
-namespace starrocks {
-namespace lake {
-namespace sstable {
+namespace starrocks::sstable {
 
 namespace {
 class MergingIterator : public Iterator {
@@ -188,6 +186,4 @@ Iterator* NewMergingIterator(const Comparator* comparator, Iterator** children, 
     }
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

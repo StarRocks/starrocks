@@ -11,11 +11,7 @@
 
 #include "util/slice.h"
 
-namespace starrocks {
-
-namespace lake {
-
-namespace sstable {
+namespace starrocks::sstable {
 
 class FilterPolicy;
 
@@ -61,6 +57,4 @@ private:
     size_t base_lg_;     // Encoding parameter (see kFilterBaseLg in .cc file)
 };
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

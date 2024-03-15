@@ -9,8 +9,6 @@
 namespace starrocks {
 class Cache;
 
-namespace lake {
-
 namespace sstable {
 
 class Comparator;
@@ -149,5 +147,4 @@ struct WriteOptions {
 };
 
 } // namespace sstable
-} // namespace lake
 } // namespace starrocks

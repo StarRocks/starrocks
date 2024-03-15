@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license.
 // (https://developers.google.com/open-source/licenses/bsd)
 
-#include "storage/lake/sstable/two_level_iterator.h"
+#include "storage/sstable/two_level_iterator.h"
 
-#include "storage/lake/sstable/block.h"
-#include "storage/lake/sstable/format.h"
-#include "storage/lake/sstable/table.h"
+#include "storage/sstable/block.h"
+#include "storage/sstable/format.h"
+#include "storage/sstable/table.h"
 
-namespace starrocks {
-namespace lake {
-namespace sstable {
+namespace starrocks::sstable {
 
 // A internal wrapper class with an interface similar to Iterator that
 // caches the valid() and key() results for an underlying iterator.
@@ -234,6 +232,4 @@ Iterator* NewTwoLevelIterator(Iterator* index_iter, BlockFunction block_function
     return new TwoLevelIterator(index_iter, block_function, arg, options);
 }
 
-} // namespace sstable
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::sstable

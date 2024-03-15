@@ -18,9 +18,9 @@
 
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/key_index.h"
-#include "storage/lake/sstable/filter_policy.h"
-#include "storage/lake/sstable/table.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/filter_policy.h"
+#include "storage/sstable/table.h"
 #include "storage/storage_engine.h"
 #include "util/phmap/btree.h"
 
@@ -28,17 +28,15 @@ namespace starrocks {
 
 class WritableFile;
 
-namespace lake {
-
 namespace sstable {
 
 // <version, value>
 using IndexValueWithVer = std::pair<int64_t, int64_t>;
 
-class LakePersistentIndexSstable {
+class PersistentIndexSstable {
 public:
-    LakePersistentIndexSstable() = default;
-    ~LakePersistentIndexSstable() = default;
+    PersistentIndexSstable() = default;
+    ~PersistentIndexSstable() = default;
 
     Status init(RandomAccessFile* rf, const int64_t filesz, Cache* cache);
 
@@ -56,5 +54,4 @@ private:
 };
 
 } // namespace sstable
-} // namespace lake
 } // namespace starrocks
