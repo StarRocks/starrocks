@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 各类表的能力对比
 
 ## Key 列和排序键

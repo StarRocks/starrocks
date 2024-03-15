@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Capabilities of different table types
 
 ## Key columns and sort key
