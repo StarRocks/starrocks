@@ -513,3 +513,14 @@ if [[ -d $TP_SOURCE_DIR/$BZIP_SOURCE ]] ; then
     cd -
     echo "Finished patching $BZIP_SOURCE"
 fi
+
+# patch libfpe
+if [[ -d $TP_SOURCE_DIR/$LIBFPE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$LIBFPE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $LIBFPE_SOURCE == "ubiq-fpe-c-0.1.1" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/ubiq-fpe-c-0.1.1-remove-gtest.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $LIBFPE_SOURCE"
+fi

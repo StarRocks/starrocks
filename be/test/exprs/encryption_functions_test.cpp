@@ -873,4 +873,27 @@ INSTANTIATE_TEST_SUITE_P(
                                 "eaf18d26b2976216790d95b2942d15b7db5f926c7d62d35f24c98b8eedbe96f2e6241e5e4fdc6b7d9e7893"
                                 "d94d86cd8a6f3bb6b1804c22097b337ecc24f6015e")));
 
+class FpeTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int, std::string>> {};
+
+TEST_P(FpeTestFixture, fpe_ff1_encryptTest) {
+    auto [str, key, radix, expected] = GetParam();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    auto plain = BinaryColumn::create();
+    plain->append(str);
+    plain->append(key);
+
+    ColumnPtr radix_column = ColumnHelper::create_const_column<TYPE_INT>(radix, 1);
+    columns.emplace_back(plain);
+    columns.emplace_back(radix_column);
+
+    ColumnPtr result = EncryptionFunctions::fpe_ff1_encrypt(ctx.get(), columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    EXPECT_EQ(expected, v->get_data()[0].to_string());
+}
+INSTANTIATE_TEST_SUITE_P(FpeTest, FpeTestFixture,
+                         ::testing::Values(std::make_tuple("0504327939", "abcdefghijk12345abcdefghijk12345", 10,
+                                                           "8585819134")));
+
 } // namespace starrocks
