@@ -32,7 +32,6 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class HudiScanNode extends ScanNode {
