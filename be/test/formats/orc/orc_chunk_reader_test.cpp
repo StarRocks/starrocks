@@ -23,11 +23,13 @@
 
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "exprs/is_null_predicate.h"
+#include "formats/orc/memory_stream/MemoryInputStream.hh"
+#include "formats/orc/memory_stream/MemoryOutputStream.hh"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -374,10 +376,10 @@ TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
                                 lit_node);
     ExprContext* ctx = create_expr_context(&_pool, nodes);
     std::vector<Expr*> conjuncts = {ctx->root()};
-    reader.set_conjuncts(conjuncts);
+    OrcPredicates predicates{&conjuncts, nullptr};
 
     auto input_stream = orc::readLocalFile(default_orc_file);
-    reader.init(std::move(input_stream));
+    reader.init(std::move(input_stream), &predicates);
     uint64_t records = get_hit_rows(&reader);
     EXPECT_EQ(records, 0);
 }
@@ -397,10 +399,11 @@ TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
                                 lit_node);
     ExprContext* ctx = create_expr_context(&_pool, nodes);
     std::vector<Expr*> conjuncts = {ctx->root()};
-    reader.set_conjuncts(conjuncts);
+    OrcPredicates predicates{&conjuncts, nullptr};
 
     auto input_stream = orc::readLocalFile(default_orc_file);
-    reader.init(std::move(input_stream));
+    auto st = reader.init(std::move(input_stream), &predicates);
+    ASSERT_TRUE(st.ok());
     uint64_t records = get_hit_rows(&reader);
     // at most read one stripe.
     EXPECT_LE(records, 4880);
@@ -428,10 +431,11 @@ TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsInPred) {
                            lit_nodes);
     ExprContext* ctx = create_expr_context(&_pool, nodes);
     std::vector<Expr*> conjuncts = {ctx->root()};
-    reader.set_conjuncts(conjuncts);
+    OrcPredicates predicates{&conjuncts, nullptr};
 
     auto input_stream = orc::readLocalFile(default_orc_file);
-    reader.init(std::move(input_stream));
+    auto st = reader.init(std::move(input_stream), &predicates);
+    ASSERT_TRUE(st.ok());
     uint64_t records = get_hit_rows(&reader);
     EXPECT_LE(records, 0);
 }
@@ -2214,4 +2218,515 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatchedString2Double) {
     EXPECT_FALSE(column->has_null());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(OrcChunkReaderTest, GetFileSchema) {
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
+            {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
+             {{"col_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+              {"col_tinyint", TypeDescriptor::from_logical_type(TYPE_TINYINT)},
+              {"col_smallint", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
+              {"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_float", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
+              {"col_double", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+              {"col_string", TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+              {"col_char", TypeDescriptor::create_char_type(10)},
+              {"col_varchar", TypeDescriptor::create_varchar_type(10)},
+              {"col_binary", TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+              {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
+              {"col_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)}}},
+            {"./be/test/exec/test_data/orc_scanner/compound.orc",
+             {{"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_map_string_int",
+               TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                                               TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_map_string_map_string_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_map_type(
+                               TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                               TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_struct_string_int",
+               TypeDescriptor::create_struct_type(
+                       {"field_string", "field_int"},
+                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})},
+              {"col_struct_struct_string_int_string",
+               TypeDescriptor::create_struct_type(
+                       {"filed_struct", "field_string2"},
+                       {TypeDescriptor::create_struct_type(
+                                {"field_string1", "field_int"},
+                                {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                                 TypeDescriptor::from_logical_type(TYPE_INT)}),
+                        TypeDescriptor::create_varchar_type(1048576)})}}}};
+
+    for (const auto& test_case : test_cases) {
+        check_schema(test_case.first, test_case.second);
+    }
+}
+
+/**
+ *
+File Version: 0.12 with TRINO_ORIGINAL by Trino
+Rows: 1
+Compression: ZSTD
+Compression size: 262144
+Type: struct<c1:int,c2:bigint>
+Attributes on root.c1
+  iceberg.id: 1
+  iceberg.required: false
+Attributes on root.c2
+  iceberg.id: 2
+  iceberg.long-type: TIME
+  iceberg.required: false
+
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 1 hasNull: true
+    Column 1: count: 1 hasNull: true min: 1 max: 1 sum: 1
+    Column 2: count: 1 hasNull: true min: 3723456000 max: 3723456000 sum: 3723456000
+
+File Statistics:
+  Column 0: count: 1 hasNull: true
+  Column 1: count: 1 hasNull: true min: 1 max: 1 sum: 1
+  Column 2: count: 1 hasNull: true min: 3723456000 max: 3723456000 sum: 3723456000
+
+Stripes:
+  Stripe: offset: 3 data: 16 rows: 1 tail: 58 index: 56
+    Stream: column 1 section ROW_INDEX start: 3 length 22
+    Stream: column 2 section ROW_INDEX start: 25 length 34
+    Stream: column 1 section DATA start: 59 length 6
+    Stream: column 2 section DATA start: 65 length 10
+    Encoding column 0: DIRECT
+    Encoding column 1: DIRECT_V2
+    Encoding column 2: DIRECT_V2
+
+File length: 455 bytes
+Padding length: 0 bytes
+Padding ratio: 0%
+
+{"c1":1,"c2":3723456000}
+{"c1":4,"c2":null}
+{"c1":2,"c2":7384000000}
+{"c1":3,"c2":11045000000}
+ */
+TEST_F(OrcChunkReaderTest, TestReadTimeColumn) {
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)},
+            {""},
+    };
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_time_column.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        EXPECT_TRUE(st.ok());
+
+        st = reader.read_next();
+        EXPECT_TRUE(st.ok());
+        ChunkPtr ckptr = reader.create_chunk();
+        EXPECT_TRUE(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        EXPECT_TRUE(st.ok());
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        EXPECT_TRUE(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+        ColumnPtr col = result->get_column_by_slot_id(1);
+        EXPECT_EQ("[1, 3723]", result->debug_row(0));
+        EXPECT_EQ("[4, NULL]", result->debug_row(1));
+        EXPECT_EQ("[2, 7384]", result->debug_row(2));
+        EXPECT_EQ("[3, 11045]", result->debug_row(3));
+    }
+}
+
+TEST_F(OrcChunkReaderTest, DatetimeMicrosecond) {
+    SlotDesc slot_descs[] = {
+            {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"col_datetime", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
+            {""},
+    };
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/timestamp.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        EXPECT_OK(reader.init(std::move(input_stream)));
+
+        EXPECT_OK(reader.read_next());
+        ChunkPtr ckptr = reader.create_chunk();
+        EXPECT_TRUE(ckptr != nullptr);
+        EXPECT_OK(reader.fill_chunk(&ckptr));
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        EXPECT_TRUE(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+        EXPECT_EQ("[1, 2006-01-02 07:04:05]", result->debug_row(0));
+        EXPECT_EQ("[2, 2006-01-02 07:04:05.900000]", result->debug_row(1));
+        EXPECT_EQ("[3, 2006-01-02 07:04:05.999999]", result->debug_row(2));
+        EXPECT_EQ("[4, 2006-01-02 07:04:05.999999]", result->debug_row(3));
+    }
+}
+
+/**
+ * struct<_col1:int,_col2:int>
+ * {"_col1":1,"_col2":10001}
+ * {"_col1":2,"_col2":10002}
+ * {"_col1":3,"_col2":10003}
+ * {"_col1":4,"_col2":10004}
+ * .....
+ */
+TEST_F(OrcChunkReaderTest, TestSearchArgumentWithUnmatchedColumnName) {
+    MemoryOutputStream buffer(1024000);
+
+    {
+        // prepare data
+        orc::WriterOptions writerOptions;
+        // force to make stripe every time.
+        writerOptions.setStripeSize(128);
+        writerOptions.setRowIndexStride(128);
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<_col1:int,_col2:int>"));
+        ORC_UNIQUE_PTR<orc::Writer> writer = createWriter(*schema, &buffer, writerOptions);
+
+        size_t batch_size = 128;
+        size_t batch_num = 3;
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(batch_size);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* col1 = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        auto* col2 = dynamic_cast<orc::LongVectorBatch*>(root->fields[1]);
+
+        size_t index = 1;
+        for (size_t k = 0; k < batch_num; k++) {
+            for (size_t i = 0; i < batch_size; i++) {
+                col1->data[i] = index;
+                col2->data[i] = 10000 + index;
+                index += 1;
+            }
+            col1->numElements = batch_size;
+            col2->numElements = batch_size;
+            root->numElements = batch_size;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+    SlotDesc col2{"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+
+    SlotDesc slot_descs[] = {col1, col2, {""}};
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+    std::vector<std::string> hive_column_names = {"col1", "col2"};
+
+    // filter all by col1
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::TINYINT, 0);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::EQ, src_slot_descriptors[0], TPrimitiveType::TINYINT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        reader.set_hive_column_names(&hive_column_names);
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 0);
+    }
+
+    // filter all by col2
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::TINYINT, 100);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::EQ, src_slot_descriptors[1], TPrimitiveType::TINYINT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        reader.set_hive_column_names(&hive_column_names);
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok());
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 0);
+    }
+
+    // filter partial by col1
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 130);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::GT, src_slot_descriptors[0], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        reader.set_hive_column_names(&hive_column_names);
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok());
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 256);
+    }
+
+    // filter partial by col2
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 130);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::GT, src_slot_descriptors[1], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        reader.set_hive_column_names(&hive_column_names);
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok());
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 384);
+    }
+
+    // filter nothing by col2
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::TINYINT, 100);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::GT, src_slot_descriptors[1], TPrimitiveType::TINYINT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        reader.set_hive_column_names(&hive_column_names);
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok());
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 384);
+    }
+}
+
+/**
+ * struct<col1:int,col2:int, col3: struct<col4: int>>
+ * {"col1":1,"col2":10001, "col3": struct<"col4": 10001>}
+ * {"col1":2,"col2":10002, "col3": struct<"col4": 10002>}
+ * {"col1":3,"col2":10003, "col3": struct<"col4": 10003>}
+ * {"col1":4,"col2":10004, "col3": struct<"col4": 10004>}
+ * .....
+ */
+TEST_F(OrcChunkReaderTest, TestSearchArgumentWithMatchedColumnName) {
+    MemoryOutputStream buffer(1024000);
+
+    {
+        // prepare data
+        orc::WriterOptions writerOptions;
+        // force to make stripe every time.
+        writerOptions.setStripeSize(128);
+        writerOptions.setRowIndexStride(128);
+        ORC_UNIQUE_PTR<orc::Type> schema(
+                orc::Type::buildTypeFromString("struct<col1:int,col2:int,col3:struct<col4:int>>"));
+        ORC_UNIQUE_PTR<orc::Writer> writer = createWriter(*schema, &buffer, writerOptions);
+
+        size_t batch_size = 128;
+        size_t batch_num = 3;
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(batch_size);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* col1 = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        auto* col2 = dynamic_cast<orc::LongVectorBatch*>(root->fields[1]);
+        auto* col3 = dynamic_cast<orc::StructVectorBatch*>(root->fields[2]);
+        auto* col4 = dynamic_cast<orc::LongVectorBatch*>(col3->fields[0]);
+
+        size_t index = 1;
+        for (size_t k = 0; k < batch_num; k++) {
+            for (size_t i = 0; i < batch_size; i++) {
+                col1->data[i] = index;
+                col2->data[i] = 10000 + index;
+                col4->data[i] = 10000 + index;
+                index += 1;
+            }
+            col1->numElements = batch_size;
+            col2->numElements = batch_size;
+            root->numElements = batch_size;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+    SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+    SlotDesc col2{"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+    TypeDescriptor col3_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+    col3_type.field_names.emplace_back("col4");
+    col3_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    SlotDesc col3{"col3", col3_type};
+
+    SlotDesc slot_descs[] = {col1, col2, col3, {""}};
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    // filter all by col1
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 0);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::LT, src_slot_descriptors[0], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 0);
+    }
+
+    // filter partial all by col1
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 50);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::NE, src_slot_descriptors[0], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 384);
+    }
+
+    // filter partial all by col1
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 129);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::LT, src_slot_descriptors[0], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 128);
+    }
+
+    // filter partial by col1
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 129);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::LE, src_slot_descriptors[0], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 256);
+    }
+
+    // filter col3 by is null
+    {
+        TExprNode expr_node;
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        expr_node.node_type = TExprNodeType::FUNCTION_CALL;
+        expr_node.fn.name.function_name = "is_null_pred";
+        expr_node.__isset.fn = true;
+        std::unique_ptr<Expr> expr(VectorizedIsNullPredicateFactory::from_thrift(expr_node));
+
+        TExprNode slot_ref;
+        slot_ref.node_type = TExprNodeType::SLOT_REF;
+        slot_ref.__set_type(create_primitive_type_desc(TPrimitiveType::TINYINT));
+        slot_ref.num_children = 0;
+        slot_ref.__isset.slot_ref = true;
+        slot_ref.slot_ref.slot_id = 2;
+        slot_ref.slot_ref.tuple_id = 0;
+        slot_ref.__set_is_nullable(true);
+        std::unique_ptr<ColumnRef> column_ref = std::make_unique<ColumnRef>(slot_ref);
+        expr->add_child(column_ref.get());
+        std::vector<Expr*> conjuncts = {expr.get()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 0);
+    }
+
+    // filter col3 by is not null
+    {
+        TExprNode expr_node;
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        expr_node.node_type = TExprNodeType::FUNCTION_CALL;
+        expr_node.fn.name.function_name = "is_not_null_pred";
+        expr_node.__isset.fn = true;
+        std::unique_ptr<Expr> expr(VectorizedIsNullPredicateFactory::from_thrift(expr_node));
+
+        TExprNode slot_ref;
+        slot_ref.node_type = TExprNodeType::SLOT_REF;
+        slot_ref.__set_type(create_primitive_type_desc(TPrimitiveType::TINYINT));
+        slot_ref.num_children = 0;
+        slot_ref.__isset.slot_ref = true;
+        slot_ref.slot_ref.slot_id = 2;
+        slot_ref.slot_ref.tuple_id = 0;
+        slot_ref.__set_is_nullable(true);
+        std::unique_ptr<ColumnRef> column_ref = std::make_unique<ColumnRef>(slot_ref);
+        expr->add_child(column_ref.get());
+        std::vector<Expr*> conjuncts = {expr.get()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 384);
+    }
+}
+
+>>>>>>> 4d0970c77f ([Enhancement] Using ORC column id in SearchArgument (#42516))
 } // namespace starrocks
