@@ -31,7 +31,7 @@
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
 #ifdef USE_STAROS
-#include "storage/lake/staros_cache_stats_collector.h"
+#include "storage/lake/star_cache_mgr.h"
 #endif
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
@@ -651,22 +651,36 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
 #ifdef USE_STAROS
             if (config::starlet_use_star_cache && config::experimental_lake_enable_collect_cache_stat &&
                 tablet_info.enable_cache()) {
-                std::vector<std::string> files;
+                std::unordered_map<std::string, int64_t> file_size_map;
                 for (const auto& rowset : (*tablet_metadata)->rowsets()) {
+                    int index = 0;
+                    const auto& seg_file_meta = rowset.segment_size();
                     for (const auto& segment : rowset.segments()) {
-                        files.emplace_back(_tablet_mgr->segment_location(tablet_id, segment));
+                        auto file_name = _tablet_mgr->segment_location(tablet_id, segment);
+                        auto file_size = seg_file_meta.Get(index);
+                        file_size_map.emplace(file_name, file_size);
+                        index++;
                     }
                 }
-                if (!files.empty()) {
+                if (!file_size_map.empty()) {
                     auto start = std::chrono::steady_clock::now();
-                    auto cache_size_st = starrocks::lake::calculate_cache_size(files);
-                    if (cache_size_st.ok()) {
-                        tablet_stat->set_data_cache_size(cache_size_st.value());
+                    int64_t total_size = 0;
+                    for (const auto& pair : file_size_map) {
+                        auto file_path = pair.first;
+                        auto file_size = pair.second;
+                        auto size_st = starrocks::lake::calculate_cache_size(file_path, file_size);
+                        if (size_st.ok()) {
+                            total_size += size_st.value();
+                        } else {
+                            LOG(INFO) << "Cache stat size collect failed, tablet_id: " << tablet_id
+                                      << ", file: " << file_path;
+                        }
                     }
+                    tablet_stat->set_data_cache_size(total_size);
                     auto end = std::chrono::steady_clock::now();
                     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-                    LOG(WARNING) << "Total cache stat size collected, size: " << cache_size_st.value()
-                                 << ", file count: " << files.size() << ", tablet_id: " << tablet_id
+                    LOG(WARNING) << "Total cache stat size collected, size: " << total_size
+                                 << ", file count: " << file_size_map.size() << ", tablet_id: " << tablet_id
                                  << ", time cost: " << duration.count() << " milliseconds";
                 }
             }

@@ -47,7 +47,7 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"DATA_SIZE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"ROW_COUNT", TYPE_BIGINT, sizeof(int64_t), false},
         {"ENABLE_DATACACHE", TYPE_BOOLEAN, sizeof(bool), false},
-        {"DATACACHE_SIZE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATA_CACHE_SIZE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"AVG_CS", TYPE_DOUBLE, sizeof(double), false},
         {"P50_CS", TYPE_DOUBLE, sizeof(double), false},
         {"MAX_CS", TYPE_DOUBLE, sizeof(double), false},

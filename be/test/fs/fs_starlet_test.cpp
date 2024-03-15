@@ -22,11 +22,15 @@
 #include <fstream>
 
 #include "common/config.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
+
+using starrocks::fs::build_starlet_uri;
+using starrocks::fs::parse_starlet_uri;
 
 class StarletFileSystemTest : public ::testing::TestWithParam<std::string> {
 public:

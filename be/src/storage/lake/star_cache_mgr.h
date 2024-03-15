@@ -11,31 +11,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 #ifdef USE_STAROS
+#pragma once
 
-#include "storage/lake/staros_cache_stats_collector.h"
+#include <cstdint>
+#include <string>
 
-#include "fs/fs.h"
+#include "common/statusor.h"
 
 namespace starrocks::lake {
 
-StatusOr<int64_t> calculate_cache_size(std::vector<std::string> paths) {
-    if (paths.empty()) {
-        return 0;
-    }
+// collect local cache stat size for block cache
+StatusOr<int64_t> calculate_cache_size(const std::string& path, int64_t file_size);
 
-    // REQUIRE: All files in |paths| have the same file system scheme.
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(paths[0]));
+// TODO: add more cache manager operations, such as warmup/pin/unpin
 
-    int64_t total_size = 0;
-    for (auto path : paths) {
-        auto size_st = fs->calculate_cache_size(path);
-        if (size_st.ok()) {
-            total_size += size_st.value();
-        }
-    }
-    return total_size;
-}
 } // namespace starrocks::lake
+
 #endif

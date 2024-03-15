@@ -42,6 +42,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TabletStatRequest;
@@ -255,7 +256,12 @@ public class TabletStatMgr extends FrontendDaemon {
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
             List<Tablet> tablets = new ArrayList<>(partition.getBaseIndex().getTablets());
-            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
+            PartitionInfo partitionInfo = table.getPartitionInfo();
+            DataCacheInfo cacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+            // ENABLE_DATACACHE
+            boolean dataCacheEnabled = cacheInfo.isEnabled();
+            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets,
+                    dataCacheEnabled);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -286,15 +292,17 @@ public class TabletStatMgr extends FrontendDaemon {
         private final long visibleVersion;
         private final long visibleVersionTime;
         private final List<Tablet> tablets;
+        private final boolean dataCacheEnabled;
 
         PartitionSnapshot(String dbName, String tableName, long partitionId, long visibleVersion,
-                          long visibleVersionTime, List<Tablet> tablets) {
+                          long visibleVersionTime, List<Tablet> tablets, boolean dataCacheEnabled) {
             this.dbName = dbName;
             this.tableName = tableName;
             this.partitionId = partitionId;
             this.visibleVersion = visibleVersion;
             this.visibleVersionTime = visibleVersionTime;
             this.tablets = Objects.requireNonNull(tablets);
+            this.dataCacheEnabled = dataCacheEnabled;
         }
 
         private String debugName() {
@@ -310,12 +318,14 @@ public class TabletStatMgr extends FrontendDaemon {
         private final Map<Long, Tablet> tablets;
         private long collectStatTime = 0;
         private List<Future<TabletStatResponse>> responseList;
+        private final boolean dataCacheEnabled;
 
         CollectTabletStatJob(PartitionSnapshot snapshot) {
             this.dbName = Objects.requireNonNull(snapshot.dbName, "dbName is null");
             this.tableName = Objects.requireNonNull(snapshot.tableName, "tableName is null");
             this.partitionId = snapshot.partitionId;
             this.version = snapshot.visibleVersion;
+            this.dataCacheEnabled = snapshot.dataCacheEnabled;
             this.tablets = new HashMap<>();
             for (Tablet tablet : snapshot.tablets) {
                 this.tablets.put(tablet.getId(), tablet);
@@ -342,15 +352,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 TabletInfo tabletInfo = new TabletInfo();
                 tabletInfo.tabletId = tablet.getId();
                 tabletInfo.version = version;
-                // for cache stat
-                LakeTablet lakeTablet = (LakeTablet) tablet;
-                boolean enableCache = true;
-                try {
-                    enableCache = lakeTablet.getShardInfo().getFileCache().getEnableCache();
-                } catch (Exception e) {
-                    LOG.warn("Fail to get shard info of tablet {}: {}", lakeTablet.getId(), e.getMessage());
-                }
-                tabletInfo.enableCache = enableCache;
+                tabletInfo.enableCache = dataCacheEnabled;
                 beToTabletInfos.computeIfAbsent(node, k -> Lists.newArrayList()).add(tabletInfo);
             }
 

@@ -80,7 +80,7 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
         return new_fs_hdfs(options);
     }
 #ifdef USE_STAROS
-    if (is_starlet_uri(uri)) {
+    if (fs::is_starlet_uri(uri)) {
         return new_fs_starlet();
     }
 #endif
@@ -100,7 +100,7 @@ StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::st
         return get_tls_fs_s3();
     }
 #ifdef USE_STAROS
-    if (is_starlet_uri(uri)) {
+    if (fs::is_starlet_uri(uri)) {
         return get_tls_fs_starlet();
     }
 #endif

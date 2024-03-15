@@ -68,7 +68,6 @@ DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 DECLARE_bool(fs_enable_buffer_prefetch);
 
 namespace starrocks {
-
 std::shared_ptr<StarOSWorker> g_worker;
 std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
