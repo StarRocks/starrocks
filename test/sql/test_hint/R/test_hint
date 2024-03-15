@@ -226,6 +226,20 @@ select @test;
 -- result:
 ["测试","测试","abc"]
 -- !result
+set @test = (select array_col from all_type where date_col > '2021-01-01');
+-- result:
+-- !result
+select @test;
+-- result:
+None
+-- !result
+set @test= (select JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25));
+-- result:
+-- !result
+select @test;
+-- result:
+{" Daniel Smith": 26, "Lily Smith": 25}
+-- !result
 set @test = (select array_agg(c2) from (select t2.c2 from t2 join t2 tt join t2 ttt join t2 tttt) t);
 -- result:
 -- !result
