@@ -17,14 +17,13 @@
 #include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
-#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
-#include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "formats/orc/column_reader.h"
 #include "formats/orc/orc_mapping.h"
+#include "formats/orc/utils.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
@@ -59,8 +58,8 @@ public:
     explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
     OrcChunkReader();
     ~OrcChunkReader();
-    Status init(std::unique_ptr<orc::InputStream> input_stream);
-    Status init(std::unique_ptr<orc::Reader> reader);
+    Status init(std::unique_ptr<orc::InputStream> input_stream, const OrcPredicates* orc_predicates = nullptr);
+    Status init(std::unique_ptr<orc::Reader> reader, const OrcPredicates* orc_predicates = nullptr);
     Status read_next(orc::RowReader::ReadPosition* pos = nullptr);
     // create sample chunk
     ChunkPtr create_chunk();
@@ -72,9 +71,7 @@ public:
     // call them before calling init.
     void set_read_chunk_size(uint64_t v) { _read_chunk_size = v; }
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
-    Status set_conjuncts(const std::vector<Expr*>& conjuncts);
-    Status set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                             const RuntimeFilterProbeCollector* rf_collector);
+    Status build_search_argument_by_predicates(const OrcPredicates* orc_predicates);
     Status set_timezone(const std::string& tz);
     size_t num_columns() const { return _src_slot_descriptors.size(); }
 
@@ -140,15 +137,26 @@ public:
 
     Status get_schema(std::vector<SlotDescriptor>* schema);
 
+    std::string get_search_argument_string() const;
+
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     StatusOr<ChunkPtr> _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots,
                                    const std::vector<int>* indices);
 
-    bool _ok_to_add_conjunct(const Expr* conjunct);
-    Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
-    bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
+    bool _ok_to_add_conjunct(const Expr* conjunct,
+                             const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors);
+    bool _ok_to_add_compound_conjunct(const Expr* conjunct,
+                                      const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors);
+    bool _ok_to_add_binary_in_conjunct(
+            const Expr* conjunct, const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors);
+    bool _ok_to_add_is_null_conjunct(const Expr* conjunct,
+                                     const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors);
+    Status _add_conjunct(const Expr* conjunct,
+                         const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors,
+                         std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+    bool _add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
     void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to);
@@ -159,7 +167,8 @@ private:
     orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
     std::vector<SlotDescriptor*> _src_slot_descriptors;
-    std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
+    // slot id to position in orc type.
+    std::unordered_map<SlotId, int> _slot_id_to_position;
 
     // Access ORC columns by name. By default,
     // columns in ORC files are accessed by their ordinal position in the Hive table definition.
@@ -170,10 +179,9 @@ private:
     // https://trino.io/docs/current/connector/hive.html?highlight=hive#orc-format-configuration-properties
     bool _use_orc_column_names = false;
     OrcMappingOptions _orc_mapping_options{};
-    std::unique_ptr<OrcMapping> _root_selected_mapping;
+    std::unique_ptr<OrcMapping> _root_mapping;
     std::vector<TypeDescriptor> _src_types;
-    // slot id to position in orc.
-    std::unordered_map<SlotId, int> _slot_id_to_position;
+
     std::vector<Expr*> _cast_exprs;
     std::vector<std::unique_ptr<ORCColumnReader>> _column_readers;
     Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
