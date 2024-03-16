@@ -379,16 +379,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_runtime_state(runtime_state);
     _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
-    if (_use_orc_sargs) {
-        std::vector<Expr*> conjuncts;
-        for (const auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
-            for (const auto& it2 : it.second) {
-                conjuncts.push_back(it2->root());
-            }
-        }
-        RETURN_IF_ERROR(
-                _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_ctx.runtime_filter_collector));
-    }
     _orc_reader->set_hive_column_names(_scanner_ctx.hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_ctx.case_sensitive);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
@@ -412,7 +402,17 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         orc_hdfs_file_stream->setStripes(std::move(stripes));
     }
 
-    RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
+    std::vector<Expr*> conjuncts{};
+    if (_use_orc_sargs) {
+        for (const auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
+            for (const auto& it2 : it.second) {
+                conjuncts.push_back(it2->root());
+            }
+        }
+    }
+    const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
+    RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
+
     return Status::OK();
 }
 
@@ -559,25 +559,28 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     const std::string orcProfileSectionPrefix = "ORC";
 
-    RuntimeProfile* root = profile->runtime_profile;
-    ADD_COUNTER(root, orcProfileSectionPrefix, TUnit::NONE);
+    RuntimeProfile* root_profile = profile->runtime_profile;
+    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
 
-    do_update_iceberg_v2_counter(root, orcProfileSectionPrefix);
+    do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
 
     size_t total_stripe_size = 0;
     for (const auto& v : _app_stats.orc_stripe_sizes) {
         total_stripe_size += v;
     }
 
-    RuntimeProfile::Counter* total_stripe_size_counter = root->add_child_counter(
+    RuntimeProfile::Counter* total_stripe_size_counter = root_profile->add_child_counter(
             "TotalStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
             orcProfileSectionPrefix);
-    RuntimeProfile::Counter* total_stripe_number_counter = root->add_child_counter(
+    RuntimeProfile::Counter* total_stripe_number_counter = root_profile->add_child_counter(
             "TotalStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
             orcProfileSectionPrefix);
-
     COUNTER_UPDATE(total_stripe_size_counter, total_stripe_size);
     COUNTER_UPDATE(total_stripe_number_counter, _app_stats.orc_stripe_sizes.size());
+    if (_orc_reader != nullptr) {
+        // _orc_reader is nullptr for split task
+        root_profile->add_info_string("ORCSearchArgument: ", _orc_reader->get_search_argument_string());
+    }
 }
 
 } // namespace starrocks
