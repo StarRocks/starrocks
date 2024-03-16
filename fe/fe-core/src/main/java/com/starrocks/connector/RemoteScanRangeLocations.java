@@ -359,7 +359,10 @@ public class RemoteScanRangeLocations {
             throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
         }
 
-        // Shuffle scan ranges to improve probe sql
+        // Previously, the order of the scan range was from front to back, which would cause some probing sql to
+        // encounter very bad cases (scan ranges that meet the predicate conditions are in the later partitions),
+        // making BE have to scan more data to find rows that meet the conditions.
+        // So shuffle scan ranges can naturally disrupt the scan ranges' order to avoid very bad cases.
         Collections.shuffle(result);
 
         LOG.debug("Get {} scan range locations cost: {} ms",
