@@ -412,7 +412,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
-        
+
     return Status::OK();
 }
 
