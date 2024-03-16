@@ -756,7 +756,7 @@ bool OrcChunkReader::_ok_to_add_binary_in_conjunct(
     const TExprOpcode::type& op_type = conjunct->op();
     DCHECK(node_type == TExprNodeType::BINARY_PRED || node_type == TExprNodeType::IN_PRED);
 
-    if (!_supported_binary_ops.contains(op_type)) {
+    if (_supported_binary_ops.find(op_type) == _supported_binary_ops.end()) {
         return false;
     }
 
@@ -786,12 +786,12 @@ bool OrcChunkReader::_ok_to_add_binary_in_conjunct(
 
     for (int i = 1; i < conjunct->get_num_children(); i++) {
         c = conjunct->get_child(i);
-        if (!_supported_literal_types.contains(c->node_type())) {
+        if (_supported_literal_types.find(c->node_type()) == _supported_literal_types.end()) {
             return false;
         }
     }
     for (int i = 0; i < conjunct->get_num_children(); i++) {
-        if (!_supported_logical_types.contains(conjunct->get_child(i)->type().type)) {
+        if (_supported_logical_types.find(conjunct->get_child(i)->type().type) == _supported_logical_types.end()) {
             return false;
         }
     }
@@ -833,7 +833,7 @@ bool OrcChunkReader::_ok_to_add_is_null_conjunct(
 bool OrcChunkReader::_ok_to_add_conjunct(
         const Expr* conjunct, const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors) {
     const TExprNodeType::type& node_type = conjunct->node_type();
-    if (!_supported_expr_node_types.contains(node_type)) {
+    if (_supported_expr_node_types.find(node_type) == _supported_expr_node_types.end()) {
         return false;
     }
 
