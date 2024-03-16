@@ -92,7 +92,7 @@ public class NetUtils {
             ip = host;
         } else {
             // ipOrFqdn is fqdn
-            ip = removeScope(InetAddress.getByName(host).getHostAddress());
+            ip = InetAddress.getByName(host).getHostAddress();
             if (Strings.isNullOrEmpty(ip)) {
                 throw new UnknownHostException("got a wrong ip");
             }
@@ -158,9 +158,6 @@ public class NetUtils {
     }
 
     public static String removeScope(String hostAddress) {
-        if (hostAddress  == null) {
-            return null;
-        }
         if (hostAddress.contains("%")) {
             return hostAddress.split("%")[0];
         } else {

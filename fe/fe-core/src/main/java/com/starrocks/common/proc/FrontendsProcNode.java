@@ -174,9 +174,9 @@ public class FrontendsProcNode implements ProcNodeInterface {
                     continue;
                 }
                 if (InetAddressValidator.getInstance().isValid(fe.getHost())) {
-                    realHost = NetUtils.removeScope(address.getHostAddress());
+                    realHost = address.getHostAddress();
                 } else {
-                    realHost = NetUtils.removeScope(address.getHostName());
+                    realHost = address.getHostName();
                 }
             } catch (Exception e) {
                 LOG.warn("Failed to get address hostname of fe: {} msg: {}", addr, e);

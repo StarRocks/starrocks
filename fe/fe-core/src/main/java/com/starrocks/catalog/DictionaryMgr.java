@@ -418,7 +418,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 String memoryUsage = "";
                 for (Map.Entry<TNetworkAddress, PProcessDictionaryCacheResult> result : resultMap.entrySet()) {
                     TNetworkAddress address = result.getKey();
-                    memoryUsage += address.getHostname() + ":" + address.getPort() + " : ";
+                    memoryUsage += address.getHostname() + ":" + String.valueOf(address.getPort()) + " : ";
 
                     if (result.getValue() != null) {
                         memoryUsage += String.valueOf(result.getValue().dictionaryMemoryUsage) + "\n";
