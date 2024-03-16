@@ -37,6 +37,7 @@ package com.starrocks.service;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.net.InetAddresses;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.NetUtils;
@@ -270,7 +271,7 @@ public class FrontendOptions {
         if (useFqdn) {
             return localAddr.getCanonicalHostName();
         }
-        return localAddr.getHostAddress();
+        return InetAddresses.toAddrString(localAddr);
     }
 
     public static String getHostname() {
