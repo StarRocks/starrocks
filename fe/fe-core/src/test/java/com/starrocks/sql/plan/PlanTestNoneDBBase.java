@@ -549,6 +549,7 @@ public class PlanTestNoneDBBase {
             }
             if (hasFragmentStatistics) {
                 statistic = format(execPlan.getExplainString(TExplainLevel.COSTS));
+                System.out.println(statistic.trim());
                 if (!isDebug) {
                     checkWithIgnoreTabletList(fragmentStatistics.toString().trim(), statistic.trim());
                 }
