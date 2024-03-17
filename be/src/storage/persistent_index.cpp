@@ -2551,6 +2551,11 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         check_keys_info.swap(keys_info);
     }
 
+    if (check_keys_info.size() == 0) {
+        // All keys have been filtered by bloom filter.
+        return Status::OK();
+    }
+
     // an optimization for very small data import. In some real time scenario, user only import a very small batch data
     // once, and we only need to read a little page but not total shard.
     std::map<size_t, std::vector<KeyInfo>> keys_info_by_page;
