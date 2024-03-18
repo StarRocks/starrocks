@@ -1761,6 +1761,10 @@ public class ShowExecutor {
 
             for (Database db : dbs) {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
+                if (jobI == null) {
+                    // show next db
+                    continue;
+                }
                 if (!(jobI instanceof BackupJob)) {
                     return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
                 }
@@ -1806,6 +1810,10 @@ public class ShowExecutor {
 
             for (Database db : dbs) {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
+                if (jobI == null) {
+                    // show next db
+                    continue;
+                }
                 if (!(jobI instanceof RestoreJob)) {
                     return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
                 }
