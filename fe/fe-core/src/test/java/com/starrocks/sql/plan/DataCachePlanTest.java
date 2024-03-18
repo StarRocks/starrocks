@@ -93,10 +93,12 @@ public class DataCachePlanTest extends PlanTestBase {
         Assert.assertEquals(8, tScanRangeLocationsList.size());
         for (int i = 0; i < tScanRangeLocationsList.size(); i++) {
             TScanRangeLocations tScanRangeLocations = tScanRangeLocationsList.get(i);
-            if (i <= 5) {
-                Assert.assertFalse(tScanRangeLocations.scan_range.hdfs_scan_range.isSetDatacache_options());
+            if (tScanRangeLocations.scan_range.hdfs_scan_range.partition_id == 6 ||
+                    tScanRangeLocations.scan_range.hdfs_scan_range.partition_id == 7) {
+                Assert.assertEquals(-1,
+                        tScanRangeLocations.scan_range.hdfs_scan_range.getDatacache_options().getPriority());
             } else {
-                Assert.assertEquals(-1, tScanRangeLocations.scan_range.hdfs_scan_range.getDatacache_options().getPriority());
+                Assert.assertFalse(tScanRangeLocations.scan_range.hdfs_scan_range.isSetDatacache_options());
             }
         }
 
@@ -129,10 +131,11 @@ public class DataCachePlanTest extends PlanTestBase {
         Assert.assertEquals(8, tScanRangeLocationsList.size());
         for (int i = 0; i < tScanRangeLocationsList.size(); i++) {
             TScanRangeLocations tScanRangeLocations = tScanRangeLocationsList.get(i);
-            if (i <= 6) {
-                Assert.assertFalse(tScanRangeLocations.scan_range.hdfs_scan_range.isSetDatacache_options());
+            if (tScanRangeLocations.scan_range.hdfs_scan_range.partition_id == 7) {
+                Assert.assertEquals(-1,
+                        tScanRangeLocations.scan_range.hdfs_scan_range.getDatacache_options().getPriority());
             } else {
-                Assert.assertEquals(-1, tScanRangeLocations.scan_range.hdfs_scan_range.getDatacache_options().getPriority());
+                Assert.assertFalse(tScanRangeLocations.scan_range.hdfs_scan_range.isSetDatacache_options());
             }
         }
 
