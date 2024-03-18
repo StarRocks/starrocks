@@ -47,8 +47,13 @@ public class ShortCircuitTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
 
         // project support short circuit
-        String sql = "select pk1 || v3 from tprimary1 where pk1=20";
+        String sql = "select * from tprimary1 where pk1=20";
         String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+
+        // project support short circuit
+        sql = "select pk1 || v3 from tprimary1 where pk1=20";
+        planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         // boolean filter

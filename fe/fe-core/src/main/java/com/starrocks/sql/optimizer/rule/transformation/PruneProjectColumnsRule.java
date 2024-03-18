@@ -49,7 +49,7 @@ public class PruneProjectColumnsRule extends TransformationRule {
         ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         Map<ColumnRefOperator, ScalarOperator> newMap = Maps.newHashMap();
-        projectOperator.getColumnRefMap().forEach(((columnRefOperator, operator) -> {
+        projectOperator.getColumnRefMap().forEach((columnRefOperator, operator) -> {
             if (requiredOutputColumns.contains(columnRefOperator)) {
                 requiredInputColumns.union(operator.getUsedColumns());
                 newMap.put(columnRefOperator, operator);
@@ -61,7 +61,7 @@ public class PruneProjectColumnsRule extends TransformationRule {
                     newMap.put(columnRefOperator, operator);
                 }
             }
-        }));
+        });
 
         if (newMap.isEmpty()) {
             ColumnRefOperator constCol = context.getColumnRefFactory()
@@ -69,7 +69,9 @@ public class PruneProjectColumnsRule extends TransformationRule {
             newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
         } else if (newMap.equals(projectOperator.getColumnRefMap()) && context.isShortCircuit()) {
             // Change the requiredOutputColumns in context
-            requiredOutputColumns.union(requiredInputColumns);
+            if (!requiredOutputColumns.containsAll(requiredInputColumns)) {
+                requiredOutputColumns.union(requiredInputColumns);
+            }
             // make sure this rule only executed once
             return Collections.emptyList();
         }
