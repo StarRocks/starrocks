@@ -1143,6 +1143,8 @@ CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 // revert this config change.
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
 
+CONF_String(rocksdb_db_options_string, "create_if_missing=true;create_missing_column_families=true");
+
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
 // only used for test. default: 128M
