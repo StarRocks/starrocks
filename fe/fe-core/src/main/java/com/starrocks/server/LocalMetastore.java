@@ -5180,7 +5180,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             PhysicalPartition physicalPartition;
             OlapTable olapTable = (OlapTable) table;
-            if (stmt.getPartitionId()!= -1) {
+            if (stmt.getPartitionId() != -1) {
                 physicalPartition = olapTable.getPhysicalPartition(stmt.getPartitionId());
                 if (physicalPartition == null) {
                     ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
