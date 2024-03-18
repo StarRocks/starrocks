@@ -63,6 +63,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -93,6 +94,7 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
@@ -255,6 +257,21 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 TTabletType tabletType = tbl.getPartitionInfo().getTabletType(partition.getParentId());
                 MaterializedIndex rollupIndex = entry.getValue();
 
+                TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                        .setId(rollupIndexId) // For newly created materialized, schema id equals to index id
+                        .setVersion(rollupSchemaVersion)
+                        .setKeysType(rollupKeysType)
+                        .setShortKeyColumnCount(rollupShortKeyColumnCount)
+                        .setSchemaHash(rollupSchemaHash)
+                        .setStorageType(TStorageType.COLUMN)
+                        .setBloomFilterColumnNames(tbl.getCopiedBfColumns())
+                        .setBloomFilterFpp(tbl.getBfFpp())
+                        .setIndexes(tbl.getCopiedIndexes())
+                        .setSortKeyIndexes(null) // Rollup tablets does not have sort key
+                        .setSortKeyUniqueIds(null)
+                        .addColumns(rollupSchema)
+                        .build().toTabletSchema();
+
                 Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
@@ -263,6 +280,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         long backendId = rollupReplica.getBackendId();
                         Preconditions.checkNotNull(tabletIdMap.get(rollupTabletId)); // baseTabletId
                         countDownLatch.addMark(backendId, rollupTabletId);
+<<<<<<< HEAD
                         // create replica with version 1.
                         // version will be updated by following load process, or when rollup task finished.
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(
@@ -280,6 +298,27 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
                         createReplicaTask.setSchemaVersion(rollupSchemaVersion);
                         batchTask.addTask(createReplicaTask);
+=======
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                .setNodeId(backendId)
+                                .setDbId(dbId)
+                                .setTableId(tableId)
+                                .setPartitionId(partitionId)
+                                .setIndexId(rollupIndexId)
+                                .setTabletId(rollupTabletId)
+                                .setVersion(Partition.PARTITION_INIT_VERSION)
+                                .setStorageMedium(storageMedium)
+                                .setLatch(countDownLatch)
+                                .setEnablePersistentIndex(tbl.enablePersistentIndex())
+                                .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
+                                .setTabletType(tabletType)
+                                .setCompressionType(tbl.getCompressionType())
+                                .setCreateSchemaFile(true)
+                                .setBaseTabletId(tabletIdMap.get(rollupTabletId))
+                                .setTabletSchema(tabletSchema)
+                                .build();
+                        batchTask.addTask(task);
+>>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
                     } // end for rollupReplicas
                 } // end for rollupTablets
             }

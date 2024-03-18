@@ -18,6 +18,7 @@ package com.starrocks.clone;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
@@ -26,6 +27,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -43,6 +45,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -353,19 +356,32 @@ public class TabletSchedulerTest {
         long indexId = 10005L;
         long tabletId = 10006L;
         long replicaId = 10007L;
-        short count = 1;
+        long schemaId = indexId;
+
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder().setId(schemaId)
+                .setKeysType(DUP_KEYS)
+                .setShortKeyColumnCount((short) 1)
+                .setSchemaHash(-1)
+                .setStorageType(TStorageType.COLUMN)
+                .addColumn(new Column())
+                .build().toTabletSchema();
+
+        CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()
+                .setNodeId(beId)
+                .setDbId(dbId)
+                .setTableId(tblId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId)
+                .setVersion(1)
+                .setTabletId(tabletId)
+                .setStorageMedium(TStorageMedium.HDD)
+                .setPrimaryIndexCacheExpireSec(1)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .build();
+
         TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, -1, TStorageMedium.HDD);
-        CreateReplicaTask createReplicaTask = new CreateReplicaTask(beId, dbId, tblId, partitionId, indexId, tabletId, count,
-                -1, -1L,
-                DUP_KEYS,
-                TStorageType.COLUMN,
-                TStorageMedium.HDD, null, null, 0.0, null,
-                null,
-                false,
-                false,
-                1,
-                TTabletType.TABLET_TYPE_DISK,
-                TCompressionType.LZ4_FRAME);
 
         Replica replica = new Replica(replicaId, beId, -1, Replica.ReplicaState.RECOVER);
 

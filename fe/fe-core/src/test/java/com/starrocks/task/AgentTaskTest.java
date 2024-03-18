@@ -41,6 +41,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -50,6 +51,7 @@ import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.junit.Assert;
@@ -114,15 +116,28 @@ public class AgentTaskTest {
 
         PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
 
-        // create tasks
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                .setId(indexId1)
+                .setKeysType(KeysType.AGG_KEYS)
+                .setShortKeyColumnCount(shortKeyNum)
+                .setSchemaHash(0)
+                .setStorageType(storageType)
+                .addColumns(columns)
+                .build().toTabletSchema();
 
-        // create
-        createReplicaTask = new CreateReplicaTask(backendId1, dbId, tableId, partitionId,
-                indexId1, tabletId1, shortKeyNum, 0,
-                version, KeysType.AGG_KEYS,
-                storageType, TStorageMedium.SSD,
-                columns, null, 0, latch, null,
-                false, false, 0, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
+        createReplicaTask = CreateReplicaTask.newBuilder()
+                .setNodeId(backendId1)
+                .setDbId(dbId)
+                .setTableId(tableId)
+                .setPartitionId(partitionId)
+                .setIndexId(indexId1)
+                .setTabletId(tabletId1)
+                .setVersion(version)
+                .setStorageMedium(TStorageMedium.SSD)
+                .setTabletType(TTabletType.TABLET_TYPE_DISK)
+                .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
+                .build();
 
         // drop
         dropTask = new DropReplicaTask(backendId1, tabletId1, 0, false);

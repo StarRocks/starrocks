@@ -94,6 +94,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -245,6 +246,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.Warehouse;
@@ -2026,82 +2028,76 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
                                                             MaterializedIndex index) throws DdlException {
+<<<<<<< HEAD
+=======
+        LOG.info("build create replica tasks for index {} db {} table {} partition {}",
+                index, dbId, table.getId(), partition);
+        boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
+>>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
         boolean createSchemaFile = true;
         LOG.debug("build create replica tasks for index {} db {} table {} partition {}",
                 index, dbId, table.getId(), partition); 
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
+        TTabletType tabletType = isCloudNativeTable ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
+        TStorageMedium storageMedium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                .setId(indexMeta.getSchemaId())
+                .setVersion(indexMeta.getSchemaVersion())
+                .setKeysType(indexMeta.getKeysType())
+                .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                .setSchemaHash(indexMeta.getSchemaHash())
+                .setStorageType(indexMeta.getStorageType())
+                .setIndexes(table.getIndexes())
+                .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                .setBloomFilterColumnNames(table.getBfColumns())
+                .setBloomFilterFpp(table.getBfFpp())
+                .addColumns(indexMeta.getSchema())
+                .build().toTabletSchema();
+
         for (Tablet tablet : index.getTablets()) {
-            if (table.isCloudNativeTableOrMaterializedView()) {
-                long primaryComputeNodeId = -1;
+            List<Long> nodeIdsOfReplicas = new ArrayList<>();
+            if (isCloudNativeTable) {
                 try {
+<<<<<<< HEAD
                     Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                     primaryComputeNodeId = ((LakeTablet) tablet).
+=======
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+                    long nodeId = ((LakeTablet) tablet).
+>>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
                             getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    nodeIdsOfReplicas.add(nodeId);
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
-
-                CreateReplicaTask task = new CreateReplicaTask(
-                        primaryComputeNodeId,
-                        dbId,
-                        table.getId(),
-                        partition.getId(),
-                        index.getId(),
-                        tablet.getId(),
-                        indexMeta.getShortKeyColumnCount(),
-                        indexMeta.getSchemaHash(),
-                        partition.getVisibleVersion(),
-                        indexMeta.getKeysType(),
-                        indexMeta.getStorageType(),
-                        table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium(),
-                        indexMeta.getSchema(),
-                        table.getBfColumns(),
-                        table.getBfFpp(),
-                        null,
-                        table.getIndexes(),
-                        table.getPartitionInfo().getIsInMemory(partition.getParentId()),
-                        table.enablePersistentIndex(),
-                        table.primaryIndexCacheExpireSec(),
-                        table.getPersistentIndexType(),
-                        TTabletType.TABLET_TYPE_LAKE,
-                        table.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                        indexMeta.getSortKeyUniqueIds(),
-                        createSchemaFile);
-                // For each partition, the schema file is created only when the first Tablet is created
-                createSchemaFile = false;
-                task.setSchemaVersion(indexMeta.getSchemaVersion());
-                tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                    CreateReplicaTask task = new CreateReplicaTask(
-                            replica.getBackendId(),
-                            dbId,
-                            table.getId(),
-                            partition.getId(),
-                            index.getId(),
-                            tablet.getId(),
-                            indexMeta.getShortKeyColumnCount(),
-                            indexMeta.getSchemaHash(),
-                            partition.getVisibleVersion(),
-                            indexMeta.getKeysType(),
-                            indexMeta.getStorageType(),
-                            table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium(),
-                            indexMeta.getSchema(),
-                            table.getBfColumns(),
-                            table.getBfFpp(),
-                            null,
-                            table.getIndexes(),
-                            table.getPartitionInfo().getIsInMemory(partition.getParentId()),
-                            table.enablePersistentIndex(),
-                            table.primaryIndexCacheExpireSec(),
-                            table.getCurBinlogConfig(),
-                            table.getPartitionInfo().getTabletType(partition.getParentId()),
-                            table.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                            indexMeta.getSortKeyUniqueIds());
-                    task.setSchemaVersion(indexMeta.getSchemaVersion());
-                    tasks.add(task);
+                    nodeIdsOfReplicas.add(replica.getBackendId());
                 }
+            }
+
+            for (Long nodeId : nodeIdsOfReplicas) {
+                CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                        .setNodeId(nodeId)
+                        .setDbId(dbId)
+                        .setTableId(table.getId())
+                        .setPartitionId(partition.getId())
+                        .setIndexId(index.getId())
+                        .setTabletId(tablet.getId())
+                        .setVersion(partition.getVisibleVersion())
+                        .setStorageMedium(storageMedium)
+                        .setEnablePersistentIndex(table.enablePersistentIndex())
+                        .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                        .setBinlogConfig(table.getCurBinlogConfig())
+                        .setTabletType(tabletType)
+                        .setCompressionType(table.getCompressionType())
+                        .setTabletSchema(tabletSchema)
+                        .setCreateSchemaFile(createSchemaFile)
+                        .build();
+                tasks.add(task);
+                createSchemaFile = false;
             }
         }
         return tasks;

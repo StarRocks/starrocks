@@ -62,6 +62,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx;
@@ -111,6 +112,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TWorkGroup;
@@ -859,22 +861,36 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                                     Set<String> bfColumns = olapTable.getCopiedBfColumns();
                                     double bfFpp = olapTable.getBfFpp();
-                                    CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId,
-                                            tableId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
-                                            indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(),
-                                            partition.getVisibleVersion(),
-                                            indexMeta.getKeysType(),
-                                            olapTable.getStorageType(),
-                                            TStorageMedium.HDD, indexMeta.getSchema(), bfColumns, bfFpp, null,
-                                            olapTable.getCopiedIndexes(),
-                                            olapTable.isInMemory(),
-                                            olapTable.enablePersistentIndex(),
-                                            olapTable.primaryIndexCacheExpireSec(),
-                                            olapTable.getPartitionInfo().getTabletType(partitionId),
-                                            olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                                            indexMeta.getSortKeyUniqueIds());
-                                    createReplicaTask.setRecoverySource(RecoverySource.REPORT);
-                                    createReplicaBatchTask.addTask(createReplicaTask);
+                                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                                            .setId(indexMeta.getSchemaId())
+                                            .setKeysType(indexMeta.getKeysType())
+                                            .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                                            .setSchemaHash(indexMeta.getSchemaHash())
+                                            .setVersion(indexMeta.getSchemaVersion())
+                                            .setStorageType(olapTable.getStorageType())
+                                            .addColumns(indexMeta.getSchema())
+                                            .setBloomFilterColumnNames(bfColumns)
+                                            .setBloomFilterFpp(bfFpp)
+                                            .setIndexes(olapTable.getCopiedIndexes())
+                                            .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                                            .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                                            .build().toTabletSchema();
+                                    CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                            .setNodeId(backendId)
+                                            .setDbId(dbId)
+                                            .setTableId(tableId)
+                                            .setPartitionId(partitionId)
+                                            .setIndexId(indexId)
+                                            .setVersion(partition.getVisibleVersion())
+                                            .setStorageMedium(TStorageMedium.HDD)
+                                            .setEnablePersistentIndex(olapTable.enablePersistentIndex())
+                                            .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
+                                            .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
+                                            .setCompressionType(olapTable.getCompressionType())
+                                            .setRecoverySource(RecoverySource.REPORT)
+                                            .setTabletSchema(tabletSchema)
+                                            .build();
+                                    createReplicaBatchTask.addTask(task);
                                 } else {
                                     // just set this replica as bad
                                     if (replica.setBad(true)) {
