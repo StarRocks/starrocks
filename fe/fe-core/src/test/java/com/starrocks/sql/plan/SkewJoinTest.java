@@ -148,10 +148,15 @@ public class SkewJoinTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 10> : CASE WHEN 2: c1.a IS NULL THEN round(rand() * 1000.0) WHEN 2: c1.a IN (1, 2) " +
-                "THEN round(rand() * 1000.0) ELSE 0 END\n" +
+                "  |  <slot 10> : CASE WHEN 2: c1.a IS NULL THEN 26: round " +
+                "WHEN 2: c1.a IN (1, 2) THEN 26: round ELSE 0 END\n" +
                 "  |  <slot 19> : 2: c1.a\n" +
-                "  |  <slot 21> : 3: c2.a");
+                "  |  <slot 21> : 3: c2.a\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 23> : 2: c1.a\n" +
+                "  |  <slot 24> : rand()\n" +
+                "  |  <slot 25> : 24: rand * 1000.0\n" +
+                "  |  <slot 26> : round(25: multiply)");
     }
 
     @Test
