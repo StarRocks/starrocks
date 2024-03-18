@@ -244,6 +244,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -3960,11 +3961,17 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void renameColumn(Database db, Table table, ColumnRenameClause renameClause) throws DdlException {
         if (!(table instanceof OlapTable)) {
-            throw new DdlException("Column rename now only supports olap table.");
+            ErrorReportException.report(ErrorCode.ERR_COLUMN_RENAME_NOT_SUPPORTED,
+                    "Column rename now only supports olap table.");
+        }
+        if (db.getFullName().equals(StatsConstants.STATISTICS_DB_NAME)) {
+            ErrorReportException.report(ErrorCode.ERR_COLUMN_RENAME_NOT_SUPPORTED,
+                    "Cannot change the column name of tables in database: " + StatsConstants.STATISTICS_DB_NAME);
         }
         OlapTable olapTable = (OlapTable) table;
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + olapTable.getName() + "] is under " + olapTable.getState());
+            ErrorReportException.report(ErrorCode.ERR_COLUMN_RENAME_NOT_SUPPORTED,
+                    "Table[" + olapTable.getName() + "] is under " + olapTable.getState());
         }
 
         String colName = renameClause.getColName();
@@ -3972,11 +3979,11 @@ public class LocalMetastore implements ConnectorMetadata {
 
         Column column = olapTable.getColumn(colName);
         if (column == null) {
-            throw new DdlException("Unknown column '" + colName + "' in '" + table.getName() + "'");
+            ErrorReportException.report(ErrorCode.ERR_BAD_FIELD_ERROR, colName, table.getName());
         }
         Column currentColumn = olapTable.getColumn(newColName);
         if (currentColumn != null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, newColName);
+            ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
         }
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
