@@ -64,6 +64,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -90,23 +91,16 @@ public class MvRewritePreprocessor {
     private final ConnectContext connectContext;
     private final ColumnRefFactory queryColumnRefFactory;
     private final OptimizerContext context;
-    private final OptExpression logicalTree;
     private final ColumnRefSet requiredColumns;
 
     public MvRewritePreprocessor(ConnectContext connectContext,
                                  ColumnRefFactory queryColumnRefFactory,
                                  OptimizerContext context,
-                                 OptExpression logicalTree,
                                  ColumnRefSet requiredColumns) {
         this.connectContext = connectContext;
         this.queryColumnRefFactory = queryColumnRefFactory;
         this.context = context;
-        this.logicalTree = logicalTree;
         this.requiredColumns = requiredColumns;
-    }
-
-    public OptExpression getLogicalTree() {
-        return logicalTree;
     }
 
     @VisibleForTesting
@@ -224,7 +218,7 @@ public class MvRewritePreprocessor {
         }
     }
 
-    public void prepare(OptExpression queryOptExpression) {
+    public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
         // MV Rewrite will be used when cbo is enabled.
         if (context.getOptimizerConfig().isRuleBased()) {
             return;
@@ -253,17 +247,20 @@ public class MvRewritePreprocessor {
                 prepareRelatedMVs(queryTables, mvWithPlanContexts);
 
                 // 5. process relate mvs with views
-                processPlanWithView(queryMaterializationContext, connectContext, logicalTree,
+                processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
                         queryColumnRefFactory, requiredColumns);
+
+                // add queryMaterializationContext into context
+                if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
+                    context.setQueryMaterializationContext(queryMaterializationContext);
+                }
+
+                // initialize mv rewrite strategy finally
+                MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, queryOptExpression, strategy);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}", tableNames, e.getMessage());
                 LOG.warn("Prepare query tables {} for mv failed", tableNames, e);
-            }
-
-            // add queryMaterializationContext into context
-            if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
-                context.setQueryMaterializationContext(queryMaterializationContext);
             }
         }
     }

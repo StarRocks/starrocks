@@ -90,7 +90,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/mock_join_agg1");
         // Table and mv have no stats, mv rewrite is ok.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, null);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("table: tbl_mock_001, rollup: tbl_mock_001"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("table: test_mv0"));
         FeConstants.isReplayFromQueryDump = false;
     }
 
@@ -159,6 +159,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("test_mv2"));
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test

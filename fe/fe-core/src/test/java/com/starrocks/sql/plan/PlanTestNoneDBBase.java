@@ -149,7 +149,7 @@ public class PlanTestNoneDBBase {
     private static String normalizeLogicalPlan(String plan) {
         return Stream.of(plan.split("\n"))
                 .filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+: ", "col\\$: ").trim())
+                .map(str -> str.replaceAll("\\d+:", "col\\$:").trim())
                 .map(str -> str.replaceAll("\\[\\d+]", "[col\\$]").trim())
                 .map(str -> str.replaceAll("\\[\\d+, \\d+]", "[col\\$, col\\$]").trim())
                 .map(str -> str.replaceAll("\\[\\d+, \\d+, \\d+]", "[col\\$, col\\$, col\\$]").trim())
