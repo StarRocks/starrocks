@@ -26,9 +26,12 @@ on:
         type: string
       IS_REBUILD:
         description: 'REBUILD'
-        type: 'boolean'
+        type: boolean
         default: false
-
+      RETAIN_ENV:
+        description: 'RETAIN THE ENVIRONMENT?'
+        type: boolean
+        default: false
 
 permissions:
   checks: write
@@ -59,6 +62,7 @@ jobs:
       PR_NUMBER: ${{ steps.param.outputs.PR_NUMBER }}
       TAR_PATH: ${{ steps.param.outputs.TAR_PATH }}
       ASAN_TAR_PATH: ${{ steps.param.outputs.ASAN_TAR_PATH }}
+      RETAIN_ENV: ${{ steps.param.outputs.RETAIN_ENV }}
     steps:
       - name: CRON PARAM
         id: param
@@ -78,6 +82,7 @@ jobs:
             echo "PR_NUMBER=${{ inputs.COMMIT_ID }}" >> $GITHUB_OUTPUT
             echo "TAR_PATH=${{ inputs.TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "ASAN_TAR_PATH=${{ inputs.ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "RETAIN_ENV=${{ inputs.RETAIN_ENV }}" >> $GITHUB_OUTPUT
           fi
 
   be-ut:
@@ -375,6 +380,7 @@ jobs:
       ASAN_CONF_FILE: ${{ needs.system-test-asan.outputs.CONF_FILE }}
       RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release.outputs.MYSQL_ECI_ID }}
       ASAN_MYSQL_ECI_ID: ${{ needs.system-test-asan.outputs.MYSQL_ECI_ID }}
+      RETAIN_ENV: ${{ needs.info.outputs.RETAIN_ENV }}
     steps:
       - name: init
         run: |
@@ -388,7 +394,10 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${RELEASE_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
-          ./bin/elastic-cluster.sh --delete
+          
+          if [[ "${RETAIN_ENV}" != "true" ]]; then
+            ./bin/elastic-cluster.sh --delete
+          fi
 
       - name: Backup SR Info (ASAN)
         if: env.ASAN_CONF_FILE != ''
@@ -398,7 +407,10 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${ASAN_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
-          ./bin/elastic-cluster.sh --delete
+          
+          if [[ "${RETAIN_ENV}" != "true" ]]; then
+            ./bin/elastic-cluster.sh --delete
+          fi
 
       - name: save unstable cases
         if: always() && github.event_name == 'schedule' && env.BRANCH == 'main'
