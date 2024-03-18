@@ -355,7 +355,7 @@ public class PlanFragmentBuilder {
         }
         Collections.reverse(fragments);
         // assign colocate groups to plan fragment
-        if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
+        if (ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
             List<ExecGroup> colocateExecGroups =
                     execPlan.getExecGroups().stream().filter(ExecGroup::isColocateExecGroup).collect(
                             Collectors.toList());

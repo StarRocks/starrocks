@@ -201,6 +201,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         SessionVariable sv = ConnectContext.get().getSessionVariable();
                         int maxDop = Math.min(sv.getGroupExecutionGroupScale() * expectedDop,
                                 sv.getGroupExecutionMaxGroups());
+                        maxDop = Math.max(maxDop, expectedDop);
                         logicalDop = Math.min(bucketSeqsOfInstance.size(), maxDop);
                     }
                     List<List<Integer>> bucketSeqsPerDriverSeq = ListUtil.splitBySize(bucketSeqsOfInstance, logicalDop);
@@ -256,6 +257,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                             SessionVariable sv = ConnectContext.get().getSessionVariable();
                             int maxDop = Math.min(sv.getGroupExecutionGroupScale() * expectedPhysicalDop,
                                     sv.getGroupExecutionMaxGroups());
+                            maxDop = Math.max(maxDop, expectedPhysicalDop);
                             logicalDop = Math.min(scanRanges.size(), maxDop);
                         }
                         List<List<TScanRangeParams>> scanRangesPerDriverSeq;
