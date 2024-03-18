@@ -204,7 +204,7 @@ jobs:
 
   be-ut:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, thirdparty-info ]
+    needs: thirdparty-info
     timeout-minutes: 90
     name: BE UT
     env:
@@ -217,7 +217,7 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
+          if [[ "${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}" != '' ]]; then
               export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
