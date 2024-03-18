@@ -616,6 +616,9 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
         }
         auto query_mem_tracker = _query_ctx->mem_tracker();
         auto query_mem_limit = query_mem_tracker->limit();
+        if (query_mem_limit < 0) {
+            return;
+        }
         auto query_consumption = query_mem_tracker->consumption();
         auto spill_mem_threshold = query_mem_limit * state->spill_mem_limit_threshold();
         if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio) {
