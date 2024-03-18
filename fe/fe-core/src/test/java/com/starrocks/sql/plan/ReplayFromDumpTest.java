@@ -33,7 +33,6 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
-
     @Test
     public void testForceRuleBasedRewrite() throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
@@ -793,11 +792,61 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testMvOnView() throws Exception {
+    public void testRBOMvOnView() throws Exception {
+        String dumpInfo = getDumpInfoFromFile("query_dump/mv_on_view");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_LEAF_ACC_CUBE_SHADOW_VIEW_fb70da80"));
+    }
+
+    @Test
+    public void testCBOMvOnView() throws Exception {
         String dumpInfo = getDumpInfoFromFile("query_dump/mv_on_view");
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableCBOViewBasedMvRewrite(true);
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_LEAF_ACC_CUBE_SHADOW_VIEW_fb70da80"));
+        sessionVariable.setEnableCBOViewBasedMvRewrite(false);
+    }
+
+    @Test
+    public void testCBONestedMvRewriteDrinks() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_drinks"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(false);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_drinks"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks"));
+    }
+
+    @Test
+    public void testCBONestedMvRewriteDates() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(false);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks_dates"));
+    }
+
+    @Test
+    public void testCBONestedMvRewriteMonth() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(false);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"), sessionVariable);
+        Assert.assertTrue(replayPair.second,
+                replayPair.second.contains("partition_flat_consumptions_partition_drinks_roll_month"));
+    }
+
+    @Test
+    public void testCBONestedMvRewriteYear() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(false);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"));
     }
 }
