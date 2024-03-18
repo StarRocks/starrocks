@@ -57,13 +57,11 @@ StatusOr<ChunkPtr> AggregateDistinctStreamingSinkOperator::pull_chunk(RuntimeSta
 }
 
 void AggregateDistinctStreamingSinkOperator::set_execute_mode(int performance_level) {
-    if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::AUTO) {
-        if (_aggregator->params()->streaming_agg_low_memory_mode == TStreamingPreaggregationMode::FORCE_STREAMING) {
-            _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
-            _aggregator->set_streaming_all_states(true);
-        } else {
-            _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
-        }
+    if (_aggregator->params()->streaming_agg_low_memory_mode == TStreamingPreaggregationMode::FORCE_STREAMING) {
+        _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
+        _aggregator->set_streaming_all_states(true);
+    } else {
+        _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::LIMITED_MEM;
     }
     _limited_mem_state.limited_memory_size = _aggregator->hash_map_memory_usage();
 }
