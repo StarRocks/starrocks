@@ -63,6 +63,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -100,6 +101,7 @@ import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -310,32 +312,48 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int shadowSchemaVersion = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion;
                     long originIndexId = indexIdMap.get(shadowIdxId);
-                    int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
                     List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
-
+                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                            .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
+                            .setKeysType(originKeysType)
+                            .setShortKeyColumnCount(shadowShortKeyColumnCount)
+                            .setSchemaHash(shadowSchemaHash)
+                            .setVersion(shadowSchemaVersion)
+                            .setStorageType(tbl.getStorageType())
+                            .setBloomFilterColumnNames(bfColumns)
+                            .setBloomFilterFpp(bfFpp)
+                            .setIndexes(indexes)
+                            .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
+                            .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
+                            .addColumns(shadowSchema)
+                            .build().toTabletSchema();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
+                        long baseTabletId = physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId)
+                                .get(shadowTabletId);
                         for (Replica shadowReplica : shadowReplicas) {
                             long backendId = shadowReplica.getBackendId();
                             countDownLatch.addMark(backendId, shadowTabletId);
-                            CreateReplicaTask createReplicaTask = new CreateReplicaTask(
-                                    backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
-                                    shadowShortKeyColumnCount, shadowSchemaHash, shadowSchemaVersion,
-                                    Partition.PARTITION_INIT_VERSION,
-                                    originKeysType, tbl.getStorageType(), storageMedium,
-                                    shadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
-                                    tbl.isInMemory(),
-                                    tbl.enablePersistentIndex(),
-                                    tbl.primaryIndexCacheExpireSec(),
-                                    tbl.getPartitionInfo().getTabletType(partition.getParentId()),
-                                    tbl.getCompressionType(), originIndexId == baseIndexId ? sortKeyIdxes : null,
-                                    originIndexId == baseIndexId ? sortKeyUniqueIds : null);
-                            createReplicaTask.setBaseTablet(
-                                    physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
-                                    originSchemaHash);
-                            batchTask.addTask(createReplicaTask);
+                            CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                    .setNodeId(backendId)
+                                    .setDbId(dbId)
+                                    .setTableId(tableId)
+                                    .setPartitionId(partitionId)
+                                    .setIndexId(shadowIdxId)
+                                    .setTabletId(shadowTabletId)
+                                    .setVersion(Partition.PARTITION_INIT_VERSION)
+                                    .setStorageMedium(storageMedium)
+                                    .setLatch(countDownLatch)
+                                    .setEnablePersistentIndex(tbl.enablePersistentIndex())
+                                    .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
+                                    .setTabletType(tbl.getPartitionInfo().getTabletType(partition.getParentId()))
+                                    .setCompressionType(tbl.getCompressionType())
+                                    .setBaseTabletId(baseTabletId)
+                                    .setTabletSchema(tabletSchema)
+                                    .build();
+                            batchTask.addTask(task);
                         } // end for rollupReplicas
                     } // end for rollupTablets
                 }
@@ -511,7 +529,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
 
                         /*
-                          * The expression substitution is needed here, because all slotRefs in 
+                          * The expression substitution is needed here, because all slotRefs in
                           * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
                           * if it is init by SlotDescriptor. The slot information will be used by be to indentify
                           * the column location in a chunk.
