@@ -661,6 +661,9 @@ public final class SqlToScalarOperatorTranslator {
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
+            if (FunctionSet.nonDeterministicFunctions.contains(node.getFnName().getFunction())) {
+                callOperator.setId(columnRefFactory.getNextUniqueId());
+            }
             return callOperator;
         }
 
