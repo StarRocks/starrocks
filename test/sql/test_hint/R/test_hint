@@ -256,5 +256,5 @@ select @test;
 -- !result
 set @test= (select cast(50 as time));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Can't set variable with type TIME.')
+E: (1064, "Getting analyzing error. Detail message: Can't set variable with type TIME.")
 -- !result
