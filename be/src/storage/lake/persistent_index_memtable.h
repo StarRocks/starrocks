@@ -46,9 +46,8 @@ public:
     void clear();
 
 private:
-    void insert(const std::string& key, int64_t version, const IndexValue& value);
-
-    static void update(std::list<IndexValueInfo>* index_value_info, int64_t version, const IndexValue& value);
+    static void update_index_value(std::list<IndexValueInfo>* index_value_info, int64_t version,
+                                   const IndexValue& value);
 
 private:
     phmap::btree_map<std::string, std::list<IndexValueInfo>, std::less<>> _map;

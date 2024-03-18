@@ -16,14 +16,8 @@
 
 namespace starrocks::lake {
 
-void PersistentIndexMemtable::insert(const std::string& key, int64_t version, const IndexValue& value) {
-    std::list<IndexValueInfo> index_value_infos;
-    index_value_infos.emplace_front(version, value);
-    _map.emplace(key, index_value_infos);
-}
-
-void PersistentIndexMemtable::update(std::list<IndexValueInfo>* index_value_infos, int64_t version,
-                                     const IndexValue& value) {
+void PersistentIndexMemtable::update_index_value(std::list<IndexValueInfo>* index_value_infos, int64_t version,
+                                                 const IndexValue& value) {
     std::list<IndexValueInfo> t;
     t.emplace_front(version, value);
     index_value_infos->swap(t);
@@ -35,16 +29,16 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
         const auto value = values[i];
-        auto it = _map.find(key);
-        if (it == _map.end()) {
+        std::list<IndexValueInfo> index_value_infos;
+        index_value_infos.emplace_front(version, value);
+        if (auto [it, inserted] = _map.emplace(key, index_value_infos); inserted) {
             not_found->key_index_infos.emplace_back(i);
-            insert(key, version, value);
         } else {
-            auto& index_value_infos = it->second;
-            auto old_value = index_value_infos.front().second;
+            auto& old_index_value_infos = it->second;
+            auto old_value = old_index_value_infos.front().second;
             old_values[i] = old_value;
             nfound += old_value.get_value() != NullIndexValue;
-            update(&it->second, version, value);
+            update_index_value(&old_index_value_infos, version, value);
         }
     }
     *num_found = nfound;
@@ -56,13 +50,13 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
         auto key = keys[i].to_string();
         auto size = keys[i].get_size();
         const auto value = values[i];
-        auto it = _map.find(key);
-        if (it != _map.end()) {
+        std::list<IndexValueInfo> index_value_infos;
+        index_value_infos.emplace_front(version, value);
+        if (auto [it, inserted] = _map.emplace(key, index_value_infos); !inserted) {
             std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
                                                   hexdump((const char*)key.data(), size));
+            LOG(WARNING) << msg;
             return Status::AlreadyExist(msg);
-        } else {
-            insert(key, version, value);
         }
     }
     return Status::OK();
@@ -73,17 +67,17 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
-        auto it = _map.find(key);
-        if (it == _map.end()) {
+        std::list<IndexValueInfo> index_value_infos;
+        index_value_infos.emplace_front(version, IndexValue(NullIndexValue));
+        if (auto [it, inserted] = _map.emplace(key, index_value_infos); inserted) {
             old_values[i] = NullIndexValue;
             not_found->key_index_infos.emplace_back(i);
-            insert(key, version, IndexValue(NullIndexValue));
         } else {
-            auto& index_value_infos = it->second;
-            auto old_index_value = index_value_infos.front().second;
+            auto& old_index_value_infos = it->second;
+            auto old_index_value = old_index_value_infos.front().second;
             old_values[i] = old_index_value;
             nfound += old_index_value.get_value() != NullIndexValue;
-            update(&index_value_infos, version, IndexValue(NullIndexValue));
+            update_index_value(&old_index_value_infos, version, IndexValue(NullIndexValue));
         }
     }
     *num_found = nfound;
@@ -95,11 +89,10 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
     for (unsigned long idx : replace_idxes) {
         auto key = keys[idx].to_string();
         const auto value = values[idx];
-        auto it = _map.find(key);
-        if (it == _map.end()) {
-            insert(key, version, value);
-        } else {
-            update(&it->second, version, value);
+        std::list<IndexValueInfo> index_value_infos;
+        index_value_infos.emplace_front(version, value);
+        if (auto [it, inserted] = _map.emplace(key, index_value_infos); !inserted) {
+            update_index_value(&it->second, version, value);
         }
     }
     return Status::OK();
