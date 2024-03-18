@@ -429,7 +429,7 @@ public class SetStmtAnalyzer {
             }
         } else if (type.isScalarType()) {
             PrimitiveType primitiveType = type.getPrimitiveType();
-            if (primitiveType == PrimitiveType.BOOLEAN ||primitiveType.isDateType() || primitiveType.isNumericType() ||
+            if (primitiveType == PrimitiveType.BOOLEAN || primitiveType.isDateType() || primitiveType.isNumericType() ||
                     primitiveType.isCharFamily() || primitiveType.isJsonType()) {
                 return true;
             }
