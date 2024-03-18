@@ -14,8 +14,6 @@
 
 package com.starrocks.catalog;
 
-import static com.google.common.base.Verify.verify;
-
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -48,6 +46,11 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -57,10 +60,9 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
-import org.apache.commons.collections4.ListUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
+
+import static com.google.common.base.Verify.verify;
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
     private static final Set<String> SUPPORTED_FORMATS;
@@ -187,7 +189,7 @@ public class TableFunctionTable extends Table {
         tTableFunctionTable.setColumns(tColumns);
         tTableFunctionTable.setFile_format(format);
         tTableFunctionTable.setWrite_single_file(writeSingleFile);
-        tTableFunctionTable.setCompression_codec(compressionType);
+        tTableFunctionTable.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(compressionType));
         tTableFunctionTable.setTarget_max_file_size(targetMaxFileSize);
         if (partitionColumnIDs != null) {
             tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);

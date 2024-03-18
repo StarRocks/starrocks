@@ -1480,7 +1480,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_TARGET_MAX_FILE_SIZE)
     private long connectorSinkTargetMaxFileSize = 1024 * 1024 * 1024;
 
-    public long getConnectorSinkTargetMaxFileSize() { return connectorSinkTargetMaxFileSize; }
+    public long getConnectorSinkTargetMaxFileSize() {
+        return connectorSinkTargetMaxFileSize;
+    }
 
     @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
     private boolean enableFileMetaCache = true;
