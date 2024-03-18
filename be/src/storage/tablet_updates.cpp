@@ -2525,7 +2525,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     }
     bool was_runing = false;
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
-        return Status::InternalError("illegal state: another compaction is running");
+        return Status::AlreadyExist("illegal state: another compaction is running");
     }
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     vector<uint32_t> rowsets;
@@ -2647,7 +2647,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     }
     bool was_runing = false;
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
-        return Status::InternalError("illegal state: another compaction is running");
+        return Status::AlreadyExist("illegal state: another compaction is running");
     }
     vector<uint32_t> rowsets;
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
@@ -2860,7 +2860,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     }
     bool was_runing = false;
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
-        return Status::InternalError("illegal state: another compaction is running");
+        return Status::AlreadyExist("illegal state: another compaction is running");
     }
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     std::unordered_set<uint32_t> all_rowsets;
