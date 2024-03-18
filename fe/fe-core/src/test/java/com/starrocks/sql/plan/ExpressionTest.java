@@ -1523,4 +1523,11 @@ public class ExpressionTest extends PlanTestBase {
             connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
         }
     }
+
+    @Test
+    public void testCastConstantFn() throws Exception {
+        String sql = "select 2011-12-01 = id_date from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " CAST(9: id_date AS DOUBLE) = 1998.0");
+    }
 }

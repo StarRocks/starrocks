@@ -151,7 +151,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         }
 
         // we will try cast const operator to variable operator
-        if (rightChild.isVariable() != leftChild.isVariable()) {
+        if ((rightChild.isVariable() && leftChild.isConstantRef()) ||
+                (leftChild.isVariable() && rightChild.isConstantRef())) {
             int constant = leftChild.isVariable() ? 1 : 0;
             int variable = 1 - constant;
             Optional<BinaryPredicateOperator> optional = optimizeConstantAndVariable(predicate, constant, variable);
