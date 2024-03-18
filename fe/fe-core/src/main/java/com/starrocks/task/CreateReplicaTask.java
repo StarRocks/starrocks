@@ -102,7 +102,7 @@ public class CreateReplicaTask extends AgentTask {
         this.inRestoreMode = builder.isInRestoreMode();
     }
 
-    public static Builder builder() {
+    public static Builder newBuilder() {
         return new Builder();
     }
 

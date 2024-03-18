@@ -896,7 +896,7 @@ public class RestoreJob extends AbstractJob {
                 MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByIndexId(restoredIdx.getId());
                 TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), physicalPartition.getId(),
                         restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
-                TTabletSchema tabletSchema = SchemaInfo.builder()
+                TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                         .setId(indexMeta.getSchemaId())
                         .setKeysType(indexMeta.getKeysType())
                         .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
@@ -917,7 +917,7 @@ public class RestoreJob extends AbstractJob {
                         LOG.info("tablet {} physical partition {} index {} replica {}",
                                 restoreTablet.getId(), physicalPartition.getId(), restoredIdx.getId(),
                                 restoreReplica.getId());
-                        CreateReplicaTask task = CreateReplicaTask.builder()
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                 .setNodeId(restoreReplica.getBackendId())
                                 .setDbId(dbId)
                                 .setTableId(localTbl.getId())

@@ -260,7 +260,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 TTabletType tabletType = tbl.getPartitionInfo().getTabletType(partition.getParentId());
                 MaterializedIndex rollupIndex = entry.getValue();
 
-                TTabletSchema tabletSchema = SchemaInfo.builder()
+                TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                         .setId(rollupIndexId) // For newly created materialized, schema id equals to index id
                         .setVersion(rollupSchemaVersion)
                         .setKeysType(rollupKeysType)
@@ -283,7 +283,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         long backendId = rollupReplica.getBackendId();
                         Preconditions.checkNotNull(tabletIdMap.get(rollupTabletId)); // baseTabletId
                         countDownLatch.addMark(backendId, rollupTabletId);
-                        CreateReplicaTask task = CreateReplicaTask.builder()
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                 .setNodeId(backendId)
                                 .setDbId(dbId)
                                 .setTableId(tableId)

@@ -2033,7 +2033,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         TTabletType tabletType = isCloudNativeTable ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
         TStorageMedium storageMedium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
-        TTabletSchema tabletSchema = SchemaInfo.builder()
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                 .setId(indexMeta.getSchemaId())
                 .setVersion(indexMeta.getSchemaVersion())
                 .setKeysType(indexMeta.getKeysType())
@@ -2066,7 +2066,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             for (Long nodeId : nodeIdsOfReplicas) {
-                CreateReplicaTask task = CreateReplicaTask.builder()
+                CreateReplicaTask task = CreateReplicaTask.newBuilder()
                         .setNodeId(nodeId)
                         .setDbId(dbId)
                         .setTableId(table.getId())

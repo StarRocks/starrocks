@@ -314,7 +314,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
                     List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
-                    TTabletSchema tabletSchema = SchemaInfo.builder()
+                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                             .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
@@ -336,7 +336,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         for (Replica shadowReplica : shadowReplicas) {
                             long backendId = shadowReplica.getBackendId();
                             countDownLatch.addMark(backendId, shadowTabletId);
-                            CreateReplicaTask task = CreateReplicaTask.builder()
+                            CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                     .setNodeId(backendId)
                                     .setDbId(dbId)
                                     .setTableId(tableId)

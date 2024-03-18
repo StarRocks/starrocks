@@ -391,7 +391,7 @@ public class TabletSchedulerTest {
         long replicaId = 10007L;
         long schemaId = indexId;
 
-        TTabletSchema tabletSchema = SchemaInfo.builder().setId(schemaId)
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder().setId(schemaId)
                 .setKeysType(DUP_KEYS)
                 .setShortKeyColumnCount((short) 1)
                 .setSchemaHash(-1)
@@ -399,7 +399,7 @@ public class TabletSchedulerTest {
                 .addColumn(new Column())
                 .build().toTabletSchema();
 
-        CreateReplicaTask createReplicaTask = CreateReplicaTask.builder()
+        CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()
                 .setNodeId(beId)
                 .setDbId(dbId)
                 .setTableId(tblId)

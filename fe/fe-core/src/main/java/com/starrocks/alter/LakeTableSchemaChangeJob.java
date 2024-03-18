@@ -336,7 +336,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         sortKeyIdxes = copiedSortKeyIdxes;
                     }
 
-                    TTabletSchema tabletSchema = SchemaInfo.builder()
+                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                             .setId(shadowIdxId) // For newly create materialized index, schema id equals to index id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
@@ -360,7 +360,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         }
                         countDownLatch.addMark(backendId, shadowTabletId);
 
-                        CreateReplicaTask task = CreateReplicaTask.builder()
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                 .setNodeId(backendId)
                                 .setDbId(dbId)
                                 .setTableId(tableId)

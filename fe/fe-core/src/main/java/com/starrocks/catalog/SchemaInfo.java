@@ -160,7 +160,7 @@ public class SchemaInfo {
         return tSchema;
     }
 
-    public static Builder builder() {
+    public static Builder newBuilder() {
         return new Builder();
     }
 

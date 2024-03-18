@@ -902,7 +902,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                                     Set<String> bfColumns = olapTable.getCopiedBfColumns();
                                     double bfFpp = olapTable.getBfFpp();
-                                    TTabletSchema tabletSchema = SchemaInfo.builder()
+                                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                                             .setId(indexMeta.getSchemaId())
                                             .setKeysType(indexMeta.getKeysType())
                                             .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
@@ -916,7 +916,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                                             .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
                                             .build().toTabletSchema();
-                                    CreateReplicaTask task = CreateReplicaTask.builder()
+                                    CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                             .setNodeId(backendId)
                                             .setDbId(dbId)
                                             .setTableId(tableId)

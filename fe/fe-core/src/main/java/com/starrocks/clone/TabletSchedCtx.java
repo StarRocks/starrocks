@@ -936,7 +936,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (indexMeta == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
             }
-            TTabletSchema tabletSchema = SchemaInfo.builder()
+            TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                     .setId(indexMeta.getSchemaId())
                     .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
                     .setSchemaHash(indexMeta.getSchemaHash())
@@ -951,7 +951,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
                     .build().toTabletSchema();
 
-            CreateReplicaTask task = CreateReplicaTask.builder()
+            CreateReplicaTask task = CreateReplicaTask.newBuilder()
                     .setNodeId(destBackendId)
                     .setDbId(dbId)
                     .setTableId(tblId)

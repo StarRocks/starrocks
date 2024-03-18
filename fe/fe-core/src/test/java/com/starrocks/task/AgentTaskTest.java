@@ -116,7 +116,7 @@ public class AgentTaskTest {
 
         PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
 
-        TTabletSchema tabletSchema = SchemaInfo.builder()
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                 .setId(indexId1)
                 .setKeysType(KeysType.AGG_KEYS)
                 .setShortKeyColumnCount(shortKeyNum)
@@ -125,7 +125,7 @@ public class AgentTaskTest {
                 .addColumns(columns)
                 .build().toTabletSchema();
 
-        createReplicaTask = CreateReplicaTask.builder()
+        createReplicaTask = CreateReplicaTask.newBuilder()
                 .setNodeId(backendId1)
                 .setDbId(dbId)
                 .setTableId(tableId)
