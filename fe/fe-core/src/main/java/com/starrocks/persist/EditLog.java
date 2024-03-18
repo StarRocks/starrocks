@@ -125,6 +125,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /**
  * EditLog maintains a log of the memory modifications.
@@ -1235,6 +1236,13 @@ public class EditLog {
     }
 
     /**
+     * submit log to queue, wait for JournalWriter
+     */
+    protected Future<Boolean> logEditAsync(short op, Writable writable) {
+        return submitLog(op, writable, -1);
+    }
+
+    /**
      * submit log in queue and return immediately
      */
     private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
@@ -1874,6 +1882,10 @@ public class EditLog {
 
     public void logStarMgrOperation(StarMgrJournal journal) {
         logEdit(OperationType.OP_STARMGR, journal);
+    }
+
+    public Future<Boolean> logStarMgrOperationAsync(StarMgrJournal journal) {
+        return logEditAsync(OperationType.OP_STARMGR, journal);
     }
 
     public void logCreateUser(
