@@ -39,6 +39,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+<<<<<<< HEAD
+=======
+import java.util.Collections;
+import java.util.HashMap;
+>>>>>>> 0e1dd9482d ([Enhancement] Reorder hive/hudi scan ranges to improve probe sql (#42634))
 import java.util.List;
 import java.util.Optional;
 
@@ -231,7 +236,6 @@ public class RemoteScanRangeLocations {
                         LOG.debug("Add scan range success. partition: {}, file: {}, range: {}-{}",
                                 partitions.get(i).getFullPath(), fileDesc.getFileName(), 0, fileDesc.getLength());
                     }
-
                 }
             }
         } else if (table instanceof HudiTable) {
@@ -264,6 +268,12 @@ public class RemoteScanRangeLocations {
             String message = "Only Hive/Hudi table is supported.";
             throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
         }
+
+        // Previously, the order of the scan range was from front to back, which would cause some probing sql to
+        // encounter very bad cases (scan ranges that meet the predicate conditions are in the later partitions),
+        // making BE have to scan more data to find rows that meet the conditions.
+        // So shuffle scan ranges can naturally disrupt the scan ranges' order to avoid very bad cases.
+        Collections.shuffle(result);
 
         LOG.debug("Get {} scan range locations cost: {} ms",
                 getScanRangeLocationsSize(), (System.currentTimeMillis() - start));
