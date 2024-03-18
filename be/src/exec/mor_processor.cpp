@@ -17,12 +17,11 @@
 namespace starrocks {
 
 Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& params) {
-    THashJoinNode hash_join_node;
-    hash_join_node.__set_join_op(TJoinOp::LEFT_ANTI_JOIN);
-    hash_join_node.__set_distribution_mode(TJoinDistributionMode::PARTITIONED);
-    hash_join_node.__set_is_push_down(false);
-    hash_join_node.__set_build_runtime_filters_from_planner(false);
-    hash_join_node.__set_output_columns(std::vector<SlotId>());
+    _hash_join_node.__set_join_op(TJoinOp::LEFT_ANTI_JOIN);
+    _hash_join_node.__set_distribution_mode(TJoinDistributionMode::PARTITIONED);
+    _hash_join_node.__set_is_push_down(false);
+    _hash_join_node.__set_build_runtime_filters_from_planner(false);
+    _hash_join_node.__set_output_columns(std::vector<SlotId>());
 
     std::set<SlotId> probe_output_slot_ids;
     for (const auto slot_desc : params.tuple_desc->slots()) {
@@ -43,7 +42,7 @@ Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& p
     _probe_row_desc = std::make_unique<RowDescriptor>(params.tuple_desc, false);
 
     const auto param = _pool.add(
-            new HashJoinerParam(&_pool, hash_join_node, 1, TPlanNodeType::HASH_JOIN_NODE,
+            new HashJoinerParam(&_pool, _hash_join_node, 1, TPlanNodeType::HASH_JOIN_NODE,
                                 std::vector<bool>(params.equality_slots.size(), false), _join_exprs, _join_exprs,
                                 std::vector<ExprContext*>(), std::vector<ExprContext*>(), *_build_row_desc,
                                 *_probe_row_desc, *_probe_row_desc, TPlanNodeType::HDFS_SCAN_NODE,
