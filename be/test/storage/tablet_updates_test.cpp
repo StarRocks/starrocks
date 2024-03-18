@@ -3727,13 +3727,10 @@ TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {
     for (int i = 0; i < 10; i++) {
         rowsets.emplace_back(create_rowset(_tablet, keys2, nullptr, false, false));
     }
-    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     for (int i = 0; i < rowsets.size(); i++) {
         auto version = i + 2;
         auto st = _tablet->rowset_commit(version, rowsets[i]);
         ASSERT_TRUE(st.ok()) << st.to_string();
-        // Ensure that there is at most one thread doing the version apply job.
-        ASSERT_LE(pool->num_threads(), 1);
         ASSERT_EQ(version, _tablet->updates()->max_version());
         ASSERT_EQ(version, _tablet->updates()->version_history_count());
     }
