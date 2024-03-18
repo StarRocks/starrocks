@@ -499,4 +499,12 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         assertNotContains(plan, "DictDecode");
         assertContains(plan, "<slot 9> : array_slice(5: S_PHONE, -1, 2)");
     }
+
+    @Test
+    public void testArrayPruneSubfield() throws Exception {
+        String sql = "select S_NAME from supplier_nullable where array_length(S_ADDRESS) = 2";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "dict_col=");
+        assertContains(plan, "PredicateAccessPath: [/S_ADDRESS/OFFSET]");
+    }
 }
