@@ -25,15 +25,7 @@ jobs:
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
     outputs:
-      be_src_filter: ${{ steps.be-path-filter.outputs.be }}
-      be_test_filter: ${{ steps.be-path-filter.outputs.ut }}
-      be_thirdparty_filter: ${{ steps.be-path-filter.outputs.thirdparty }}
-
-      fe_src_filter: ${{ steps.fe-path-filter.outputs.fe }}
-      fe_test_filter: ${{ steps.fe-path-filter.outputs.ut }}
-      fe_java_filter: ${{ steps.fe-path-filter.outputs.java }}
-
-      test_filter: ${{ steps.test-path-filter.outputs.test }}
+      PASS: ${{ steps.check.outputs.pass }}
     steps:
       - name: Sync Check
         id: check
@@ -66,10 +58,18 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-blacklist.sh
 
-      - name: BE Checker
-        uses: dorny/paths-filter@v3
-        if: steps.check.outputs.pass == 'true'
-        id: be-path-filter
+  be-checker:
+    runs-on: ubuntu-latest
+    needs: basic-checker
+    name: BE FILTER
+    if: needs.basic-checker.outputs.PASS == 'true'
+    outputs:
+      src_filter: ${{ steps.path-filter.outputs.be }}
+      test_filter: ${{ steps.path-filter.outputs.ut }}
+      thirdparty_filter: ${{ steps.path-filter.outputs.thirdparty }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
         with:
           filters: |
             be:
@@ -85,36 +85,13 @@ jobs:
               - 'thirdparty/**'
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
-      - uses: dorny/paths-filter@v3
-        id: fe-path-filter
-        if: steps.check.outputs.pass == 'true'
-        with:
-          filters: |
-            fe:
-              - 'fe/!(**/test/**)**'
-              - 'gensrc/**'
-              - 'java-extensions/**'
-              - 'build.sh'
-            ut:
-              - 'fe/**/test/**'
-              - 'run-fe-ut.sh'
-            java:
-              - '**.java'
-
-      - uses: dorny/paths-filter@v3
-        id: test-path-filter
-        with:
-          filters: |
-            test:
-              - 'test/**'
-
   clang-format:
     runs-on: [self-hosted, light]
-    needs: basic-checker
+    needs: be-checker
     name: Clang-Format
     env:
       PR_NUMBER: ${{ github.event.number }}
-    if: needs.basic-checker.outputs.be_src_filter == 'true' || needs.basic-checker.outputs.be_test_filter == 'true'
+    if: needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true'
     steps:
       - name: clean
         run: |
@@ -157,7 +134,7 @@ jobs:
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
-    needs: [ basic-checker, clang-format ]
+    needs: [ be-checker, clang-format ]
     name: Thirdparty Update
     continue-on-error: false
     strategy:
@@ -176,7 +153,7 @@ jobs:
 
       - name: Update Image (${{ matrix.build_type }})
         id: update-image
-        if: needs.basic-checker.outputs.be_thirdparty_filter == 'true'
+        if: needs.be-checker.outputs.thirdparty_filter == 'true'
         env:
           linux_distro: ${{ matrix.build_type }}
         run: |
@@ -192,7 +169,7 @@ jobs:
           overwrite: true
 
       - name: Clean ENV
-        if: always() && needs.basic-checker.outputs.be_thirdparty_filter == 'true'
+        if: always() && needs.be-checker.outputs.thirdparty_filter == 'true'
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/elastic-cluster.sh --delete
@@ -271,8 +248,8 @@ jobs:
 
   clang-tidy:
     runs-on: [self-hosted, normal]
-    needs: [ basic-checker, thirdparty-info ]
-    if: success() && needs.basic-checker.outputs.be_src_filter == 'true'
+    needs: [ be-checker, thirdparty-info ]
+    if: success() && needs.be-checker.outputs.src_filter == 'true'
     timeout-minutes: 90
     name: Clang-Tidy
     env:
@@ -296,7 +273,7 @@ jobs:
         timeout-minutes: 60
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          if [[ "${{ needs.basic-checker.outputs.be_thirdparty_filter }}" == 'true' ]]; then
+          if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
@@ -315,12 +292,35 @@ jobs:
           rm -f ${{ steps.run_clang_tidy.outputs.RES_LOG }}
           rm -rf ${{ github.workspace }}/*
 
-  
+  fe-checker:
+    runs-on: ubuntu-latest
+    needs: basic-checker
+    name: FE FILTER
+    if: needs.basic-checker.outputs.PASS == 'true'
+    outputs:
+      src_filter: ${{ steps.path-filter.outputs.fe }}
+      test_filter: ${{ steps.path-filter.outputs.ut }}
+      java_filter: ${{ steps.path-filter.outputs.java }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            fe:
+              - 'fe/!(**/test/**)**'
+              - 'gensrc/**'
+              - 'java-extensions/**'
+              - 'build.sh'
+            ut:
+              - 'fe/**/test/**'
+              - 'run-fe-ut.sh'
+            java:
+              - '**.java'
 
   fe-codestyle-check:
     runs-on: ubuntu-latest
-    needs: basic-checker
-    if: needs.basic-checker.outputs.fe_src_filter == 'true' || needs.basic-checker.outputs.fe_test_filter == 'true'
+    needs: fe-checker
+    if: needs.fe-checker.outputs.src_filter == 'true' || needs.fe-checker.outputs.test_filter == 'true'
     name: FE Code Style Check
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -354,12 +354,12 @@ jobs:
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
       - name: Copy checkstyle files
-        if: needs.basic-checker.outputs.fe_java_filter == 'true'
+        if: needs.fe-checker.outputs.java_filter == 'true'
         run: |
           cp fe/checkstyle* .
 
       - name: Run java checkstyle
-        if: needs.basic-checker.outputs.fe_java_filter == 'true'
+        if: needs.fe-checker.outputs.java_filter == 'true'
         uses: dbelyaev/action-checkstyle@v1.5.6
         with:
           workdir: "./fe"
@@ -371,8 +371,8 @@ jobs:
 
   sonarcloud-fe-checker:
     runs-on: ubuntu-latest
-    needs: basic-checker
-    if: needs.basic-checker.outputs.fe_src_filter == 'true' && github.repository == 'StarRocks/starrocks'
+    needs: fe-checker
+    if: needs.fe-checker.outputs.src_filter == 'true' && github.repository == 'StarRocks/starrocks'
     name: FE Sonarcloud Check
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -500,9 +500,24 @@ jobs:
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
           rm -rf ${{ github.workspace }}/*
 
+  test-checker:
+    runs-on: ubuntu-latest
+    needs: basic-checker
+    name: TEST FILTER
+    if: needs.basic-checker.outputs.PASS == 'true'
+    outputs:
+      output1: ${{ steps.path-filter.outputs.test }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            test:
+              - 'test/**'
+
   build:
     runs-on: [self-hosted, normal]
-    needs: [basic-checker, clang-tidy, fe-ut, thirdparty-info]
+    needs: [be-checker, fe-checker, test-checker, clang-tidy, fe-ut, thirdparty-info]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -514,9 +529,9 @@ jobs:
     if: > 
       always() && 
       (needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || 
-      (needs.basic-checker.outputs.be_src_filter != 'true' && needs.basic-checker.outputs.fe_src_filter == 'true' && needs.fe-ut.result == 'success') || 
-      (needs.basic-checker.outputs.fe_src_filter != 'true' && needs.basic-checker.outputs.be_src_filter == 'true' && needs.clang-tidy.result == 'success') ||
-      (needs.basic-checker.outputs.be_src_filter != 'true' && needs.basic-checker.outputs.fe_src_filter != 'true' && needs.basic-checker.outputs.test_filter == 'true')
+      (needs.be-checker.outputs.src_filter != 'true' && needs.fe-checker.outputs.src_filter == 'true' && needs.fe-ut.result == 'success') || 
+      (needs.fe-checker.outputs.src_filter != 'true' && needs.be-checker.outputs.src_filter == 'true' && needs.clang-tidy.result == 'success') ||
+      (needs.be-checker.outputs.src_filter != 'true' && needs.fe-checker.outputs.src_filter != 'true' && needs.test-checker.outputs.output1 == 'true')
     steps:
       - name: CLEAN
         run: |
@@ -532,8 +547,8 @@ jobs:
       - name: Rebuild Checker
         id: rebuild-checker
         env:
-          be_change: ${{ needs.basic-checker.outputs.be_src_filter }}
-          fe_change: ${{ needs.basic-checker.outputs.fe_src_filter }}
+          be_change: ${{ needs.be-checker.outputs.src_filter }}
+          fe_change: ${{ needs.fe-checker.outputs.src_filter }}
           build_type: Release
         run: |
           echo "package=${package}" >> "$GITHUB_ENV"
@@ -551,7 +566,7 @@ jobs:
           package: ${{ env.package }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          if [[ "${{ needs.basic-checker.outputs.be_thirdparty_filter }}" == 'true' ]]; then
+          if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
             export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
             export image_tag=$BRANCH-$PR_NUMBER
           fi
