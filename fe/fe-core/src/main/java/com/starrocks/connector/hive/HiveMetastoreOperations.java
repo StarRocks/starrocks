@@ -181,6 +181,9 @@ public class HiveMetastoreOperations {
                 .setProperties(stmt.getProperties())
                 .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, "parquet")))
                 .setCreateTime(System.currentTimeMillis());
+        if (stmt.isExternal()) {
+            builder.setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE);
+        }
         Table table = builder.build();
         try {
             createDirectory(tablePath, hadoopConf);
