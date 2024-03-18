@@ -20,16 +20,12 @@ import Replicanum from '../assets/commonMarkdown/replicanum.md'
 
 ```SQL
 PARTITION BY date_trunc(<time_unit>,<partition_column_name>)
-...
-[PROPERTIES("partition_live_number" = "xxx")];
 ```
 
 或者
 
 ```SQL
 PARTITION BY time_slice(<partition_column_name>,INTERVAL N <time_unit>[, boundary]))
-...
-[PROPERTIES("partition_live_number" = "xxx")];
 ```
 
 ### 参数解释
@@ -39,7 +35,9 @@ PARTITION BY time_slice(<partition_column_name>,INTERVAL N <time_unit>[, boundar
 - `partition_column_name`：分区列。由于分区类型为 RANGE 类型，因此分区列仅支持为 DATE 或 DATETIME 类型，不支持为其它类型。目前仅支持指定一个分区列，不支持指定多个分区列。
   - 如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。
   - 分区列的值支持为 `NULL`。如果分区列是 DATE 类型，则数值范围为 [0000-01-01 ~ 9999-12-31]。如果分区列是 DATETIME 类型，则数值范围为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。
+<!--
 - `partition_live_number`：保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以当前的时间为基准，然后从后往前数的分区的个数会保留，其余分区会删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 p20230401、p20230402、p20230403、p20230404，则分区 p20230403、p20230404 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 p20230401、p20230402、p20230403、p20230404、p20230405、p20230406，则分区 p20230403、p20230404、p20230405、p20230406 会保留，其他分区会删除。
+-->
 
 ## 示例
 
@@ -108,7 +106,7 @@ LastConsistencyCheckTime: NULL
                 RowCount: 0
 2 rows in set (0.00 sec)
 ```
-
+<!--
 示例二：使用 date_trunc 函数创建一张支持自动创建分区的表，分区粒度为 `month`，分区列为 `event_day`，此外在导入数据前批量创建一些历史分区。并且还指定该表只保留最近 3 个分区。
 
 ```SQL
@@ -128,8 +126,8 @@ PROPERTIES("partition_live_number" = "3");
 ```
 
 <Replicanum />
-
-示例三：使用 time_slice 函数创建一张支持自动创建分区的表，分区粒度为七天，分区列为 `event_day`。
+-->
+示例二：使用 time_slice 函数创建一张支持自动创建分区的表，分区粒度为七天，分区列为 `event_day`。
 
 ```SQL
 CREATE TABLE site_access(
