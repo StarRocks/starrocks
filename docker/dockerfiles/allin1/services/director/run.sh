@@ -110,7 +110,8 @@ check_fe_liveness()
     loginfo "checking if FE service query port:$fequeryport alive or not ..."
     while true
     do
-        if nc -z -4 -w 5 $MYHOST $fequeryport ; then
+        NC="nc -z -w 5"
+        if $NC $MYHOST $fequeryport ; then
             loginfo "FE service query port:$fequeryport is alive!"
             break
         else
