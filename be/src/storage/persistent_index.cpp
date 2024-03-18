@@ -2551,7 +2551,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         check_keys_info.swap(keys_info);
     }
 
-    if (check_keys_info.size() == 0) {
+    if (check_keys_info.empty()) {
         // All keys have been filtered by bloom filter.
         return Status::OK();
     }
@@ -2578,6 +2578,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
                                             shard_info.bytes));
     if (stat != nullptr) {
+        stat->get_in_shard_cnt++;
         stat->read_io_bytes += shard_info.bytes;
     }
     if (shard_info.key_size != 0) {
@@ -2788,7 +2789,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
                                           found_keys_info, stat));
         }
         if (stat != nullptr) {
-            stat->get_in_shard_cnt += nshard;
             stat->get_in_shard_cost += watch.elapsed_time();
         }
     } else {
@@ -2801,7 +2801,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
         }
         RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, infos.key_infos, values, found_keys_info, stat));
         if (stat != nullptr) {
-            stat->get_in_shard_cnt++;
             stat->get_in_shard_cost += watch.elapsed_time();
         }
     }
