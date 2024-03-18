@@ -43,7 +43,7 @@ public class HiveTableSink extends DataSink {
 
     protected final TupleDescriptor desc;
     private final String fileFormat;
-    private Optional<TextFileFormatDesc> textFileFormatDesc;
+    private Optional<TextFileFormatDesc> textFileFormatDesc = Optional.empty();
     private final String stagingDir;
     private final List<String> dataColNames;
     private final List<String> partitionColNames;

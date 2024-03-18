@@ -345,7 +345,13 @@ public class InsertStmt extends DmlStmt {
 
         if (format == null) {
             throw new SemanticException("format is a mandatory property. " +
-                    "Use \"format\" = \"parquet\" as only parquet format is supported now");
+                    "Use any of (parquet, orc, csv)");
+        }
+
+        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc") &&
+                !format.equalsIgnoreCase("csv")) {
+            throw new SemanticException(String.format("Unsupported format %s. " +
+                    "Use any of (parquet, orc, csv)", format));
         }
 
         // if max_file_size is not specified, use target max file size

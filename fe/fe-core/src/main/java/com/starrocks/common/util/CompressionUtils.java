@@ -138,6 +138,7 @@ public class CompressionUtils {
     private static final ImmutableMap<String, TCompressionType> CONNECTOR_SINK_SUPPORTED_COMPRESSION_TYPES =
             (new ImmutableSortedMap.Builder<String, TCompressionType>(String.CASE_INSENSITIVE_ORDER))
                     .put("NO_COMPRESSION", TCompressionType.NO_COMPRESSION)
+                    .put("UNCOMPRESSED", TCompressionType.NO_COMPRESSION)
                     .put("NONE", TCompressionType.NO_COMPRESSION)
                     .put("LZ4", TCompressionType.LZ4)
                     .put("SNAPPY", TCompressionType.SNAPPY)

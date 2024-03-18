@@ -238,11 +238,10 @@ struct TIcebergTableSink {
     1: optional string location
     2: optional string file_format
     3: optional i64 target_table_id
-    4: optional Types.TCompressionType compression_type // deprecated
+    4: optional Types.TCompressionType compression_type
     5: optional bool is_static_partition_sink
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     7: optional i64 target_max_file_size
-    8: optional string compression_codec
 }
 
 struct THiveTableSink {
@@ -250,12 +249,11 @@ struct THiveTableSink {
     2: optional string file_format
     3: optional list<string> data_column_names
     4: optional list<string> partition_column_names
-    5: optional Types.TCompressionType compression_type // deprecated
+    5: optional Types.TCompressionType compression_type
     6: optional bool is_static_partition_sink
     7: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     8: optional i64 target_max_file_size
-    9: optional string compression_codec
-    10: optional Descriptors.TTextFileDesc text_file_desc // for textfile format
+    9: optional Descriptors.TTextFileDesc text_file_desc // for textfile format
 }
 
 struct TTableFunctionTableSink {
