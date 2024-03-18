@@ -27,7 +27,11 @@ FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
 FROM registry.access.redhat.com/ubi8/ubi:8.7
 ARG STARROCKS_ROOT=/opt/starrocks
 
+<<<<<<< HEAD
 RUN yum install -y java-1.8.0-openjdk-devel tzdata openssl curl vim ca-certificates fontconfig gzip tar less hostname procps-ng lsof && \
+=======
+RUN yum install -y java-11-openjdk-devel tzdata openssl curl vim ca-certificates fontconfig gzip tar less hostname procps-ng lsof nc && \
+>>>>>>> aecec6ed69 ([Enhancement]  Use nc to detect fe query port (#39197))
     rpm -ivh https://repo.mysql.com/mysql80-community-release-el8-7.noarch.rpm && \
     yum -y install mysql-community-client --nogpgcheck && \
     yum remove -y mysql80-community-release
