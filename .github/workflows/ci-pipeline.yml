@@ -114,6 +114,14 @@ jobs:
     name: Clang-Format
     env:
       PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      be_src_filter: ${{ needs.basic-checker.outputs.be_src_filter }}
+      be_test_filter: ${{ needs.basic-checker.outputs.be_test_filter }}
+      be_thirdparty_filter: ${{ needs.basic-checker.outputs.be_thirdparty_filter }}
+      fe_src_filter: ${{ needs.basic-checker.outputs.fe_src_filter }}
+      fe_test_filter: ${{ needs.basic-checker.outputs.fe_test_filter }}
+      fe_java_filter: ${{ needs.basic-checker.outputs.fe_java_filter }}
+      test_filter: ${{ needs.basic-checker.outputs.test_filter }}
     if: needs.basic-checker.outputs.be_src_filter == 'true' || needs.basic-checker.outputs.be_test_filter == 'true'
     steps:
       - name: clean
@@ -157,7 +165,7 @@ jobs:
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
-    needs: [ basic-checker, clang-format ]
+    needs: clang-format
     name: Thirdparty Update
     continue-on-error: false
     strategy:
@@ -176,7 +184,7 @@ jobs:
 
       - name: Update Image (${{ matrix.build_type }})
         id: update-image
-        if: needs.basic-checker.outputs.be_thirdparty_filter == 'true'
+        if: needs.clang-format.outputs.be_thirdparty_filter == 'true'
         env:
           linux_distro: ${{ matrix.build_type }}
         run: |
@@ -192,7 +200,7 @@ jobs:
           overwrite: true
 
       - name: Clean ENV
-        if: always() && needs.basic-checker.outputs.be_thirdparty_filter == 'true'
+        if: always() && needs.clang-format.outputs.be_thirdparty_filter == 'true'
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/elastic-cluster.sh --delete
