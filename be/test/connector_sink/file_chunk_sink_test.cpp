@@ -273,7 +273,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0);
+        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
         EXPECT_OK(sink->init());
     }
 
@@ -289,7 +289,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0);
+        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
         EXPECT_OK(sink->init());
     }
 
@@ -305,7 +305,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0);
+        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
         EXPECT_ERROR(sink->init());
     }
 }

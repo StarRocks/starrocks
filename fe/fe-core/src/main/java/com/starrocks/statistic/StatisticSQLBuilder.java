@@ -206,6 +206,12 @@ public class StatisticSQLBuilder {
                 .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
     }
 
+    public static String buildDropExternalHistogramSQL(String tableUUID, List<String> columnNames) {
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where table_uuid = '"
+                + tableUUID + "' and column_name in (" + Joiner.on(", ")
+                .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+    }
+
     private static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);

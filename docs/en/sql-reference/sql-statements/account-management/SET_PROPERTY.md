@@ -12,6 +12,7 @@ Sets user properties. Currently, only the number of user connections (`max_user_
 
 - The user properties mean the properties of users, not user_identity. For example, if two users, 'jack'@'%' and 'jack'@'192.%', are created using CREATE USER, the SET PROPERTY statement works only on user `jack``, not 'jack'@'%' or 'jack'@'192.%'.
 - Only users with the `user_admin` role can perform this operation.
+
 :::
 
 ### Syntax

@@ -475,6 +475,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
 
+    public static final String ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE =
+            "enable_materialized_view_text_match_rewrite";
+    public static final String MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT =
+            "materialized_view_subuqery_text_match_max_count";
+
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
@@ -545,6 +550,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
 
     public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
+
+    public static final String ENABLE_CBO_VIEW_BASED_MV_REWRITE = "enable_cbo_view_based_mv_rewrite";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -666,7 +673,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
 
-    public static final String ENABLE_JIT = "enable_jit";
+    public static final String JIT_LEVEL = "jit_level";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1544,6 +1551,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
 
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE)
+    private boolean enableMaterializedViewTextMatchRewrite = false;
+
+    @VarAttr(name = MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT)
+    private int materializedViewSubQueryTextMatchMaxCount = 4;
+
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
 
@@ -1573,6 +1586,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
     private boolean enableViewBasedMvRewrite = false;
+
+    @VarAttr(name = ENABLE_CBO_VIEW_BASED_MV_REWRITE)
+    private boolean enableCBOViewBasedMvRewrite = false;
 
     /**
      * Materialized view rewrite rule output limit: how many MVs would be chosen in a Rule for an OptExpr ?
@@ -1716,8 +1732,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PREPARE_STMT)
     private boolean enablePrepareStmt = true;
 
-    @VarAttr(name = ENABLE_JIT)
-    private boolean enableJit = true;
+    @VarAttr(name = JIT_LEVEL)
+    private int jitLevel = 1;
 
     private int exprChildrenLimit = -1;
 
@@ -3001,6 +3017,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
     }
 
+    public boolean isEnableMaterializedViewTextMatchRewrite() {
+        return enableMaterializedViewTextMatchRewrite;
+    }
+
+    public void setEnableMaterializedViewTextMatchRewrite(boolean enable) {
+        this.enableMaterializedViewTextMatchRewrite = enable;
+    }
+
+    public int getMaterializedViewSubQueryTextMatchMaxCount() {
+        return materializedViewSubQueryTextMatchMaxCount;
+    }
+
+    public void setMaterializedViewSubQueryTextMatchMaxCount(int materializedViewSubQueryTextMatchMaxCount) {
+        this.materializedViewSubQueryTextMatchMaxCount = materializedViewSubQueryTextMatchMaxCount;
+    }
+
     public boolean isEnableRuleBasedMaterializedViewRewrite() {
         return enableRuleBasedMaterializedViewRewrite;
     }
@@ -3069,6 +3101,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableViewBasedMvRewrite() {
         return this.enableViewBasedMvRewrite;
+    }
+
+    public void setEnableCBOViewBasedMvRewrite(boolean enableCBOViewBasedMvRewrite) {
+        this.enableCBOViewBasedMvRewrite = enableCBOViewBasedMvRewrite;
+    }
+
+    public boolean isEnableCBOViewBasedMvRewrite() {
+        return this.enableCBOViewBasedMvRewrite;
     }
 
     public int getCboMaterializedViewRewriteRuleOutputLimit() {
@@ -3532,7 +3572,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);
-        tResult.setEnable_jit(enableJit);
+        tResult.setJit_level(jitLevel);
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
         tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
         return tResult;

@@ -141,7 +141,8 @@ Status JITEngine::init() {
         if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
             _initialized = true;
             _support_jit = false;
-            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT";
+            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT. You can set "
+                            "jit_lru_cache_size a properly positive value in BE's config to force enabling JIT";
             return Status::OK();
         } else {
             jit_lru_cache_size = std::min<int64_t>((1UL << 30), (int64_t)(mem_limit * 0.01));

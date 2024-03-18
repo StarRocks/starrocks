@@ -1121,7 +1121,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 DROP TABLE <table_name> [FORCE];
 ```
 
-## 配置元数据缓存方式
+## 配置元数据缓存
 
 Iceberg 的元数据文件可能存储在 AWS S3 或 HDFS 上。StarRocks 默认在内存中缓存 Iceberg 元数据。为了加速查询，StarRocks 提供了基于内存和磁盘的元数据两级缓存机制，在初次查询时触发缓存，在后续查询中会优先使用缓存。如果缓存中无对应元数据，则会直接访问远端存储。
 
@@ -1141,3 +1141,9 @@ StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基�
 | iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
 | iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |
+
+## 配置 Iceberg 表指针和分区名缓存
+
+您可以通过系统变量 [`enable_iceberg_metadata_cache`](../../reference/System_variable.md#enable_iceberg_metadata_cache321-及以后) 指定是否缓存 Iceberg 表指针和分区名相关的数据。该变量自 3.2.1 版本起支持。
+
+在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。

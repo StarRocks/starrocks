@@ -288,6 +288,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             if (tbl == null) {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
+            Long baseIndexId = tbl.getBaseIndexId();
 
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
@@ -312,46 +313,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
                     List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
-                    List<Integer> copiedSortKeyIdxes = index.getSortKeyIdxes();
-                    List<Integer> copiedSortKeyUniqueIds = index.getSortKeyUniqueIds();
-                    // TODO
-                    // the following code appears to be deletable 
-                    if (index.getSortKeyIdxes() != null) {
-                        if (originSchema.size() > shadowSchema.size()) {
-                            List<Column> differences = originSchema.stream().filter(element ->
-                                    !shadowSchema.contains(element)).collect(Collectors.toList());
-                            // can just drop one column one time, so just one element in differences
-                            Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
-                            for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
-                                Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
-                                if (dropIdx < sortKeyIdx) {
-                                    copiedSortKeyIdxes.set(i, sortKeyIdx - 1);
-                                }
-                            }
-                        } else if (originSchema.size() < shadowSchema.size()) {
-                            List<Column> differences = shadowSchema.stream().filter(element ->
-                                    !originSchema.contains(element)).collect(Collectors.toList());
-                            for (Column difference : differences) {
-                                int addColumnIdx = shadowSchema.indexOf(difference);
-                                for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
-                                    Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
-                                    int shadowSortKeyIdx = shadowSchema.indexOf(originSchema.get(index.getSortKeyIdxes().get(i)));
-                                    if (addColumnIdx < shadowSortKeyIdx) {
-                                        copiedSortKeyIdxes.set(i, sortKeyIdx + 1);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (sortKeyIdxes != null) {
-                        copiedSortKeyIdxes = sortKeyIdxes;
-                    } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
-                        sortKeyIdxes = copiedSortKeyIdxes;
-                    }
-                    // reorder, change sort key columns
-                    if (sortKeyUniqueIds != null) {
-                        copiedSortKeyUniqueIds = sortKeyUniqueIds;
-                    }
+
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
@@ -368,8 +330,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     tbl.enablePersistentIndex(),
                                     tbl.primaryIndexCacheExpireSec(),
                                     tbl.getPartitionInfo().getTabletType(partition.getParentId()),
-                                    tbl.getCompressionType(), copiedSortKeyIdxes,
-                                    sortKeyUniqueIds);
+                                    tbl.getCompressionType(), originIndexId == baseIndexId ? sortKeyIdxes : null,
+                                    originIndexId == baseIndexId ? sortKeyUniqueIds : null);
                             createReplicaTask.setBaseTablet(
                                     physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
                                     originSchemaHash);

@@ -20,8 +20,14 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * DeriveStatsTask derives any stats needed for costing a GroupExpression.
@@ -61,7 +67,28 @@ public class DeriveStatsTask extends OptimizerTask {
         // choose best statistics
         Statistics groupExpressionStatistics = expressionContext.getStatistics();
         if (needUpdateGroupStatistics(currentStatistics, groupExpressionStatistics)) {
-            groupExpression.getGroup().setStatistics(groupExpressionStatistics);
+            if (currentStatistics != null
+                    && isMaterializedView(groupExpression)
+                    && !groupExpressionStatistics.isTableRowCountMayInaccurate()) {
+                // use statistics of materialized view because it is more accurate
+                Statistics.Builder newBuilder = Statistics.buildFrom(currentStatistics);
+                if (!groupExpressionStatistics.isTableRowCountMayInaccurate()) {
+                    newBuilder.setOutputRowCount(groupExpressionStatistics.getOutputRowCount());
+                    newBuilder.setTableRowCountMayInaccurate(groupExpressionStatistics.isTableRowCountMayInaccurate());
+                }
+                Map<ColumnRefOperator, ColumnStatistic> newColumnStatisticMap = groupExpressionStatistics.getColumnStatistics();
+                // update ColumnStatistics
+                for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : currentStatistics.getColumnStatistics().entrySet()) {
+                    ColumnStatistic columnStatistic = newColumnStatisticMap.get(entry.getKey());
+                    if (columnStatistic != null && !columnStatistic.isUnknown()) {
+                        newBuilder.addColumnStatistic(entry.getKey(), columnStatistic);
+                    }
+                }
+                groupExpression.getGroup().setStatistics(newBuilder.build());
+                groupExpression.getGroup().setIsStatisticsAdjustedByMv(true);
+            } else {
+                groupExpression.getGroup().setStatistics(groupExpressionStatistics);
+            }
         }
 
         // do set group statistics when the groupExpression is a materialized view scan
@@ -70,6 +97,11 @@ public class DeriveStatsTask extends OptimizerTask {
             LogicalOlapScanOperator scan = groupExpression.getOp().cast();
             MaterializedView mv = (MaterializedView) scan.getTable();
             groupExpression.getGroup().setMvStatistics(mv.getId(), groupExpressionStatistics);
+            if (mv.getRelatedMaterializedViews() != null) {
+                List<Long> relatedMvIds =
+                        mv.getRelatedMaterializedViews().stream().map(mvid -> mvid.getId()).collect(Collectors.toList());
+                groupExpression.getGroup().setRelatedMvs(mv.getId(), relatedMvIds);
+            }
         }
 
         groupExpression.setStatsDerived();
@@ -85,7 +117,14 @@ public class DeriveStatsTask extends OptimizerTask {
         if (currentStatistics == null) {
             return true;
         }
+        // if the group expression is mv, use it to update group statistics because it is more accurate
+        if (isMaterializedView(groupExpression)) {
+            return true;
+        }
 
+        if (groupExpression.getGroup().isStatisticsAdjustedByMv()) {
+            return false;
+        }
         return newStatistics.getComputeSize() < currentStatistics.getComputeSize();
     }
 }

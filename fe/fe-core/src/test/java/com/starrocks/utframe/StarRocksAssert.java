@@ -471,14 +471,14 @@ public class StarRocksAssert {
         return this;
     }
 
-    public StarRocksAssert withSingleReplicaAsyncMv(String sql) throws Exception {
+    public StarRocksAssert withAsyncMvAndRefresh(String sql) throws Exception {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             if (!(statementBase instanceof CreateMaterializedViewStatement)) {
                 return this;
             }
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) statementBase;
-            withAsyncMv(createMaterializedViewStatement, true, true);
+            withAsyncMv(createMaterializedViewStatement, false, true);
         } catch (Exception e) {
             LOG.warn("create mv failed, sql:{}", sql, e);
             throw e;
@@ -878,8 +878,8 @@ public class StarRocksAssert {
         StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(stmt, ctx);
 
-        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
-        ShowResultSet res =  showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet res =  showExecutor.execute((ShowStmt) stmt, ctx);
         String header = res.getMetaData().getColumns().stream().map(Column::getName).collect(Collectors.joining("|"));
         String body = res.getResultRows().stream()
                 .map(row -> String.join("|", row))
@@ -891,8 +891,8 @@ public class StarRocksAssert {
         StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Assert.assertTrue(stmt instanceof ShowStmt);
         Analyzer.analyze(stmt, ctx);
-        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
-        return showExecutor.execute().getResultRows();
+        ShowExecutor showExecutor = new ShowExecutor();
+        return showExecutor.execute((ShowStmt) stmt, ctx).getResultRows();
     }
 
     public String showCreateTable(String sql) throws Exception {
@@ -1012,7 +1012,7 @@ public class StarRocksAssert {
     public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
         TableName tableName = new TableName(db, table);
         ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1, NodePosition.ZERO);
-        ShowExecutor showExecutor = new ShowExecutor(getCtx(), showTabletStmt);
-        return showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        return showExecutor.execute(showTabletStmt, getCtx());
     }
 }

@@ -30,7 +30,7 @@ public class FileAnalyzer {
         new FileAnalyzer.FileAnalyzerVisitor().visit(statement, context);
     }
 
-    static class FileAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class FileAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {

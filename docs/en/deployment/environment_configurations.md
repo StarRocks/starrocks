@@ -380,7 +380,7 @@ You must configure time synchronization between nodes within your StarRocks clus
 4. Check the connectivity and monitoring status of the NTP service.
 
    ```Bash
-   netstat -tlunp | grep ntp
+   netstat -tunlp | grep ntp
    ```
 
 5. Check if your application is synchronized with the NTP server.

@@ -55,6 +55,8 @@ public:
     }
     JITScalarFunction get_func() const { return _func; }
 
+    size_t get_code_size() const { return _obj_code == nullptr ? 0 : _obj_code->getBufferSize(); }
+
 private:
     const std::string _cache_key;
     JITScalarFunction _func = nullptr;

@@ -39,7 +39,7 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     return _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found);
 }
 
-Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
+Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
     return _memtable->insert(n, keys, values);
 }
 

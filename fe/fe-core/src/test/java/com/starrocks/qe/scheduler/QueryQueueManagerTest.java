@@ -1346,8 +1346,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "show running queries;";
         ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, showStmt);
-        ShowResultSet res = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet res = executor.execute(showStmt, ctx);
         Assert.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
         Assert.assertTrue(res.getResultRows().isEmpty());
     }
@@ -1411,8 +1411,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             ConnectContext ctx = starRocksAssert.getCtx();
             String sql = "show running queries;";
             ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            ShowExecutor executor = new ShowExecutor(ctx, showStmt);
-            ShowResultSet res = executor.execute();
+            ShowExecutor executor = new ShowExecutor();
+            ShowResultSet res = executor.execute(showStmt, ctx);
             Assert.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
 
             final int groupIndex = 1;
@@ -1437,8 +1437,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             ConnectContext ctx = starRocksAssert.getCtx();
             String sql = "show running queries limit 4;";
             ShowRunningQueriesStmt showStmt = (ShowRunningQueriesStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            ShowExecutor executor = new ShowExecutor(ctx, showStmt);
-            ShowResultSet res = executor.execute();
+            ShowExecutor executor = new ShowExecutor();
+            ShowResultSet res = executor.execute(showStmt, ctx);
             Assert.assertEquals(showStmt.getMetaData().getColumns(), res.getMetaData().getColumns());
             Assert.assertEquals(4, res.getResultRows().size());
         }

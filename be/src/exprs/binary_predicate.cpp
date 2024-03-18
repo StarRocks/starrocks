@@ -25,6 +25,7 @@
 #include "exprs/binary_function.h"
 #include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
+#include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -131,7 +132,24 @@ public:
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         if constexpr (lt_is_decimal<Type>) {
@@ -192,9 +210,10 @@ public:
         }
     }
 
-    std::string jit_func_name_impl() const override {
-        return "{" + _children[0]->jit_func_name() + get_cmp_op_name<Type, OP>() + _children[1]->jit_func_name() + "}" +
-               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + get_cmp_op_name<Type, OP>() +
+               _children[1]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
+               type().debug_string();
     }
 
     std::string debug_string() const override {
@@ -408,7 +427,9 @@ public:
         return builder.build(ColumnHelper::is_all_const(list));
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
@@ -439,8 +460,8 @@ public:
         }
     }
 
-    std::string jit_func_name_impl() const override {
-        return "{" + _children[0]->jit_func_name() + "<=>" + _children[1]->jit_func_name() + "}" +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + "<=>" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 

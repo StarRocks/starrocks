@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 As an OLAP database, StarRocks originally stores data in the columnar storage, which can enhance the performance of complex queries, such as aggregate queries. Since v3.2.3, StarRocks also supports storing data in the hybrid row-column storage where data is stored in both row-by-row and column-by-column fashions. This hybrid row-column storage is well suited for various scenario such as primary key-based high-concurrency, low-latency point queries and partial column updates, while delivering efficient analytical capabilities comparable to columnar storage. Additionally, hybrid row-column storage supports [prepared statements](../sql-reference/sql-statements/prepared_statement.md), which enhances query performance and security.
 
-## Comparisons between columnar storage and hybrid row-column storage 
+## Comparisons between columnar storage and hybrid row-column storage
 
 | **Storage format**         | **Storage method**                                           | **Scenarios**                                                |
 | -------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -29,7 +29,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - The table must be a Primary Key table.
 - The length of the `__row` column cannot exceed 1 MB.
-- Columns cannot be of data types like ARRAY, MAP, and STRUCT.
+- Since v3.2.4, StarRocks extends support to the following column types: BITMAP, HLL, JSON, ARRAY, MAP, and STRUCT.
 
 :::
 
@@ -102,12 +102,10 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
 
    If the short circuiting for queries is not enabled, run the `SET enable_short_circuit = true;` command to set the variable [`enable_short_circuit`](../reference/System_variable.md#enable_short_circuit-323-and-later)  to `true`.
 
-2. Query data. If the query meets the criteria that conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the shortcut. 
+2. Query data. If the query meets the criteria that conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the shortcut.
 
    :::note
-   
    The conditional columns in the WHERE clause can include additional columns beyond all primary key columns.
-   
    :::
 
    ```SQL
@@ -162,7 +160,7 @@ EXECUTE select_by_id_stmt USING @id2;
 
 ## Limits
 
-- Currently, the table with hybrid row-column storage cannot be altered by using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
+- Since v3.2.4, the table with hybrid row-column storage can be altered by using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
 - The short circuiting for queries is currently only suitable for queries that happen after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short circuiting for queries happens at the apply stage of the data writing process, data writing may block short circuiting for queries, affecting the response time of point queries during data writing.
 - Hybrid row-column storage may significantly increase storage consumption. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.
 - Hybrid row-column storage can increase the time and resource consumption during data loading.

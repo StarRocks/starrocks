@@ -287,6 +287,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     if (query_options.__isset.enable_spill && query_options.enable_spill) {
         RETURN_IF_ERROR(_query_ctx->init_spill_manager(query_options));
     }
+    _fragment_ctx->init_jit_profile();
     return Status::OK();
 }
 

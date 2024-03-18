@@ -275,7 +275,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0);
+        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
         EXPECT_OK(sink->init());
     }
 
@@ -293,7 +293,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0);
+        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
         EXPECT_OK(sink->init());
     }
 
@@ -311,7 +311,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0);
+        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
         EXPECT_ERROR(sink->init());
     }
 }

@@ -43,6 +43,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -107,6 +108,47 @@ public class SelectStmtTest {
                 .withTable(createPratitionTableStr)
                 .withTable(createTable1);
         FeConstants.enablePruneEmptyOutputScan = false;
+    }
+
+    @Test
+    void testPivot() throws Exception {
+        String sql = "select * from t0 pivot (sum(c1) for c2 in (1, 2, 3)) order by c0";
+        String columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals("c0,1,2,3", columns);
+
+        sql = "select * from t0 pivot (sum(c1) for c2 in (1 as a, 2 as b, 3)) order by c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals("c0,a,b,3", columns);
+
+        sql = "select * from t0 pivot (sum(c1), avg(c1) as avg for c2 in (1 as a, 2 as b, 3)) order by c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals("c0,a_sum(db1.t0.c1),a_avg,b_sum(db1.t0.c1),b_avg,3_sum(db1.t0.c1),3_avg", columns);
+
+        sql = "select * from t0 pivot (sum(c1) as sum, avg(c1) as avg for c2 in (1 as a, 2 as b, 3)) order by c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals( "c0,a_sum,a_avg,b_sum,b_avg,3_sum,3_avg", columns);
+
+        sql = "select * from t0 join tbl1 "
+                + "pivot (sum(t0.c1) as s, avg(t0.c2) as a "
+                + "for (k1, k2) "
+                + "in (('a', 'a'), ('b', 'b'), ('c', 'c'))) order by t0.c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals(
+                "c0,k3,k4,{'a','a'}_s,{'a','a'}_a,{'b','b'}_s,{'b','b'}_a,{'c','c'}_s,{'c','c'}_a", columns);
+
+        sql = "select * from t0 join tbl1 "
+                + "pivot (sum(t0.c1) as s, avg(t0.c2) as a "
+                + "for (k1, k2) "
+                + "in (('a', 'a') as aa, ('b', 'b') as bb, ('c', 'c') as cc, ('d', 'd') as dd)) order by t0.c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals(
+                "c0,k3,k4,aa_s,aa_a,bb_s,bb_a,cc_s,cc_a,dd_s,dd_a", columns);
     }
 
     @Test
@@ -332,21 +374,12 @@ public class SelectStmtTest {
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
-                "  5:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(4: count)\n" +
-                "  |  group by: 3: expr\n" +
-                "  |  \n" +
-                "  4:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
+                "  3:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: split)\n" +
                 "  |  group by: 3: expr\n" +
                 "  |  \n" +
-                "  3:Project\n" +
-                "  |  <slot 2> : 2: split\n" +
-                "  |  <slot 3> : 'aaa'\n" +
-                "  |  \n" +
                 "  2:AGGREGATE (update serialize)\n" +
-                "  |  group by: 2: split\n" +
+                "  |  group by: 2: split, 3: expr\n" +
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 2> : split('a,b,c', ',')\n" +

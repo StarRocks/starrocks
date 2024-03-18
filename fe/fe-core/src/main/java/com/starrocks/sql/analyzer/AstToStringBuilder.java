@@ -51,6 +51,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.BrokerTable;
@@ -115,6 +116,9 @@ import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.PivotAggregation;
+import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -147,6 +151,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
@@ -171,7 +176,7 @@ public class AstToStringBuilder {
         return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote).visit(expr);
     }
 
-    public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
+    public static class AST2StringBuilderVisitor implements AstVisitor<String, Void> {
 
         // when you want to get the full string of a functionCallExpr set it true
         // when you just want to a function name as its alias set it false
@@ -804,6 +809,65 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
+        @Override
+        public String visitPivotRelation(PivotRelation node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(visit(Objects.requireNonNull(node.getQuery())));
+            sb.append(" PIVOT (");
+            boolean first = true;
+            for (PivotAggregation aggregation : node.getAggregateFunctions()) {
+                if (!first) {
+                    sb.append(", ");
+                }
+                first = false;
+                sb.append(aggregation.getFunctionCallExpr().toSqlImpl());
+                if (aggregation.getAlias() != null) {
+                    sb.append(" AS ").append(aggregation.getAlias());
+                }
+            }
+            sb.append("\n");
+
+            sb.append("FOR ");
+            if (node.getPivotColumns().size() == 1) {
+                sb.append(node.getPivotColumns().get(0).getColumnName());
+            } else {
+                sb.append("(");
+                String columns = node.getPivotColumns()
+                        .stream()
+                        .map(SlotRef::getColumnName)
+                        .collect(Collectors.joining(", "));
+                sb.append(columns);
+                sb.append(")");
+
+            }
+
+            sb.append(" IN (");
+            first = true;
+            for (PivotValue pivotValue : node.getPivotValues()) {
+                if (!first) {
+                    sb.append(", ");
+                }
+                first = false;
+                if (pivotValue.getExprs().size() == 1) {
+                    sb.append(visit(pivotValue.getExprs().get(0)));
+                } else {
+                    sb.append("(");
+                    String values = pivotValue.getExprs()
+                            .stream()
+                            .map(this::visit)
+                            .collect(Collectors.joining(", "));
+                    sb.append(values);
+                    sb.append(")");
+                }
+                if (pivotValue.getAlias() != null) {
+                    sb.append(" AS ").append(pivotValue.getAlias());
+                }
+            }
+            sb.append(")\n)");
+
+            return sb.toString();
+        }
+
         // ---------------------------------- Expression --------------------------------
 
         @Override
@@ -1117,6 +1181,14 @@ public class AstToStringBuilder {
                     sb.append("SESSION.");
                 }
             }
+            sb.append(node.getName());
+            return sb.toString();
+        }
+
+        @Override
+        public String visitUserVariableExpr(UserVariableExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("@");
             sb.append(node.getName());
             return sb.toString();
         }

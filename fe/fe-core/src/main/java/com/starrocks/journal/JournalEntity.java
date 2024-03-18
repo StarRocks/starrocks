@@ -95,6 +95,7 @@ import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DisableDiskInfo;
+import com.starrocks.persist.DisablePartitionRecoveryInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -153,6 +154,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -294,6 +296,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DISABLE_TABLE_RECOVERY: {
                 data = DisableTableRecoveryInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
+                data = DisablePartitionRecoveryInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -965,6 +972,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META: {
                 data = ExternalBasicStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
+                data = ExternalHistogramStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
+                data = ExternalHistogramStatsMeta.read(in);
                 isRead = true;
                 break;
             }

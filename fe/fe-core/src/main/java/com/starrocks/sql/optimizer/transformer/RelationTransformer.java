@@ -26,6 +26,7 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Column;
@@ -56,6 +57,7 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -72,6 +74,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.JoinHelper;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -81,6 +84,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -139,7 +143,7 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMapping> {
+public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMapping> {
     private static final Logger LOG = LogManager.getLogger(RelationTransformer.class);
 
     private final ColumnRefFactory columnRefFactory;
@@ -150,6 +154,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final boolean inlineView;
     private final boolean enableViewBasedMvRewrite;
+    private final Map<Operator, ParseNode> optToAstMap;
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this(columnRefFactory, session,
@@ -159,7 +164,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
                                CTETransformerContext cteContext) {
-        this(new TransformerContext(columnRefFactory, session, outer, cteContext));
+        this(new TransformerContext(columnRefFactory, session, outer, cteContext, null));
     }
 
     public RelationTransformer(TransformerContext context) {
@@ -169,6 +174,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         this.cteContext = context.getCteContext();
         this.inlineView = context.isInlineView();
         this.enableViewBasedMvRewrite = context.isEnableViewBasedMvRewrite();
+        this.optToAstMap = context.getOptToAstMap();
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -256,7 +262,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitSelect(SelectRelation node, ExpressionMapping context) {
-        return new QueryTransformer(columnRefFactory, session, cteContext, inlineView).plan(node, outer);
+        return new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap).plan(node, outer);
     }
 
     @Override
@@ -644,12 +650,22 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     @Override
     public LogicalPlan visitSubquery(SubqueryRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
+        OptExpression subQueryOptExpression = logicalPlan.getRoot();
+
         OptExprBuilder builder = new OptExprBuilder(
                 logicalPlan.getRoot().getOp(),
                 logicalPlan.getRootBuilder().getInputs(),
                 new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
 
         builder = addOrderByLimit(builder, node);
+
+        // store opt expression to ast map if sub-query is project or union
+        OperatorType operatorType = subQueryOptExpression.getOp().getOpType();
+        if (optToAstMap != null && (operatorType == OperatorType.LOGICAL_PROJECT ||
+                operatorType == OperatorType.LOGICAL_UNION)) {
+            optToAstMap.put(subQueryOptExpression.getOp(), node.getQueryStatement());
+        }
+
         return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
     }
 
@@ -898,6 +914,30 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder rootBuilder = plan.getRootBuilder();
         rootBuilder.setExpressionMapping(rootBuilder.getInputs().get(1).getExpressionMapping());
         return plan;
+    }
+
+    @Override
+    public LogicalPlan visitPivotRelation(PivotRelation node, ExpressionMapping context) {
+        LogicalPlan queryPlan = visit(node.getQuery());
+
+        // aggregate
+        List<Expr> groupKeys = node.getGroupByKeys();
+        List<FunctionCallExpr> aggFunctions = node.getRewrittenAggFunctions();
+        QueryTransformer queryTransformer = new QueryTransformer(columnRefFactory, session, cteContext, inlineView, optToAstMap);
+        OptExprBuilder builder = queryTransformer.aggregate(
+                queryPlan.getRootBuilder(), groupKeys, aggFunctions, null, ImmutableList.of());
+
+        // output
+        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) builder.getRoot().getOp();
+        List<ColumnRefOperator> output = new ArrayList<>(aggregationOperator.getGroupingKeys());
+        for (Expr agg : aggFunctions) {
+            ColumnRefOperator ref = builder.getExpressionMapping().get(agg);
+            output.add(ref);
+        }
+
+        ExpressionMapping mapping = new ExpressionMapping(node.getScope(), output);
+        builder.setExpressionMapping(mapping);
+        return new LogicalPlan(builder, output, null);
     }
 
     /**

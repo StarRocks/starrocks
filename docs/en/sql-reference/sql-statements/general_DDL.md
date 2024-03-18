@@ -16,7 +16,6 @@ displayed_sidebar: "English"
   - [KILL](#kill)
   - [Utility commands](#utility-commands)
 
-
 ## CREATE
 
 - [ANALYZE TABLE](./data-definition/ANALYZE_TABLE.md)

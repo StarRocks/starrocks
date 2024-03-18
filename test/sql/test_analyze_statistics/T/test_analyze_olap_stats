@@ -1,0 +1,52 @@
+-- name: test_analyze_olap_stats
+create database analyze_test_${uuid0};
+use analyze_test_${uuid0};
+
+ CREATE TABLE `duplicate_table_with_null` (
+    `k1`  date,
+    `k2`  datetime,
+    `k3`  char(20),
+    `k4`  varchar(20),
+    `k5`  boolean,
+    `k6`  tinyint,
+    `k7`  smallint,
+    `k8`  int,
+    `k9`  bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9) )
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO duplicate_table_with_null VALUES
+    ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    (null,'2020-10-26 12:12:12',null,null,null,null,null,null,null,null,1,1.12,2.889),
+    (null,'2020-10-27 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+
+-- analyze basic stats
+analyze table duplicate_table_with_null;
+
+-- check stats table
+select count(1) from default_catalog._statistics_.column_statistics where table_name='analyze_test_${uuid0}.duplicate_table_with_null';
+
+-- drop stats
+drop stats duplicate_table_with_null;
+
+-- analyze histogram stats
+analyze table duplicate_table_with_null update histogram on k1,k6;
+
+-- check histogram stats
+select count(1) from _statistics_.histogram_statistics where table_name='analyze_test_${uuid0}.duplicate_table_with_null';
+
+-- drop histogram stats
+analyze table duplicate_table_with_null drop histogram on k1,k6;
+
+drop database analyze_test_${uuid0};
+
+
+
+

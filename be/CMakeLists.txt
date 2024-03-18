@@ -648,6 +648,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0.0")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unsafe-buffer-usage")
+        # ignore warning from geo
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-but-set-variable")
     endif ()
 else ()
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fcoroutines")
@@ -1119,6 +1121,7 @@ install(FILES
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j2.properties
     ${BASE_DIR}/../conf/udf_security.policy
+    ${BASE_DIR}/../conf/core-site.xml
     DESTINATION ${OUTPUT_DIR}/conf)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")

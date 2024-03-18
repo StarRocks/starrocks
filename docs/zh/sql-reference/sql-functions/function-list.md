@@ -9,7 +9,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 您可以按照以下分类来查找目标函数。
 
 - [函数列表](#函数列表)
-  - [日期函数](#日期函数)
+  - [时间日期函数](#时间日期函数)
   - [字符串函数](#字符串函数)
   - [聚合函数](#聚合函数)
   - [数学函数](#数学函数)
@@ -30,7 +30,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
   - [地理位置函数](#地理位置函数)
   - [Hash 函数](#hash-函数)
 
-## 日期函数
+## 时间日期函数
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
@@ -68,6 +68,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [makedate](./date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
 | [microseconds_add](./date-time-functions/microseconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为微秒。  |
 | [microseconds_sub](./date-time-functions/microseconds_sub.md)| 从一个日期时间中减去指定的时间间隔，单位为微秒。  |
+| [milliseconds_diff](./date-time-functions/milliseconds_diff.md)| 计算开始时间和结束时间相差多少毫秒。  |
 | [minute](./date-time-functions/minute.md)| 获得日期中的分钟的信息，返回值范围为 0~59。  |
 | [minutes_add](./date-time-functions/minutes_add.md)| 给指定的日期时间或日期增加指定的分钟数。|
 | [minutes_diff](./date-time-functions/minutes_diff.md)| 计算开始时间和结束时间相差多少分钟。  |

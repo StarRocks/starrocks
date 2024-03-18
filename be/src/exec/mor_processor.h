@@ -25,6 +25,7 @@ namespace starrocks {
 
 struct MORParams {
     TupleDescriptor* tuple_desc = nullptr;
+    TupleDescriptor* delete_column_tuple_desc = nullptr;
     std::vector<SlotDescriptor*> equality_slots;
     RuntimeProfile* runtime_profile = nullptr;
     int mor_tuple_id;

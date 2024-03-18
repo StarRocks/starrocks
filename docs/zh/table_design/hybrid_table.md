@@ -29,7 +29,7 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 
 - 必须为主键表。
 - `__row` 列的长度不能超过 1 MB。
-- 不支持列的数据类型为 BITMAP、JSON、ARRAY、MAP、STRUCT。
+- 自 3.2.4 起，列的类型新增支持 BITMAP、HLL、JSON、ARRAY、MAP 和 STRUCT。
 - 表中除了主键列外必须包含更多的列。
 
 :::
@@ -161,9 +161,9 @@ EXECUTE select_by_id_stmt USING @id1;
 EXECUTE select_by_id_stmt USING @id2;
 ```
 
-## 限制
+## 注意事项
 
-- 行列混存表暂不支持 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md)。
+- 自 3.2.4 版本起，行列混存表支持 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md)。
 - 短路径查询目前仅适合定期批量导入后纯查询的场景。因为目前短路径查询和写流程中的 apply 步骤互斥访问索引，所以写操作可能会堵塞短路径查询，导致写入时会影响点查的响应时间。
 - 行列混存表可能会大幅增加存储空间的占用。因为数据会按行和列格式存储两份，并且按行存储压缩比可能不如按列存储高。
 - 行列混存表会增加数据导入耗时和资源占用。

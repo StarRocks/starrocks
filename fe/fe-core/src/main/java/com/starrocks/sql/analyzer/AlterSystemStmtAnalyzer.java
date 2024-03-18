@@ -49,7 +49,7 @@ import java.util.regex.Pattern;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
-public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
+public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext> {
     public static final String PROP_KEY_LOCATION = PropertyAnalyzer.PROPERTIES_LABELS_LOCATION;
     private static final Set<String> PROPS_SUPPORTED = new HashSet<>();
 

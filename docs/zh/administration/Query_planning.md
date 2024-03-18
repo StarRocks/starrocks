@@ -43,7 +43,7 @@ order by count(*) limit 100;
 
 Query Plan 可以分为逻辑执行计划（Logical Query Plan），和物理执行计划（Physical Query Plan），本章节所讲述的 Query Plan 默认指代的都是逻辑执行计划。
 
-通过以下命令查看 Query Plan。
+通过 [EXPLAIN](../sql-reference/sql-statements/Administration/EXPLAIN.md) 命令查看 Query Plan。
 
 ```sql
 EXPLAIN sql_statement;
@@ -233,9 +233,7 @@ Fragment 1 集成了三个 Join 算子的执行，采用默认的 BROADCAST 方�
 
 ## 查看分析 Profile
 
-在分析 Query Plan 后，您可以分析 BE 的执行结果 Profile 了解集群性能。
-
-如果您是企业版用户，您可以在 StarRocksManager 中执行查询，然后点击 **查询历史**，就可看在 **执行详情** Tab 中看到 Profile 的详细文本信息，并在 **执行时间** Tab 中看到图形化的展示。以下使用 TPC-H 的 Q4 查询来作为例子。
+在分析 Query Plan 后，您可以分析 BE 的执行结果 Profile 了解集群性能。关于如何查看并分析查询的 Profile，请参考[Query Profile 概述](./query_profile_overview.md)。
 
 以下示例以 TPCH 的 Q4 查询为例。
 
@@ -259,11 +257,7 @@ order by o_orderpriority;
 * 订单创建时间处于 `1993 年 7 月` 至 `1993 年 10 月` 之间。
 * 订单对应的产品的提交日期 `l_commitdate` 小于收货日期 `l_receiptadate`。
 
-执行查询后，您可以查看当前查询的 **执行时间** Tab。
-
-![8-6](../assets/8-6.png)
-  
-在页面左上角，您可以看到整个查询执行了 3.106s。通过点击每个节点，您可以看到每一部分的执行信息，`Active` 字段表示当前节点（包含其所有子节点）的执行时间。当前节点有两个子节点，即两个 Scan Node，二者分别扫描了 5,730,776 条和 379,364,474 条数据，并进行了一次 Shuffle Join，完成后输出 5,257,429 条数据，然后经过两层聚合，最后通过一个 Sort Node 后输出结果，其中 Exchange Node 是数据交换节点，在当前示例中进行了两次 Shuffle。
+通过分析对应 Profile，可以看到该查询执行了 3.106s。其中 `Active` 字段表示当前节点（包含其所有子节点）的执行时间。当前节点有两个子节点，即两个 Scan Node，二者分别扫描了 5,730,776 条和 379,364,474 条数据，并进行了一次 Shuffle Join，完成后输出 5,257,429 条数据，然后经过两层聚合，最后通过一个 Sort Node 后输出结果，其中 Exchange Node 是数据交换节点，在当前示例中进行了两次 Shuffle。
 
 通常情况下，分析 Profile 的核心即找到执行时间最长的性能瓶颈所在的节点。您可以按照自上而下的方式依次查看。
 
@@ -305,10 +299,6 @@ with t1 as (
 group by o_orderpriority
 order by o_orderpriority;
 ```
-
-执行结果如下所示：
-
-![8-7](../assets/8-7.png)
 
 新的 SQL 执行时间从 3.106s 降低至 1.042s。两张大表没有了 Exchange 节点，直接通过 Colocate Join 进行 Join。除此之外，调换左右表顺序后，整体性能大幅提升，新的 Join Node 信息如下：
 

@@ -30,7 +30,6 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -110,8 +109,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 return expressions;
             } else {
                 // in rule phase, only return the best one result
-                BestMvSelector bestMvSelector = new BestMvSelector(
-                        expressions, context, queryExpression.getOp() instanceof LogicalAggregationOperator);
+                BestMvSelector bestMvSelector = new BestMvSelector(expressions, context, queryExpression);
                 return Lists.newArrayList(bestMvSelector.selectBest());
             }
         } catch (Exception e) {

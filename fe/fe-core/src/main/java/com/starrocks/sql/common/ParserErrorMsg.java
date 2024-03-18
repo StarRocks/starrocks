@@ -220,4 +220,6 @@ public interface ParserErrorMsg {
 
     @BaseMessage("No selected database for cancel BACKUP/RESTORE")
     String nullIdentifierCancelBackupRestore();
+    @BaseMessage("Value count in PIVOT {0} must match number of FOR columns {1}")
+    String pivotValueArityMismatch(int a0, int a1);
 }

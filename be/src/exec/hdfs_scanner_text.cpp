@@ -267,6 +267,10 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+void HdfsTextScanner::do_update_counter(HdfsScanProfile* profile) {
+    profile->runtime_profile->add_info_string("TextCompression", CompressionTypePB_Name(_compression_type));
+}
+
 void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
     _reader.reset();
 }

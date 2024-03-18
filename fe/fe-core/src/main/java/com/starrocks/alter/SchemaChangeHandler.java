@@ -1182,6 +1182,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withBloomFilterColumns(bfColumns, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange);
 
+        long baseIndexId = olapTable.getBaseIndexId();
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop
         for (Long alterIndexId : indexSchemaMap.keySet()) {
@@ -1296,7 +1297,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // to determine which columns are sort key columns
             boolean useSortKeyUniqueId = (index.getSortKeyUniqueIds() != null) &&
                     (!index.getSortKeyUniqueIds().isEmpty());
-            if (index.getSortKeyIdxes() != null) {
+            if (index.getSortKeyIdxes() != null && baseIndexId == alterIndexId) {
                 List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
                 for (Integer colIdx : originSortKeyIdxes) {
                     String columnName = index.getSchema().get(colIdx).getName();
@@ -1355,21 +1356,19 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyUniqueIds(sortKeyUniqueIds);
 
         long tableId = olapTable.getId();
-        for (Long alterIndexId : indexSchemaMap.keySet()) {
-            List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
+        Long alterIndexId = olapTable.getBaseIndexId();
+        List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
+        short newShortKeyCount = 0;
+        if (sortKeyIdxes != null) {
+            newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null, sortKeyIdxes);
+        } else {
+            newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null);
+        }
 
-            short newShortKeyCount = 0;
-            if (sortKeyIdxes != null) {
-                newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null, sortKeyIdxes);
-            } else {
-                newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null);
-            }
+        LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
+        jobBuilder.withNewIndexShortKeyCount(alterIndexId, newShortKeyCount).withNewIndexSchema(alterIndexId, originSchema);
 
-            LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
-            jobBuilder.withNewIndexShortKeyCount(alterIndexId, newShortKeyCount).withNewIndexSchema(alterIndexId, originSchema);
-
-            LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
-        } // end for indices
+        LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
 
         return jobBuilder.build();
     }

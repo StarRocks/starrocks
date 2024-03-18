@@ -1038,6 +1038,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Total number of APPLY for partial updates by column (Column mode)
+
 #### disk_writes_completed
 
 - Unit: Count
@@ -1959,4 +1960,3 @@ Starlet Dashboard includes the following categories of monitoring metrics:
 
 - Type: Counter
 - Description: Cumulative number of asynchronous tasks in the queue.
-

@@ -117,8 +117,8 @@ public class ShowDbStmtTest {
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowDbStmt(null, null, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
+        ShowExecutor executor = new ShowExecutor();
+        ShowResultSet resultSet = executor.execute(stmt, ctx);
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals(metaData.getColumn(0).getName(), "Database");
 
