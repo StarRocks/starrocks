@@ -52,13 +52,17 @@ public class WarehouseManager implements Writable {
     }
 
     public void initDefaultWarehouse() {
-        // gen a default warehouse
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID,
-                    DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID);
-            nameToWh.put(wh.getName(), wh);
-            idToWh.put(wh.getId(), wh);
-            wh.setExist(true);
+            // FE Leader or FE Follower both execute initDefaultWarehouse during startup that will generate
+            // the default warehouse, and it's state is always AVAILABLE.
+            // If the state of default warehouse is updated, e.g. SUSPENDED, we should not overwrite the state.
+            if (!nameToWh.containsKey(DEFAULT_WAREHOUSE_NAME)) {
+                Warehouse wh = new DefaultWarehouse(DEFAULT_WAREHOUSE_ID,
+                        DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID);
+                nameToWh.put(wh.getName(), wh);
+                idToWh.put(wh.getId(), wh);
+                wh.setExist(true);
+            }
         }
     }
 
