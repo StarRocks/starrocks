@@ -20,6 +20,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.UtFrameUtils;
@@ -54,8 +55,19 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
                 .get(new PlanNodeId(0)).getScanRangeLocations(100);
         Assert.assertEquals(4, scanRangeLocations.size());
 
+        scanRangeLocations.sort((o1, o2) -> {
+            THdfsScanRange scanRange1 = o1.scan_range.hdfs_scan_range;
+            THdfsScanRange scanRange2 = o2.scan_range.hdfs_scan_range;
+            if (scanRange1.relative_path.equalsIgnoreCase(scanRange2.relative_path)) {
+                return (int) (scanRange1.offset - scanRange2.offset);
+            } else {
+                return scanRange1.compareTo(scanRange2);
+            }
+        });
+
         TScanRange scanRange1 = scanRangeLocations.get(0).scan_range;
         TScanRange scanRange2 = scanRangeLocations.get(1).scan_range;
+
         Assert.assertEquals(scanRange1.hdfs_scan_range.length, scanRange2.hdfs_scan_range.offset);
     }
 
@@ -68,6 +80,16 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
         List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
                 .get(new PlanNodeId(0)).getScanRangeLocations(100);
         Assert.assertEquals(8, scanRangeLocations.size());
+
+        scanRangeLocations.sort((o1, o2) -> {
+            THdfsScanRange scanRange1 = o1.scan_range.hdfs_scan_range;
+            THdfsScanRange scanRange2 = o2.scan_range.hdfs_scan_range;
+            if (scanRange1.relative_path.equalsIgnoreCase(scanRange2.relative_path)) {
+                return (int) (scanRange1.offset - scanRange2.offset);
+            } else {
+                return scanRange1.compareTo(scanRange2);
+            }
+        });
 
         Assert.assertEquals(0, scanRangeLocations.get(0).scan_range.hdfs_scan_range.offset);
         long previousOffset = scanRangeLocations.get(0).scan_range.hdfs_scan_range.length;
