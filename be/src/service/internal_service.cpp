@@ -406,15 +406,12 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
         return Status::InvalidArgument("batch_size is not set");
     }
-    // Before version 2.5, broker load was not executed in the pipeline engine.
+    // Before version 2.5, broker load/export was not executed in the pipeline engine.
     // The batch_size params may not be set in the request sent by FE.
     // During the grayscale upgrade process, the request sent by the old version of FE will report an error.
-    // For compatibility, choose to skip checking batch_size for load job here.
-    bool need_check_chunk_size = true;
-    if (t_request.query_options.__isset.query_type && t_request.query_options.query_type == TQueryType::LOAD) {
-        need_check_chunk_size = false;
-    }
-    if (need_check_chunk_size) {
+    // For compatibility, choose to skip checking batch_size for non-pipeline query here.
+    bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
+    if (is_pipeline) {
         auto batch_size = t_request.query_options.batch_size;
         if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
             return Status::InvalidArgument(
@@ -422,8 +419,6 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
                                 MAX_CHUNK_SIZE, batch_size));
         }
     }
-
-    bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
               << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
               << ", is_pipeline=" << is_pipeline << ", chunk_size=" << t_request.query_options.batch_size;
