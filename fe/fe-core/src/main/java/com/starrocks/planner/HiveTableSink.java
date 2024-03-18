@@ -68,8 +68,10 @@ public class HiveTableSink extends DataSink {
         this.fileFormat = hiveTable.getStorageFormat().name().toLowerCase();
         if (format == HiveStorageFormat.TEXTFILE) {
             this.textFileFormatDesc = Optional.of(toTextFileFormatDesc(hiveTable.getSerdeProperties()));
+            this.compressionType = String.valueOf(TCompressionType.NO_COMPRESSION);
+        } else {
+            this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         }
-        this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);

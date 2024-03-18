@@ -25,6 +25,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -357,6 +358,10 @@ public class InsertStmt extends DmlStmt {
         if (compressionType == null) {
             compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         }
+        if (CompressionUtils.getConnectorSinkCompressionType(compressionType).isEmpty()) {
+            throw new SemanticException(String.format("Unsupported compression codec %s. " +
+                    "Use any of (uncompressed, snappy, lz4, zstd, gzip)", compressionType));
+        }
 
         if (writeSingleFile && partitionBy != null) {
             throw new SemanticException("cannot use partition_by and single simultaneously.");
@@ -371,10 +376,8 @@ public class InsertStmt extends DmlStmt {
                     path, format, compressionType, columns, null, false, targetMaxFileSize, props);
         }
 
-        // extra validation for using partitionBy
         if (!path.endsWith("/")) {
-            throw new SemanticException(
-                    "If partition_by is used, path should be a directory ends with forward slash(/).");
+            path += "/";
         }
 
         // parse and validate partition columns
