@@ -413,4 +413,38 @@ public class TabletStatMgrTest {
         Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
         Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
     }
+
+    @Test
+    public void testNoAliveNode(@Mocked SystemInfoService systemInfoService, @Mocked LakeService lakeService) {
+        LakeTable table = createLakeTableForTest();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress addr) {
+                return lakeService;
+            }
+
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseNodeId(LakeTablet tablet) {
+                return 1000L;
+            }
+            @Mock
+            public ComputeNode chooseNode(LakeTablet tablet) {
+                return null;
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+    }
 }

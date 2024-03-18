@@ -369,6 +369,9 @@ public class TabletStatMgr extends FrontendDaemon {
         }
 
         private void waitResponse() {
+            if (responseList == null) {
+                return;
+            }
             for (Future<TabletStatResponse> responseFuture : responseList) {
                 try {
                     TabletStatResponse response = responseFuture.get();
