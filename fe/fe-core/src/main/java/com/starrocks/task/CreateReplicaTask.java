@@ -36,13 +36,7 @@ package com.starrocks.task;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.binlog.BinlogConfig;
-<<<<<<< HEAD
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.common.MarkedCountDownLatch;
-=======
->>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
 import com.starrocks.common.Status;
 import com.starrocks.thrift.TBinlogConfig;
 import com.starrocks.thrift.TCompressionType;

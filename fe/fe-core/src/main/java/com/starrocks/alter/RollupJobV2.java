@@ -280,25 +280,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         long backendId = rollupReplica.getBackendId();
                         Preconditions.checkNotNull(tabletIdMap.get(rollupTabletId)); // baseTabletId
                         countDownLatch.addMark(backendId, rollupTabletId);
-<<<<<<< HEAD
-                        // create replica with version 1.
-                        // version will be updated by following load process, or when rollup task finished.
-                        CreateReplicaTask createReplicaTask = new CreateReplicaTask(
-                                backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
-                                rollupShortKeyColumnCount, rollupSchemaHash,
-                                Partition.PARTITION_INIT_VERSION,
-                                rollupKeysType, TStorageType.COLUMN, storageMedium,
-                                rollupSchema, tbl.getCopiedBfColumns(), tbl.getBfFpp(), countDownLatch,
-                                tbl.getCopiedIndexes(),
-                                tbl.isInMemory(),
-                                tbl.enablePersistentIndex(),
-                                tbl.primaryIndexCacheExpireSec(),
-                                tabletType, tbl.getCompressionType(), index.getSortKeyIdxes(),
-                                index.getSortKeyUniqueIds(), true);
-                        createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
-                        createReplicaTask.setSchemaVersion(rollupSchemaVersion);
-                        batchTask.addTask(createReplicaTask);
-=======
                         CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                 .setNodeId(backendId)
                                 .setDbId(dbId)
@@ -318,7 +299,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 .setTabletSchema(tabletSchema)
                                 .build();
                         batchTask.addTask(task);
->>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
                     } // end for rollupReplicas
                 } // end for rollupTablets
             }

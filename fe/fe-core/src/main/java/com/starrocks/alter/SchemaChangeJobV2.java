@@ -287,6 +287,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             if (tbl == null) {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
+            Long baseIndexId = tbl.getBaseIndexId();
 
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
@@ -310,48 +311,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
                     List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
-<<<<<<< HEAD
-                    List<Integer> copiedSortKeyIdxes = index.getSortKeyIdxes();
-                    List<Integer> copiedSortKeyUniqueIds = index.getSortKeyUniqueIds();
-                    // TODO
-                    // the following code appears to be deletable 
-                    if (index.getSortKeyIdxes() != null) {
-                        if (originSchema.size() > shadowSchema.size()) {
-                            List<Column> differences = originSchema.stream().filter(element ->
-                                    !shadowSchema.contains(element)).collect(Collectors.toList());
-                            // can just drop one column one time, so just one element in differences
-                            Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
-                            for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
-                                Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
-                                if (dropIdx < sortKeyIdx) {
-                                    copiedSortKeyIdxes.set(i, sortKeyIdx - 1);
-                                }
-                            }
-                        } else if (originSchema.size() < shadowSchema.size()) {
-                            List<Column> differences = shadowSchema.stream().filter(element ->
-                                    !originSchema.contains(element)).collect(Collectors.toList());
-                            for (Column difference : differences) {
-                                int addColumnIdx = shadowSchema.indexOf(difference);
-                                for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
-                                    Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
-                                    int shadowSortKeyIdx = shadowSchema.indexOf(originSchema.get(index.getSortKeyIdxes().get(i)));
-                                    if (addColumnIdx < shadowSortKeyIdx) {
-                                        copiedSortKeyIdxes.set(i, sortKeyIdx + 1);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (sortKeyIdxes != null) {
-                        copiedSortKeyIdxes = sortKeyIdxes;
-                    } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
-                        sortKeyIdxes = copiedSortKeyIdxes;
-                    }
-                    // reorder, change sort key columns
-                    if (sortKeyUniqueIds != null) {
-                        copiedSortKeyUniqueIds = sortKeyUniqueIds;
-                    }
-=======
                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                             .setId(shadowIdxId) // For newly created materialized, schema id equals to index id
                             .setKeysType(originKeysType)
@@ -366,7 +325,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
                             .addColumns(shadowSchema)
                             .build().toTabletSchema();
->>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
@@ -375,24 +333,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         for (Replica shadowReplica : shadowReplicas) {
                             long backendId = shadowReplica.getBackendId();
                             countDownLatch.addMark(backendId, shadowTabletId);
-<<<<<<< HEAD
-                            CreateReplicaTask createReplicaTask = new CreateReplicaTask(
-                                    backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
-                                    shadowShortKeyColumnCount, shadowSchemaHash, shadowSchemaVersion,
-                                    Partition.PARTITION_INIT_VERSION,
-                                    originKeysType, tbl.getStorageType(), storageMedium,
-                                    shadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
-                                    tbl.isInMemory(),
-                                    tbl.enablePersistentIndex(),
-                                    tbl.primaryIndexCacheExpireSec(),
-                                    tbl.getPartitionInfo().getTabletType(partition.getParentId()),
-                                    tbl.getCompressionType(), copiedSortKeyIdxes,
-                                    sortKeyUniqueIds);
-                            createReplicaTask.setBaseTablet(
-                                    physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
-                                    originSchemaHash);
-                            batchTask.addTask(createReplicaTask);
-=======
                             CreateReplicaTask task = CreateReplicaTask.newBuilder()
                                     .setNodeId(backendId)
                                     .setDbId(dbId)
@@ -411,7 +351,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     .setTabletSchema(tabletSchema)
                                     .build();
                             batchTask.addTask(task);
->>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
                         } // end for rollupReplicas
                     } // end for rollupTablets
                 }

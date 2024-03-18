@@ -2028,12 +2028,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
                                                             MaterializedIndex index) throws DdlException {
-<<<<<<< HEAD
-=======
         LOG.info("build create replica tasks for index {} db {} table {} partition {}",
                 index, dbId, table.getId(), partition);
         boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
->>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
         boolean createSchemaFile = true;
         LOG.debug("build create replica tasks for index {} db {} table {} partition {}",
                 index, dbId, table.getId(), partition); 
@@ -2060,13 +2057,8 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Long> nodeIdsOfReplicas = new ArrayList<>();
             if (isCloudNativeTable) {
                 try {
-<<<<<<< HEAD
                     Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                    primaryComputeNodeId = ((LakeTablet) tablet).
-=======
-                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                     long nodeId = ((LakeTablet) tablet).
->>>>>>> 01028a16b8 ([BugFix] Fixed incorrect schema id in CreateReplicaTask (#42279))
                             getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
                     nodeIdsOfReplicas.add(nodeId);
                 } catch (UserException e) {
