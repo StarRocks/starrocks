@@ -58,8 +58,8 @@ class ConnectorChunkSinkProvider {
 public:
     virtual ~ConnectorChunkSinkProvider() = default;
 
-    virtual std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                  int32_t driver_id) = 0;
+    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
+            std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) = 0;
 };
 
 } // namespace starrocks::connector

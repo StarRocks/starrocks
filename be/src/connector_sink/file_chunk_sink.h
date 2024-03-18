@@ -70,7 +70,7 @@ struct FileChunkSinkContext : public ConnectorChunkSinkContext {
     std::vector<std::string> column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> column_evaluators;
     std::vector<int32_t> partition_column_indices;
-    int64_t max_file_size;
+    int64_t max_file_size = 128L * 1024 * 1024;
     std::string format;
     std::map<std::string, std::string> options;
     PriorityThreadPool* executor;
@@ -82,8 +82,8 @@ class FileChunkSinkProvider : public ConnectorChunkSinkProvider {
 public:
     ~FileChunkSinkProvider() override = default;
 
-    std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                          int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
+                                                                    int32_t driver_id) override;
 };
 
 } // namespace starrocks::connector

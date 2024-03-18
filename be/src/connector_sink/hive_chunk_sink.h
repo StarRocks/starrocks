@@ -71,7 +71,7 @@ struct HiveChunkSinkContext : public ConnectorChunkSinkContext {
     std::vector<std::unique_ptr<ColumnEvaluator>> data_column_evaluators;
     std::vector<std::string> partition_column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators;
-    int64_t max_file_size = 1 << 30;
+    int64_t max_file_size = 128L * 1024 * 1024;
     std::string format;
     std::map<std::string, std::string> options;
     PriorityThreadPool* executor;
@@ -83,8 +83,8 @@ class HiveChunkSinkProvider : public ConnectorChunkSinkProvider {
 public:
     ~HiveChunkSinkProvider() override = default;
 
-    std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                          int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
+                                                                    int32_t driver_id) override;
 };
 
 } // namespace starrocks::connector

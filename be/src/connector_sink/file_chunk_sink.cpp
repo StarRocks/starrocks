@@ -95,7 +95,7 @@ std::function<void(const formats::FileWriter::CommitResult& result)> FileChunkSi
     };
 }
 
-std::unique_ptr<ConnectorChunkSink> FileChunkSinkProvider::create_chunk_sink(
+StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
