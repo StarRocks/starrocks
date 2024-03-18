@@ -254,3 +254,10 @@ select @test;
 -- result:
 1
 -- !result
+set @test= (select cast(50 as time));
+-- result:
+-- !result
+select @test;
+-- result:
+00:00:50
+-- !result

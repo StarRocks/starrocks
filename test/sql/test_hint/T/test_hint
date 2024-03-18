@@ -143,3 +143,5 @@ select array_length(@test);
 set @test= (select cast(50 as boolean));
 select @test;
 
+set @test= (select cast(50 as time));
+select @test;
