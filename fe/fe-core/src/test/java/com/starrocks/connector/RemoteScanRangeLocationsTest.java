@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DefaultCoordinator;
