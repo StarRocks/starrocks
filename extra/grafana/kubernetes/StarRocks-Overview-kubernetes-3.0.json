@@ -1,14 +1,4 @@
 {
-    "__inputs": [
-    {
-      "name": "StarRocks_Prometheus",
-      "label": "StarRocks",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
   "__requires": [
     {
       "type": "grafana",
@@ -8297,6 +8287,21 @@
   "tags": [],
   "templating": {
     "list": [
+      {
+        "description": "",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "StarRocks_Prometheus",
+        "options": [],
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
       {
         "current": {
           "selected": false,
