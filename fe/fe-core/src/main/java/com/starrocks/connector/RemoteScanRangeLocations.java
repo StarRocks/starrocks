@@ -30,6 +30,7 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.datacache.DataCacheRule;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.common.ErrorType;
@@ -86,21 +87,14 @@ public class RemoteScanRangeLocations {
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
                                        Optional<RemoteFileBlockDesc> blockDesc, DataCacheOptions dataCacheOptions) {
-        long splitSize = Config.hive_max_split_size;
+        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
         ConnectContext connectContext = ConnectContext.get();
-        boolean splitIOTasksOnBackend = false;
         if (connectContext != null) {
-            splitSize = connectContext.getSessionVariable().getConnectorMaxSplitSize();
-            splitIOTasksOnBackend = connectContext.getSessionVariable().isEnableConnectorSplitIoTasks();
-        }
-
-        if (partition.getFormat().isBackendSplittable()) {
-            splitIOTasksOnBackend = false;
+            sv = connectContext.getSessionVariable();
         }
 
         long totalSize = fileDesc.getLength();
         long offset = 0;
-
         if (blockDesc.isPresent()) {
             // If blockDesc existed, we will split according block desc
             RemoteFileBlockDesc block = blockDesc.get();
@@ -108,12 +102,17 @@ public class RemoteScanRangeLocations {
             offset = block.getOffset();
         }
 
-        // do split when meet all conditions:
-        // 1. when backend can not do split.
-        // 2. when this file is splittable
-        // 3. when total size is larger than split size.
-        boolean needSplit = (!splitIOTasksOnBackend) && (fileDesc.isSplittable()) && (totalSize > splitSize);
-
+        // assume we can not split at all.
+        long splitSize = totalSize;
+        if (fileDesc.isSplittable()) {
+            // if splittable, then use max split size.
+            splitSize = sv.getConnectorMaxSplitSize();
+            if (sv.isEnableConnectorSplitIoTasks() && partition.getFormat().isBackendSplittable()) {
+                // if BE can split, use a higher threshold.
+                splitSize = sv.getConnectorHugeFileSize();
+            }
+        }
+        boolean needSplit = (totalSize > splitSize);
         if (needSplit) {
             splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, offset, totalSize, splitSize,
                     dataCacheOptions);
@@ -283,7 +282,7 @@ public class RemoteScanRangeLocations {
     }
 
     public List<TScanRangeLocations> getScanRangeLocations(DescriptorTable descTbl, Table table,
-                                           HDFSScanNodePredicates scanNodePredicates) {
+                                                           HDFSScanNodePredicates scanNodePredicates) {
         result.clear();
         HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
 
