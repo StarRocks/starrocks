@@ -116,11 +116,11 @@ public:
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                          PriorityThreadPool* executors = nullptr);
 
+    Status init() override;
+
     StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override;
 
 private:
-    Status _init();
-
     std::shared_ptr<FileSystem> _fs;
     std::map<std::string, std::string> _options;
     std::shared_ptr<ORCWriterOptions> _parsed_options;

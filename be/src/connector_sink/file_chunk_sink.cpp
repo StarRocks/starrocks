@@ -41,6 +41,7 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
 
 Status FileChunkSink::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
+    RETURN_IF_ERROR(_file_writer_factory->init());
     return Status::OK();
 }
 
@@ -65,7 +66,7 @@ StatusOr<ConnectorChunkSink::Futures> FileChunkSink::add(ChunkPtr chunk) {
     auto writer = _partition_writers[partition];
     if (writer->get_written_bytes() >= _max_file_size) {
         auto f = writer->commit();
-        futures.commit_file_future.push_back(std::move(f));
+        futures.commit_file_futures.push_back(std::move(f));
         auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
         ASSIGN_OR_RETURN(writer, _file_writer_factory->create(path));
         RETURN_IF_ERROR(writer->init());
@@ -73,7 +74,7 @@ StatusOr<ConnectorChunkSink::Futures> FileChunkSink::add(ChunkPtr chunk) {
     }
 
     auto f = writer->write(chunk);
-    futures.add_chunk_future.push_back(std::move(f));
+    futures.add_chunk_futures.push_back(std::move(f));
     return futures;
 }
 
@@ -81,7 +82,7 @@ ConnectorChunkSink::Futures FileChunkSink::finish() {
     Futures futures;
     for (auto& [_, writer] : _partition_writers) {
         auto f = writer->commit();
-        futures.commit_file_future.push_back(std::move(f));
+        futures.commit_file_futures.push_back(std::move(f));
     }
     return futures;
 }
@@ -97,7 +98,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)));
+    auto fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
     auto location_provider = std::make_unique<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
@@ -112,7 +113,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
                 std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor);
     } else {
-        return Status::NotSupported("got unsupported file format: " + ctx->format);
+        file_writer_factory = std::make_unique<formats::UnknownFileWriterFactory>(ctx->format);
     }
 
     std::vector<std::string> partition_columns;

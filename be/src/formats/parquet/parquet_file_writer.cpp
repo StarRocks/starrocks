@@ -438,7 +438,7 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> f
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors) {}
 
-Status ParquetFileWriterFactory::_init() {
+Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
     _parsed_options->column_ids = _field_ids;
@@ -446,10 +446,6 @@ Status ParquetFileWriterFactory::_init() {
 }
 
 StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const std::string& path) {
-    if (_parsed_options == nullptr) {
-        RETURN_IF_ERROR(_init());
-    }
-
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");

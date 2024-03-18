@@ -564,7 +564,7 @@ ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs,
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors) {}
 
-Status ORCFileWriterFactory::_init() {
+Status ORCFileWriterFactory::init() {
     for (auto& e : _column_evaluators) {
         RETURN_IF_ERROR(e->init());
     }
@@ -573,10 +573,6 @@ Status ORCFileWriterFactory::_init() {
 }
 
 StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) {
-    if (_parsed_options == nullptr) {
-        RETURN_IF_ERROR(_init());
-    }
-
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");

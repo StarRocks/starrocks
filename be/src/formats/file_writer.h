@@ -17,8 +17,8 @@
 #include <future>
 
 #include "column/chunk.h"
-#include "column_evaluator.h"
 #include "common/status.h"
+#include "formats/column_evaluator.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
@@ -61,7 +61,23 @@ class FileWriterFactory {
 public:
     virtual ~FileWriterFactory() = default;
 
+    virtual Status init() = 0;
+
     virtual StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) = 0;
+};
+
+class UnknownFileWriterFactory : public FileWriterFactory {
+public:
+    UnknownFileWriterFactory(std::string format) : _format(std::move(format)) {}
+
+    Status init() override { return Status::NotSupported(fmt::format("got unsupported file format: {}", _format)); }
+
+    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override {
+        return Status::NotSupported(fmt::format("got unsupported file format: {}", _format));
+    }
+
+private:
+    std::string _format;
 };
 
 } // namespace starrocks::formats

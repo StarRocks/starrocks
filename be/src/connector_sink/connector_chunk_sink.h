@@ -30,11 +30,11 @@ namespace starrocks::connector {
 
 class ConnectorChunkSink {
 public:
-    // If `add_chunk_future` is not ready, the chunk sink cannot accept more chunks.
-    // If `commit_file_future` is not ready, the chunk sink can still accept chunks.
+    // If any of the `add_chunk_futures` is not ready, the chunk sink cannot accept more chunks.
+    // The chunk sink can still accept chunks if some `add_chunk_futures` is ready or not.
     struct Futures {
-        std::vector<std::future<Status>> add_chunk_future;
-        std::vector<std::future<formats::FileWriter::CommitResult>> commit_file_future;
+        std::vector<std::future<Status>> add_chunk_futures;
+        std::vector<std::future<formats::FileWriter::CommitResult>> commit_file_futures;
     };
 
     virtual ~ConnectorChunkSink() = default;
