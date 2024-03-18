@@ -17,7 +17,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotRef;
@@ -55,7 +54,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
      * Build the filter if inner table contains only one row, which is a common case for scalar subquery
      */
     @Override
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl) {
+    protected void buildSelfRuntimeFilters(IdGenerator<RuntimeFilterId> generator) {
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
@@ -63,6 +62,11 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         PlanNode buildStageNode = this.getChild(1);
         List<Expr> conjuncts = new ArrayList<>(otherJoinConjuncts);
         conjuncts.addAll(getConjuncts());
+
+        // join may be 1-N relation, the value will be negative, but it's ok
+        double selectivity = getChild(0).getCardinality() == 0 ? 0 :
+                Math.max(Math.min((double) getCardinality() / getChild(0).getCardinality(), 1.0), 0);
+
         for (int i = 0; i < conjuncts.size(); i++) {
             Expr expr = conjuncts.get(i);
             if (canBuildFilter(expr)) {
@@ -77,10 +81,12 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 rf.setBuildCardinality(buildStageNode.getCardinality());
                 rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
+                rf.setProbeExpr(left);
 
-                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
-                    this.getBuildRuntimeFilters().add(rf);
-                }
+                rf.setWaitTimeMs(sessionVariable.getGlobalRuntimeFilterWaitTimeout());
+                rf.setSelectivity(selectivity);
+
+                unPushDownRuntimeFilters.add(rf);
             }
         }
     }

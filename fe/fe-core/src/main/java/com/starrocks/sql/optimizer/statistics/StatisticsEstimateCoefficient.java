@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.monitor.unit.ByteSizeUnit;
+
 public class StatisticsEstimateCoefficient {
     // Estimated parameters for multiple join on predicates when predicate correlation is not known
     public static final double UNKNOWN_AUXILIARY_FILTER_COEFFICIENT = 0.9;
@@ -60,6 +62,8 @@ public class StatisticsEstimateCoefficient {
     // default or predicate limit
     public static final int DEFAULT_OR_OPERATOR_LIMIT = 16;
 
+    // default 1 GB/s, between SSD(300MB/s) and NVME (2GB/s)
+    public static final long DEFAULT_BE_IO_SPEED = ByteSizeUnit.GB.toBytes(1);
 
     public static final double EXECUTE_COST_PENALTY = 2;
     public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
