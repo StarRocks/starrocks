@@ -48,7 +48,7 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
@@ -119,7 +119,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             return partitionNames;
         }
 
-        AbstractFileStoreTable dataTable = (AbstractFileStoreTable) paimonTable;
+        FileStoreTable dataTable = (FileStoreTable) paimonTable;
         RowDataConverter converter = new RowDataConverter(dataTable.schema().logicalPartitionType());
 
         ReadBuilder readBuilder = paimonTable.newReadBuilder();

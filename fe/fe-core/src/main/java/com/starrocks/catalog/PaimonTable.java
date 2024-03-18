@@ -22,7 +22,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.options.Options;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
 
 import java.util.ArrayList;
@@ -38,7 +38,7 @@ public class PaimonTable extends Table {
     private final String databaseName;
     private final String tableName;
     private final Options paimonOptions;
-    private final AbstractFileStoreTable paimonNativeTable;
+    private final FileStoreTable paimonNativeTable;
     private final List<String> partColumnNames;
     private final List<String> paimonFieldNames;
 
@@ -49,7 +49,7 @@ public class PaimonTable extends Table {
         this.databaseName = dbName;
         this.tableName = tblName;
         this.paimonOptions = paimonOptions;
-        this.paimonNativeTable = (AbstractFileStoreTable) paimonNativeTable;
+        this.paimonNativeTable = (FileStoreTable) paimonNativeTable;
         this.partColumnNames = paimonNativeTable.partitionKeys();
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
@@ -69,7 +69,7 @@ public class PaimonTable extends Table {
         return tableName;
     }
 
-    public AbstractFileStoreTable getNativeTable() {
+    public FileStoreTable getNativeTable() {
         return paimonNativeTable;
     }
 

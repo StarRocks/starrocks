@@ -35,7 +35,7 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.system.SchemasTable;
@@ -111,7 +111,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetTable(@Mocked AbstractFileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
+    public void testGetTable(@Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         List<DataField> fields = new ArrayList<>();
         fields.add(new DataField(1, "col2", new IntType()));
         new Expectations() {
@@ -137,7 +137,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testListPartitionNames(@Mocked AbstractFileStoreTable paimonNativeTable,
+    public void testListPartitionNames(@Mocked FileStoreTable paimonNativeTable,
                                        @Mocked ReadBuilder readBuilder) throws Catalog.TableNotExistException {
 
         RowType partitionRowType = RowType.of(
@@ -170,7 +170,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testGetRemoteFileInfos(@Mocked AbstractFileStoreTable paimonNativeTable,
+    public void testGetRemoteFileInfos(@Mocked FileStoreTable paimonNativeTable,
                                        @Mocked ReadBuilder readBuilder)
             throws Catalog.TableNotExistException {
         new Expectations() {
@@ -192,7 +192,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testUUID(@Mocked AbstractFileStoreTable paimonNativeTable,
+    public void testUUID(@Mocked FileStoreTable paimonNativeTable,
                          @Mocked ReadBuilder readBuilder) {
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
         Assert.assertTrue(paimonTable.getUUID().startsWith("paimon_catalog.db1.tbl1"));
