@@ -30,6 +30,14 @@ DEFINE_UNARY_FN_WITH_IMPL(isNullImpl, v) {
     return v;
 }
 
+DEFINE_UNARY_FN_WITH_IMPL(isJsonNullImpl, v) {
+    return v->is_null_or_none();
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(isNotJsonNullImpl, v) {
+    return !v->is_null_or_none();
+}
+
 class VectorizedIsNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNullPredicate);
@@ -39,6 +47,11 @@ public:
 
         if (column->only_null()) {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, column->size());
+        }
+
+        if (column->is_json()) {
+            // Consider JSON NULL as NULL
+            return VectorizedStrictUnaryFunction<isJsonNullImpl>::evaluate<TYPE_JSON, TYPE_BOOLEAN>(column);
         }
 
         if (!column->is_nullable() || !column->has_null()) {
@@ -63,6 +76,11 @@ public:
 
         if (column->only_null()) {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, column->size());
+        }
+
+        if (column->is_json()) {
+            // Consider JSON NULL as NULL
+            return VectorizedStrictUnaryFunction<isNotJsonNullImpl>::evaluate<TYPE_JSON, TYPE_BOOLEAN>(column);
         }
 
         if (!column->is_nullable() || !column->has_null()) {
