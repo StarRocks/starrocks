@@ -648,6 +648,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
+    public static final String ENABLE_AGGREGATION_RUNTIME_LIMIT = "enable_aggregation_runtime_limit";
+    public static final String STREAMING_AGG_LOW_MEMORY_MODE = "streaming_agg_low_memory_mode";
+
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
@@ -897,6 +900,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // auto, force_streaming, force_preaggregation
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
     private String streamingPreaggregationMode = SessionVariableConstants.AUTO;
+
+    @VarAttr(name = STREAMING_AGG_LOW_MEMORY_MODE, flag = VariableMgr.INVISIBLE)
+    private String streamingAggLowMemoryMode = SessionVariableConstants.LIMITED;
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
@@ -1334,6 +1340,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
 
+    @VarAttr(name = ENABLE_AGGREGATION_RUNTIME_LIMIT, flag = VariableMgr.INVISIBLE)
+    private boolean enableAggregationRuntimeLimit = false;
+
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
 
@@ -1370,6 +1379,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
         this.cboPushDownTopNLimit = cboPushDownTopNLimit;
+    }
+
+    public boolean getEnableAggregationRuntimeLimit() {
+        return enableAggregationRuntimeLimit;
     }
 
     public String getThriftPlanProtocol() {
@@ -1425,6 +1438,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableQueryQueue() {
         return enableQueryQueue;
+    }
+
+    public String getStreamingAggLowMemoryMode() {
+        return streamingAggLowMemoryMode;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)

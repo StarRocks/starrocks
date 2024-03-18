@@ -32,6 +32,7 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
                                 _aggregator->limit() != -1 &&                 // has limit
                                 _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
                                 _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
+    _runtime_limit = (static_cast<AggregateBlockingSinkOperatorFactory*>(get_factory()))->get_runtime_limit();
     return Status::OK();
 }
 
@@ -94,7 +95,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     // try to build hash table if has group by keys
     if (!_aggregator->is_none_group_by_exprs()) {
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _agg_group_by_with_limit));
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _agg_group_by_with_limit, _runtime_limit));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
 
