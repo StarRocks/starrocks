@@ -127,6 +127,12 @@ public:
 
     void reset_cancel_major_compaction();
 
+    // only for ut
+    void set_status(bool loaded, Status st) {
+        _loaded = loaded;
+        _status = st;
+    }
+
 private:
     void _set_schema(const vectorized::Schema& pk_schema);
 
