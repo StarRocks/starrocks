@@ -188,7 +188,15 @@ public class ConnectProcessor {
         }
 
         // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
-        String errorCode = StringUtils.isNotEmpty(ctx.getErrorCode()) ? ctx.getErrorCode() : ctx.getState().getErrType().name();
+        String errorCode = "";
+        if (ctx.getState().getErrType() != QueryState.ErrType.EMPTY) {
+            // error happens in FE execution.
+            errorCode = ctx.getState().getErrType().name();
+        } else if (StringUtils.isNotEmpty(ctx.getErrorCode())) {
+            // error happens in BE execution.
+            errorCode = ctx.getErrorCode();
+        }
+
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
                 .setErrorCode(errorCode)
