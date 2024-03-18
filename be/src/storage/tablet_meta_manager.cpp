@@ -48,6 +48,7 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
+#include "fmt/format.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
@@ -1795,10 +1796,9 @@ Status TabletMetaManager::pending_rowset_iterate(DataDir* store, TTabletId table
             META_COLUMN_FAMILY_INDEX, prefix, [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
                 TTabletId tid = -1;
                 int64_t version = -1;
-                if (!decode_meta_pending_rowset_key(key, &tid, &version)) {
-                    LOG(ERROR) << "corrupt pending rowset key: " << hexdump(key.data(), key.length());
-                    return false;
-                }
+                bool decode_ok = decode_meta_pending_rowset_key(key, &tid, &version);
+                RETURN_ERROR_IF_FALSE(decode_ok,
+                                      fmt::format("corrupt pending rowset key: {}", hexdump(key.data(), key.length())));
                 return func(version, value);
             });
 }
