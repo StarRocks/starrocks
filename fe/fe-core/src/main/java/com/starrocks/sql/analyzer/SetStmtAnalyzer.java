@@ -422,14 +422,14 @@ public class SetStmtAnalyzer {
         if (type.isArrayType()) {
             ArrayType arrayType = (ArrayType) type;
             PrimitiveType itemPrimitiveType = arrayType.getItemType().getPrimitiveType();
-            if (itemPrimitiveType == PrimitiveType.BOOLEAN || itemPrimitiveType == PrimitiveType.TIME ||
+            if (itemPrimitiveType == PrimitiveType.BOOLEAN ||
                     itemPrimitiveType.isDateType() || itemPrimitiveType.isNumericType() ||
                     itemPrimitiveType.isCharFamily()) {
                 return true;
             }
         } else if (type.isScalarType()) {
             PrimitiveType primitiveType = type.getPrimitiveType();
-            if (primitiveType == PrimitiveType.BOOLEAN || primitiveType == PrimitiveType.TIME ||
+            if (primitiveType == PrimitiveType.BOOLEAN ||
                     primitiveType.isDateType() || primitiveType.isNumericType() ||
                     primitiveType.isCharFamily() || primitiveType.isJsonType()) {
                 return true;
