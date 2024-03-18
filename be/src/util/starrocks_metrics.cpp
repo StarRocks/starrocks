@@ -55,7 +55,22 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
 
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_total);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_duration_us);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_memtable_duration_us);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_writer_duration_us);
+    REGISTER_STARROCKS_METRIC(load_channel_add_chunks_wait_replica_duration_us);
+
+    REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
+    REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);
+    REGISTER_STARROCKS_METRIC(async_delta_writer_task_execute_duration_us);
+    REGISTER_STARROCKS_METRIC(async_delta_writer_task_pending_duration_us);
+
+    REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_duration_us);
+    REGISTER_STARROCKS_METRIC(delta_writer_wait_replica_duration_us);
+
     REGISTER_STARROCKS_METRIC(memtable_flush_total);
+    REGISTER_STARROCKS_METRIC(memtable_finalize_duration_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_duration_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_io_time_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_memory_bytes_total);
