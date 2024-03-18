@@ -127,7 +127,7 @@ std::function<void(const formats::FileWriter::CommitResult& result)> IcebergChun
     };
 }
 
-std::unique_ptr<ConnectorChunkSink> IcebergChunkSinkProvider::create_chunk_sink(
+StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
