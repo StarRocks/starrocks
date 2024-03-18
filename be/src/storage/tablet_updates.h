@@ -301,6 +301,12 @@ public:
 
     Status pk_index_major_compaction();
 
+    void set_error(const string& msg) { _set_error(msg); }
+    void reset_error() {
+        _error = false;
+        _error_msg = "";
+    }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

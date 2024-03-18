@@ -3710,4 +3710,50 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
     ASSERT_TRUE(count == keys.size());
 }
 
+TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {
+    const int N = 10;
+    _tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<int64_t> keys2(N);
+    for (int i = 0; i < N; i++) {
+        keys2[i] = (i + 1) * 1000;
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(20);
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys2, nullptr, false, false));
+    }
+    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+    for (int i = 0; i < rowsets.size(); i++) {
+        auto version = i + 2;
+        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Ensure that there is at most one thread doing the version apply job.
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+    }
+    ASSERT_EQ(N * 2, read_tablet(_tablet, rowsets.size() + 1));
+
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_TRUE(_tablet->updates()->is_error());
+    config::enable_pindex_rebuild_in_compaction = false;
+    auto index_entry = StorageEngine::instance()->update_manager()->index_cache().get_or_create(_tablet->tablet_id());
+    auto& index = index_entry->value();
+    index.set_status(true, Status::InternalError("ut"));
+    _tablet->updates()->reset_error();
+    ASSERT_FALSE(_tablet->updates()->is_error());
+
+    ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    ASSERT_TRUE(_tablet->updates()->is_error());
+}
+
 } // namespace starrocks
