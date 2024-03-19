@@ -2,6 +2,7 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -246,17 +247,21 @@ public class StatementPlanner {
         if (dbs == null) {
             return;
         }
-        dbs.sort(Comparator.comparingLong(Database::getId));
-        for (Database db : dbs) {
-            db.readLock();
+        Map<Long, Database> dbMap = Maps.newTreeMap();
+        dbs.stream().forEach(db -> dbMap.put(db.getId(), db));
+        for (Map.Entry<Long, Database> entry : dbMap.entrySet()) {
+            entry.getValue().readLock();
         }
     }
     public static void unlockDatabases(Collection<Database> dbs) {
         if (dbs == null) {
             return;
         }
-        for (Database db : dbs) {
-            db.readUnlock();
+        // use TreeMap to remove duplicate and sort by db id
+        Map<Long, Database> dbMap = Maps.newTreeMap();
+        dbs.stream().forEach(db -> dbMap.put(db.getId(), db));
+        for (Map.Entry<Long, Database> entry : dbMap.entrySet()) {
+            entry.getValue().readUnlock();
         }
     }
 
