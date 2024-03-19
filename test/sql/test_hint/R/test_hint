@@ -247,3 +247,14 @@ select array_length(@test);
 -- result:
 1296
 -- !result
+set @test= (select cast(50 as boolean));
+-- result:
+-- !result
+select @test;
+-- result:
+1
+-- !result
+set @test= (select cast(50 as time));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't set variable with type TIME.")
+-- !result
