@@ -34,6 +34,7 @@ You can find a function based on the following categories:
 
 - [any_value](./aggregate-functions/any_value.md)
 - [approx_count_distinct](./aggregate-functions/approx_count_distinct.md)
+- [approx_top_k](./aggregate-functions/approx_top_k.md)
 - [array_agg](./array-functions/array_agg.md)
 - [avg](./aggregate-functions/avg.md)
 - [bitmap](./aggregate-functions/bitmap.md)
