@@ -103,13 +103,13 @@ public class RemoteFileDesc {
         return splittable;
     }
 
-    public TextFileFormatDesc getTextFileFormatDesc() {
-        return textFileFormatDesc;
-    }
-
     public RemoteFileDesc setSplittable(boolean splittable) {
         this.splittable = splittable;
         return this;
+    }
+
+    public TextFileFormatDesc getTextFileFormatDesc() {
+        return textFileFormatDesc;
     }
 
     public RemoteFileDesc setTextFileFormatDesc(TextFileFormatDesc textFileFormatDesc) {
@@ -117,13 +117,13 @@ public class RemoteFileDesc {
         return this;
     }
 
+    public String getFullPath() {
+        return this.fullPath;
+    }
+
     public RemoteFileDesc setFullPath(String fullPath) {
         this.fullPath = fullPath;
         return this;
-    }
-
-    public String getFullPath() {
-        return this.fullPath;
     }
 
     public ImmutableList<String> getHudiDeltaLogs() {
@@ -137,6 +137,7 @@ public class RemoteFileDesc {
     public PaimonSplitsInfo getPaimonSplitsInfo() {
         return paimonSplitsInfo;
     }
+
     public OdpsSplitsInfo getOdpsSplitsInfo() {
         return odpsSplitsInfo;
     }
