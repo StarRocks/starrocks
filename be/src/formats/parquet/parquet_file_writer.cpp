@@ -462,13 +462,7 @@ Status ParquetFileWriter::init() {
     return Status::OK();
 }
 
-ParquetFileWriter::~ParquetFileWriter() {
-    try {
-        auto st = _output_stream->Close();
-        LOG_IF(WARNING, !st.ok()) << st;
-    } catch (...) {
-    }
-}
+ParquetFileWriter::~ParquetFileWriter() = default;
 
 ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs,
                                                    TCompressionType::type compression_type,
