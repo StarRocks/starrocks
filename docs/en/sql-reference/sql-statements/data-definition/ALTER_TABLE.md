@@ -128,7 +128,7 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 Note:
 
 1. Keep at least one partition for partitioned tables.
-2. After executing DROP PARTITION for a while, the dropped partition can be recovered by the RECOVER statement. See the RECOVER statement for details.
+2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](./RECOVER.md) command within a specified period (1 day by default).
 3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally this operation is not recommended.
 
 #### Add a temporary partition

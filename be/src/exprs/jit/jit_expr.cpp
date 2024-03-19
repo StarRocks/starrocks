@@ -14,6 +14,8 @@
 
 #include "exprs/jit/jit_expr.h"
 
+#include <llvm/IR/IRBuilder.h>
+
 #include <chrono>
 #include <vector>
 
@@ -25,7 +27,6 @@
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"
-#include "llvm/IR/IRBuilder.h"
 
 namespace starrocks {
 
@@ -46,7 +47,18 @@ JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
 
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
+    RETURN_IF_ERROR(prepare_impl(state, context));
+    if (_jit_function == nullptr) {
+        _children.clear();
+        _children.push_back(_expr);
+        // jitExpr becomes an empty node, fallback to original expr, which are prepared again in case of jit
+        // complex expressions later.
+        RETURN_IF_ERROR(Expr::prepare(state, context));
+    }
+    return Status::OK();
+}
 
+Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
     if (_is_prepared) {
         return Status::OK();
     }
@@ -57,31 +69,25 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
 
         // Compile the expression into native code and retrieve the function pointer.
         auto* jit_engine = JITEngine::get_instance();
-        if (!jit_engine->initialized()) {
+        if (!jit_engine->support_jit()) {
             return Status::JitCompileError("JIT is not supported");
         }
+        auto expr_name = _expr->jit_func_name();
+        _jit_obj_cache = std::make_unique<JitObjectCache>(expr_name, JITEngine::get_instance()->get_func_cache());
 
-        auto function = jit_engine->compile_scalar_function(context, _expr);
+        auto st = jit_engine->compile_scalar_function(context, _jit_obj_cache.get(), _expr, _children);
 
         auto elapsed = MonotonicNanos() - start;
-        if (!function.ok()) {
+        if (!st.ok()) {
             LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
-                      << " Reason: " << function.status();
+                      << " Reason: " << st;
         } else {
-            LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
+            VLOG_QUERY << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
+            _jit_function = _jit_obj_cache->get_func();
+            if (_jit_function == nullptr) {
+                return Status::RuntimeError("JIT func must be not null");
+            }
         }
-
-        _jit_function = function.value_or(nullptr);
-    }
-    if (_jit_function != nullptr) {
-        _jit_expr_name = _expr->debug_string();
-        if (_jit_expr_name.empty()) {
-            return Status::RuntimeError("[JIT] expr debug_string() is empty");
-        }
-    } else {
-        _children.clear();
-        _children.push_back(_expr);
-        RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.
     }
     return Status::OK();
 }
@@ -126,9 +132,9 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         auto child = _children[i];
         if (UNLIKELY((column->is_constant() ^ child->is_constant()) ||
                      (column->is_nullable() ^ child->is_nullable()))) {
-            LOG(INFO) << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
-                      << " but col const = " << column->is_constant() << " null = " << column->is_nullable()
-                      << " expr= " << child->debug_string() << " col= " << column->get_name();
+            VLOG_QUERY << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
+                       << " but col const = " << column->is_constant() << " null = " << column->is_nullable()
+                       << " expr= " << child->debug_string() << " col= " << column->get_name();
         }
 
         if (column->is_constant()) {
@@ -156,19 +162,6 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         down_cast<NullableColumn*>(result_column.get())->update_has_null();
     }
     return result_column;
-}
-
-// only unregister once
-JITExpr::~JITExpr() {
-    if (_is_prepared && _jit_function != nullptr) {
-        auto* jit_engine = JITEngine::get_instance();
-        if (jit_engine->initialized()) {
-            auto status = jit_engine->remove_function(_jit_expr_name);
-            if (!status.ok()) {
-                LOG(WARNING) << "JIT: remove function failed, reason: " << status;
-            }
-        }
-    }
 }
 
 } // namespace starrocks

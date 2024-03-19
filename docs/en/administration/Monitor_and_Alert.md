@@ -308,7 +308,7 @@ To integrate Grafana with your Prometheus service, you need to modify the follow
 
   ![MA-8](../assets/monitor/monitor8.png)
 
-- **Prometheus Server URL**: The URL of the Prometheus server, which, in this tutorial, is `http://192.168.110.23:9090`。
+- **Prometheus Server URL**: The URL of the Prometheus server, which, in this tutorial, is `http://192.168.110.23:9090`.
 
   ![MA-9](../assets/monitor/monitor9.png)
 
@@ -423,7 +423,7 @@ After completing these steps, modify the Grafana configuration file on the node 
 vim /usr/share/grafana/conf/defaults.ini
 ```
 
-Example：
+Example:
 
 ```Properties
 ###################### SMTP / Emailing #####################

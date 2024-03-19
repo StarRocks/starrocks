@@ -15,7 +15,6 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -143,6 +142,8 @@ public class SystemInfoServiceTest {
 
     @Test
     public void testGetBackendOrComputeNode() {
+        mockNet();
+
         Backend be = new Backend(10001, "host1", 1000);
         service.addBackend(be);
         ComputeNode cn = new ComputeNode(10002, "host2", 1000);
@@ -189,14 +190,6 @@ public class SystemInfoServiceTest {
             }
         };
 
-        new Expectations(localMetastore) {
-            {
-                localMetastore.getCluster();
-                minTimes = 0;
-                result = new Cluster("cluster", 1);
-            }
-        };
-
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, false);
@@ -226,14 +219,6 @@ public class SystemInfoServiceTest {
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
-            }
-        };
-
-        new Expectations(localMetastore) {
-            {
-                localMetastore.getCluster();
-                minTimes = 0;
-                result = new Cluster("cluster", 1);
             }
         };
 
@@ -327,5 +312,32 @@ public class SystemInfoServiceTest {
         latch.await();
 
         Assert.assertEquals(10L, version.get());
+    }
+
+    @Test
+    public void testGetComputeNodeWithBePort() throws Exception {
+        mockNet();
+
+        ComputeNode be1 = new ComputeNode(10001, "127.0.0.1", 1000);
+        be1.setBePort(1001);
+        service.addComputeNode(be1);
+        ComputeNode beIP1 = service.getComputeNodeWithBePort("127.0.0.1", 1001);
+
+        service.dropAllComputeNode();
+
+        ComputeNode be2 = new ComputeNode(10001, "newHost-1", 1000);
+        be2.setBePort(1001);
+        service.addComputeNode(be2);
+        ComputeNode beFqdn = service.getComputeNodeWithBePort("127.0.0.1", 1001);
+
+        Assert.assertTrue(beFqdn != null && beIP1 != null);
+
+        service.dropAllComputeNode();
+
+        ComputeNode be3 = new ComputeNode(10001, "127.0.0.1", 1000);
+        be3.setBePort(1001);
+        service.addComputeNode(be3);
+        ComputeNode beIP3 = service.getComputeNodeWithBePort("127.0.0.2", 1001);
+        Assert.assertTrue(beIP3 == null);
     }
 }

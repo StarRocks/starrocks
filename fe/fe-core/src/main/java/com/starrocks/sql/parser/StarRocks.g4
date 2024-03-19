@@ -521,7 +521,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING (BITMAP | GIN)
+    : USING (BITMAP | GIN | NGRAMBF)
     ;
 
 showTableStatement
@@ -617,12 +617,22 @@ columnNameWithComment
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT TASK qualifiedName? properties?
-    AS (createTableAsSelectStatement | insertStatement )
+    : SUBMIT TASK qualifiedName?
+        taskClause*
+        AS (createTableAsSelectStatement | insertStatement )
+    ;
+
+taskClause
+    : properties
+    | taskScheduleDesc
     ;
 
 dropTaskStatement
     : DROP TASK qualifiedName FORCE?
+    ;
+
+taskScheduleDesc
+    : SCHEDULE (START '(' string ')')? EVERY '(' interval ')'
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
@@ -2783,7 +2793,7 @@ nonReserved
     | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
-    | SAMPLE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE
@@ -2793,5 +2803,5 @@ nonReserved
     | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
-    | DOTDOTDOT
+    | DOTDOTDOT | NGRAMBF
     ;

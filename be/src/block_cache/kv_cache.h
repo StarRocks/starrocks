@@ -25,6 +25,8 @@ namespace starrocks {
 using DataCacheMetrics = starcache::CacheMetrics;
 using DataCacheStatus = starcache::CacheStatus;
 
+enum class DataCacheEngineType { STARCACHE, CACHELIB };
+
 class KvCache {
 public:
     virtual ~KvCache() = default;
@@ -55,6 +57,8 @@ public:
     virtual void record_read_cache(size_t size, int64_t lateny_us) = 0;
 
     virtual Status shutdown() = 0;
+
+    virtual DataCacheEngineType engine_type() = 0;
 };
 
 } // namespace starrocks

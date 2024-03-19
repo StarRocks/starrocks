@@ -41,7 +41,7 @@ public:
 
     PrimaryIndex();
     PrimaryIndex(const Schema& pk_schema);
-    ~PrimaryIndex();
+    virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
@@ -113,7 +113,7 @@ public:
 
     double get_write_amp_score();
 
-    Status major_compaction(Tablet* tablet);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
 
     Status abort();
 

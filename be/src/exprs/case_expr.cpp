@@ -98,7 +98,7 @@ public:
                                                           head->getParent());
                     auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
                                                           head->getParent());
-                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir_impl(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir(context, jit_ctx))
                     if (i == 0) { // if caseExpr is null, go to else
                         datum_0 = datum_i;
                         llvm::Value* is_null = nullptr;
@@ -125,7 +125,7 @@ public:
                             b.CreateCondBr(cmp_eq, then, next);
                         }
                         b.SetInsertPoint(then);
-                        ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir_impl(context, jit_ctx))
+                        ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir(context, jit_ctx))
                         b.CreateStore(datum_i_1.value, res);
                         b.CreateStore(datum_i_1.null_flag, res_null);
                         b.CreateBr(join);
@@ -138,7 +138,7 @@ public:
                                                           head->getParent());
                     auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
                                                           head->getParent());
-                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir_impl(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir(context, jit_ctx))
                     auto* is_true = IRHelper::bool_to_cond(b, datum_i.value);
                     if (_children[i]->is_nullable()) {
                         auto* not_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
@@ -148,7 +148,7 @@ public:
                     }
                     b.SetInsertPoint(then);
 
-                    ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir_impl(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir(context, jit_ctx))
                     b.CreateStore(datum_i_1.value, res);
                     b.CreateStore(datum_i_1.null_flag, res_null);
                     b.CreateBr(join);
@@ -159,7 +159,7 @@ public:
             b.SetInsertPoint(else_block);
             LLVMDatum else_val;
             if (_has_else_expr) {
-                ASSIGN_OR_RETURN(else_val, _children.back()->generate_ir_impl(context, jit_ctx))
+                ASSIGN_OR_RETURN(else_val, _children.back()->generate_ir(context, jit_ctx))
             } else {
                 ASSIGN_OR_RETURN(else_val.value, IRHelper::create_ir_number(b, ResultType, 0))
                 else_val.null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
@@ -175,6 +175,31 @@ public:
         } else {
             return Status::NotSupported("JIT of case..when..else...end not support");
         }
+    }
+
+    std::string jit_func_name_impl() const override {
+        std::stringstream out;
+        out << "{";
+        for (auto i = 0; i < _children.size(); i++) {
+            if (i == 0) {
+                if (_has_case_expr) {
+                    out << "C";
+                } else {
+                    out << "CW";
+                }
+            } else if (i + 1 == _children.size() && _has_else_expr) {
+                out << "EL";
+            } else {
+                if ((i + _has_case_expr) % 2 == 0) {
+                    out << "W";
+                } else {
+                    out << "T";
+                }
+            }
+            out << "<" << _children[i]->jit_func_name() << ">";
+        }
+        out << "}" << (is_constant() ? "c:" : "") << (is_nullable() ? "n:" : "") << type().debug_string();
+        return out.str();
     }
 
     std::string debug_string() const override {

@@ -24,7 +24,7 @@ displayed_sidebar: "Chinese"
 
 ### 参数变更
 
-- 新增 FE 配置项  `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍**。**[#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- 新增 FE 配置项  `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。[#37530](https://github.com/StarRocks/starrocks/pull/37530)
 - 新增 BE 配置项 `lake_pk_compaction_max_input_rowsets`，用于控制存算分离集群下主键表 Compaction 任务中允许的最大输入 Rowset 数量，优化 Compaction 时资源的使用。[#39611](https://github.com/StarRocks/starrocks/pull/39611)
 - 新增 Session 变量 `connector_sink_compression_codec`，用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法，可选算法包括 GZIP、BROTLI、ZSTD 以及 LZ4。 [#37912](https://github.com/StarRocks/starrocks/pull/37912)
 - 新增 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
@@ -32,13 +32,14 @@ displayed_sidebar: "Chinese"
 - 新增 BE 配置项 `enable_lazy_delta_column_compaction`，默认取值是 `true`，表示不启用频繁的进行 Delta Column 的 Compaction。[#36654](https://github.com/StarRocks/starrocks/pull/36654)
 - 新增 FE 配置项 `default_mv_refresh_immediate`，用于控制物化视图创建完成后是否立刻进行刷新，默认值为 `true`，表示立刻刷新，`false` 表示延迟刷新。 [#37093](https://github.com/StarRocks/starrocks/pull/37093)
 - 调整 FE 配置项 `default_mv_refresh_partition_num` 默认值为 `1`，即单次物化视图刷新需更新多个分区时，任务将分批执行，一次只刷新一个分区。此举可以减少每次刷新占用的资源。 [#36560](https://github.com/StarRocks/starrocks/pull/36560)
+- 调整 BE/CN 配置项 `starlet_use_star_cache` 默认值为 `true`，即在存算分离模式下默认开启 block data cache。如果您在升级前将 BE/CN 参数 `starlet_cache_evict_high_water` 配置为 `X`，则需要将 BE/CN 参数 `starlet_star_cache_disk_size_percent` 配置为 `(1.0 - X) * 100`。例如，如果您将 `starlet_cache_evict_high_water` 设置为 0.3，则需要设置 `starlet_star_cache_disk_size_percent` 为 70。此举可以确保 file data cache 和 block data cache 不会超过磁盘容量上限。[#38200](https://github.com/StarRocks/starrocks/pull/38200)
 
 ### 功能优化
 
 - 对于分区字段为 TIMESTAMP 类型的 Iceberg 表，新增 `yyyy-MM-ddTHH:mm` 和 `yyyy-MM-dd HH:mm` 两种数据格式的支持。[#39986](https://github.com/StarRocks/starrocks/pull/39986)
 - 监控 API 增加 Data Cache 相关指标。 [#40375](https://github.com/StarRocks/starrocks/pull/40375)
 - 优化 BE 的日志打印，避免日志过多。 [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
-- 视图 `information_schema.``be_tablets` 中增加 `storage_medium` 字段。 [#37070](https://github.com/StarRocks/starrocks/pull/37070)
+- 视图 `information_schema.be_tablets` 中增加 `storage_medium` 字段。 [#37070](https://github.com/StarRocks/starrocks/pull/37070)
 - 支持在多个子查询中使用 `SET_VAR`。 [#36871](https://github.com/StarRocks/starrocks/pull/36871)
 - SHOW ROUTINE LOAD 返回结果中增加 `LatestSourcePosition`，记录数据源 Kafka 中 Topic 内各个分区的最新消息位点，便于检查导入延迟情况。[#38298](https://github.com/StarRocks/starrocks/pull/38298)
 - WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)

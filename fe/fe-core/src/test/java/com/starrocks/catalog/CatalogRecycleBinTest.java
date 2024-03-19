@@ -34,6 +34,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
@@ -61,18 +62,17 @@ public class CatalogRecycleBinTest {
     public void testGetTable() {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
-        bin.recycleTable(11L, table);
+        bin.recycleTable(11L, table, true);
         Table table2 = new Table(2L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
-        bin.recycleTable(11L, table2);
+        bin.recycleTable(11L, table2, true);
 
-        Table recycledTable = bin.getTable(11L, 1L);
-        Assert.assertNull(recycledTable);
-        recycledTable = bin.getTable(11L, 2L);
-        Assert.assertEquals(2L, recycledTable.getId());
+        Assert.assertFalse(bin.isTableRecoverable(11L, 1L));
+        Assert.assertNotNull(bin.getTable(11L, 1L));
+        Assert.assertTrue(bin.isTableRecoverable(11L, 2L));
+        Assert.assertNotNull(bin.getTable(11L, 2L));
 
         List<Table> tables = bin.getTables(11L);
-        Assert.assertEquals(1, tables.size());
-        Assert.assertEquals(2L, tables.get(0).getId());
+        Assert.assertEquals(2, tables.size());
     }
 
     @Test
@@ -129,17 +129,17 @@ public class CatalogRecycleBinTest {
     public void testReplayEraseTable() {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
-        bin.recycleTable(11, table);
-        bin.recycleTable(12, table);
+        bin.recycleTable(11, table, true);
+        bin.recycleTable(12, table, true);
 
         List<Table> tables = bin.getTables(11L);
         Assert.assertEquals(1, tables.size());
 
-        bin.replayEraseTable(2);
+        bin.replayEraseTable(Collections.singletonList(2L));
         tables = bin.getTables(11);
         Assert.assertEquals(1, tables.size());
 
-        bin.replayEraseTable(1);
+        bin.replayEraseTable(Collections.singletonList(1L));
         tables = bin.getTables(11);
         Assert.assertEquals(0, tables.size());
     }
@@ -153,18 +153,19 @@ public class CatalogRecycleBinTest {
                 result = globalStateMgr;
 
                 globalStateMgr.getEditLog().logEraseMultiTables((List<Long>) any);
-                minTimes = 0;
+                minTimes = 1;
+                maxTimes = 1;
                 result = null;
             }
         };
 
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
-        bin.recycleTable(11, table);
+        bin.recycleTable(11, table, true);
         Table table2 = new Table(2L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
-        bin.recycleTable(12, table2);
+        bin.recycleTable(12, table2, true);
         Table table3 = new Table(3L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
-        bin.recycleTable(13, table3);
+        bin.recycleTable(13, table3, true);
 
         bin.eraseTable(System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
 
@@ -233,12 +234,12 @@ public class CatalogRecycleBinTest {
         };
 
         CatalogRecycleBin bin = new CatalogRecycleBin();
-        bin.recycleTable(dbId, table);
+        bin.recycleTable(dbId, table, true);
         bin.addTabletToInvertedIndex();
 
         // Check
         TabletMeta tabletMeta1 = invertedIndex.getTabletMeta(tabletId);
-        Assert.assertTrue(tabletMeta1 != null);
+        Assert.assertNotNull(tabletMeta1);
         Assert.assertFalse(tabletMeta1.isLakeTablet());
         Assert.assertEquals(TStorageMedium.SSD, tabletMeta1.getStorageMedium());
         Assert.assertEquals(replica1, invertedIndex.getReplica(tabletId, backendId));
@@ -306,7 +307,7 @@ public class CatalogRecycleBinTest {
         };
 
         CatalogRecycleBin bin = new CatalogRecycleBin();
-        bin.recycleTable(dbId, table);
+        bin.recycleTable(dbId, table, true);
         bin.addTabletToInvertedIndex();
     }
 
@@ -411,9 +412,44 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(db2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(db2.getId(), now));
         recycleBin.eraseDatabase(now);
-        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), null);
+        Assert.assertNull(recycleBin.getDatabase(db2.getId()));
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+    }
+
+    @Test
+    public void testRecycleTableMaxBatchSize(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 1;
+                result = globalStateMgr;
+            }
+        };
+        new Expectations() {
+            {
+                globalStateMgr.getEditLog();
+                minTimes = 1;
+                maxTimes = 1;
+                result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                editLog.logEraseMultiTables((List<Long>) any);
+                minTimes = 1;
+                maxTimes = 1;
+                result = null;
+            }
+        };
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        for (int i = 0; i < CatalogRecycleBin.getMaxEraseOperationsPerCycle() + 1; i++) {
+            Table t = new Table(i, String.format("t%d", i), Table.TableType.VIEW, null);
+            recycleBin.recycleTable(10000L, t, true);
+        }
+        List<CatalogRecycleBin.RecycleTableInfo> recycleTableInfos = recycleBin.pickTablesToErase(
+                System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000 + 1);
+        Assert.assertEquals(CatalogRecycleBin.getMaxEraseOperationsPerCycle(), recycleTableInfos.size());
     }
 
     @Test
@@ -440,19 +476,20 @@ public class CatalogRecycleBinTest {
             {
                 editLog.logEraseMultiTables((List<Long>) any);
                 minTimes = 0;
+                result = null;
             }
         };
 
         // 1. add 2 tables
         long dbId = 1;
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleTable(dbId, table1);
-        recycleBin.recycleTable(dbId, table2SameName);
-        recycleBin.recycleTable(dbId, table2);
+        recycleBin.recycleTable(dbId, table1, true);
+        recycleBin.recycleTable(dbId, table2SameName, true);
+        recycleBin.recycleTable(dbId, table2, true);
 
-        Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table1, table2));
-        Assert.assertEquals(recycleBin.getTable(dbId, table1.getId()), table1);
-        Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), table2);
+        Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table1, table2SameName, table2));
+        Assert.assertSame(recycleBin.getTable(dbId, table1.getId()), table1);
+        Assert.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
         Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table1.getId()));
         Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table2.getId()));
 
@@ -463,9 +500,9 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
 
-        Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table2));
-        Assert.assertEquals(recycleBin.getTable(dbId, table1.getId()), null);
-        Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), table2);
+        Assert.assertEquals(recycleBin.getTables(dbId), List.of(table2));
+        Assert.assertNull(recycleBin.getTable(dbId, table1.getId()));
+        Assert.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
 
         // 3. set recyle later, check if recycle now
         CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
@@ -487,7 +524,7 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(table2.getId(), now));
         recycleBin.eraseTable(now);
-        Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), null);
+        Assert.assertNull(recycleBin.getTable(dbId, table2.getId()));
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
     }

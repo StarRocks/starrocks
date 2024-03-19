@@ -121,6 +121,13 @@ TO test_repo
 ON (sr_member);
 ```
 
+:::tip
+StarRocks supports BACKUP and RESTORE operations on the following levels of granularity:
+- Partition level: You need to specify the ON clause in the format `ON (<table_name>.<partition_name>)`.
+- Table level: You need to specify the ON clause in the format `ON (<table_name>)`.
+- Database level: You do not need to specify the ON clause. This will back up or restore the entire database.
+:::
+
 BACKUP is an asynchronous operation. You can check the status of a BACKUP job using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md).
 
 ## Restore or migrate data
@@ -162,6 +169,13 @@ PROPERTIES (
     "replication_num" = "1"
 );
 ```
+
+:::tip
+StarRocks supports BACKUP and RESTORE operations on the following levels of granularity:
+- Partition level: You need to specify the ON clause in the format `ON (<table_name>.<partition_name>)`.
+- Table level: You need to specify the ON clause in the format `ON (<table_name>)`.
+- Database level: You do not need to specify the ON clause. This will back up or restore the entire database.
+:::
 
 RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md).
 
@@ -205,7 +219,7 @@ After RESTORE, you can check the status of the materialized view using [SHOW MAT
 
 ## Usage notes
 
-- Only users with the ADMIN privilege can back up or restore data.
+- Performing backup and restore operations on global, database, table, and partition levels requires different privileges. For detailed information, see [Customize roles based on scenarios](./User_privilege.md#customize-roles-based-on-scenarios).
 - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
 - Because BACKUP and RESTORE jobs occupy many resources of your StarRocks cluster, you can back up and restore your data while your StarRocks cluster is not heavily loaded.
 - StarRocks does not support specifying data compression algorithm for data backup.

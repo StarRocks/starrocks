@@ -55,7 +55,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -67,7 +66,6 @@ import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -83,9 +81,6 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -622,6 +617,12 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.of();
     }
 
+    // only for test
+    public void dropAllComputeNode() {
+        // update idToComputeNodeRef
+        idToComputeNodeRef.clear();
+    }
+
     public Backend getBackend(long backendId) {
         return idToBackendRef.get(backendId);
     }
@@ -748,34 +749,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
-
-        Pair<String, String> targetPair;
-        try {
-            targetPair = NetUtils.getIpAndFqdnByHost(host);
-        } catch (UnknownHostException e) {
-            LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
-            return null;
-        }
-
-        for (Backend backend : idToBackendRef.values()) {
-            Pair<String, String> curPair;
-            try {
-                curPair = NetUtils.getIpAndFqdnByHost(backend.getHost());
-            } catch (UnknownHostException e) {
-                LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
-                continue;
-            }
-            // target, cur has same ip
-            boolean hostMatch = targetPair.first.equals(curPair.first);
-            // target, cur has same fqdn and both of them are not equal ""
-            if (!hostMatch && targetPair.second.equals(curPair.second) && !curPair.second.isEmpty()) {
-                hostMatch = true;
-            }
-            if (hostMatch && (backend.getBePort() == bePort)) {
-                return backend;
-            }
-        }
-        return null;
+        return getComputeNodeWithBePortCommon(host, bePort, idToBackendRef);
     }
 
     public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
@@ -817,8 +791,37 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
-        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
-            if (computeNode.getHost().equals(host) && computeNode.getBePort() == bePort) {
+        return getComputeNodeWithBePortCommon(host, bePort, idToComputeNodeRef);
+    }
+
+    private <T extends ComputeNode> T getComputeNodeWithBePortCommon(String host, int bePort,
+                                                                     Map<Long, T> nodeRef) {
+        Pair<String, String> targetPair;
+        try {
+            targetPair = NetUtils.getIpAndFqdnByHost(host);
+        } catch (UnknownHostException e) {
+            LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
+            return null;
+        }
+
+        for (T computeNode : nodeRef.values()) {
+            Pair<String, String> curPair;
+            try {
+                curPair = NetUtils.getIpAndFqdnByHost(computeNode.getHost());
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
+                continue;
+            }
+            boolean hostMatch = false;
+            // target, cur has same ip
+            if (targetPair.first.equals(curPair.first)) {
+                hostMatch = true;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (!hostMatch && targetPair.second.equals(curPair.second) && !curPair.second.equals("")) {
+                hostMatch = true;
+            }
+            if (hostMatch && (computeNode.getBePort() == bePort)) {
                 return computeNode;
             }
         }
@@ -942,7 +945,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
-                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+                    LOG.info("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
                 } else {
                     LOG.warn("failed to update backend report version, db {} does not exist", dbId);
                 }
@@ -956,66 +959,6 @@ public class SystemInfoService implements GsonPostProcessable {
         if (currentVersion.get() < newVersion) {
             currentVersion.set(newVersion);
         }
-    }
-
-    public long saveBackends(DataOutputStream dos, long checksum) throws IOException {
-        ImmutableMap<Long, Backend> idToBackend = ImmutableMap.copyOf(idToBackendRef);
-        int backendCount = idToBackend.size();
-        checksum ^= backendCount;
-        dos.writeInt(backendCount);
-        for (Map.Entry<Long, Backend> entry : idToBackend.entrySet()) {
-            long key = entry.getKey();
-            checksum ^= key;
-            dos.writeLong(key);
-            entry.getValue().write(dos);
-        }
-        return checksum;
-    }
-
-    public long saveComputeNodes(DataOutputStream dos, long checksum) throws IOException {
-        SerializeData data = new SerializeData();
-        data.computeNodes = Lists.newArrayList(idToComputeNodeRef.values());
-        checksum ^= data.computeNodes.size();
-        String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(dos, s);
-        return checksum;
-    }
-
-    private static class SerializeData {
-        @SerializedName("computeNodes")
-        public List<ComputeNode> computeNodes;
-
-    }
-
-    public long loadBackends(DataInputStream dis, long checksum) throws IOException {
-        int count = dis.readInt();
-        checksum ^= count;
-        for (int i = 0; i < count; i++) {
-            long key = dis.readLong();
-            checksum ^= key;
-            Backend backend = Backend.read(dis);
-            replayAddBackend(backend);
-        }
-        return checksum;
-    }
-
-    public long loadComputeNodes(DataInputStream dis, long checksum) throws IOException {
-        int computeNodeSize = 0;
-        try {
-            String s = Text.readString(dis);
-            SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-            if (data != null && data.computeNodes != null) {
-                for (ComputeNode computeNode : data.computeNodes) {
-                    replayAddComputeNode(computeNode);
-                }
-                computeNodeSize = data.computeNodes.size();
-            }
-            checksum ^= computeNodeSize;
-            LOG.info("finished replaying compute node from image");
-        } catch (EOFException e) {
-            LOG.info("no compute node to replay.");
-        }
-        return checksum;
     }
 
     public void clear() {

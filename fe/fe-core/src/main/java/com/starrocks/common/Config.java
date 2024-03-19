@@ -331,6 +331,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int task_runs_max_history_number = 10000;
 
+    @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
+    public static int task_min_schedule_interval_s = 10;
+
     /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.
@@ -771,14 +774,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String mysql_server_version = "5.1.0";
-
-    /**
-     * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
-     * Cluster id is usually a random integer generated when master FE start at first time.
-     * You can also specify one.
-     */
-    @ConfField
-    public static int cluster_id = -1;
 
     /**
      * If a backend is down for *max_backend_down_time_second*, a BACKEND_DOWN event will be triggered.
@@ -1234,6 +1229,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_create_partial_partition_in_batch = false;
+
+    @ConfField(mutable = true, comment = "The interval of create partition batch, to avoid too frequent")
+    public static long mv_create_partition_batch_interval_ms = 1000;
 
     /**
      * The number of query retries.
@@ -2086,6 +2084,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_refresh_hive_partitions_statistics = true;
+
+    /**
+     * Enable reuse spark column statistics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_reuse_spark_column_statistics = true;
 
     /**
      * size of iceberg worker pool

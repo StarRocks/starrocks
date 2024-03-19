@@ -282,7 +282,7 @@ public class OptimizerContext {
     }
 
     // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
-    public void reset() {
+    public void clearNotNullPredicates() {
         pushdownNotNullPredicates.clear();
     }
 }

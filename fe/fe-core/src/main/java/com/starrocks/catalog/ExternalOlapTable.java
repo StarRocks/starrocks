@@ -372,7 +372,6 @@ public class ExternalOlapTable extends OlapTable {
             return;
         }
 
-        clusterId = meta.getCluster_id();
         externalTableInfo.setDbId(meta.getDb_id());
         externalTableInfo.setTableId(meta.getTable_id());
         if (meta.isSetTable_type()) {
@@ -575,7 +574,7 @@ public class ExternalOlapTable extends OlapTable {
         }
         long endOfTabletMetaBuild = System.currentTimeMillis();
 
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         for (TBackendMeta backendMeta : backendMetas) {
             Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
             if (backend == null) {

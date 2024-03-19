@@ -280,6 +280,16 @@ public class StarOSAgent {
         return workerId;
     }
 
+    public long getWorkerTabletNum(String workerIpPort) {
+        try {
+            WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+            return workerInfo.getTabletNum();
+        } catch (StarClientException e) {
+            LOG.info("Failed to get worker tablet num from starMgr, Error: {}.", e.getMessage());
+        }
+        return 0;
+    }
+
     public void addWorker(long nodeId, String workerIpPort, long workerGroupId) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -723,5 +733,10 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId), workerGroupId);
         Preconditions.checkState(shardInfos.size() == 1);
         return shardInfos.get(0);
+    }
+
+    public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long partitionId) {
+        String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(partitionId));
+        return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, partitionId)).build();
     }
 }

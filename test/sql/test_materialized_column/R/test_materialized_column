@@ -380,11 +380,11 @@ E: (1064, 'Getting syntax error. Detail message: Generated Column can not be KEY
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_2 INT;
 -- result:
-E: (1064, 'Unexpected exception: Can not modify a generated column to a non-generated column')
+E: (1064, 'Can not modify a generated column to a non-generated column')
 -- !result
 ALTER TABLE t MODIFY COLUMN job BIGINT AS (id);
 -- result:
-E: (1064, 'Unexpected exception: Can not modify a non-generated column to a generated column')
+E: (1064, 'Can not modify a non-generated column to a generated column')
 -- !result
 ALTER TABLE t DROP COLUMN mc_2;
 -- result:
@@ -411,11 +411,11 @@ CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc 
 -- !result
 ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0" AFTER mc;
 -- result:
-E: (1064, 'Unexpected exception: Can not add column after Generated Column')
+E: (1064, 'Can not add column after Generated Column')
 -- !result
 ALTER TABLE t MODIFY COLUMN job BIGINT;
 -- result:
-E: (1064, 'Unexpected exception: Do not support modify column: job, because it associates with the generated column')
+E: (1064, 'Do not support modify column: job, because it associates with the generated column')
 -- !result
 ALTER TABLE t DROP COLUMN job;
 -- result:
@@ -906,15 +906,15 @@ CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT NOT NULL) DU
 -- !result
 alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after testcol1;
 -- result:
-E: (1064, 'Unexpected exception: Column[xxx] does not found')
+E: (1064, 'Column[xxx] does not found')
 -- !result
 alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after xxx;
 -- result:
-E: (1064, 'Unexpected exception: Column[xxx] does not found')
+E: (1064, 'Column[xxx] does not found')
 -- !result
 alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after xxx;
 -- result:
-E: (1064, 'Unexpected exception: Column[xxx] does not found')
+E: (1064, 'Column[xxx] does not found')
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10 after xxx, add column testcol2 BIGINT after xxx;
 -- result:
@@ -926,7 +926,7 @@ E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Det
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10, add column testcol2 BIGINT after testcol1;
 -- result:
-E: (1064, 'Unexpected exception: Can not add column after Generated Column')
+E: (1064, 'Can not add column after Generated Column')
 -- !result
 alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after testcol1;
 -- result:

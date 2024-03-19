@@ -1029,6 +1029,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by storage page cache.
 
+#### jit_cache_mem_bytes
+
+- Unit: Bytes
+- Description: Memory used by jit compiled function cache.
+
 #### column_partial_update_apply_total
 
 - Unit: Count

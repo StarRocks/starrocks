@@ -16,7 +16,6 @@
 
 #include <string>
 
-#include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exprs/column_ref.h"
@@ -24,7 +23,6 @@
 #include "exprs/function_call_expr.h"
 #include "exprs/jit/jit_engine.h"
 #include "gen_cpp/Exprs_types.h"
-#include "llvm/IR/IRBuilder.h"
 
 namespace starrocks {
 
@@ -34,23 +32,20 @@ public:
 
     JITExpr(const TExprNode& node, Expr* expr);
 
-    ~JITExpr() override;
+    ~JITExpr() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return JITExpr::create(pool, _expr); }
 
-    bool is_jit_compiled() { return _jit_function != nullptr && !_jit_expr_name.empty(); }
+    bool is_jit_compiled() { return _jit_function != nullptr; }
+
+    Status prepare_impl(RuntimeState* state, ExprContext* context);
 
 protected:
-    /**
-     * @brief Prepare the expression, including:
-     * 1. Compile the expression into native code and retrieve the function pointer.
-     * 2. Create a function context and set the function pointer.
-     */
+    // Compile the expression into native code and retrieve the function pointer.
+    // if compile failed, fallback to original expr.
     Status prepare(RuntimeState* state, ExprContext* context) override;
 
-    /**
-     * @brief Evaluate the expression using the function context, which contains the compiled function pointer.
-     */
+    // Evaluate the expression using the compiled function.
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
@@ -58,7 +53,7 @@ private:
     Expr* _expr;
     bool _is_prepared = false;
     JITScalarFunction _jit_function = nullptr;
-    std::string _jit_expr_name;
+    std::unique_ptr<JitObjectCache> _jit_obj_cache;
 };
 
 } // namespace starrocks

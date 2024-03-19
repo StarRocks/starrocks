@@ -153,17 +153,17 @@ BE dynamic parameters are as follows.
 #### tablet_rowset_stale_sweep_time_sec
 
 - **Default:** 1,800 seconds
-- **Description:** The time interval at which to sweep the stale rowsets in tablets.
+- **Description:** The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading.
 
 #### snapshot_expire_time_sec
 
 - **Default:** 172,800 seconds
-- **Description:** The expiration time of snapshot files.
+- **Description:** The expiration time of snapshot files. The system cleans snapshot files at a specified interval. If a snapshot is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`.
 
 #### trash_file_expire_time_sec
 
 - **Default:** 86,400 seconds
-- **Description:** The time interval at which to clean trash files. The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6.
+- **Description:** The maximum duration files can be retained in trash. The system cleans trash files at a specified interval. If a trash file is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`. Since v2.5.17, v3.0.9, and v3.1.6, the default value has been changed from 259200 to 86400.
 
 #### base_compaction_check_interval_seconds
 
@@ -262,7 +262,13 @@ BE dynamic parameters are as follows.
 #### enable_size_tiered_compaction_strategy
 
 - **Default:** true
-- **Description:** Whether to enable the Size-tiered Compaction policy.
+- **Description:** Whether to enable the Size-tiered Compaction policy (excluding Primary Key tables).
+
+#### enable_pk_size_tiered_compaction_strategy
+
+- **Default:** true
+- **Description:** Whether to enable the Size-tiered Compaction policy for Primary Key tables.
+- **Introduced in**: v3.2.4, v3.1.10
 
 #### min_compaction_failure_interval_sec
 
@@ -371,12 +377,12 @@ BE dynamic parameters are as follows.
 #### storage_flood_stage_usage_percent
 
 - **Default:** 95
-- **Description:** If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected.
+- **Description:** Hard limit of the storage usage percentage in all BE directories. If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_flood_stage_left_capacity_bytes`, Load and Restore jobs are rejected. You need to set this item together with the FE configuration item `storage_usage_hard_limit_percent` to allow the configurations to take effect.
 
 #### storage_flood_stage_left_capacity_bytes
 
 - **Default:** 107,374,182,400 Bytes (Remaining Storage Space Threshold for Load and Restore Job Rejection)
-- **Description:** If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected.
+- **Description:** Hard limit of the remaining storage space in all BE directories. If the remaining storage space of the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_flood_stage_usage_percent`, Load and Restore jobs are rejected. You need to set this item together with the FE configuration item `storage_usage_hard_limit_reserve_bytes` to allow the configurations to take effect.
 
 #### tablet_meta_checkpoint_min_new_rowsets_num
 
@@ -443,11 +449,6 @@ BE dynamic parameters are as follows.
 - **Default:** 20%
 - **Description:** The PageCache size. It can be specified as size, for example, `20G`, `20,480M`, `20,971,520K`, or `21,474,836,480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`.
 
-#### internal_service_async_thread_num
-
-- **Default:** 10 (Number of Threads)
-- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
-
 #### lake_enable_vertical_compaction_fill_data_cache
 
 - **Default:** false
@@ -456,8 +457,8 @@ BE dynamic parameters are as follows.
 
 #### lake_pk_compaction_max_input_rowsets
 
-- **Default:** 5
-- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster.
+- **Default:** 1000
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - **Introduced in:** v3.1.8, v3.2.3
 
 #### compact_threads
@@ -470,6 +471,13 @@ BE dynamic parameters are as follows.
 
 - **Default:** 0.5
 - **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
+#### lake_compaction_stream_buffer_size_bytes
+
+- **Default:** 1048576
+- **Unit**: Bytes
+- **Description:** The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1 MB. You can increase this value to accelerate the compaction process.
+- **Introduced in:** v3.2.3
 
 #### create_tablet_worker_count
 
@@ -488,6 +496,18 @@ BE dynamic parameters are as follows.
 - **Default**: 8
 - **Unit**: N/A
 - **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### starlet_use_star_cache
+
+- **Default**: true
+- **Description**: Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
+- **Introduced in:** v3.1
+
+#### starlet_cache_evict_high_water
+
+- **Default**: 0.2
+- **Description**: In a shared-data cluster, if the percentage of the available disk capacity is below this value, file data cache eviction will be triggered. The default value indicates that file data cache will use at most 80% of the disk capacity.
+- **Introduced in:** v3.0
 
 ## Configure BE static parameters
 
@@ -883,7 +903,12 @@ BE static parameters are as follows.
 
 - **Default**: 10
 - **Unit**: N/A
-- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter max_routine_load_task_num_per_be.
+- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.
+
+#### internal_service_async_thread_num
+
+- **Default:** 10 (Number of Threads)
+- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. **Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.**
 
 #### brpc_max_body_size
 
@@ -986,3 +1011,9 @@ BE static parameters are as follows.
 - **Default**: 0
 - **Unit**: N/A
 - **Description**: The maximum concurrency of RPC requests in a shared-data cluster. Incoming requests will be rejected when this threshold is reached. When this item is set to 0, no limit is imposed on the concurrency.
+
+#### starlet_star_cache_disk_size_percent
+
+- **Default**: 80
+- **Description**: The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- **Introduced in:** v3.1

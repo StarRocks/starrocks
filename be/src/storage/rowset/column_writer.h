@@ -41,6 +41,7 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
+#include "storage/inverted/inverted_writer.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -63,7 +64,7 @@ struct ColumnWriterOptions {
     // - input: column_id/unique_id/type/length/encoding/compression/is_nullable members
     // - output: encoding/indexes/dict_page members
     ColumnMetaPB* meta;
-    uint32_t data_page_size = OLAP_PAGE_SIZE;
+    uint32_t data_page_size = config::data_page_size;
     uint32_t page_format = 2;
     // store compressed page only when space saving is above the threshold.
     // space saving = 1 - compressed_size / uncompressed_size
@@ -71,6 +72,10 @@ struct ColumnWriterOptions {
     bool need_zone_map = false;
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
+    bool need_inverted_index = false;
+    std::unordered_map<IndexType, std::string> standalone_index_file_paths;
+    std::unordered_map<IndexType, TabletIndex> tablet_index;
+
     // for char/varchar will speculate encoding in append
     // for others will decide encoding in init method
     bool need_speculate_encoding = false;
@@ -80,6 +85,8 @@ struct ColumnWriterOptions {
     GlobalDictMap* global_dict = nullptr;
 
     bool need_flat = false;
+
+    std::string field_name;
 };
 
 class BitmapIndexWriter;
@@ -122,6 +129,8 @@ public:
     virtual Status write_bitmap_index() = 0;
 
     virtual Status write_bloom_filter_index() = 0;
+
+    virtual Status write_inverted_index() { return Status::OK(); }
 
     virtual ordinal_t get_next_rowid() const = 0;
 
@@ -176,6 +185,8 @@ public:
     Status write_zone_map() override;
     Status write_bitmap_index() override;
     Status write_bloom_filter_index() override;
+    Status write_inverted_index() override;
+
     ordinal_t get_next_rowid() const override { return _next_rowid; }
 
     bool is_global_dict_valid() override { return _is_global_dict_valid; }
@@ -247,8 +258,11 @@ private:
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
     std::unique_ptr<BitmapIndexWriter> _bitmap_index_builder;
     std::unique_ptr<BloomFilterIndexWriter> _bloom_filter_index_builder;
+    std::unique_ptr<InvertedWriter> _inverted_index_builder;
+
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;
+    bool _has_inverted_builder = false;
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
 

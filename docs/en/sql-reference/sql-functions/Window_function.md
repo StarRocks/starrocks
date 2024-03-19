@@ -2,7 +2,39 @@
 displayed_sidebar: "English"
 ---
 
-# Window function
+# Window functions
+
+- [Window functions](#window-functions)
+  - [Background](#background)
+  - [Usage](#usage)
+    - [Functions](#functions)
+    - [PARTITION BY clause](#partition-by-clause)
+    - [ORDER BY clause](#order-by-clause)
+    - [Window clause](#window-clause)
+  - [Function Examples](#function-examples)
+    - [AVG()](#avg)
+    - [COUNT()](#count)
+    - [CUME\_DIST()](#cume_dist)
+    - [DENSE\_RANK()](#dense_rank)
+    - [NTILE()](#ntile)
+    - [FIRST\_VALUE()](#first_value)
+    - [LAG()](#lag)
+    - [LAST\_VALUE()](#last_value)
+    - [LEAD()](#lead)
+    - [MAX()](#max)
+    - [MIN()](#min)
+    - [PERCENT\_RANK()](#percent_rank)
+    - [RANK()](#rank)
+    - [ROW\_NUMBER()](#row_number)
+    - [QUALIFY()](#qualify)
+    - [SUM()](#sum)
+    - [VARIANCE, VAR\_POP, VARIANCE\_POP](#variance-var_pop-variance_pop)
+    - [VAR\_SAMP, VARIANCE\_SAMP](#var_samp-variance_samp)
+    - [STD, STDDEV, STDDEV\_POP](#std-stddev-stddev_pop)
+    - [STDDEV\_SAMP](#stddev_samp)
+    - [COVAR\_SAMP](#covar_samp)
+    - [COVAR\_POP](#covar_pop)
+    - [CORR](#corr)
 
 ## Background
 

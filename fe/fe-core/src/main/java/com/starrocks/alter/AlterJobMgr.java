@@ -425,8 +425,7 @@ public class AlterJobMgr {
         Task currentTask = GlobalStateMgr.getCurrentState().getTaskManager().getTask(
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
-            currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
-                    materializedView.getViewDefineSql());
+            currentTask.setDefinition(materializedView.getTaskDefinition());
             currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }

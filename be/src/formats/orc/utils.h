@@ -21,7 +21,6 @@
 #include "cctz/time_zone.h"
 #include "column/vectorized_fwd.h"
 #include "formats/orc/orc_mapping.h"
-#include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "io/shared_buffered_input_stream.h"
 #include "types/date_value.h"

@@ -95,7 +95,7 @@ E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materializ
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
 -- result:
-E: (1064, 'Unexpected exception: New name conflicts with rollup index name: mv1')
+E: (1064, 'New name conflicts with rollup index name: mv1')
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:

@@ -39,6 +39,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exec/exec_node.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/query_statistics.h"
@@ -50,6 +52,11 @@ class RuntimeProfile;
 class RuntimeState;
 class TPlanFragmentExecParams;
 class RowDescriptor;
+class DataStreamSender;
+
+namespace pipeline {
+class UnifiedExecPlanFragmentParams;
+}
 
 // Superclass of all data sinks.
 class DataSink {
@@ -90,6 +97,16 @@ public:
     virtual void set_query_statistics(std::shared_ptr<QueryStatistics> statistics) {
         _query_statistics = std::move(statistics);
     }
+
+    Status decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContext* context, RuntimeState* state,
+                                           pipeline::OpFactories prev_operators,
+                                           const pipeline::UnifiedExecPlanFragmentParams& request,
+                                           const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs);
+
+private:
+    OperatorFactoryPtr _create_exchange_sink_operator(pipeline::PipelineBuilderContext* context,
+                                                      const TDataStreamSink& stream_sink,
+                                                      const DataStreamSender* sender, size_t dop);
 
 protected:
     RuntimeState* _runtime_state = nullptr;

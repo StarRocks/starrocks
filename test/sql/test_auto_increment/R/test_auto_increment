@@ -27,7 +27,7 @@ E: (1064, 'Getting analyzing error from line 1, column 53 to line 1, column 74. 
 -- !result
 DROP DATABASE test_create_table_abnormal;
 -- result:
-E: (1064, "Unexpected exception: Can't drop database 'test_create_table_abnormal'; database doesn't exist")
+E: (1008, "Can't drop database 'test_create_table_abnormal'; database doesn't exist")
 -- !result
 -- name: test_create_table_normal
 CREATE DATABASE test_create_table_normal_auto_increment;
@@ -495,7 +495,7 @@ E: (1064, "Getting syntax error from line 1, column 25 to line 1, column 39. Det
 -- !result
 ALTER TABLE t MODIFY COLUMN job2 BIGINT;
 -- result:
-E: (1064, "Unexpected exception: Can't not modify a AUTO_INCREMENT column")
+E: (1064, "Can't not modify a AUTO_INCREMENT column")
 -- !result
 ALTER TABLE t MODIFY COLUMN job2 BIGINT AUTO_INCREMENT;
 -- result:

@@ -144,14 +144,9 @@ class StarRocksAdapter(SQLAdapter):
         conn = self.connections.get_if_exists()
         if conn:
             server_version = conn.handle.server_version
-            version_detail = version.split(".")
-            version_detail = (int(version_detail[0]), int(version_detail[1]), int(version_detail[2]))
-            if version_detail[0] > server_version[0]:
-                return True
-            elif version_detail[0] == server_version[0] and version_detail[1] > server_version[1]:
-                return True
-            elif version_detail[0] == server_version[0] and version_detail[1] == server_version[1] \
-                    and version_detail[2] > server_version[2]:
+            server_version_tuple = tuple(int(part) for part in server_version if part.isdigit())
+            version_detail_tuple = tuple(int(part) for part in version.split(".") if part.isdigit())
+            if version_detail_tuple > server_version_tuple:
                 return True
         return False
 

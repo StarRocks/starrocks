@@ -34,6 +34,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -97,7 +98,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
     private ThreadPoolExecutor deleteTxnLogExecutor;
     private Set<Long> publishingLakeTransactions;
 
-    private Set<Long> publishingLakeTransactionsBatchTableId;
+    @VisibleForTesting
+    protected Set<Long> publishingLakeTransactionsBatchTableId;
 
 
     public PublishVersionDaemon() {
@@ -411,7 +413,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Set<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
             long txnId = txnState.getTransactionId();
-            if (publishingTransactions.add(txnId)) { // the set did not already contain the specified element
+            if (!publishingTransactions.contains(txnId)) { // the set did not already contain the specified element
                 Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
                 // When the `enable_lake_batch_publish_version` switch is just set to false,
                 // it is possible that the result of publish task has not been returned,
@@ -421,6 +423,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                             txnState.getTransactionId());
                     continue;
                 }
+                publishingTransactions.add(txnId);
                 CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
                 future.thenRun(() -> publishingTransactions.remove(txnId));
             }

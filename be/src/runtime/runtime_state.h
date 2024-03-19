@@ -434,7 +434,11 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
-    bool is_jit_enabled() const { return _query_options.__isset.enable_jit && _query_options.enable_jit; }
+    bool is_jit_enabled() const;
+
+    bool enable_wait_dependent_event() const {
+        return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
+    }
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 

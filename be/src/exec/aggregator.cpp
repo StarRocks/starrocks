@@ -28,7 +28,6 @@
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/anyval_util.h"
-#include "exprs/jit/jit_engine.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -329,8 +328,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _intermediate_tuple_id = _params->intermediate_tuple_id;
     _output_tuple_id = _params->output_tuple_id;
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->conjuncts, &_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_exprs, &_group_by_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->conjuncts, &_conjunct_ctxs, state, true));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
 
     // add profile attributes
     if (!_params->sql_grouping_keys.empty()) {
@@ -1137,6 +1136,9 @@ Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
             // TODO: optimized the memory usage
             _group_by_columns[i] =
                     NullableColumn::create(_group_by_columns[i], NullColumn::create(_group_by_columns[i]->size(), 0));
+        } else if (!_group_by_types[i].is_nullable && _group_by_columns[i]->is_nullable()) {
+            return Status::InternalError(fmt::format("error nullablel column, index: {}, slot: {}", i,
+                                                     _group_by_expr_ctxs[i]->root()->debug_string()));
         }
     }
 

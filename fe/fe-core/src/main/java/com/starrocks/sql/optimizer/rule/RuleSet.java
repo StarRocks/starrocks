@@ -63,6 +63,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.FineGrainedRangePredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctDataSkewEliminateRule;
 import com.starrocks.sql.optimizer.rule.transformation.InlineOneCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.IntersectAddDistinctRule;
@@ -103,6 +104,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTrueFilterRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
@@ -350,6 +352,10 @@ public class RuleSet {
                 new PruneAssertOneRowRule()
         ));
 
+        REWRITE_RULES.put(RuleSetType.PRUNE_UKFK_JOIN, ImmutableList.of(
+                new PruneUKFKJoinRule()
+        ));
+
         REWRITE_RULES.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
@@ -424,6 +430,10 @@ public class RuleSet {
                 new PruneProjectRule(),
                 new PartitionPruneRule(),
                 new DistributionPruneRule()));
+
+        REWRITE_RULES.put(RuleSetType.FINE_GRAINED_RANGE_PREDICATE, ImmutableList.of(
+                FineGrainedRangePredicateRule.INSTANCE,
+                FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
     }
 
     public RuleSet() {

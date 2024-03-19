@@ -87,7 +87,7 @@ jobs:
           mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -139,7 +139,7 @@ jobs:
           mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -194,18 +194,20 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: BE UT LOG
-          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          path: ${{ steps.run_ut.outputs.BE_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
         run: |
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ steps.run_ut.outputs.BE_LOG }}
           rm -rf ${{ github.workspace }}/*
 
   fe-checker:
@@ -263,7 +265,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -287,7 +289,7 @@ jobs:
 
       - name: Run java checkstyle
         if: ${{ steps.java-file.outputs.java == 'true' }}
-        uses: dbelyaev/action-checkstyle@v0.7.5
+        uses: dbelyaev/action-checkstyle@v1.5.6
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
@@ -307,7 +309,7 @@ jobs:
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -407,11 +409,12 @@ jobs:
 
       - name: Upload log
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -440,14 +443,15 @@ jobs:
           echo ${GITHUB_SHA} > head_sha.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 3
+          overwrite: true
 
       - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: head_sha
           path: ./head_sha.txt

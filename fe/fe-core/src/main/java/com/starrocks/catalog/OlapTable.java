@@ -84,6 +84,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
@@ -170,10 +171,6 @@ public class OlapTable extends Table {
          */
         WAITING_STABLE
     }
-
-    @SerializedName(value = "clusterId")
-    @Deprecated
-    protected int clusterId;
 
     @SerializedName(value = "state")
     protected OlapTableState state;
@@ -264,8 +261,6 @@ public class OlapTable extends Table {
         // for persist
         super(type);
 
-        this.clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
-
         this.bfColumns = null;
         this.bfFpp = 0;
 
@@ -282,24 +277,16 @@ public class OlapTable extends Table {
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
-        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(), indexes, TableType.OLAP);
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                     TableIndexes indexes) {
+        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes, TableType.OLAP);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-                     int clusterId, TableIndexes indexes) {
-        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                clusterId, indexes, TableType.OLAP);
-    }
-
-    public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-                     int clusterId, TableIndexes indexes, TableType tableType) {
+                     TableIndexes indexes, TableType tableType) {
         super(id, tableName, tableType, baseSchema);
 
-        this.clusterId = clusterId;
         this.state = OlapTableState.NORMAL;
 
         this.keysType = keysType;
@@ -448,10 +435,6 @@ public class OlapTable extends Table {
 
     public long getBaseIndexId() {
         return baseIndexId;
-    }
-
-    public int getClusterId() {
-        return clusterId;
     }
 
     public void setState(OlapTableState state) {
@@ -1740,6 +1723,11 @@ public class OlapTable extends Table {
         return partitionInfo != null && partitionInfo.isPartitioned();
     }
 
+    @Override
+    public boolean isUnPartitioned() {
+        return !isPartitionedTable();
+    }
+
     // NOTE: It's different from `isPartitionedTable` which `isPartitioned` means table has many buckets rather than
     // partitions.
     @Override
@@ -1951,10 +1939,6 @@ public class OlapTable extends Table {
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
             }
         }
-
-        // The table may be restored from another cluster, it should be set to current
-        // cluster id.
-        clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
 
         lastSchemaUpdateTime = new AtomicLong(-1);
         // Record the start and end time for data load version update phase
@@ -2813,6 +2797,10 @@ public class OlapTable extends Table {
     }
 
     public boolean getUseFastSchemaEvolution() {
+        if (hasRowStorageType()) {
+            // row storage type does not support fast schema evolution currently
+            return false;
+        }
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }
@@ -2888,17 +2876,8 @@ public class OlapTable extends Table {
         }
     }
 
-    @Override
-    public void onDrop(Database db, boolean force, boolean replay) {
-        // drop all temp partitions of this table, so that there is no temp partitions
-        // in recycle bin,
-        // which make things easier.
-        dropAllTempPartitions();
-        LocalMetastore.inactiveRelatedMaterializedView(db, this,
-                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
-    }
-
-    public void onErase(boolean isReplay) {
+    // Remove all Tablets belonging to this table from TabletInvertedIndex
+    public void removeTabletsFromInvertedIndex() {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Collection<Partition> allPartitions = getAllPartitions();
         for (Partition partition : allPartitions) {
@@ -2908,15 +2887,36 @@ public class OlapTable extends Table {
                 }
             }
         }
+    }
 
+    // If you are modifying this function, please check if you need to modify LakeTable.onDrop also.
+    @Override
+    public void onDrop(Database db, boolean force, boolean replay) {
+        // drop all temp partitions of this table, so that there is no temp partitions
+        // in recycle bin,
+        // which make things easier.
+        dropAllTempPartitions();
+        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
+        if (!replay && hasAutoIncrementColumn()) {
+            sendDropAutoIncrementMapTask();
+        }
+    }
+
+    public void removeTableBinds(boolean isReplay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(getId(), isReplay);
         GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
         GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(getId());
     }
 
     @Override
-    public Runnable delete(boolean replay) {
-        onErase(replay);
-        return replay ? null : new DeleteOlapTableTask(this);
+    public boolean delete(long dbId, boolean isReplay) {
+        removeTableBinds(isReplay);
+        removeTabletsFromInvertedIndex();
+        if (!isReplay) {
+            deleteAllReplicas();
+        }
+        return true;
     }
 
     @Override
@@ -2932,68 +2932,58 @@ public class OlapTable extends Table {
         return new OptimizeJobV2Builder(this);
     }
 
-    private static class DeleteOlapTableTask implements Runnable {
+    private void deleteAllReplicas() {
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
 
-        private final OlapTable table;
-
-        public DeleteOlapTableTask(OlapTable table) {
-            this.table = table;
-        }
-
-        @Override
-        public void run() {
-            HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
-
-            // drop all replicas
-            for (Partition partition : table.getAllPartitions()) {
-                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    List<MaterializedIndex> allIndices = physicalPartition
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                    for (MaterializedIndex materializedIndex : allIndices) {
-                        long indexId = materializedIndex.getId();
-                        int schemaHash = table.getSchemaHashByIndexId(indexId);
-                        for (Tablet tablet : materializedIndex.getTablets()) {
-                            long tabletId = tablet.getId();
-                            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                            for (Replica replica : replicas) {
-                                long backendId = replica.getBackendId();
-                                DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
-                                AgentBatchTask batchTask = batchTaskMap.get(backendId);
-                                if (batchTask == null) {
-                                    batchTask = new AgentBatchTask();
-                                    batchTaskMap.put(backendId, batchTask);
-                                }
-                                batchTask.addTask(dropTask);
-                                LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
-                                        tabletId, backendId, table.getId(), table.getName());
-                            } // end for replicas
-                        } // end for tablets
-                    }
-                } // end for indices
-            } // end for partitions
-
-            int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
-            for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
-                AgentBatchTask originTasks = entry.getValue();
-                if (originTasks.getTaskNum() > numDropTaskPerBe) {
-                    AgentBatchTask partTask = new AgentBatchTask();
-                    List<AgentTask> allTasks = originTasks.getAllTasks();
-                    int curTask = 1;
-                    for (AgentTask task : allTasks) {
-                        partTask.addTask(task);
-                        if (curTask++ > numDropTaskPerBe) {
-                            AgentTaskExecutor.submit(partTask);
-                            curTask = 1;
-                            partTask = new AgentBatchTask();
-                            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
-                        }
-                    }
-                    if (!partTask.getAllTasks().isEmpty()) {
-                        AgentTaskExecutor.submit(partTask);
-                    }
-                } else {
-                    AgentTaskExecutor.submit(originTasks);
+        // drop all replicas
+        for (Partition partition : getAllPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                List<MaterializedIndex> allIndices = physicalPartition
+                        .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                for (MaterializedIndex materializedIndex : allIndices) {
+                    long indexId = materializedIndex.getId();
+                    int schemaHash = getSchemaHashByIndexId(indexId);
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        long tabletId = tablet.getId();
+                        List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                        for (Replica replica : replicas) {
+                            long backendId = replica.getBackendId();
+                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                            AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                            if (batchTask == null) {
+                                batchTask = new AgentBatchTask();
+                                batchTaskMap.put(backendId, batchTask);
+                            }
+                            batchTask.addTask(dropTask);
+                            LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                                    tabletId, backendId, getId(), getName());
+                        } // end for replicas
+                    } // end for tablets
                 }
+            } // end for indices
+        } // end for partitions
+
+        int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+            AgentBatchTask originTasks = entry.getValue();
+            if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                AgentBatchTask partTask = new AgentBatchTask();
+                List<AgentTask> allTasks = originTasks.getAllTasks();
+                int curTask = 1;
+                for (AgentTask task : allTasks) {
+                    partTask.addTask(task);
+                    if (curTask++ > numDropTaskPerBe) {
+                        AgentTaskExecutor.submit(partTask);
+                        curTask = 1;
+                        partTask = new AgentBatchTask();
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                    }
+                }
+                if (!partTask.getAllTasks().isEmpty()) {
+                    AgentTaskExecutor.submit(partTask);
+                }
+            } else {
+                AgentTaskExecutor.submit(originTasks);
             }
         }
     }
@@ -3038,10 +3028,7 @@ public class OlapTable extends Table {
     public FilePathInfo getPartitionFilePathInfo(long partitionId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-            builder.mergeFrom(pathInfo);
-            builder.setFullPath(builder.getFullPath() + "/" + partitionId);
-            return builder.build();
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, partitionId);
         }
         return null;
     }
@@ -3111,7 +3098,7 @@ public class OlapTable extends Table {
                     return partitionRange.isConnected(dataCacheRange);
                 } catch (Exception e) {
                     LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
-                            " validaity of range partition. Error: {}.", super.name, partition.getName(),
+                                    " validaity of range partition. Error: {}.", super.name, partition.getName(),
                             cacheDuration.toString(), e.getMessage());
                     return false;
                 }
@@ -3150,7 +3137,7 @@ public class OlapTable extends Table {
                 return false;
             } catch (Exception e) {
                 LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
-                        "validaity of list partition. Error: {}.", super.name, partition.getName(),
+                                "validaity of list partition. Error: {}.", super.name, partition.getName(),
                         cacheDuration.toString(), e.getMessage());
                 return false;
             }

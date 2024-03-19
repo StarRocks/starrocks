@@ -17,6 +17,8 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -125,6 +127,17 @@ void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
 
 void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
     if (index_entry != nullptr) {
+        _index_cache.remove(index_entry);
+    }
+}
+
+void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        auto guard = index.fetch_guard();
+        index.unload();
+        guard.reset(nullptr);
         _index_cache.remove(index_entry);
     }
 }
@@ -240,6 +253,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     TRACE_COUNTER_INCREMENT("deletes", state.deletes().size());
     TRACE_COUNTER_INCREMENT("new_del", new_del);
     TRACE_COUNTER_INCREMENT("total_del", total_del);
+    TRACE_COUNTER_INCREMENT("upsert_rows", op_write.rowset().num_rows());
     TRACE_COUNTER_INCREMENT("base_version", base_version);
     _print_memory_stats();
     return Status::OK();
@@ -687,6 +701,16 @@ void UpdateManager::update_primary_index_data_version(const Tablet& tablet, int6
     }
 }
 
+int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        int64_t version = index_entry->value().data_version();
+        _index_cache.release(index_entry);
+        return version;
+    }
+    return 0;
+}
+
 void UpdateManager::_print_memory_stats() {
     static std::atomic<int64_t> last_print_ts;
     if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _update_mem_tracker != nullptr) {
@@ -818,6 +842,15 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
         _compaction_cache.release(compaction_entry);
     }
     TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
+}
+
+void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        index.set_enable_persistent_index(enable_persistent_index);
+        _index_cache.release(index_entry);
+    }
 }
 
 } // namespace starrocks::lake

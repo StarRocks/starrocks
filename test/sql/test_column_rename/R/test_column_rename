@@ -40,7 +40,7 @@ ALTER TABLE t1 RENAME COLUMN k1 TO k2;
 -- !result
 ALTER TABLE t1 RENAME COLUMN v1 TO v2;
 -- result:
-E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Duplicate column name 'v2'.")
+E: (1060, "Unexpected exception: Getting analyzing error. Detail message: Duplicate column name 'v2'.")
 -- !result
 select * from t1;
 -- result:

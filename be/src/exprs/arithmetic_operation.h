@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/Value.h>
+
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Value.h"
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
 #include "util/guard.h"
@@ -224,6 +225,10 @@ struct ArithmeticBinaryOperator {
             // TODO(Yueyang): implement float type * 0.
             if constexpr (lt_is_float<Type>) {
                 result.value = b.CreateFMul(l, r);
+                auto* result_is_nagative_zero =
+                        b.CreateFCmpOEQ(result.value, llvm::ConstantFP::get(result.value->getType(), -0.0));
+                result.value = b.CreateSelect(result_is_nagative_zero,
+                                              llvm::ConstantFP::get(result.value->getType(), 0.0), result.value);
             } else {
                 result.value = b.CreateMul(l, r);
             }
@@ -280,11 +285,15 @@ struct ArithmeticBinaryOperator {
                 // return 0 when mod by -0.
                 // adjusted_r = r == 0.0 ? r + 1.0 : r;
                 r_is_zero = b.CreateFCmpOEQ(r, llvm::ConstantFP::get(r->getType(), 0));
-                auto* r_is_negative_zero = b.CreateFCmpOEQ(r, llvm::ConstantFP::get(r->getType(), -0));
+                auto* r_is_negative_zero = b.CreateFCmpOEQ(r, llvm::ConstantFP::get(r->getType(), -0.0));
                 auto* sum = b.CreateFAdd(r, llvm::ConstantFP::get(r->getType(), 1));
                 auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
                 result.value = b.CreateSelect(r_is_negative_zero, llvm::ConstantFP::get(r->getType(), 0),
                                               b.CreateFRem(l, adjusted_r));
+                auto* result_is_nagative_zero =
+                        b.CreateFCmpOEQ(result.value, llvm::ConstantFP::get(result.value->getType(), -0.0));
+                result.value = b.CreateSelect(result_is_nagative_zero,
+                                              llvm::ConstantFP::get(result.value->getType(), 0.0), result.value);
             } else {
                 // TODO(Yueyang): avoid 0 mod a negative num, make result -0
                 // adjusted_r = r == 0 ? r + 1 : r;

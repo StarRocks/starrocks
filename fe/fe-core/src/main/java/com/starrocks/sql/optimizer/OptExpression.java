@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
@@ -56,6 +57,7 @@ public class OptExpression {
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
     private PhysicalPropertySet outputProperty;
+    private UKFKConstraints constraints;
 
     private Boolean isShortCircuit = false;
 
@@ -164,6 +166,14 @@ public class OptExpression {
 
     public PhysicalPropertySet getOutputProperty() {
         return this.outputProperty;
+    }
+
+    public UKFKConstraints getConstraints() {
+        return constraints;
+    }
+
+    public void setConstraints(UKFKConstraints constraints) {
+        this.constraints = constraints;
     }
 
     // This function assume the child expr logical property has been derived

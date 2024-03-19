@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Canshu']
 ---
 
 # FE 配置项
@@ -125,6 +126,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：false
 - 引入版本：3.1.5
 
+### 用户，角色，权限
+
+#### privilege_max_total_roles_per_user
+
+- 含义：每个用户最多可以拥有的角色数量。
+- 默认值：64
+- 引入版本：v3.0.0
+
+#### privilege_max_role_depth
+
+- 含义：每个角色最多的嵌套层数。
+- 默认值：16
+- 引入版本：v3.0.0
+
 ### Query engine
 
 #### max_allowed_in_element_num_of_delete
@@ -141,6 +156,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 含义：是否开启 Decimal V3。
 - 默认值：TRUE
+
+#### expr_children_limit
+
+- 含义：一个表达式中子表达式的最大数量。
+- 默认值：10000
 
 #### enable_sql_blacklist
 
@@ -349,7 +369,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### disable_load_job
 
-- 含义：是否禁用任何导入任务，集群出问题时的止损措施。
+- 含义：是否禁用任何导入任务，集群出问题时的止损措施。设置为 TRUE 时，无法进行导入任务，集群仅处于可读状态。
 - 默认值：FALSE
 
 #### history_job_keep_max_second
@@ -513,20 +533,37 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：TRUE
 - 引入版本：2.5.6
 
+#### enable_experimental_rowstore
+
+- 含义：是否开启[行列混存表](../table_design/hybrid_table.md)功能。
+- 默认值：FALSE
+- 引入版本：3.2.3
+
 #### storage_usage_soft_limit_percent
 
-- 含义：如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。
+- 含义：单个 BE 存储目录空间使用率软上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。
 - 默认值：90
 
 #### storage_usage_soft_limit_reserve_bytes
 
-- 含义：默认 200 GB，单位为 Byte，如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。
+- 含义：单个 BE 存储目录剩余空间软限制。默认 200 GB，单位为 Byte。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_soft_limit_percent`，则不能继续往该路径 clone tablet。
 - 单位：字节
 - 默认值：200 \* 1024 \* 1024 \* 1024
 
+#### storage_usage_hard_limit_percent
+
+- 含义：单个 BE 存储目录空间使用率硬上限。如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_hard_limit_reserve_bytes`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数`storage_flood_stage_usage_percent` 才能使配置生效。
+- 默认值：95
+
+#### storage_usage_hard_limit_reserve_bytes
+
+- 含义：单个 BE 存储目录剩余空间硬限制。默认 100 GB，单位为 Byte。如果 BE 存储目录下剩余空间小于该值且空间使用率超过 `storage_usage_hard_limit_percent`，会拒绝 Load 和 Restore 作业。配置该参数时，需要同时配置 BE 参数 `storage_flood_stage_left_capacity_bytes` 才能使配置生效。
+- 单位：字节
+- 默认值：100 \* 1024 \* 1024 \* 1024
+
 #### catalog_trash_expire_second
 
-- 含义：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以再恢复。
+- 含义：通过 DROP 删除数据库、表或分区之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过 RECOVER 命令再恢复。
 - 单位：秒
 - 默认值：86400
 

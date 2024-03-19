@@ -70,6 +70,8 @@ void DataCacheAction::handle(HttpRequest* req) {
     auto block_cache = _exec_env->block_cache();
     if (!block_cache || !block_cache->is_initialized()) {
         _handle_error(req, strings::Substitute("Cache system is not ready"));
+    } else if (block_cache->engine_type() != DataCacheEngineType::STARCACHE) {
+        _handle_error(req, strings::Substitute("No more metrics for current cache engine type"));
     } else {
         _handle_stat(req, block_cache);
     }
@@ -91,7 +93,10 @@ void DataCacheAction::_handle_stat(HttpRequest* req, BlockCache* cache) {
         auto& allocator = root.GetAllocator();
         auto&& metrics = cache->cache_metrics(2);
         std::string status = cache_status_str(metrics.status);
-        root.AddMember("status", rapidjson::StringRef(status.c_str()), allocator);
+
+        rapidjson::Value status_value;
+        status_value.SetString(status.c_str(), status.length(), allocator);
+        root.AddMember("status", status_value, allocator);
         root.AddMember("mem_quota_bytes", rapidjson::Value(metrics.mem_quota_bytes), allocator);
         root.AddMember("mem_used_bytes", rapidjson::Value(metrics.mem_used_bytes), allocator);
         root.AddMember("disk_quota_bytes", rapidjson::Value(metrics.disk_quota_bytes), allocator);
@@ -119,7 +124,10 @@ void DataCacheAction::_handle_stat(HttpRequest* req, BlockCache* cache) {
             }
             disk_spaces += space;
         }
-        root.AddMember("disk_spaces", rapidjson::StringRef(disk_spaces.c_str()), allocator);
+
+        rapidjson::Value disk_spaces_value;
+        disk_spaces_value.SetString(disk_spaces.c_str(), disk_spaces.length(), allocator);
+        root.AddMember("disk_spaces", disk_spaces_value, allocator);
         root.AddMember("meta_used_bytes", rapidjson::Value(metrics.meta_used_bytes), allocator);
 
         root.AddMember("hit_count", rapidjson::Value(metrics.detail_l1->hit_count), allocator);

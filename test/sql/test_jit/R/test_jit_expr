@@ -316,3 +316,84 @@ select int0 <=> int1, int0 <=> null, nint0 <=> null, nint0 <=> nint1 from t orde
 1	0	1	0
 1	0	1	1
 -- !result
+select sum(case int0 when 0 then nint0 when 1 then nint1 when 2 then null when 3 then null end) as sc from t having sc > 1 order by 1;
+-- result:
+-- !result
+select count(*) from t group by case int0 when 0 then nint0 when 1 then nint1 when 2 then null when 3 then null end order by 1;
+-- result:
+1
+1
+6
+-- !result
+select count(*) as c from t group by case int0 when 0 then nint0 when 1 then nint1 when 2 then null when 3 then null end having c > 1;
+-- result:
+6
+-- !result
+select int0 from t order by int0 + int1, nint0 * int1;
+-- result:
+0
+0
+0
+1
+2
+3
+4
+10
+-- !result
+select int0 from t order by case nint0 when 0 then int0 when 1 then int1 when 2 then null when 3 then null end, 1;
+-- result:
+0
+0
+2
+3
+4
+10
+0
+1
+-- !result
+select int0 from t where case nint0 when 0 then int0 when 1 then int1 when 2 then null when 3 then null end > 0 order by 1;
+-- result:
+1
+-- !result
+CREATE FUNCTION Echotinyint(tinyint)
+RETURNS tinyint
+properties
+(
+    "symbol" = "Echotinyint",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc%2FEchotinyint.jar"
+);
+-- result:
+-- !result
+select count(*) from t where int0 = Echotinyint(int0);
+-- result:
+8
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+                primary key(col_1)
+                distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into dict values(1, 'hello world 1', default, 1 * 10);
+-- result:
+-- !result
+insert into dict values(2, 'hello world 2', default, 2 * 10);
+-- result:
+-- !result
+insert into dict values(3, 'hello world 3', default, 3 * 10);
+-- result:
+-- !result
+insert into dict values(4, 'hello world 4', default, 4 * 10);
+-- result:
+-- !result
+select count(*) from t where int0 <> dict_mapping("dict", int0, "col_4");
+-- result:
+4
+-- !result
+select count(*) from t where int0 = dict_mapping("dict", int0, "col_4");
+-- result:
+0
+-- !result

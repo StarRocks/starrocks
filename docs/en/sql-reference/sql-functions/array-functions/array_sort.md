@@ -28,7 +28,7 @@ Returns an array.
 
 - `NULL` values are placed at the beginning of the array that is returned.
 
-- If you want to sort the elements of an array in descending order, use the [reverse](./reverse.md) function.
+- If you want to sort the elements of an array in descending order, use the [reverse](../string-functions/reverse.md) function.
 
 - The elements of the returned array have the same data type as the elements of the input array.
 

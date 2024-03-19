@@ -114,7 +114,7 @@ bitmap_column_to_count 是 bitmap 类型的列，filter_column 是变化的维�
 
 ## 示例
 
-下面的 SQL 以上面的 pv_bitmap table 为例。
+下面的 SQL 以上面的 `pv_bitmap` table 为例。
 
 计算 user_id 的去重值:
 

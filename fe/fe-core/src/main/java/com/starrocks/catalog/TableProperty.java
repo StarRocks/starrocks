@@ -112,6 +112,35 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+    /**
+     * The value for enable_query_rewrite variable
+     */
+    public enum MVQueryRewriteSwitch {
+        DEFAULT,    // default, no check but eligible for query rewrite
+        TRUE,       // enabled, check the semantic and is eligible for query rewrite
+        FALSE,      // disabled
+        ;
+
+        public boolean isEnable() {
+            return TRUE == this || DEFAULT == this;
+        }
+
+        public static MVQueryRewriteSwitch defaultValue() {
+            return DEFAULT;
+        }
+
+        public static MVQueryRewriteSwitch parse(String str) {
+            if (StringUtils.isEmpty(str)) {
+                return DEFAULT;
+            }
+            return EnumUtils.getEnumIgnoreCase(MVQueryRewriteSwitch.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on(",").join(MVQueryRewriteSwitch.values());
+        }
+    }
+
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
@@ -150,6 +179,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Specify the query rewrite behaviour for external table
     private QueryRewriteConsistencyMode queryRewriteConsistencyMode =
             QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
+
+    private MVQueryRewriteSwitch mvQueryRewriteSwitch = MVQueryRewriteSwitch.DEFAULT;
 
     private boolean isInMemory = false;
 
@@ -315,6 +346,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildConstraint();
         buildMvSortKeys();
         buildQueryRewrite();
+        buildMVQueryRewriteSwitch();
         return this;
     }
 
@@ -426,6 +458,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
         } else {
             return Splitter.on(",").omitEmptyStrings().trimResults().splitToList(value);
         }
+    }
+
+    public TableProperty buildMVQueryRewriteSwitch() {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+        this.mvQueryRewriteSwitch = MVQueryRewriteSwitch.parse(value);
+        return this;
+    }
+
+    public static MVQueryRewriteSwitch analyzeQueryRewriteSwitch(String value) {
+        MVQueryRewriteSwitch res = MVQueryRewriteSwitch.parse(value);
+        if (res == null) {
+            String valueList = MVQueryRewriteSwitch.valueList();
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE
+                            + " can only be " + valueList + " but got " + value);
+        }
+        return res;
     }
 
     public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
@@ -559,7 +608,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildConstraint() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             try {
-                uniqueConstraints = UniqueConstraint.parse(
+                uniqueConstraints = UniqueConstraint.parse(null, null, null,
                         properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
             } catch (Exception e) {
                 LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
@@ -710,6 +759,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public QueryRewriteConsistencyMode getQueryRewriteConsistencyMode() {
         return this.queryRewriteConsistencyMode;
+    }
+
+    public void setMvQueryRewriteSwitch(MVQueryRewriteSwitch value) {
+        this.mvQueryRewriteSwitch = value;
+    }
+
+    public MVQueryRewriteSwitch getMvQueryRewriteSwitch() {
+        return this.mvQueryRewriteSwitch;
     }
 
     public boolean isInMemory() {

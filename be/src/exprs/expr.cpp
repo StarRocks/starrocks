@@ -191,11 +191,15 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
     if (node.__isset.is_monotonic) {
         _is_monotonic = node.is_monotonic;
     }
+    if (node.__isset.is_index_only_filter) {
+        _is_index_only_filter = node.is_index_only_filter;
+    }
 }
 
 Expr::~Expr() = default;
 
-Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state) {
+Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
+                              bool can_jit) {
     // input is empty
     if (texpr.nodes.empty()) {
         *ctx = nullptr;
@@ -203,7 +207,12 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
     int node_idx = 0;
     Expr* e = nullptr;
-    Status status = create_tree_from_thrift_with_jit(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    Status status;
+    if (can_jit) {
+        status = create_tree_from_thrift_with_jit(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    } else {
+        status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    }
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
@@ -217,12 +226,22 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
+Status Expr::prepare_jit_expr(RuntimeState* state, ExprContext* context) {
+    if (this->node_type() == TExprNodeType::JIT_EXPR) {
+        RETURN_IF_ERROR(((JITExpr*)this)->prepare_impl(state, context));
+    }
+    for (auto child : _children) {
+        RETURN_IF_ERROR(child->prepare_jit_expr(state, context));
+    }
+    return Status::OK();
+}
+
 Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
-                               RuntimeState* state) {
+                               RuntimeState* state, bool can_jit) {
     ctxs->clear();
     for (const auto& texpr : texprs) {
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx, state));
+        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx, state, can_jit));
         ctxs->push_back(ctx);
     }
     return Status::OK();
@@ -231,28 +250,21 @@ Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texpr
 Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
                                               int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
-
     // Enable JIT based on the "enable_jit" parameters.
     if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
         return status;
     }
 
-    // Check if JIT compilation is feasible on this platform.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->support_jit()) {
-        return status;
-    }
-
-    const auto* prev_e = *root_expr;
-    status = (*root_expr)->replace_compilable_exprs(root_expr, pool);
+    bool replaced = false;
+    status = (*root_expr)->replace_compilable_exprs(root_expr, pool, replaced);
     if (!status.ok()) {
         LOG(WARNING) << "Can't replace compilable exprs.\n" << status.message() << "\n" << (*root_expr)->debug_string();
         // Fall back to the non-JIT path.
         return Status::OK();
     }
 
-    if (*root_expr != prev_e) {
-        // The root node was replaced, so we need to update the context.
+    if (replaced) {
+        // The node was replaced, so we need to update the context.
         *ctx = pool->add(new ExprContext(*root_expr));
     }
 
@@ -698,6 +710,14 @@ ColumnRef* Expr::get_column_ref() {
     return nullptr;
 }
 
+StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, JITContext* jit_ctx) {
+    if (this->is_compilable()) {
+        return this->generate_ir_impl(context, jit_ctx);
+    } else {
+        return Expr::generate_ir_impl(context, jit_ctx);
+    }
+}
+
 StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
     if (is_compilable()) {
 #if BE_TEST
@@ -729,6 +749,21 @@ StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit
     return datum;
 }
 
+std::string Expr::jit_func_name() const {
+    if (this->is_compilable()) {
+        return this->jit_func_name_impl();
+    } else {
+        return Expr::jit_func_name_impl();
+    }
+}
+
+std::string Expr::jit_func_name_impl() const {
+    DCHECK(!is_compilable());
+    // uncompilable inputs, reducing string size.
+    return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
+           "]";
+}
+
 void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
     if (!this->is_compilable()) {
         exprs.emplace_back(this);
@@ -742,15 +777,21 @@ void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
 // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
-Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
+Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, bool& replaced) {
+    if (_node_type == TExprNodeType::DICT_EXPR || _node_type == TExprNodeType::DICT_QUERY_EXPR ||
+        _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR) {
+        return Status::OK();
+    }
+    DCHECK(JITEngine::get_instance()->support_jit());
     if ((*expr)->should_compile()) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
         *expr = JITExpr::create(pool, *expr);
+        replaced = true;
     }
 
     for (auto& child : (*expr)->_children) {
-        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
+        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool, replaced));
     }
     return Status::OK();
 }
@@ -770,6 +811,37 @@ bool Expr::should_compile() const {
     }
 
     return true;
+}
+
+bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
+    bool support = false;
+    for (auto& child : _children) {
+        if (child->support_ngram_bloom_filter(context)) {
+            return true;
+        }
+    }
+    return support;
+}
+
+bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
+                              const NgramBloomFilterReaderOptions& reader_options) const {
+    bool no_need_to_filt = true;
+    for (auto& child : _children) {
+        if (!child->ngram_bloom_filter(context, bf, reader_options)) {
+            return false;
+        }
+    }
+    return no_need_to_filt;
+}
+
+bool Expr::is_index_only_filter() const {
+    bool is_index_only_filter = _is_index_only_filter;
+    for (auto& child : _children) {
+        if (child->is_index_only_filter()) {
+            return true;
+        }
+    }
+    return is_index_only_filter;
 }
 
 } // namespace starrocks

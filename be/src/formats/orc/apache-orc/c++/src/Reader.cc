@@ -1061,11 +1061,32 @@ void RowReaderImpl::startNextStripe() {
             throw ParseError(msg.str());
         }
 
+        rowsInCurrentStripe = currentStripeInfo.numberofrows();
+
         bool skipStripe = false;
-        if (sargsApplier && sargsApplier->getRowReaderFilter()) {
-            if (sargsApplier->getRowReaderFilter()->filterOnOpeningStripe(currentStripe, &currentStripeInfo)) {
+        bool skipStripeByScanRangeMisMatch = false;
+        if (sargsApplier) {
+            // check is existed RowReaderFilter
+            if (sargsApplier->getRowReaderFilter() &&
+                sargsApplier->getRowReaderFilter()->filterOnOpeningStripe(currentStripe, &currentStripeInfo)) {
                 skipStripe = true;
+                skipStripeByScanRangeMisMatch = true;
                 goto end;
+            }
+
+            // TODO(SmithCruise)
+            // We should contribute this code to apache-orc, we need to eval stripe's stats before load stripe footer
+            // Because If this stripe can skip by stripe's stats, we don't need to load stripe's footer anymore
+            // Stripe's stats is placed in orc tail's metadata
+            if (contents->metadata) {
+                const auto& currentStripeStats = contents->metadata->stripestats(static_cast<int>(currentStripe));
+                // skip this stripe after stats fail to satisfy sargs
+                uint64_t stripeRowGroupCount =
+                        (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
+                if (!sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount)) {
+                    skipStripe = true;
+                    goto end;
+                }
             }
         }
 
@@ -1074,7 +1095,6 @@ void RowReaderImpl::startNextStripe() {
             contents->stream->releaseToOffset(currentStripeInfo.offset());
         }
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
-        rowsInCurrentStripe = currentStripeInfo.numberofrows();
         // We need to check this stripe is already set in shared buffer(tiny stripe optimize) to avoid shared buffer overlap
         if (isIOCoalesceEnabled &&
             !contents->stream->isAlreadyCollectedInSharedBuffer(currentStripeInfo.offset(), stripeSize)) {
@@ -1084,19 +1104,6 @@ void RowReaderImpl::startNextStripe() {
         }
 
         if (sargsApplier) {
-            bool isStripeNeeded = true;
-            if (contents->metadata) {
-                const auto& currentStripeStats = contents->metadata->stripestats(static_cast<int>(currentStripe));
-                // skip this stripe after stats fail to satisfy sargs
-                uint64_t stripeRowGroupCount =
-                        (rowsInCurrentStripe + footer->rowindexstride() - 1) / footer->rowindexstride();
-                isStripeNeeded = sargsApplier->evaluateStripeStatistics(currentStripeStats, stripeRowGroupCount);
-            }
-            if (!isStripeNeeded) {
-                skipStripe = true;
-                goto end;
-            }
-
             // read row group statistics and bloom filters of current stripe
             loadStripeIndex();
 
@@ -1152,7 +1159,8 @@ void RowReaderImpl::startNextStripe() {
             currentStripe += 1;
             currentRowInStripe = 0;
 
-            if (contents->stream->get_lazy_column_coalesce_counter() != nullptr) {
+            // We do not count the skipped stripes because the scan range does not match
+            if (!skipStripeByScanRangeMisMatch && contents->stream->get_lazy_column_coalesce_counter() != nullptr) {
                 // Skip entrie stripe, which means we didn't need to coalesce active and lazy column together
                 contents->stream->get_lazy_column_coalesce_counter()->fetch_sub(1, std::memory_order_relaxed);
             }

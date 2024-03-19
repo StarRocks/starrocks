@@ -134,7 +134,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
 
 class DependsAllEvent final : public Event {
 public:
-    explicit DependsAllEvent(const std::vector<EventPtr>& events) : _events(events) {}
+    explicit DependsAllEvent(std::vector<EventPtr> events) : _events(std::move(events)) {}
 
     ~DependsAllEvent() override = default;
 

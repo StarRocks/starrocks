@@ -20,32 +20,29 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-public abstract class HintNode implements ParseNode {
-
-    protected Map<String, String> value;
+public abstract class HintNode implements Comparable<HintNode>, ParseNode {
 
     protected final NodePosition pos;
 
-    protected String hintStr;
+    protected final String hintStr;
 
-    protected HintNode(NodePosition pos, Map<String, String> value, String hintStr) {
+    protected HintNode(NodePosition pos, String hintStr) {
         this.pos = pos;
-        this.value = value;
         this.hintStr = hintStr;
     }
 
-    public Map<String, String> getValue() {
-        return value;
+    public Scope getScope() {
+        return Scope.QUERY;
     }
+    public abstract Map<String, String> getValue();
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
     }
 
-
     @Override
     public String toSql() {
-        return "";
+        return hintStr;
     }
 
     @Override
@@ -56,5 +53,17 @@ public abstract class HintNode implements ParseNode {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitHintNode(this, context);
+    }
+
+    @Override
+    public int compareTo(HintNode o) {
+        return hintStr.compareTo(o.hintStr);
+    }
+    public enum Scope {
+        // the entire query
+        QUERY,
+        // part of a query. Like hint in select * from (select hint from tbl),
+        // we may want the hint only takes effect in the subquery in the futuer.
+        CLAUSE
     }
 }

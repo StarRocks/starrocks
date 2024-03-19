@@ -18,8 +18,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -74,7 +76,6 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -243,6 +244,24 @@ public class StatementPlanner {
 
             OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
 
+            boolean oldIsEnableLowCardinalityOptimize = session.getSessionVariable().isEnableLowCardinalityOptimize();
+            boolean oldIsUseLowCardinalityOptimizeV2 = session.getSessionVariable().isUseLowCardinalityOptimizeV2();
+            for (OlapTable tbl : olapTables) {
+                if (!session.getSessionVariable().isEnableLowCardinalityOptimize() &&
+                        !session.getSessionVariable().isUseLowCardinalityOptimizeV2()) {
+                    break;
+                }
+                for (Index index : tbl.getIndexes()) {
+                    if (index.getIndexType() == IndexDef.IndexType.GIN) {
+                        // Do not use global low cardinality optimization
+                        // for GIN column. Because the predicate rewrite
+                        // may not be completely equivalent in this case
+                        session.getSessionVariable().setEnableLowCardinalityOptimize(false);
+                        session.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+                        break;
+                    }
+                }
+            }
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
@@ -259,6 +278,8 @@ public class StatementPlanner {
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
             }
+            session.getSessionVariable().setEnableLowCardinalityOptimize(oldIsEnableLowCardinalityOptimize);
+            session.getSessionVariable().setUseLowCardinalityOptimizeV2(oldIsUseLowCardinalityOptimizeV2);
 
             try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
                 // 3. Build fragment exec plan
@@ -334,10 +355,7 @@ public class StatementPlanner {
             return;
         }
         List<Database> dbList = new ArrayList<>(dbs.values());
-        dbList.sort(Comparator.comparingLong(Database::getId));
-        for (Database db : dbList) {
-            locker.lockDatabase(db, LockType.READ);
-        }
+        locker.lockDatabases(dbList, LockType.READ);
     }
 
     // unLock all database after analyze
@@ -345,9 +363,8 @@ public class StatementPlanner {
         if (dbs == null) {
             return;
         }
-        for (Database db : dbs.values()) {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        List<Database> dbList = new ArrayList<>(dbs.values());
+        locker.unlockDatabases(dbList, LockType.READ);
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.

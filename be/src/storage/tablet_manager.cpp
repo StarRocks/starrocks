@@ -444,6 +444,7 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
         return Status::OK();
     }
     auto num_shards = _tablets_shards.size();
+    std::vector<TabletSharedPtr> dropped_tablets;
     for (int i = 0; i < num_shards; i++) {
         std::unique_lock wlock(_tablets_shards[i].lock);
         for (const TabletInfo& tablet_info : tablet_info_vec) {
@@ -459,9 +460,19 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
                 TabletMap& tablet_map = _get_tablet_map(tablet_id);
                 _remove_tablet_from_partition(*dropped_tablet);
                 tablet_map.erase(tablet_id);
+
+                dropped_tablets.push_back(dropped_tablet);
             }
         }
     }
+
+    for (const auto& dropped_tablet : dropped_tablets) {
+        // make sure dropped tablet state is TABLET_SHUTDOWN
+        std::unique_lock l(dropped_tablet->get_header_lock());
+        (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+        dropped_tablet->save_meta();
+    }
+
     return Status::OK();
 }
 
@@ -1350,10 +1361,6 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
     TCreateTabletReq normal_request = request;
     if (request.tablet_schema.storage_type == TStorageType::COLUMN_WITH_ROW) {
-        // TODO: support schemachange
-        if (is_schema_change) {
-            return Status::NotSupported("column with row store does not support schema change");
-        }
         normal_request.tablet_schema.columns.emplace_back();
         TColumn& column = normal_request.tablet_schema.columns.back();
         column.__set_column_name(Schema::FULL_ROW_COLUMN);
@@ -1370,55 +1377,63 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
+        LOG(INFO) << "creating tablet meta. next_unique_id:" << next_unique_id;
     } else {
         auto base_tablet_schema = base_tablet->tablet_schema();
         next_unique_id = base_tablet_schema->next_column_unique_id();
-        size_t old_num_columns = base_tablet_schema->num_columns();
-        const auto& new_columns = request.tablet_schema.columns;
+        size_t num_normal_old_columns = base_tablet_schema->num_columns();
+        if (base_tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN) {
+            // skip full row column's unique id
+            // assuming full row column's unique id is the last one, implementation should make sure it's true
+            --num_normal_old_columns;
+            next_unique_id--;
+        }
+        std::unordered_map<std::string_view, size_t> old_col_name_to_idx;
+        for (size_t i = 0; i < num_normal_old_columns; ++i) {
+            DCHECK(old_col_name_to_idx.count(base_tablet_schema->column(i).name()) == 0);
+            old_col_name_to_idx[base_tablet_schema->column(i).name()] = i;
+        }
+        auto& new_columns = normal_request.tablet_schema.columns;
         for (uint32_t new_col_idx = 0; new_col_idx < new_columns.size(); ++new_col_idx) {
-            const TColumn& column = new_columns[new_col_idx];
+            TColumn& new_column = new_columns[new_col_idx];
             // For schema change, compare old_tablet and new_tablet:
             // 1. if column exist in both new_tablet and old_tablet, choose the column's
             //    unique_id in old_tablet to be the column's ordinal number in new_tablet
             // 2. if column exists only in new_tablet, assign next_unique_id of old_tablet
             //    to the new column
-            size_t old_col_idx = 0;
-            for (old_col_idx = 0; old_col_idx < old_num_columns; ++old_col_idx) {
-                auto old_name = base_tablet_schema->column(old_col_idx).name();
-                if (old_name == column.column_name) {
-                    uint32_t old_unique_id = base_tablet_schema->column(old_col_idx).unique_id();
-                    if (normal_request.tablet_schema.schema_version <= base_tablet_schema->schema_version() + 1) {
-                        if (column.col_unique_id > 0) {
-                            DCHECK(column.col_unique_id == old_unique_id);
-                            if (column.col_unique_id != old_unique_id) {
-                                std::string msg = strings::Substitute(
-                                        "Tablet[$0] column[$1] has different column unique id during schema change. "
-                                        "$2(FE) "
-                                        "vs $3(BE)",
-                                        base_tablet->tablet_id(), old_col_idx, column.col_unique_id, old_unique_id);
-                                return Status::InternalError(msg);
-                            }
+            auto itr = old_col_name_to_idx.find(new_column.column_name);
+            if (itr != old_col_name_to_idx.end()) {
+                auto old_col_idx = itr->second;
+                const auto& old_column = base_tablet_schema->column(old_col_idx);
+                uint32_t old_unique_id = old_column.unique_id();
+                if (normal_request.tablet_schema.schema_version <= base_tablet_schema->schema_version() + 1) {
+                    if (new_column.col_unique_id > 0) {
+                        DCHECK(new_column.col_unique_id == old_unique_id);
+                        if (new_column.col_unique_id != old_unique_id) {
+                            std::string msg = strings::Substitute(
+                                    "Tablet[$0] column[$1] has different column unique id during schema change. "
+                                    "$2(FE) "
+                                    "vs $3(BE)",
+                                    base_tablet->tablet_id(), old_col_idx, new_column.col_unique_id, old_unique_id);
+                            return Status::InternalError(msg);
                         }
                     }
-
-                    col_idx_to_unique_id[new_col_idx] = old_unique_id;
-                    // During linked schema change, the now() default value is stored in TabletMeta.
-                    // When receiving a new schema change request, the last default value stored should be
-                    // remained instead of changing.
-                    if (base_tablet_schema->column(old_col_idx).has_default_value()) {
-                        normal_request.tablet_schema.columns[new_col_idx].__set_default_value(
-                                base_tablet_schema->column(old_col_idx).default_value());
-                    }
-                    break;
                 }
-            }
-            // Not exist in old tablet, it is a new added column
-            if (old_col_idx == old_num_columns) {
+                // During linked schema change, the now() default value is stored in TabletMeta.
+                // When receiving a new schema change request, the last default value stored should be
+                // remained instead of changing.
+                if (old_column.has_default_value()) {
+                    new_columns[new_col_idx].__set_default_value(old_column.default_value());
+                }
+                col_idx_to_unique_id[new_col_idx] = old_unique_id;
+            } else {
+                // Not exist in old tablet, it is a new added column
                 col_idx_to_unique_id[new_col_idx] = next_unique_id++;
             }
         }
+        LOG(INFO) << "creating tablet meta for schema change. next_unique_id from:"
+                  << base_tablet_schema->next_column_unique_id() << " to:" << next_unique_id;
     }
-    LOG(INFO) << "creating tablet meta. next_unique_id=" << next_unique_id;
 
     uint64_t shard_id = 0;
     if (!store->get_shard(&shard_id).ok()) {
@@ -1616,7 +1631,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     LOG(INFO) << strings::Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
                                      snapshot_meta->snapshot_version(), schema_hash_path);
 
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(snapshot_meta, schema_hash_path));
+    auto tablet_schema = TabletSchema::create(snapshot_meta->tablet_meta().schema());
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(snapshot_meta, schema_hash_path, tablet_schema));
 
     // Set of rowset id collected from rowset meta.
     std::set<uint32_t> set1;

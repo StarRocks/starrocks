@@ -54,4 +54,4 @@ Privileges determine which users can perform which operations on which objects. 
 
 ## [Data storage in storage-compute separation architecture](../introduction/Architecture.md#storage-compute-separation)
 
-Since v3.0, StarRocks introduces the new storage-compute separation (shared-data) architecture. Data storage is separated from BEs. Data is persistently stored in remote object storage or HDFS, while local disks are used for caching hot data to accelerate queries. 
+Since v3.0, StarRocks introduces the new storage-compute separation (shared-data) architecture. Data storage is separated from BEs. Data is persistently stored in remote object storage or HDFS, while local disks are used for caching hot data to accelerate queries.

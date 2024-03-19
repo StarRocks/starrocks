@@ -165,7 +165,7 @@ displayed_sidebar: "Chinese"
 - RESTful API `show_data` 对于云原生表的返回信息不正确。[#29473](https://github.com/StarRocks/starrocks/pull/29473)
 - 如果集群为[存算分离架构](https://docs.starrocks.io/zh/docs/3.0/deployment/deploy_shared_data/)，数据存储在 Azure Blob Storage 上，并且已经建表，则回滚到 3.0 时 FE 无法启动。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
 - 向用户赋予 Iceberg Catalog 下某表权限后，该用户查询该表时显示没有权限。[#29173](https://github.com/StarRocks/starrocks/pull/29173)
-- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/HLL/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Administration/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/HLL/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - 在线修改 FE 动态参数 `max_broker_load_job_concurrency` 不生效。[#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
 - Refresh 物化视图，同时并发地修改物化视图的刷新策略，有概率会导致 FE 无法启动。[#29691](https://github.com/StarRocks/starrocks/pull/29691)
 - 执行 `select count(distinct(int+double)) from table_name` 会报错 `unknown error`。 [#30054](https://github.com/StarRocks/starrocks/pull/30054)

@@ -8,7 +8,7 @@ A Delta Lake catalog is a kind of external catalog that enables you to query dat
 
 Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
 
-To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster must be able to access the storage system and metastore of your Delta Lake cluster. StarRocks supports the following storage systems and metastores:
 
 - Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 

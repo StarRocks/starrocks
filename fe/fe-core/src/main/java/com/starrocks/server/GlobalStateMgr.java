@@ -170,6 +170,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
+import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
@@ -299,9 +301,6 @@ public class GlobalStateMgr {
     // canRead can be true even if isReady is false.
     // for example: OBSERVER transfer to UNKNOWN, then isReady will be set to false, but canRead can still be true
     private final AtomicBoolean canRead = new AtomicBoolean(false);
-
-    // false if default_cluster is not created.
-    private boolean isDefaultClusterCreated = false;
 
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
@@ -441,7 +440,8 @@ public class GlobalStateMgr {
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
-    private final SlotProvider slotProvider = new SlotProvider();
+    private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
+    private final SlotProvider localSlotProvider = new LocalSlotProvider();
 
     private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
     private final RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
@@ -456,9 +456,9 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo(Integer clusterId) {
+    public TNodesInfo createNodesInfo() {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = nodeMgr.getOrCreateSystemInfo(clusterId);
+        SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
         // use default warehouse
         Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
         // TODO: need to refactor after be split into cn + dn
@@ -594,8 +594,6 @@ public class GlobalStateMgr {
 
         this.metaReplayState = new MetaReplayState();
 
-        this.isDefaultClusterCreated = false;
-
         this.resourceMgr = new ResourceMgr();
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
@@ -707,7 +705,7 @@ public class GlobalStateMgr {
         });
 
         this.replicationMgr = new ReplicationMgr();
-        nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
+        nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
     }
@@ -1128,10 +1126,6 @@ public class GlobalStateMgr {
                 editLog.logAddFirstFrontend(self);
             }
 
-            if (!isDefaultClusterCreated) {
-                initDefaultCluster();
-            }
-
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
@@ -1333,9 +1327,8 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
-    public void loadImage(String imageDir) throws IOException, DdlException {
+    public void loadImage(String imageDir) throws IOException {
         Storage storage = new Storage(imageDir);
-        nodeMgr.setClusterId(storage.getClusterID());
         File curFile = storage.getCurrentImageFile();
         if (!curFile.exists()) {
             // image.0 may not exist
@@ -1480,7 +1473,6 @@ public class GlobalStateMgr {
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
-        isDefaultClusterCreated = header.isDefaultClusterCreated();
         LOG.info("finished to replay header from image");
     }
 
@@ -1561,7 +1553,6 @@ public class GlobalStateMgr {
         ImageHeader header = new ImageHeader();
         long id = idGenerator.getBatchEndId();
         header.setBatchEndId(id);
-        header.setDefaultClusterCreated(isDefaultClusterCreated);
         Text.writeString(dos, GsonUtils.GSON.toJson(header));
     }
 
@@ -2134,10 +2125,6 @@ public class GlobalStateMgr {
         return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
-    public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
-        this.isDefaultClusterCreated = isDefaultClusterCreated;
-    }
-
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
         TableName tableName = stmt.getTableName();
         List<String> partitionNames = stmt.getPartitions();
@@ -2245,11 +2232,6 @@ public class GlobalStateMgr {
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
-    }
-
-    // TODO [meta-format-change] deprecated
-    public void initDefaultCluster() {
-        localMetastore.initDefaultCluster();
     }
 
     public void initDefaultWarehouse() {
@@ -2400,8 +2382,12 @@ public class GlobalStateMgr {
         return slotManager;
     }
 
-    public SlotProvider getSlotProvider() {
-        return slotProvider;
+    public GlobalSlotProvider getGlobalSlotProvider() {
+        return globalSlotProvider;
+    }
+
+    public SlotProvider getLocalSlotProvider() {
+        return localSlotProvider;
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {

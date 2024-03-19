@@ -70,7 +70,8 @@ public:
     static bool encode_exceed_limit(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
                                     size_t limit_size);
 
-    static Status decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest);
+    static Status decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
+                         std::vector<uint8_t>* value_encode_flags = nullptr);
 };
 
 } // namespace starrocks

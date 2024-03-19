@@ -264,7 +264,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().createTable(stmt.getCreateTableStmt());
+                context.getGlobalStateMgr().getMetadataMgr().createTableLike(stmt);
             });
             return null;
         }

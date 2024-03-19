@@ -342,10 +342,6 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
                 GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames("default_catalog");
                 minTimes = 0;
                 result = Lists.newArrayList("testDb");
@@ -705,33 +701,15 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowBackends() throws AnalysisException, DdlException {
+    public void testShowBackendsSharedDataMode(@Mocked StarOSAgent starosAgent) throws AnalysisException, DdlException {
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
-        StarOSAgent starosAgent = new StarOSAgent();
 
         // mock backends
-        Backend backend = new Backend();
-        new Expectations(clusterInfo) {
-            {
-                clusterInfo.getBackend(1L);
-                minTimes = 0;
-                result = backend;
-            }
-        };
+        Backend backend = new Backend(1L, "127.0.0.1", 12345);
+        backend.updateResourceUsage(0, 100L, 1L, 30);
+        clusterInfo.addBackend(backend);
 
         NodeMgr nodeMgr = new NodeMgr();
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            NodeMgr getNodeMgr() {
-                return nodeMgr;
-            }
-
-            @Mock
-            StarOSAgent getStarOSAgent() {
-                return starosAgent;
-            }
-        };
-
         new Expectations(nodeMgr) {
             {
                 nodeMgr.getClusterInfo();
@@ -740,26 +718,37 @@ public class ShowExecutorTest {
             }
         };
 
-        new MockUp<SystemInfoService>() {
-            @Mock
-            List<Long> getBackendIds(boolean needAlive) {
-                List<Long> backends = Lists.newArrayList();
-                backends.add(1L);
-                return backends;
-            }
-        };
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
 
-        new MockUp<StarOSAgent>() {
-            @Mock
-            long getWorkerIdByBackendId(long backendId) {
-                return 5;
+                globalStateMgr.getStarOSAgent();
+                minTimes = 0;
+                result = starosAgent;
             }
         };
 
         new MockUp<RunMode>() {
             @Mock
-            public RunMode getCurrentRunMode() {
+            RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+
+        long tabletNum = 1024;
+        long workerId = 1122;
+        new Expectations() {
+            {
+                starosAgent.getWorkerTabletNum(anyString);
+                minTimes = 1;
+                result = tabletNum;
+
+                starosAgent.getWorkerIdByBackendId(anyLong);
+                minTimes = 1;
+                result = workerId;
+
             }
         };
 
@@ -777,34 +766,22 @@ public class ShowExecutorTest {
         Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(29).getName());
 
         Assert.assertTrue(resultSet.next());
-        System.out.println(resultSet);
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("N/A", resultSet.getString(26));
-        Assert.assertEquals("5", resultSet.getString(29));
+        Assert.assertEquals(String.valueOf(workerId), resultSet.getString(29));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(11));
     }
 
     @Test
-    public void testShowComputeNodes() throws AnalysisException, DdlException {
+    public void testShowComputeNodesSharedData(@Mocked StarOSAgent starosAgent) throws AnalysisException, DdlException {
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
-        StarOSAgent starosAgent = new StarOSAgent();
 
         ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
         node.updateResourceUsage(10, 100L, 1L, 30);
+        clusterInfo.addComputeNode(node);
 
         NodeMgr nodeMgr = new NodeMgr();
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            NodeMgr getNodeMgr() {
-                return nodeMgr;
-            }
-
-            @Mock
-            StarOSAgent getStarOSAgent() {
-                return starosAgent;
-            }
-        };
-
         new Expectations(nodeMgr) {
             {
                 nodeMgr.getClusterInfo();
@@ -813,18 +790,15 @@ public class ShowExecutorTest {
             }
         };
 
-        new MockUp<SystemInfoService>() {
-            @Mock
-            List<Long> getComputeNodeIds(boolean needAlive) {
-                return ImmutableList.of(node.getId());
-            }
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
 
-            @Mock
-            ComputeNode getComputeNode(long computeNodeId) {
-                if (computeNodeId == node.getId()) {
-                    return node;
-                }
-                return null;
+                globalStateMgr.getStarOSAgent();
+                minTimes = 0;
+                result = starosAgent;
             }
         };
 
@@ -837,15 +811,17 @@ public class ShowExecutorTest {
 
         new MockUp<RunMode>() {
             @Mock
-            public RunMode getCurrentRunMode() {
+            RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
             }
         };
 
-        new MockUp<StarOSAgent>() {
-            @Mock
-            long getWorkerIdByBackendId(long backendId) {
-                return 5;
+        long tabletNum = 1024;
+        new Expectations() {
+            {
+                starosAgent.getWorkerTabletNum(anyString);
+                minTimes = 0;
+                result = tabletNum;
             }
         };
 
@@ -853,17 +829,19 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES.size(), resultSet.getMetaData().getColumnCount());
-        for (int i = 0; i < ComputeNodeProcDir.TITLE_NAMES.size(); ++i) {
-            Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES.get(i), resultSet.getMetaData().getColumn(i).getName());
+        Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.size(),
+                resultSet.getMetaData().getColumnCount());
+        for (int i = 0; i < ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.size(); ++i) {
+            Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.get(i),
+                    resultSet.getMetaData().getColumn(i).getName());
         }
-        System.out.println(resultSet.getMetaData().getColumn(13));
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("16", resultSet.getString(13));
         Assert.assertEquals("10", resultSet.getString(14));
         Assert.assertEquals("1.00 %", resultSet.getString(15));
         Assert.assertEquals("3.0 %", resultSet.getString(16));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(20));
     }
 
     @Test
@@ -984,13 +962,14 @@ public class ShowExecutorTest {
         Assert.assertEquals("", resultSet.getString(12));
         Assert.assertEquals("false", resultSet.getString(13));
         System.out.println(resultSet.getResultRows());
-        for (int i = 14; i < mvSchemaTable.size() - 3; i++) {
+        for (int i = 14; i < mvSchemaTable.size() - 4; i++) {
             System.out.println(i);
             Assert.assertEquals("", resultSet.getString(i));
         }
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 3));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 2));
-        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 4));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 3));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertEquals("VALID", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 

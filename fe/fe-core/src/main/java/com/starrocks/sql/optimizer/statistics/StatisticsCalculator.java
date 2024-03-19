@@ -36,13 +36,16 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.JoinHelper;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -50,6 +53,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -130,6 +134,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -560,6 +565,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      * return new partition column statistics or else null
      */
     private ColumnStatistic adjustPartitionStatistic(Collection<Long> selectedPartitionId, OlapTable olapTable) {
+        if (CollectionUtils.isEmpty(selectedPartitionId)) {
+            return null;
+        }
         int selectedPartitionsSize = selectedPartitionId.size();
         int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
         if (selectedPartitionsSize != allNoEmptyPartitionsSize) {
@@ -801,6 +809,19 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics innerJoinStats;
         if (innerRowCount == -1) {
             innerJoinStats = estimateInnerJoinStatistics(crossJoinStats, eqOnPredicates);
+
+            OptExpression optExpression = context.getOptExpression();
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+
+            if (optExpression != null && sessionVariable.isEnableUKFKOpt()) {
+                UKFKConstraintsCollector.collectColumnConstraints(optExpression);
+                UKFKConstraints constraints = optExpression.getConstraints();
+                Statistics ukfkJoinStat = buildStatisticsForUKFKJoin(joinType, constraints,
+                        leftRowCount, rightRowCount, crossBuilder);
+                if (ukfkJoinStat.getOutputRowCount() < innerJoinStats.getOutputRowCount()) {
+                    innerJoinStats = ukfkJoinStat;
+                }
+            }
             innerRowCount = innerJoinStats.getOutputRowCount();
         } else {
             innerJoinStats = Statistics.buildFrom(crossJoinStats).setOutputRowCount(innerRowCount).build();
@@ -881,6 +902,40 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(estimateStatistics);
         return visitOperator(context.getOp(), context);
+    }
+
+    private Statistics buildStatisticsForUKFKJoin(JoinOperator joinType, UKFKConstraints constraints,
+                                                  double leftRowCount, double rightRowCount,
+                                                  Statistics.Builder builder) {
+        UKFKConstraints.JoinProperty joinProperty = constraints.getJoinProperty();
+        if (joinProperty == null) {
+            return builder.build();
+        }
+        if (joinType.isInnerJoin()) {
+            if (joinProperty.isLeftUK) {
+                builder.setOutputRowCount(rightRowCount);
+            } else {
+                builder.setOutputRowCount(leftRowCount);
+            }
+        } else if (joinType.isLeftOuterJoin()) {
+            if (!joinProperty.isLeftUK) {
+                builder.setOutputRowCount(leftRowCount);
+            }
+        } else if (joinType.isRightOuterJoin()) {
+            if (joinProperty.isLeftUK) {
+                builder.setOutputRowCount(rightRowCount);
+            }
+        } else if (joinType.isLeftSemiJoin()) {
+            if (joinProperty.isLeftUK) {
+                builder.setOutputRowCount(leftRowCount);
+            }
+        } else if (joinType.isRightSemiJoin()) {
+            if (!joinProperty.isLeftUK) {
+                builder.setOutputRowCount(rightRowCount);
+            }
+        }
+
+        return builder.build();
     }
 
     private void computeNullFractionForOuterJoin(double outerTableRowCount, double innerJoinRowCount,

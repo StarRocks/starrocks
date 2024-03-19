@@ -307,7 +307,8 @@ public class QueryAnalyzer {
                 } else if (table instanceof HiveView) {
                     HiveView hiveView = (HiveView) table;
                     QueryStatement queryStatement = hiveView.getQueryStatement();
-                    View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema());
+                    View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema(),
+                            Table.TableType.HIVE_VIEW);
                     view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
@@ -708,13 +709,26 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            boolean isRelationAliasCaseInSensitive = false;
+            if (ConnectContext.get() != null) {
+                isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
+                // For hive view, relation alias is case-insensitive
+                if (node.getView().isHiveView()) {
+                    ConnectContext.get().setRelationAliasCaseInSensitive(true);
+                }
+            }
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
             } catch (SemanticException e) {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
+            } finally {
+                if (ConnectContext.get() != null && node.getView().isHiveView()) {
+                    ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                }
             }
+
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {

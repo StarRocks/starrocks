@@ -727,6 +727,8 @@ static std::unordered_set<TExprNodeType::type> _supported_expr_node_types = {
         TExprNodeType::type::SLOT_REF,
         TExprNodeType::type::STRING_LITERAL,
         TExprNodeType::type::LARGE_INT_LITERAL,
+        // is null & is not null
+        TExprNodeType::type::FUNCTION_CALL,
 };
 
 static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logical_types = {
@@ -752,8 +754,8 @@ static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logica
 };
 
 bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
-    TExprNodeType::type node_type = conjunct->node_type();
-    TExprOpcode::type op_type = conjunct->op();
+    const TExprNodeType::type& node_type = conjunct->node_type();
+    const TExprOpcode::type& op_type = conjunct->op();
     if (_supported_expr_node_types.find(node_type) == _supported_expr_node_types.end()) {
         return false;
     }
@@ -782,7 +784,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
     // supported one level. first child is slot, and others are literal values.
     // and only support some of logical types.
     if (node_type == TExprNodeType::BINARY_PRED || node_type == TExprNodeType::IN_PRED ||
-        node_type == TExprNodeType::IS_NULL_PRED) {
+        node_type == TExprNodeType::IS_NULL_PRED || node_type == TExprNodeType::FUNCTION_CALL) {
         // first child should be slot
         // and others should be literal.
         Expr* c = conjunct->get_child(0);
@@ -803,7 +805,27 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         }
 
         if (conjunct->get_num_children() == 1) {
-            return false;
+            if (node_type == TExprNodeType::IS_NULL_PRED) {
+                // null predicate only has one child
+                // we don't need to return false
+            } else if (node_type == TExprNodeType::FUNCTION_CALL) {
+                // null predicate only has one child
+                // check is null & is not null
+                std::string null_str;
+                if (!conjunct->is_null_scalar_function(null_str)) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // We only support is null / is not null in function call
+        if (node_type == TExprNodeType::FUNCTION_CALL) {
+            std::string null_str;
+            if (!conjunct->is_null_scalar_function(null_str)) {
+                return false;
+            }
         }
 
         for (int i = 1; i < conjunct->get_num_children(); i++) {
@@ -879,13 +901,15 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
     case LogicalType::TYPE_DECIMAL128:
         return orc::Literal{to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale};
     default:
-        CHECK(false) << "failed to handle logical type = " << std::to_string(ltype);
+        DCHECK(false);
     }
+    LOG(WARNING) << "failed to handle logical type = " << std::to_string(ltype) << " in translate_to_orc_literal()";
+    return Status::InternalError("failed to handle logical type = " + std::to_string(ltype));
 }
 
 Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
-    TExprNodeType::type node_type = conjunct->node_type();
-    TExprOpcode::type op_type = conjunct->op();
+    const TExprNodeType::type& node_type = conjunct->node_type();
+    const TExprOpcode::type& op_type = conjunct->op();
 
     // If conjunct is slot ref, like SELECT * FROM tbl where col;
     // We build SearchArgument about col=true directly.
@@ -906,7 +930,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         } else if (op_type == TExprOpcode::COMPOUND_NOT) {
             builder->startNot();
         } else {
-            CHECK(false) << "unexpected op_type in compound_pred type. op_type = " << std::to_string(op_type);
+            return Status::InternalError("unexpected op_type in compound_pred type. op_type = " +
+                                         std::to_string(op_type));
         }
         for (Expr* c : conjunct->children()) {
             RETURN_IF_ERROR(_add_conjunct(c, builder));
@@ -936,9 +961,17 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
     auto* ref = down_cast<ColumnRef*>(slot);
-    SlotId slot_id = ref->slot_id();
-    std::string name = _slot_id_to_desc[slot_id]->col_name();
-    orc::PredicateDataType pred_type = _supported_logical_types[slot->type().type];
+    const SlotId& slot_id = ref->slot_id();
+    const std::string& name = _slot_id_to_desc[slot_id]->col_name();
+
+    orc::PredicateDataType pred_type = orc::PredicateDataType::LONG;
+    auto type_it = _supported_logical_types.find(slot->type().type);
+    if (type_it != _supported_logical_types.end()) {
+        pred_type = type_it->second;
+    } else {
+        return Status::NotSupported(
+                fmt::format("orc chunk reader don't support {}.", std::to_string(slot->type().type)));
+    }
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
         Expr* lit = conjunct->get_child(1);
@@ -980,7 +1013,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
             break;
 
         default:
-            CHECK(false) << "unexpected op_type in binary_pred type. op_type = " << std::to_string(op_type);
+            return Status::InternalError("unexpected op_type in binary_pred type. op_type = " +
+                                         std::to_string(op_type));
         }
         return Status::OK();
     }
@@ -1003,13 +1037,21 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         return Status::OK();
     }
 
-    if (node_type == TExprNodeType::IS_NULL_PRED) {
-        builder->isNull(name, pred_type);
+    if (node_type == TExprNodeType::IS_NULL_PRED || node_type == TExprNodeType::FUNCTION_CALL) {
+        std::string null_function_name;
+        if (conjunct->is_null_scalar_function(null_function_name)) {
+            if (null_function_name == "null") {
+                builder->isNull(name, pred_type);
+            } else if (null_function_name == "not null") {
+                builder->startNot();
+                builder->isNull(name, pred_type);
+                builder->end();
+            }
+        }
         return Status::OK();
     }
 
-    CHECK(false) << "unexpected node_type = " << std::to_string(node_type);
-    return Status::OK();
+    return Status::InternalError("unexpected node_type = " + std::to_string(node_type));
 }
 
 #define ADD_RF_TO_BUILDER                                            \

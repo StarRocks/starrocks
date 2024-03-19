@@ -37,6 +37,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
@@ -1341,6 +1342,15 @@ public class AstToStringBuilder {
             }
             sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
             return sb.toString();
+        }
+
+        protected String extractHintStr(List<HintNode> hintNodes) {
+            StringBuilder hintBuilder = new StringBuilder();
+            for (HintNode hintNode : hintNodes) {
+                hintBuilder.append(hintNode.toSql());
+                hintBuilder.append(" ");
+            }
+            return hintBuilder.toString();
         }
     }
 

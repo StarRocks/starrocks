@@ -50,6 +50,7 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
@@ -776,6 +777,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Map<Long, DiskInfo> hashToDiskInfo = new HashMap<>();
+        for (DiskInfo diskInfo : GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getClusterInfo().getBackend(backendId).getDisks().values()) {
+            hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
+        }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         List<Long> deleteTablets = new ArrayList<>();
         DB_TRAVERSE:
@@ -854,8 +860,22 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                     long currentBackendReportVersion =
                             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId);
-                    if (backendReportVersion < currentBackendReportVersion) {
-                        continue;
+                    DiskInfo diskInfo = hashToDiskInfo.get(replica.getPathHash());
+
+                    // Only check reportVersion when the disk is online,
+                    // as there will be no tablet changes on an unavailable disk
+                    if (diskInfo != null
+                            && diskInfo.getState() == DiskInfo.DiskState.ONLINE
+                            && backendReportVersion < currentBackendReportVersion) {
+                        LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
+                                "latest report version: {}", backendId, backendReportVersion, currentBackendReportVersion);
+                        break DB_TRAVERSE;
+                    } else if (diskInfo == null) {
+                        LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
+                    } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
+                        LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
                     }
 
                     ReplicaState state = replica.getState();

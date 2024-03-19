@@ -248,6 +248,8 @@ struct TExprNode {
   55: optional TDictQueryExpr dict_query_expr
 
   56: optional TDictionaryGetExpr dictionary_get_expr
+  // whether this expr is only used in index
+  57: optional bool is_index_only_filter
 }
 
 struct TPartitionLiteral {

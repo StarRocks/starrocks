@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.parser.NodePosition;
 import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.Assert;
@@ -74,7 +75,8 @@ public class SetStmtTest {
 
     @Test
     public void testNormal() throws UserException {
-        List<SetListItem> vars = Lists.newArrayList(new UserVariable("times", new IntLiteral(100L)),
+        List<SetListItem> vars = Lists.newArrayList(new UserVariable("times", new IntLiteral(100L),
+                        NodePosition.ZERO),
                 new SetNamesVar("utf8"));
         SetStmt stmt = new SetStmt(vars);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
@@ -360,6 +362,28 @@ public class SetStmtTest {
             } catch (Exception e) {
                 Assert.assertTrue(e instanceof SemanticException);
             }
+        }
+    }
+
+    @Test
+    public void testSetCatalog() {
+        // good
+        try {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, "catalog",
+                    new StringLiteral("default_catalog"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        // bad
+        try {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, "catalog",
+                    new StringLiteral("non_existent_catalog"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Getting analyzing error. Detail message: Unknown catalog non_existent_catalog.", e.getMessage());;
         }
     }
 }

@@ -19,6 +19,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ShardInfo;
@@ -37,6 +39,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 
@@ -46,9 +49,6 @@ import java.util.Map;
 public class StarOSAgent2ndTest {
     private StarOSAgent starosAgent;
 
-    @Mocked
-    StarClient client;
-
     @Before
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
@@ -56,7 +56,7 @@ public class StarOSAgent2ndTest {
     }
 
     @Test
-    public void testGetBackendIdsByShardMissingStarletPort() throws StarClientException, UserException {
+    public void testGetBackendIdsByShardMissingStarletPort(@Mocked StarClient client) throws StarClientException, UserException {
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         long beId = 123L;
@@ -172,7 +172,7 @@ public class StarOSAgent2ndTest {
     }
 
     @Test
-    public void testGetPrimaryComputeNodeIdByShard() throws StarClientException, UserException {
+    public void testGetPrimaryComputeNodeIdByShard(@Mocked StarClient client) throws StarClientException, UserException {
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         int workerHeartbeatPort = 9050;
@@ -215,5 +215,49 @@ public class StarOSAgent2ndTest {
         UserException exception =
                 Assert.assertThrows(UserException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
         Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
+    }
+
+    @Test
+    public void allocatePartitionFilePathInfo() {
+        FilePathInfo.Builder fsPathBuilder = FilePathInfo.newBuilder();
+        // set S3FsInfo
+        fsPathBuilder.getFsInfoBuilder().getS3FsInfoBuilder()
+                .setBucket("bucket")
+                .setPathPrefix("app1");
+        // set FsInfo
+        fsPathBuilder.getFsInfoBuilder()
+                .setFsName("test-name")
+                .setFsKey("test-fskey")
+                .setFsType(FileStoreType.S3)
+                .addAllLocations(new ArrayList<>());
+        fsPathBuilder.setFullPath("s3://bucket/app1/service_id_balabala/db111/table222");
+
+        long partitionId = 10086; // 0x2766
+
+        // enablePartitioned prefix = false
+        {
+            FilePathInfo info = StarOSAgent.allocatePartitionFilePathInfo(fsPathBuilder.build(), partitionId);
+            String expectedFullPath = String.format("%s/%d", fsPathBuilder.getFullPath(), partitionId);
+            Assert.assertEquals(expectedFullPath, info.getFullPath());
+            // Compare the info without the fullpath info, should be identical
+            Assert.assertEquals(info.toBuilder().clearFullPath().toString(),
+                    fsPathBuilder.build().toBuilder().clearFullPath().toString());
+        }
+
+        // enablePartitioned prefix = true
+        fsPathBuilder.getFsInfoBuilder().getS3FsInfoBuilder().clearPathPrefix().setPartitionedPrefixEnabled(true)
+                .setNumPartitionedPrefix(1024);
+        fsPathBuilder.setFullPath("s3://bucket/service_id_balabala/db111/table222");
+
+        {
+            FilePathInfo info = StarOSAgent.allocatePartitionFilePathInfo(fsPathBuilder.build(), partitionId);
+            // prefix: 10086 % 1024 = 870 (0x366) -> reverse order: 663
+            String expectedFullPath =
+                    String.format("s3://bucket/663/service_id_balabala/db111/table222/%d", partitionId);
+            Assert.assertEquals(expectedFullPath, info.getFullPath());
+            // Compare the info without the fullpath info, should be identical
+            Assert.assertEquals(info.toBuilder().clearFullPath().toString(),
+                    fsPathBuilder.build().toBuilder().clearFullPath().toString());
+        }
     }
 }

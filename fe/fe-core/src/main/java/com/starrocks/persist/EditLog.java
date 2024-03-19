@@ -52,7 +52,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -323,6 +322,11 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayEraseMultiTables(multiEraseTableInfo);
                     break;
                 }
+                case OperationType.OP_DISABLE_TABLE_RECOVERY: {
+                    DisableTableRecoveryInfo disableTableRecoveryInfo = (DisableTableRecoveryInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDisableTableRecovery(disableTableRecoveryInfo);
+                    break;
+                }
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.getData();
                     globalStateMgr.getLocalMetastore().replayErasePartition(Long.parseLong(partitionId.toString()));
@@ -566,8 +570,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_CLUSTER: {
-                    final Cluster value = (Cluster) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayCreateCluster(value);
+                    // ignore
                     break;
                 }
                 case OperationType.OP_ADD_BROKER:
@@ -1379,6 +1382,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
     }
 
+    public void logDisableTableRecovery(List<Long> tableIds) {
+        logEdit(OperationType.OP_DISABLE_TABLE_RECOVERY, new DisableTableRecoveryInfo(tableIds));
+    }
+
     public void logEraseMultiTables(List<Long> tableIds) {
         logEdit(OperationType.OP_ERASE_MULTI_TABLES, new MultiEraseTableInfo(tableIds));
     }
@@ -1493,10 +1500,6 @@ public class EditLog {
 
     public void logGlobalVariable(SessionVariable variable) {
         logEdit(OperationType.OP_GLOBAL_VARIABLE, variable);
-    }
-
-    public void logCreateCluster(Cluster cluster) {
-        logEdit(OperationType.OP_CREATE_CLUSTER, cluster);
     }
 
     public void logAddBroker(BrokerMgr.ModifyBrokerInfo info) {

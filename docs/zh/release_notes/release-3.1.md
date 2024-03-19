@@ -290,7 +290,7 @@ displayed_sidebar: "Chinese"
 - 用户在连接时指定默认数据库，并且仅有该数据库下面表权限，但无该数据库权限时，会报对该数据库无访问权限。[#29767](https://github.com/StarRocks/starrocks/pull/29767)
 - RESTful API `show_data` 对于云原生表的返回信息不正确。[#29473](https://github.com/StarRocks/starrocks/pull/29473)
 - 在 [array_agg()](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_agg/) 函数运行过程中，如果查询取消，则会发生 BE Crash。[#29400](https://github.com/StarRocks/starrocks/issues/29400)
-- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/HLL/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Administration/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- [BITMAP](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/BITMAP/) 和 [HLL](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/HLL/) 类型的列在 [SHOW FULL COLUMNS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) 查询结果中返回的 `Default` 字段值不正确。[#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - [array_map()](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_map/) 同时涉及多个表时，下推策略问题导致查询失败。[#29504](https://github.com/StarRocks/starrocks/pull/29504)
 - 由于未合入上游 Apache ORC 的 BugFix ORC-1304（[apache/orc#1299](https://github.com/apache/orc/pull/1299)）而导致 ORC 文件查询失败。[#29804](https://github.com/StarRocks/starrocks/pull/29804)
 

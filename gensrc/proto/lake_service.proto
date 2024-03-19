@@ -95,11 +95,13 @@ message CompactResponse {
 message DropTableRequest {
     // tablet_id can be the id of any of the tablet belongs to the table to be dropped.
     optional int64 tablet_id = 1;
+    optional string path = 2;
 }
 
 message DropTableResponse {
     // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
     optional int32 pad = 1;
+    optional StatusPB status = 2;
 }
 
 message DeleteDataRequest {

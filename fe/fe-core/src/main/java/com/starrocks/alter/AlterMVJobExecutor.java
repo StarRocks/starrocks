@@ -143,6 +143,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             oldQueryRewriteConsistencyMode = TableProperty.analyzeQueryRewriteMode(propertyValue);
             properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
         }
+        TableProperty.MVQueryRewriteSwitch queryRewriteSwitch =
+                materializedView.getTableProperty().getMvQueryRewriteSwitch();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+            queryRewriteSwitch = TableProperty.analyzeQueryRewriteSwitch(value);
+            properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+        }
 
         if (!properties.isEmpty()) {
             if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
@@ -164,6 +171,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
         }
 
+        // TODO(murphy) refactor the code
         boolean isChanged = false;
         Map<String, String> curProp = materializedView.getTableProperty().getProperties();
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL) && ttlDuration != null &&
@@ -229,6 +237,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     put(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY,
                             String.valueOf(oldQueryRewriteConsistencyMode));
             materializedView.getTableProperty().setQueryRewriteConsistencyMode(oldQueryRewriteConsistencyMode);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+            materializedView.getTableProperty().getProperties()
+                    .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
+            materializedView.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);

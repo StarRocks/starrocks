@@ -258,10 +258,10 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     std::unique_lock l1(_lock);
     std::unique_lock l2(_rowsets_lock);
 
-    std::vector<TabletSegmentId> tsids;
+    std::unordered_set<TabletSegmentId> tsids;
     for (auto& [rsid, rowset] : _rowsets) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-            tsids.emplace_back(TabletSegmentId{_tablet.tablet_id(), rsid + i});
+            tsids.insert(TabletSegmentId{_tablet.tablet_id(), rsid + i});
         }
     }
 
@@ -349,10 +349,24 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     }
     del_vector_cardinality_by_rssid.clear();
 
+    for (auto& [rsid, rowset] : _rowsets) {
+        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+            tsids.insert(TabletSegmentId{_tablet.tablet_id(), rsid + i});
+        }
+    }
+
     l2.unlock(); // _rowsets_lock
 
+    std::vector<TabletSegmentId> tsids_vec;
+    tsids_vec.resize(tsids.size());
+    for (const auto& tsid : tsids) {
+        tsids_vec.emplace_back(tsid);
+    }
+
     RETURN_IF_ERROR(_load_pending_rowsets());
-    StorageEngine::instance()->update_manager()->clear_cached_del_vec(tsids);
+    StorageEngine::instance()->update_manager()->clear_cached_del_vec(tsids_vec);
+    StorageEngine::instance()->update_manager()->clear_cached_delta_column_group(tsids_vec);
+    StorageEngine::instance()->update_manager()->index_cache().try_remove_by_key(_tablet.tablet_id());
 
     _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
     VLOG(1) << "load tablet " << _debug_string(false, true);
@@ -2944,9 +2958,10 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 }
 
 StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
+    ExtraFileSize ef_size;
+#if !defined(ADDRESS_SANITIZER)
     std::string tablet_path_str = _tablet.schema_hash_path();
     std::filesystem::path tablet_path(tablet_path_str.c_str());
-    ExtraFileSize ef_size;
     try {
         for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {
             if (entry.is_regular_file()) {
@@ -2970,6 +2985,7 @@ StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
         std::string err_msg = "Iterate dir " + tablet_path.string() + " Unknown exception occurred.";
         return Status::InternalError(err_msg);
     }
+#endif
     return ef_size;
 }
 
@@ -3227,14 +3243,17 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
 
 Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                           EditVersion* full_edit_version) {
+    int64_t begin_ms = MonotonicMillis();
     if (_error) {
         return Status::InternalError(
                 strings::Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
                                     _tablet.tablet_id(), _error_msg));
     }
     std::unique_lock<std::mutex> ul(_lock);
+    int64_t get_lock_ms = MonotonicMillis();
     // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
+    int64_t wait_ver_ms = MonotonicMillis();
     if (_edit_version_infos.empty()) {
         string msg = strings::Substitute(
                 "Tablet is deleted, perhaps this table is doing schema change, or it has already been deleted. Please "
@@ -3263,10 +3282,20 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
             if (full_edit_version != nullptr) {
                 *full_edit_version = edit_version_info->version;
             }
+            int64_t end_ms = MonotonicMillis();
+            if (end_ms - begin_ms > 3 * 1000) {
+                // more than 3 seconds
+                LOG(INFO) << strings::Substitute("get_applied_rowsets(version $0) slow cost ($1/$2/$3)", version,
+                                                 get_lock_ms - begin_ms, wait_ver_ms - get_lock_ms,
+                                                 end_ms - wait_ver_ms);
+            }
             return Status::OK();
         }
     }
-    string msg = strings::Substitute("get_applied_rowsets(version $0) failed $1", version, _debug_version_info(false));
+    int64_t end_ms = MonotonicMillis();
+    string msg = strings::Substitute("get_applied_rowsets(version $0) failed $1 cost ($2/$3/$4)", version,
+                                     _debug_version_info(false), get_lock_ms - begin_ms, wait_ver_ms - get_lock_ms,
+                                     end_ms - wait_ver_ms);
     LOG(WARNING) << msg;
     return Status::NotFound(msg);
 }
@@ -3531,6 +3560,15 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
     Schema base_schema = ChunkHelper::convert_schema(base_tablet_schema, chunk_changer->get_selected_column_indexes());
+    auto tschema = _tablet.tablet_schema();
+    std::vector<ColumnId> cids;
+    for (size_t i = 0; i < tschema->num_columns(); i++) {
+        if (tschema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+        cids.push_back(i);
+    }
+    Schema new_schema = ChunkHelper::convert_schema(tschema, cids);
 
     OlapReaderStatistics stats;
 
@@ -3579,7 +3617,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         }
 
         // notice: rowset's del files not linked, it's not useful
-        status = _convert_from_base_rowset(base_schema, seg_iterator, chunk_changer, rowset_writer);
+        status = _convert_from_base_rowset(base_schema, new_schema, seg_iterator, chunk_changer, rowset_writer);
         if (!status.ok()) {
             LOG(WARNING) << err_msg_header << "failed to convert from base rowset, exit alter process, "
                          << status.to_string();
@@ -3693,12 +3731,10 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     return Status::OK();
 }
 
-Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const ChunkIteratorPtr& seg_iterator,
-                                                ChunkChanger* chunk_changer,
+Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const Schema& new_schema,
+                                                const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-
-    Schema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -3793,6 +3829,14 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     size_t total_rows = 0;
     size_t total_files = 0;
     auto tschema = _tablet.tablet_schema();
+    std::vector<ColumnId> cids;
+    for (size_t i = 0; i < tschema->num_columns(); i++) {
+        if (tschema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
+        cids.push_back(i);
+    }
+    Schema new_schema = ChunkHelper::convert_schema(tschema, cids);
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
 
@@ -3827,7 +3871,6 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         }
 
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-        Schema new_schema = ChunkHelper::convert_schema(tschema);
 
         for (auto& seg_iterator : seg_iterators) {
             if (seg_iterator.get() == nullptr) {
@@ -4158,7 +4201,7 @@ Status TabletUpdates::pk_index_major_compaction() {
         }
     });
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    return index.major_compaction(&_tablet);
+    return index.major_compaction(_tablet.data_dir(), _tablet.tablet_id(), _tablet.updates()->get_index_lock());
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {

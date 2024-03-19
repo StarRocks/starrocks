@@ -566,7 +566,6 @@ public class SyncPartitionUtils {
                     mvNeedRefreshPartitions.addAll(mvAssociatedPartitions);
                 }
 
-                Preconditions.checkState(mvNeedRefreshPartitions.contains(needRefreshMvPartitionName));
                 if (mvNeedRefreshPartitions.size() > 1) {
                     needRefreshMvPartitionNames.addAll(mvNeedRefreshPartitions);
                     mvPotentialRefreshPartitionNames.add(needRefreshMvPartitionName);

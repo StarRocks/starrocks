@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['suoyin']
 ---
 
 # Bitmap 索引
@@ -82,7 +83,7 @@ SHOW ALTER TABLE COLUMN [FROM db_name];
 
 ## 查看索引
 
-查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../../sql-reference/sql-statements/Administration/SHOW_INDEX.md)。
+查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../../sql-reference/sql-statements/data-manipulation//SHOW_INDEX.md)。
 
 ```SQL
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];

@@ -40,6 +40,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
+
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
 
@@ -329,7 +331,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<List<Long>> bindings = new ArrayList<>();
         List<Long> tableBindings = new ArrayList<>();
         List<Long> dbBindings = new ArrayList<>();
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin().stream()
+                .filter(dbid -> dbid > NEXT_ID_INIT_VALUE).collect(Collectors.toList());
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Locker locker = new Locker();

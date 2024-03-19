@@ -10,7 +10,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 - 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
 - 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
 
-为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Hive 内的数据，StarRocks 集群必须能够访问 Hive 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 
@@ -29,7 +29,6 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - CSV 文件从 v3.1.5 起支持 LZO 压缩格式。
 
 - StarRocks 查询 Hive 数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 CSV 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
-- Hive Catalog 仅支持查询 Hive 数据，不支持针对 Hive 的写/删操作。
 
 ## 准备工作
 

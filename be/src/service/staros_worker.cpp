@@ -377,6 +377,7 @@ void init_staros_worker() {
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
+    fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
     fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;
     fslib::FLAGS_star_cache_disk_size_bytes = config::starlet_star_cache_disk_size_bytes;
     fslib::FLAGS_star_cache_block_size_bytes = config::starlet_star_cache_block_size_bytes;

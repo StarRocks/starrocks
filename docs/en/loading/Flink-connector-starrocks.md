@@ -10,7 +10,7 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 > **NOTICE**
 >
-> Loading data into StarRocks tables with Flink connector needs SELECT and INSERT privileges. If you do not have these privileges, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant these privileges to the user that you use to connect to your StarRocks cluster.
+> Loading data into StarRocks tables with Flink connector needs SELECT and INSERT privileges on the target StarRocks table. If you do not have these privileges, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant these privileges to the user that you use to connect to your StarRocks cluster.
 
 ## Version requirements
 
@@ -68,7 +68,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 ### Compile by yourself
 
-1. Download the [Flink connector package](https://github.com/StarRocks/starrocks-connector-for-apache-flink).
+1. Download the [Flink connector source code](https://github.com/StarRocks/starrocks-connector-for-apache-flink).
 2. Execute the following command to compile the source code of Flink connector into a JAR file. Note that `flink_version` is replaced with the corresponding Flink version.
 
       ```bash
@@ -99,13 +99,13 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
-**Description**: The address that is used to connect to the MySQL server of the FE.  You can specify multiple addresss, which must be separated by a comma (,). Format: `jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>,<fe_host3>:<fe_query_port3>`.
+**Description**: The address that is used to connect to the MySQL server of the FE. You can specify multiple addresses, which must be separated by a comma (,). Format: `jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>,<fe_host3>:<fe_query_port3>`.
 
 ###  load-url
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
-**Description**: The HTTP URL of the FE in your StarRocks cluster. You can specify multiple URLs, which must be separated by a semicolon (;). Format: `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`.
+**Description**: The address that is used to connect to the HTTP server of the FE. You can specify multiple addresses, which must be separated by a semicolon (;). Format: `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`.
 
 ###  database-name
 
@@ -123,19 +123,13 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
-**Description**:  The username of the account that you want to use to load data into StarRocks.  The account needs [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md).
+**Description**: The username of the account that you want to use to load data into StarRocks. The account needs [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md) on the target StarRocks table.
 
 ### password
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
 **Description**: The password of the preceding account.
-
-### sink.semantic
-
-**Required**: No<br/>
-**Default value**: at-least-once<br/>
-**Description**: The semantic  guaranteed by sink. Valid values: **at-least-once** and **exactly-once**.
 
 ### sink.version
 
@@ -149,23 +143,29 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: NONE<br/>
 **Description**: The label prefix used by Stream Load. Recommend to configure it if you are using exactly-once with connector 1.2.8 and later. See [exactly-once usage notes](#exactly-once).
 
+### sink.semantic
+
+**Required**: No<br/>
+**Default value**: at-least-once<br/>
+**Description**: The semantic guaranteed by sink. Valid values: **at-least-once** and **exactly-once**.
+
 ### sink.buffer-flush.max-bytes
 
 **Required**: No<br/>
 **Default value**: 94371840(90M)<br/>
-**Description**: The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. The maximum value ranges from 64 MB to 10 GB. Setting this parameter to a larger value can improve loading performance but may increase loading latency.
+**Description**: The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. The maximum value ranges from 64 MB to 10 GB. Setting this parameter to a larger value can improve loading performance but may increase loading latency. This parameter only takes effect when `sink.semantic` is set to `at-least-once`. If `sink.semantic` is set to `exactly-once`, the data in memory is flushed when a Flink checkpoint is triggered. In this circumstance, this parameter does not take effect.
 
 ### sink.buffer-flush.max-rows
 
 **Required**: No<br/>
 **Default value**: 500000<br/>
-**Description**: The maximum number of rows that can be accumulated in memory before being sent to StarRocks at a time. This parameter is available only when you set `sink.version` to `V1` and set `sink.semantic` to `at-least-once`. Valid values: 64000 to 5000000.
+**Description**: The maximum number of rows that can be accumulated in memory before being sent to StarRocks at a time. This parameter is available only when `sink.version` is `V1` and `sink.semantic` is `at-least-once`. Valid values: 64000 to 5000000.
 
 ### sink.buffer-flush.interval-ms
 
 **Required**: No<br/>
 **Default value**: 300000<br/>
-**Description**: The interval at which data is flushed. This parameter is available only when you set `sink.semantic` to `at-least-once`. Valid values: 1000 to 3600000. Unit: ms.
+**Description**: The interval at which data is flushed. This parameter is available only when `sink.semantic` is `at-least-once`. Valid values: 1000 to 3600000. Unit: ms.
 
 ### sink.max-retries
 
@@ -191,11 +191,16 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: true<br/>
 **Description**: Supported since version 1.2.8. Whether to ignore `UPDATE_BEFORE` records from Flink when loading data to Primary Key tables. If this parameter is set to false, the record is treated as a delete operation to StarRocks table.
 
-### sink.properties.*
+### sink.parallelism
 
 **Required**: No<br/>
 **Default value**: NONE<br/>
-**Description**:  The parameters that are used to control Stream Load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+**Description**: The parallelism of loading. Only available for Flink SQL. If this parameter is not specified, Flink planner decides the parallelism. **In the scenario of multi-parallelism, users need to guarantee data is written in the correct order.**
+
+### sink.properties.*
+**Required**: No<br/>
+**Default value**: NONE<br/>
+**Description**: The parameters that are used to control Stream Load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 ### sink.properties.format
 
@@ -203,17 +208,17 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: csv<br/>
 **Description**: The format used for Stream Load. The Flink connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`.
 
-### sink.properties.row_delimiter     
-
-**Required**: No<br/>
-**Default value**: \n<br/>
-**Description**: The row delimiter for CSV-formatted data.
-
 ### sink.properties.column_separator  
 
 **Required**: No<br/>
 **Default value**: \t<br/>
 **Description**: The column separator for CSV-formatted data.
+
+### sink.properties.row_delimiter     
+
+**Required**: No<br/>
+**Default value**: \n<br/>
+**Description**: The row delimiter for CSV-formatted data.
 
 ### sink.properties.max_filter_ratio  
 
@@ -301,7 +306,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       checkpoint, instead of due to timeout (which may cause data loss).
 
   - `label_keep_max_second` and `label_keep_max_num`: StarRocks FE configurations, default values are `259200` and `1000`
-    respectively. For details, see [FE configurations](../loading/Loading_intro.md#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
+    respectively. For details, see [FE configurations](./loading_introduction/loading_considerations.md#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
 
   These configurations are mutable and can be modified by using `ADMIN SET FRONTEND CONFIG`:
 
@@ -818,7 +823,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
    The column `visit_user_id` in the Flink table is of `BIGINT` type, and we want to load this column to the column `visit_users` of `HLL` type in the StarRocks table. So when defining the DDL of the Flink table, note that:
     - Because Flink does not support `BITMAP`, you need to define a column `visit_user_id` as `BIGINT` type to represent the column `visit_users` of `HLL` type in the StarRocks table.
-    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=hll_hash(visit_user_id)` which tells the connector the column mapping between Flink table and StarRocks table.  Also you need to use [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash.md) function to tell the connector to convert the data of `BIGINT` type into `HLL` type.
+    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=hll_hash(visit_user_id)` which tells the connector the column mapping between Flink table and StarRocks table.  Also you need to use [`hll_hash`](../sql-reference/sql-functions/scalar-functions/hll_hash.md) function to tell the connector to convert the data of `BIGINT` type into `HLL` type.
 
     ```SQL
     CREATE TABLE `hll_uv` (

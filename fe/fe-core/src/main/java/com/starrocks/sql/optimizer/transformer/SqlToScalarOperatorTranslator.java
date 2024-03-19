@@ -841,7 +841,7 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn(), node.getType());
         }
 
         @Override

@@ -450,8 +450,9 @@ private:
 
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
-    Status _convert_from_base_rowset(const Schema& base_schema, const ChunkIteratorPtr& seg_iterator,
-                                     ChunkChanger* chunk_changer, const std::unique_ptr<RowsetWriter>& rowset_writer);
+    Status _convert_from_base_rowset(const Schema& base_schema, const Schema& new_schema,
+                                     const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
+                                     const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
 

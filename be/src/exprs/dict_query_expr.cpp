@@ -43,17 +43,22 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
         }
     }
-    ChunkPtr key_chunk = ChunkHelper::new_chunk(_key_schema, size);
-    key_chunk->reset();
-    for (int i = 0; i < _dict_query_expr.key_fields.size(); ++i) {
-        ColumnPtr key_column = columns[1 + i];
-        key_chunk->update_column_by_index(key_column, i);
-    }
+
+    // key_columns should be columns[1] ~ columns[1 + _dict_query_expr.key_fields.size()]
+    Columns key_columns(columns.begin() + 1, columns.begin() + 1 + _dict_query_expr.key_fields.size());
+    DCHECK(_key_schema.num_fields() == key_columns.size());
+    auto key_chunk = std::make_unique<Chunk>(std::move(key_columns), std::make_shared<Schema>(_key_schema));
+    key_chunk->check_or_die();
+
     for (size_t i = 0; i < key_chunk->num_columns(); ++i) {
         key_chunk->set_slot_id_to_index(_key_slot_ids[i], i);
     }
 
     for (auto& column : key_chunk->columns()) {
+        // key does not support null value, return error in this case
+        if (column->has_null()) {
+            return Status::InternalError("invalid parameter : get NULL paramenter");
+        }
         if (column->is_nullable()) {
             column = ColumnHelper::update_column_nullable(false, column, column->size());
         }

@@ -165,7 +165,7 @@ public class SelectStmtTest {
                         "nullable_tuples:[false], conjuncts:[TExpr(nodes:[TExprNode(node_type:BINARY_PRED, " +
                         "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BOOLEAN))]), " +
                         "opcode:EQ, num_children:2, output_scale:-1, vector_opcode:INVALID_OPCODE, child_type:INT, " +
-                        "has_nullable_child:true, is_nullable:true, is_monotonic:false)";
+                        "has_nullable_child:true, is_nullable:true, is_monotonic:false,";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift, thrift.contains(expectString));
     }
@@ -587,9 +587,13 @@ public class SelectStmtTest {
             String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
                     "str_to_map('age=18&sex=1&gender=1','&','=')['sex'] AS sex;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assert.assertTrue(plan, plan.contains("str_to_map[([4: split, ARRAY<VARCHAR>, true], '='); " +
-                    "args: INVALID_TYPE,VARCHAR; result: MAP<VARCHAR,VARCHAR>; " +
-                    "args nullable: true; result nullable: true]"));
+            Assert.assertTrue(plan, plan.contains("2 <-> 4: str_to_map['age']\n" +
+                    "  |  3 <-> 4: str_to_map['sex']\n" +
+                    "  |  common expressions:\n" +
+                    "  |  4 <-> str_to_map[('age=18&sex=1&gender=1', '&', '='); " +
+                    "args: VARCHAR,VARCHAR,VARCHAR; " +
+                    "result: MAP<VARCHAR,VARCHAR>; args " +
+                    "nullable: false; result nullable: true]"));
         } catch (Exception e) {
             Assert.fail("Should not throw an exception");
         }

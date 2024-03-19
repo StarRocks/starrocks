@@ -93,6 +93,9 @@ Usage: $0 <options>
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      -j                 build Backend parallel
+     --output-compile-time 
+                        save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
+                        Turning this option on automatically disables ccache.
 
   Eg.
     $0                                           build all
@@ -122,6 +125,7 @@ OPTS=$(getopt \
   -l 'without-java-ext' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
+  -l 'output-compile-time' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -143,6 +147,7 @@ WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
+OUTPUT_COMPILE_TIME=OFF
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -160,7 +165,7 @@ fi
 if [[ -z ${JEMALLOC_DEBUG} ]]; then
     JEMALLOC_DEBUG=OFF
 fi
-if [[ -z ${CCACHE} ]]; then
+if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
 fi
 if [[ -z ${USE_AVX2KI} ]]; then
@@ -182,13 +187,13 @@ fi
 
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
-    if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
+    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
         USE_AVX2=OFF
     fi
     if [[ -z $(grep -o 'avx512' /proc/cpuinfo) ]]; then
         USE_AVX512=OFF
     fi
-    if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
+    if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
         USE_SSE4_2=OFF
     fi
 fi
@@ -254,6 +259,7 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+            --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -289,12 +295,14 @@ echo "Get params:
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
     USE_AVX2KI          -- $USE_AVX2KI
+    USE_SSE4_2          -- $USE_SSE4_2
     JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_CACHELIB       -- $WITH_CACHELIB
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
+    OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
 "
 
 check_tool()
@@ -365,17 +373,24 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       fi
       export STARLET_INSTALL_DIR
     fi
+    
+    if [ "${OUTPUT_COMPILE_TIME}" == "ON" ]; then
+        rm -f ${ROOT}/compile_times.txt
+        CXX_COMPILER_LAUNCHER=${ROOT}/build-support/compile_time.sh
+    else
+        CXX_COMPILER_LAUNCHER=${CCACHE}
+    fi
 
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
                   -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
-                  -DCMAKE_CXX_COMPILER_LAUNCHER=${CCACHE}                  \
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
-                  -DUSE_AVX2KI=$USE_AVX2KI          \
-                  -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG  \
+                  -DUSE_AVX2KI=$USE_AVX2KI                              \
+                  -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
@@ -550,7 +565,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
     fi
 
-    if [ "${AVX2KI}" == "ON"  ]; then
+    if [ "${USE_AVX2KI}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/avx2ki
         cp ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ${STARROCKS_OUTPUT}/be/lib/avx2ki/libavx2neon.so.2.0.0
     fi

@@ -52,10 +52,10 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.2.1/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.2.2/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="3ec3306c862cb75f99a1615bcf4dc290"
+STARCACHE_MD5SUM="43b768470c712371df2a4620bf445b3f"
 
 # avx2ki for aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/boostkit/library/system?subtab=AVX2KI)
 AVX2KI_DOWNLOAD="https://kunpeng-repo.obs.cn-north-4.myhuaweicloud.com/Kunpeng%20BoostKit/Kunpeng%20BoostKit%2023.0.RC5/BoostKit-ksl_2.0.0.zip"

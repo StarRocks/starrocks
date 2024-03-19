@@ -175,11 +175,11 @@ public:
     }
 
 protected:
-    int64_t _transaction_id = 100;
-    int64_t _table_id = 10001;
-    int64_t _partition_id = 10002;
-    int64_t _tablet_id = 10003;
-    int64_t _src_tablet_id = 10004;
+    int64_t _transaction_id = 200;
+    int64_t _table_id = 20001;
+    int64_t _partition_id = 20002;
+    int64_t _tablet_id = 20003;
+    int64_t _src_tablet_id = 20004;
     int32_t _schema_hash = 368169781;
     int64_t _version = 2;
     int64_t _src_version = 10;

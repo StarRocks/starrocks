@@ -4,6 +4,30 @@ displayed_sidebar: "Chinese"
 
 # 使用窗口函数组织过滤数据
 
+- [使用窗口函数组织过滤数据](#使用窗口函数组织过滤数据)
+  - [窗口函数语法及参数](#窗口函数语法及参数)
+  - [使用 AVG() 窗口函数](#使用-avg-窗口函数)
+  - [使用 COUNT() 窗口函数](#使用-count-窗口函数)
+  - [使用 DENSE\_RANK() 窗口函数](#使用-dense_rank-窗口函数)
+  - [使用 FIRST\_VALUE() 窗口函数](#使用-first_value-窗口函数)
+  - [使用 LAG() 窗口函数](#使用-lag-窗口函数)
+  - [使用 LAST\_VALUE() 窗口函数](#使用-last_value-窗口函数)
+  - [使用 LEAD() 窗口函数](#使用-lead-窗口函数)
+  - [使用 MAX() 窗口函数](#使用-max-窗口函数)
+  - [使用 MIN() 窗口函数](#使用-min-窗口函数)
+  - [使用 NTILE() 窗口函数](#使用-ntile-窗口函数)
+  - [使用 RANK() 窗口函数](#使用-rank-窗口函数)
+  - [使用 ROW\_NUMBER() 窗口函数](#使用-row_number-窗口函数)
+  - [使用 QUALIFY 窗口函数](#使用-qualify-窗口函数)
+  - [使用 SUM() 窗口函数](#使用-sum-窗口函数)
+  - [使用 VARIANCE, VAR\_POP, VARIANCE\_POP 窗口函数](#使用-variance-var_pop-variance_pop-窗口函数)
+  - [使用 VAR\_SAMP, VARIANCE\_SAMP 窗口函数](#使用-var_samp-variance_samp-窗口函数)
+  - [使用 STD, STDDEV, STDDEV\_POP 窗口函数](#使用-std-stddev-stddev_pop-窗口函数)
+  - [使用 STDDEV\_SAMP 窗口函数](#使用-stddev_samp-窗口函数)
+  - [使用 COVAR\_SAMP 窗口函数](#使用-covar_samp-窗口函数)
+  - [使用 COVAR\_POP 窗口函数](#使用-covar_pop-窗口函数)
+  - [使用 CORR 窗口函数](#使用-corr-窗口函数)
+
 本文介绍如何使用 StarRocks 窗口函数。
 
 窗口函数是 StarRocks 内置的特殊函数。和聚合函数类似，窗口函数通过对多行数据进行计算得到一个数据值。不同的是，窗口函数使用 Over() 子句对**当前窗口**内的数据进行排序和分组，同时**对结果集的每一行**计算出一个单独的值，而不是对每个 Group By 分组计算一个值。这种灵活的方式允许您在 SELECT 子句中增加额外的列，对结果集进行重新组织和过滤。

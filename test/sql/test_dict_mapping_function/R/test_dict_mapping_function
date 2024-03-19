@@ -1,11 +1,11 @@
--- name: test_expression_cast
-CREATE DATABASE test_expression_cast_db;
+-- name: test_dict_mapping_streamload
+CREATE DATABASE test_dict_mapping_streamload;
 -- result:
 -- !result
-USE test_expression_cast_db;
+USE test_dict_mapping_streamload;
 -- result:
 -- !result
-CREATE TABLE `t_expression_cast` (
+CREATE TABLE `t_dict_mapping_streamload` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `id2` bigint(20) NOT NULL AUTO_INCREMENT COMMENT ""
 ) ENGINE=OLAP 
@@ -20,7 +20,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-INSERT INTO t_expression_cast VALUES (1, DEFAULT),(2, DEFAULT),(3, DEFAULT);
+INSERT INTO t_dict_mapping_streamload VALUES (1, DEFAULT),(2, DEFAULT),(3, DEFAULT);
 -- result:
 -- !result
 CREATE TABLE `test_table` (
@@ -38,7 +38,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_dict_mapping_case_1.csv -XPUT -H partial_update:false -H label:stream_load_dict_mapping_case_1 -H column_separator:, -H columns:"xx, id1=xx, id2=dict_mapping('test_expression_cast_db.t_expression_cast', cast(xx as BIGINT))" ${url}/api/test_expression_cast_db/test_table/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_dict_mapping_case_1.csv -XPUT -H partial_update:false -H label:stream_load_dict_mapping_case_1 -H column_separator:, -H columns:"id1, id2=dict_mapping('t_dict_mapping_streamload', id1)" ${url}/api/test_dict_mapping_streamload/test_table/_stream_load
 -- result:
 0
 {
@@ -55,9 +55,214 @@ SELECT * FROM test_table;
 2	2
 3	3
 -- !result
-DROP TABLE t_expression_cast;
+DROP TABLE t_dict_mapping_streamload;
 -- result:
 -- !result
-DROP DATABASE test_expression_cast_db;
+DROP DATABASE test_dict_mapping_streamload;
+-- result:
+-- !result
+-- name: test_dictmapping_multiple_column
+CREATE DATABASE test_dictmapping_multiple_column;
+-- result:
+-- !result
+use test_dictmapping_multiple_column;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO dict VALUES (1, "abc", default, 0);
+-- result:
+-- !result
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t VALUES (1, "abc");
+-- result:
+-- !result
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+-- result:
+1
+-- !result
+DROP DATABASE test_dictmapping_multiple_column;
+-- result:
+-- !result
+-- name: test_dictmapping_null_column
+CREATE DATABASE test_dictmapping_null_column;
+-- result:
+-- !result
+use test_dictmapping_null_column;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO dict VALUES (1, "abc", default, 0);
+-- result:
+-- !result
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t VALUES (1, NULL), (2, "abc");
+-- result:
+-- !result
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+-- result:
+E: (1064, 'invalid parameter : get NULL paramenter')
+-- !result
+DROP DATABASE test_dictmapping_null_column;
+-- result:
+-- !result
+-- name: test_dictmapping_DictQueryOperator_bug
+CREATE DATABASE test_dictmapping_DictQueryOperator_bug;
+-- result:
+-- !result
+USE test_dictmapping_DictQueryOperator_bug;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+                primary key(col_1)
+                distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into dict values(1, 'hello world 1', default, 1 * 10);
+-- result:
+-- !result
+insert into dict values(2, 'hello world 2', default, 2 * 10);
+-- result:
+-- !result
+insert into dict values(3, 'hello world 3', default, 3 * 10);
+-- result:
+-- !result
+insert into dict values(4, 'hello world 4', default, 4 * 10);
+-- result:
+-- !result
+insert into dict values(5, 'hello world 5', default, 5 * 10);
+-- result:
+-- !result
+insert into dict values(6, 'hello world 6', default, 6 * 10);
+-- result:
+-- !result
+insert into dict values(7, 'hello world 7', default, 7 * 10);
+-- result:
+-- !result
+insert into dict values(8, 'hello world 8', default, 8 * 10);
+-- result:
+-- !result
+insert into dict values(9, 'hello world 9', default, 9 * 10);
+-- result:
+-- !result
+insert into dict values(10, 'hello world 10', default, 10 * 10);
+-- result:
+-- !result
+create table fact_tbl_2(col_i int, col_2 varchar(20), col_mapvalue bigint)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into fact_tbl_2
+                values
+                (1, 'Beijing', DICT_mapping("dict", 1)),
+                (2, 'Shenzhen', DICT_MAPping("dict", 2, "col_3")),
+                (3, 'Shanghai', Dict_Mapping("dict", 3, "col_4"));
+-- result:
+-- !result
+DROP DATABASE test_dictmapping_DictQueryOperator_bug;
+-- result:
+-- !result
+-- name: test_dictmapping_add_generated_column_with_dict_mapping
+CREATE DATABASE test_dictmapping_add_generated_column_with_dict_mapping;
+-- result:
+-- !result
+USE test_dictmapping_add_generated_column_with_dict_mapping;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO dict VALUES (1, "abc", default, 0);
+-- result:
+-- !result
+create table t_dictmapping_add_generated_column_with_dict_mapping(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t_dictmapping_add_generated_column_with_dict_mapping VALUES (1, "abc");
+-- result:
+-- !result
+ALTER TABLE t_dictmapping_add_generated_column_with_dict_mapping ADD COLUMN newcol BIGINT AS
+dict_mapping("dict", col_1, col_2);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT * FROM t_dictmapping_add_generated_column_with_dict_mapping;
+-- result:
+1	abc	1
+-- !result
+DROP TABLE t_dictmapping_add_generated_column_with_dict_mapping;
+-- result:
+-- !result
+DROP DATABASE test_dictmapping_add_generated_column_with_dict_mapping;
+-- result:
+-- !result
+-- name: test_dictmapping_generated_column_in_create_table
+CREATE DATABASE test_dictmapping_generated_column_in_create_table;
+-- result:
+-- !result
+USE test_dictmapping_generated_column_in_create_table;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+create table fact_tbl_1(col_1 int, col_2 varchar(20), col_mapvalue bigint as Dict_Mapping("dict", COL_1, false))
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: column:COL_1 does not exist.')
+-- !result
+DROP DATABASE test_dictmapping_generated_column_in_create_table;
 -- result:
 -- !result

@@ -907,9 +907,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
 
+
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;
+
+    public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

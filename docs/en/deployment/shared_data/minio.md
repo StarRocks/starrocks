@@ -118,22 +118,6 @@ The ARN of the IAM role that has privileges on your S3 bucket in which your data
 
 The external ID of the AWS account that is used for cross-account access to your S3 bucket.
 
-#### azure_blob_path
-
-The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, `testcontainer/subpath`.
-
-#### azure_blob_endpoint
-
-The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`.
-
-#### azure_blob_shared_key
-
-The Shared Key used to authorize requests for your Azure Blob Storage.
-
-#### azure_blob_sas_token
-
-The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
-
 > **Note**
 >
 > Only credential-related configuration items can be modified after your shared-data StarRocks cluster is created. If you changed the original storage path-related configuration items, the databases and tables you created before the change become read-only, and you cannot load data into them.

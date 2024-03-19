@@ -27,7 +27,6 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet.h"
-#include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
@@ -960,16 +959,6 @@ PrimaryIndex::~PrimaryIndex() {
                       << " memory: " << memory_usage();
         }
     }
-
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
-    if (tablet != nullptr) {
-        if (_persistent_index != nullptr && !tablet->get_enable_persistent_index()) {
-            auto st = _persistent_index->delete_pindex_files();
-            if (!st.ok()) {
-                LOG(ERROR) << "tablet:" << tablet->tablet_id() << " clear pindex failed:" << st;
-            }
-        }
-    }
 }
 
 PrimaryIndex::PrimaryIndex(const Schema& pk_schema) {
@@ -1455,9 +1444,9 @@ double PrimaryIndex::get_write_amp_score() {
     }
 }
 
-Status PrimaryIndex::major_compaction(Tablet* tablet) {
+Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
     if (_persistent_index != nullptr) {
-        return _persistent_index->major_compaction(tablet);
+        return _persistent_index->major_compaction(data_dir, tablet_id, mutex);
     } else {
         return Status::OK();
     }
