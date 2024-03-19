@@ -22,7 +22,7 @@ StarRocks 提供了两种预防工具处理大查询——资源组和查询队�
 
 ### 通过资源组滤除大查询
 
-资源组可以自动识别和终止大查询。在创建资源组时，您可以指定单个查询可以使用的 CPU 时间、内存使用量或 Scan 行数的上限。在命中资源组的所有查询中，任何要求更多资源的查询都将被拒绝执行并返回错误。详细信息，请参阅 [资源隔离](../administration/resource_group.md)。
+资源组可以自动识别和终止大查询。在创建资源组时，您可以指定单个查询可以使用的 CPU 时间、内存使用量或 Scan 行数的上限。在命中资源组的所有查询中，任何要求更多资源的查询都将被拒绝执行并返回错误。详细信息，请参阅 [资源隔离](./resource_management/resource_management.mdx)。
 
 在创建资源组之前，执行以下语句启用资源组功能依赖的 Pipeline 引擎功能：
 
@@ -55,7 +55,7 @@ ERROR 1064 (HY000): exceed big query scan_rows limit: current is 4 but limit is 
 
 ### 通过查询队列缓解系统过载
 
-查询队列用于在集群资源占用超过预定阈值时防止系统过载情况恶化。您可以为最大并发数、内存使用率和 CPU 使用率设置阈值。当系统资源占用达到其中任何一个阈值时，StarRocks 会自动对新增查询进行排队。待处理查询在队列中等待执行，或在达到资源阈值时被取消。有关详细信息，请参阅 [查询队列](../administration/query_queues.md)。
+查询队列用于在集群资源占用超过预定阈值时防止系统过载情况恶化。您可以为最大并发数、内存使用率和 CPU 使用率设置阈值。当系统资源占用达到其中任何一个阈值时，StarRocks 会自动对新增查询进行排队。待处理查询在队列中等待执行，或在达到资源阈值时被取消。有关详细信息，请参阅 [查询队列](./resource_management/resource_management.mdx)。
 
 执行以下语句为 SELECT 查询启用查询队列功能：
 
@@ -107,7 +107,7 @@ SET GLOBAL enable_query_queue_select = true;
   SET GLOBAL query_queue_pending_timeout_second = 480;
   ```
 
-您可以使用 [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md) 查看查询是否为待处理（Pending）状态。
+您可以使用 [SHOW PROCESSLIST](../../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md) 查看查询是否为待处理（Pending）状态。
 
 ```Plain
 mysql> SHOW PROCESSLIST;
@@ -126,7 +126,7 @@ mysql> SHOW PROCESSLIST;
 
 ### 通过 MySQL 客户端监控
 
-1. 您可以使用 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW_PROC.md) 查看当前正在处理的查询 `current_queries`。
+1. 您可以使用 [SHOW PROC](../../sql-reference/sql-statements/Administration/SHOW_PROC.md) 查看当前正在处理的查询 `current_queries`。
 
    ```SQL
    SHOW PROC '/current_queries';
@@ -175,19 +175,19 @@ mysql> SHOW PROCESSLIST;
    http://<fe_IP>:<fe_http_port>/system?path=//current_queries
    ```
 
-   ![FE console 1](../assets/console_1.png)
+   ![FE console 1](../../assets/console_1.png)
 
    您可以在 **System Info** 页面上查看当前正在处理的查询及其资源消耗。
 
 2. 点击对应查询的 **QueryID**。
 
-   ![FE console 2](../assets/console_2.png)
+   ![FE console 2](../../assets/console_2.png)
 
    您可以在新页面中查看该查询在各节点上的资源消耗信息。
 
 ### 手动终止大查询
 
-如果有大查询绕过了您设置的预防措施并威胁到系统可用性，您可以通过在 [KILL](../sql-reference/sql-statements/Administration/KILL.md) 语句中使用该查询对应的连接 ID 手动终止该查询：
+如果有大查询绕过了您设置的预防措施并威胁到系统可用性，您可以通过在 [KILL](../../sql-reference/sql-statements/Administration/KILL.md) 语句中使用该查询对应的连接 ID 手动终止该查询：
 
 ```SQL
 KILL QUERY <ConnectionId>;
@@ -239,7 +239,7 @@ SET GLOBAL enable_big_query_log = true;
 
 从实时监控和大查询日志中获得的统计数据中，您可以了解集群中被遗漏的大查询（或被错误当成大查询的常规查询）的模式，然后优化资源组和查询队列的设置。
 
-如果有较大部分的大查询符合某种 SQL 模式，而您想永久禁止这种 SQL 模式，您可以将这种模式添加到 SQL 黑名单中。StarRocks 不会执行与 SQL 黑名单中任意模式相匹配的查询，并返回错误。详细信息，请参阅 [管理 SQL 黑名单](../administration/Blacklist.md)。
+如果有较大部分的大查询符合某种 SQL 模式，而您想永久禁止这种 SQL 模式，您可以将这种模式添加到 SQL 黑名单中。StarRocks 不会执行与 SQL 黑名单中任意模式相匹配的查询，并返回错误。详细信息，请参阅 [管理 SQL 黑名单](./resource_management/resource_management.mdx)。
 
 执行以下语句启用SQL 黑名单：
 
@@ -247,7 +247,7 @@ SET GLOBAL enable_big_query_log = true;
 ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true");
 ```
 
-然后，您可以使用 [ADD SQLBLACKLIST](../sql-reference/sql-statements/Administration/ADD_SQLBLACKLIST.md) 语句将代表这种 SQL 模式的正则表达式添加到 SQL 黑名单。
+然后，您可以使用 [ADD SQLBLACKLIST](../../sql-reference/sql-statements/Administration/ADD_SQLBLACKLIST.md) 语句将代表这种 SQL 模式的正则表达式添加到 SQL 黑名单。
 
 以下示例将 `COUNT(DISTINCT)` 添加到 SQL 黑名单：
 

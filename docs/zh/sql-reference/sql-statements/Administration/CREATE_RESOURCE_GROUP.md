@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-创建资源组。关于资源组的更多信息，参见[资源隔离](../../../administration/resource_group.md)。
+创建资源组。关于资源组的更多信息，参见[资源隔离](../../../administration/management/resource_management/resource_management.mdx)。
 
 :::tip
 

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 权限项
 
-本文详细描述了 StarRocks 中可以用于赋权的权限项及其含义。您可以通过 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+本文详细描述了 StarRocks 中可以用于赋权的权限项及其含义。您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
 > 注意：本文介绍的权限项从 3.0 版本开始提供，升级后的权限框架、语法与旧的系统无法兼容，请以 3.0 版本的操作说明为准。升级后，除个别操作外，您在旧系统上的大部分操作权限仍然保留。具体差异请见文档最后的升级指南。
 

@@ -9,7 +9,7 @@ FE 参数分为动态参数和静态参数。动态参数可通过 SQL 命令进
 
 静态参数必须在 FE 配置文件 **fe.conf** 中进行配置和调整。**调整完成后，需要重启 FE 使变更生效。**
 
-参数是否为动态参数可通过 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md) 返回结果中的 `IsMutable` 列查看。`TRUE` 表示动态参数。
+参数是否为动态参数可通过 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md) 返回结果中的 `IsMutable` 列查看。`TRUE` 表示动态参数。
 
 静态和动态参数均可通过 **fe.conf** 文件进行修改。
 
@@ -21,7 +21,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
  ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
  ```
 
-详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md)。
+详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md)。
 
 > **注意**
 >
@@ -31,7 +31,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 
 ### 配置 FE 动态参数
 
-您可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
+您可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -2057,7 +2057,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：集群内每个 Routine Load 导入任务消费数据的最大时间。自 v3.1.0 起，Routine Load 导入作业 [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_consume_second`，作用于单个 Routine Load 导入作业内的导入任务，更加灵活。
+- 描述：集群内每个 Routine Load 导入任务消费数据的最大时间。自 v3.1.0 起，Routine Load 导入作业 [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_consume_second`，作用于单个 Routine Load 导入作业内的导入任务，更加灵活。
 - 引入版本：-
 
 ##### routine_load_task_timeout_second
@@ -2066,7 +2066,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：集群内每个 Routine Load 导入任务超时时间，自 v3.1.0 起，Routine Load 导入作业 [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。
+- 描述：集群内每个 Routine Load 导入任务超时时间，自 v3.1.0 起，Routine Load 导入作业 [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties) 新增参数 `task_timeout_second`，作用于单个 Routine Load 导入作业内的任务，更加灵活。
 - 引入版本：-
 
 <!--
@@ -2304,7 +2304,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
-- 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) 语句恢复。
+- 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/data-definition/RECOVER.md) 语句恢复。
 - 引入版本：-
 
 ##### enable_auto_tablet_distribution
@@ -2314,7 +2314,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 单位：-
 - 是否动态：是
 - 描述：是否开启自动设置分桶功能。
-  - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+  - 设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../../table_design/Data_distribution.md#设置分桶数量)。
   - 设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。
   - 新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。
 - 引入版本：v2.5.7
@@ -2325,7 +2325,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否开启[行列混存表](../table_design/hybrid_table.md)功能。
+- 描述：是否开启[行列混存表](../../table_design/hybrid_table.md)功能。
 - 引入版本：-
 
 ##### storage_usage_soft_limit_percent
@@ -2389,7 +2389,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 > **说明**
 >
 > - StarRocks 存算分离集群不支持该参数。
-> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
+> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
 
 ##### recover_with_empty_tablet
 
@@ -2885,7 +2885,7 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 描述：存算分离集群下，触发 Compaction 操作的 Compaction Score 阈值。当一个表分区的 Compaction Score 大于或等于该值时，系统会对该分区执行 Compaction 操作。
 - 引入版本：v3.1.0
 
-Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分，您可以通过 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 语句返回中的 `MaxCS` 一列的值来查看某个分区的 Compaction Score。Compaction Score 和分区中的文件数量有关系。文件数量过多将影响查询性能，因此系统后台会定期执行 Compaction 操作来合并小文件，减少文件数量。
+Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分，您可以通过 [SHOW PARTITIONS](../../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 语句返回中的 `MaxCS` 一列的值来查看某个分区的 Compaction Score。Compaction Score 和分区中的文件数量有关系。文件数量过多将影响查询性能，因此系统后台会定期执行 Compaction 操作来合并小文件，减少文件数量。
 
 ##### lake_compaction_max_tasks
 

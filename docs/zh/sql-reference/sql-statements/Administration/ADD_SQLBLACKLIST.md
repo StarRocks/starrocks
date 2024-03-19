@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 将一个 SQL 正则表达式添加至 SQL 黑名单。启用 SQL 黑名单功能后，StarRocks 会将所有需要执行的 SQL 语句与黑名单中的 SQL 正则表达式进行比较。StarRocks 不会执行与黑名单中任何正则表达式相匹配的 SQL，并返回错误。
 
-有关 SQL 黑名单的更多信息，请参阅 [管理 SQL 黑名单](../../../administration/Blacklist.md)。
+有关 SQL 黑名单的更多信息，请参阅 [管理 SQL 黑名单](../../../administration/management/resource_management/resource_management.mdx)。
 
 :::tip
 

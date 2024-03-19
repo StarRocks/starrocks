@@ -24,11 +24,11 @@ StarRocks 支持在以下外部存储系统中备份数据：
 
 StarRocks 支持以数据库、表、或分区为粒度全量备份数据。
 
-当表的数据量很大时，建议您按分区分别执行，以降低失败重试的代价。如果您需要对数据进行定期备份，建议您在建表时制定[动态分区](../table_design/dynamic_partitioning.md)策略，从而可以在后期运维过程中，仅定期备份新增分区中的数据。
+当表的数据量很大时，建议您按分区分别执行，以降低失败重试的代价。如果您需要对数据进行定期备份，建议您在建表时制定[动态分区](../../table_design/dynamic_partitioning.md)策略，从而可以在后期运维过程中，仅定期备份新增分区中的数据。
 
 ### 创建仓库
 
-仓库用于在远端存储系统中存储备份文件。备份数据前，您需要基于远端存储系统路径在 StarRocks 中创建仓库。您可以在同一集群中创建多个仓库。详细使用方法参阅 [CREATE REPOSITORY](../sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md)。
+仓库用于在远端存储系统中存储备份文件。备份数据前，您需要基于远端存储系统路径在 StarRocks 中创建仓库。您可以在同一集群中创建多个仓库。详细使用方法参阅 [CREATE REPOSITORY](../../sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md)。
 
 - 在 HDFS 集群中创建仓库
 
@@ -139,11 +139,11 @@ PROPERTIES(
 );
 ```
 
-仓库创建完成后，您可以通过 [SHOW REPOSITORIES](../sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES.md) 查看已创建的仓库。完成数据恢复后，您可以通过 [DROP REPOSITORY](../sql-reference/sql-statements/data-definition/DROP_REPOSITORY.md) 语句删除 StarRocks 中的仓库。但备份在远端存储系统中的快照数据目前无法通过 StarRocks 直接删除，您需要手动删除备份在远端存储系统的快照路径。
+仓库创建完成后，您可以通过 [SHOW REPOSITORIES](../../sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES.md) 查看已创建的仓库。完成数据恢复后，您可以通过 [DROP REPOSITORY](../../sql-reference/sql-statements/data-definition/DROP_REPOSITORY.md) 语句删除 StarRocks 中的仓库。但备份在远端存储系统中的快照数据目前无法通过 StarRocks 直接删除，您需要手动删除备份在远端存储系统的快照路径。
 
 ### 备份数据快照
 
-创建数据仓库后，您可以通过 [BACKUP](../sql-reference/sql-statements/data-definition/BACKUP.md) 命令创建数据快照并将其备份至远端仓库。
+创建数据仓库后，您可以通过 [BACKUP](../../sql-reference/sql-statements/data-definition/BACKUP.md) 命令创建数据快照并将其备份至远端仓库。
 
 以下示例在数据库 `sr_hub` 中为表 `sr_member` 创建数据快照 `sr_member_backup` 并备份至仓库 `test_repo` 中。
 
@@ -160,7 +160,7 @@ StarRocks 支持以下粒度的备份还原操作：
 - 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
 :::
 
-数据备份为异步操作。您可以通过 [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md) 语句取消备份作业。
+数据备份为异步操作。您可以通过 [SHOW BACKUP](../../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md) 语句取消备份作业。
 
 ## 恢复或迁移数据
 
@@ -172,7 +172,7 @@ StarRocks 支持以下粒度的备份还原操作：
 
 ### 查看数据库快照
 
-开始恢复或迁移前，您可以通过 [SHOW SNAPSHOT](../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
+开始恢复或迁移前，您可以通过 [SHOW SNAPSHOT](../../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
 
 以下示例查看仓库 `test_repo` 中的数据快照信息。
 
@@ -188,7 +188,7 @@ mysql> SHOW SNAPSHOT ON test_repo;
 
 ### 恢复数据快照
 
-通过 [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md) 语句将远端仓库中的数据快照恢复至当前或其他 StarRocks 集群以恢复或迁移数据。
+通过 [RESTORE](../../sql-reference/sql-statements/data-definition/RESTORE.md) 语句将远端仓库中的数据快照恢复至当前或其他 StarRocks 集群以恢复或迁移数据。
 
 以下示例将仓库 `test_repo` 中的数据快照 `sr_member_backup`恢复为表 `sr_member`，仅恢复一个数据副本。
 
@@ -209,7 +209,7 @@ StarRocks 支持以下粒度的备份还原操作：
 - 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
 :::
 
-数据恢复为异步操作。您可以通过 [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md) 语句取消恢复作业。
+数据恢复为异步操作。您可以通过 [SHOW RESTORE](../../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md) 语句取消恢复作业。
 
 ## 配置相关参数
 
@@ -223,9 +223,9 @@ StarRocks 支持以下粒度的备份还原操作：
 
 ## 物化视图备份恢复
 
-在备份或还原表（Table）数据期间，StarRocks 会自动备份或还原其中的 [同步物化视图](../using_starrocks/Materialized_view-single_table.md)。
+在备份或还原表（Table）数据期间，StarRocks 会自动备份或还原其中的 [同步物化视图](../../using_starrocks/Materialized_view-single_table.md)。
 
-从 v3.2.3 开始，StarRocks 支持在备份和还原数据库（Database）时备份和还原数据库中的 [异步物化视图](../using_starrocks/Materialized_view.md)。
+从 v3.2.3 开始，StarRocks 支持在备份和还原数据库（Database）时备份和还原数据库中的 [异步物化视图](../../using_starrocks/Materialized_view.md)。
 
 在备份和还原数据库期间，StarRocks 执行以下操作：
 
@@ -244,14 +244,14 @@ StarRocks 支持以下粒度的备份还原操作：
 
 在整个还原过程中遇到的任何错误都不会阻塞该过程。
 
-还原后，您可以使用[SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 检查物化视图的状态。
+还原后，您可以使用[SHOW MATERIALIZED VIEWS](../../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md) 检查物化视图的状态。
 
 - 如果物化视图处于 Active 状态，则可以直接使用。
-- 如果物化视图处于 Inactive 状态，可能是因为其基表尚未还原。在还原所有基表后，您可以使用[ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) 重新激活物化视图。
+- 如果物化视图处于 Inactive 状态，可能是因为其基表尚未还原。在还原所有基表后，您可以使用[ALTER MATERIALIZED VIEW](../../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) 重新激活物化视图。
 
 ## 注意事项
 
-- 执行全局、数据库级、表级以及分区级备份恢复需要不同权限。详细内容，请参考 [基于使用场景创建自定义角色](./User_privilege.md#基于使用场景创建自定义角色)。
+- 执行全局、数据库级、表级以及分区级备份恢复需要不同权限。详细内容，请参考 [基于使用场景创建自定义角色](../user_privs/User_privilege.md#基于使用场景创建自定义角色)。
 - 单一数据库内，仅可同时执行一个备份或恢复作业。否则，StarRocks 返回错误。
 - 因为备份与恢复操作会占用一定系统资源，建议您在集群业务低峰期进行该操作。
 - 目前 StarRocks 不支持在备份数据时使用压缩算法。

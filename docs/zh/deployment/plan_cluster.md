@@ -72,13 +72,13 @@ BE 节点所需的总存储空间 = 原始数据大小 * 数据副本数/数据�
 
 - 在 StarRocks 集群中添加新的 BE 节点
 
-  您可以在 StarRocks 集群中添加新的 BE 节点，从而将数据重新平分至更多节点上。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../administration/Scale_up_down.md)。
+  您可以在 StarRocks 集群中添加新的 BE 节点，从而将数据重新平分至更多节点上。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../administration/management/Scale_up_down)。
 
   添加新的 BE 节点后，StarRocks 会自动重新平衡数据在所有 BE 节点之间的分布。所有表类型均支持这种自动平衡。
 
 - 在 BE 节点上添加额外的存储卷
 
-  您还可以在已有 BE 节点上添加额外的存储卷。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../administration/Scale_up_down.md)。
+  您还可以在已有 BE 节点上添加额外的存储卷。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../administration/management/Scale_up_down)。
 
   添加额外的存储卷后，StarRocks 会自动重新平衡所有表中的数据。
 

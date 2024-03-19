@@ -24,15 +24,15 @@ StarRocks 采用了两种权限模型：
 
 下图展示了在 RBAC 和 IBAC 两种权限模型下的权限管理示例。
 
-![privilege management](../assets/privilege-manage.png)
+![privilege management](../../assets/privilege-manage.png)
 
 ## 对象与权限
 
 对象在逻辑上存在层级，这与他们所代表的概念有关。例如 Database 包含在 Catalog 中，而 Table、View、Materialized View、Function 又包含在 Database 中。下图展示了 StarRocks 系统中的对象层级关系。
 
-![privilege objects](../assets/privilege-object.png)
+![privilege objects](../../assets/privilege-object.png)
 
-对于每个对象，都有一组可以被授权的权限项，更多细节请查阅[权限项文档](privilege_item.md)。您可以通过 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 命令来对角色或用户进行权限的发放和收回。
+对于每个对象，都有一组可以被授权的权限项，更多细节请查阅[权限项文档](privilege_item.md)。您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 命令来对角色或用户进行权限的发放和收回。
 
 ## 用户
 
@@ -60,7 +60,7 @@ StarRocks 建议您在大部分情况下使用**角色**来分发权限。即，
 
 StarRocks 提供了几类预置角色（system-defined roles）：
 
-![roles](../assets/privilege-role.png)
+![roles](../../assets/privilege-role.png)
 
 - `root`：拥有全局权限。root 用户默认拥有 `root` 角色。
   StarRocks 集群最初创建时，系统会自动生成 root 用户，该用户拥有 root 权限。由于 root 用户、角色的权限范围过大，建议您在后续使用和维护集群时创建新的用户和角色，避免直接使用此用户和角色。root 用户的密码请您妥善保管。
@@ -85,7 +85,7 @@ StarRocks 提供了几类预置角色（system-defined roles）：
 
 > 注意：一个角色的最多继承层数为 16。角色的继承关系不能是双向的，比如将角色 A 赋予给 B，不能同时又把 B 赋予给 A，可能会造成继承关系不清楚。
 
-![role inheritance](../assets/privilege-role_inheri.png)
+![role inheritance](../../assets/privilege-role_inheri.png)
 
 如图所示，将角色赋予给用户，用户也对应拥有了角色的权限。
 
@@ -94,13 +94,13 @@ StarRocks 提供了几类预置角色（system-defined roles）：
 
 ### 激活角色
 
-通过激活角色 (Active Role)，用户可以将该角色的权限应用在当前会话下。您可以通过 [SELECT CURRENT_ROLE()](../sql-reference/sql-functions/utility-functions/current_role.md) 来查看当前会话内激活的角色。
+通过激活角色 (Active Role)，用户可以将该角色的权限应用在当前会话下。您可以通过 [SELECT CURRENT_ROLE()](../../sql-reference/sql-functions/utility-functions/current_role.md) 来查看当前会话内激活的角色。
 
 #### 默认激活角色
 
 默认角色（Default Role）即为用户登录集群时自动激活的角色，可以是 1 个或多个用户拥有的角色。管理员可以在创建用户时通过 CREATE USER 的 `DEFAULT ROLE` 关键字进行设置，也可以在后续通过 ALTER USER 进行更改。
 
-同时用户也可以通过 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 更改自己的默认角色。
+同时用户也可以通过 [SET DEFAULT ROLE](../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 更改自己的默认角色。
 
 默认角色为用户提供了一道基础的权限屏障。例如，用户 A 拥有 role_query 和 role_delete 两个角色，分别包含了查询和删除的权限。StarRocks 建议您仅将 role_query 作为默认角色，以防止误执行 DELETE 或 TRUNCATE 等高危操作而导致数据丢失。当您确认需要执行上述操作时，可以在手动设置激活角色后执行。
 
@@ -108,7 +108,7 @@ StarRocks 提供了几类预置角色（system-defined roles）：
 
 #### 手动激活角色
 
-除了默认角色，用户也可以在会话内手动选择激活一个或多个已拥有的角色。您可以通过 [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) 命令查看当前用户拥有的权限和可以激活的角色，并通过 [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md) 命令来设置当前的激活角色，生效范围为当前会话。
+除了默认角色，用户也可以在会话内手动选择激活一个或多个已拥有的角色。您可以通过 [SHOW GRANTS](../../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) 命令查看当前用户拥有的权限和可以激活的角色，并通过 [SET ROLE](../../sql-reference/sql-statements/account-management/SET_ROLE.md) 命令来设置当前的激活角色，生效范围为当前会话。
 
 SET ROLE 命令是覆盖的。例如，用户登录时是默认激活了 default_role，执行 `SET ROLE role_s`之后，用户此时拥有的是 role_s 的权限和自身权限。
 

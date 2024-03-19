@@ -40,7 +40,7 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 
 ## StarRocks 是否支持动态修改 FE、BE 配置项？
 
-部分 FE 和 BE 节点的配置项支持动态修改。具体操作参考 [配置参数](../administration/FE_configuration.md)。
+部分 FE 和 BE 节点的配置项支持动态修改。具体操作参考 [配置参数](../administration/management/management.mdx)。
 
 * 动态修改 FE 节点配置项：
   * 使用 SQL 方式动态修改：
