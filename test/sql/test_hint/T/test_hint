@@ -140,3 +140,7 @@ select @test;
 set @test = (select array_agg(c2) from (select t2.c2 from t2 join t2 tt join t2 ttt join t2 tttt) t);
 select array_length(@test);
 
+set @test= (select cast(50 as boolean));
+select @test;
+
+set @test= (select cast(50 as time));
