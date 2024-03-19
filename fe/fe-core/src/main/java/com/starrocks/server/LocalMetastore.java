@@ -5202,6 +5202,23 @@ public class LocalMetastore implements ConnectorMetadata {
 
             PartitionVersion partitionVersion = new PartitionVersion(database.getId(), table.getId(),
                     physicalPartition.getId(), stmt.getVersion());
+            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (Tablet tablet : index.getTablets()) {
+                    if (!(tablet instanceof LocalTablet)) {
+                        continue;
+                    }
+
+                    LocalTablet localTablet = (LocalTablet) tablet;
+                    for (Replica replica : localTablet.getAllReplicas()) {
+                        if (replica.getVersion() > stmt.getVersion() && localTablet.getAllReplicas().size() > 1) {
+                            replica.setBad(true);
+                            LOG.warn("set tablet: {} on backend: {} to bad, " +
+                                            "because its version: {} is higher than partition visible version: {}",
+                                    tablet.getId(), replica.getBackendId(), replica.getVersion(), stmt.getVersion());
+                        }
+                    }
+                }
+            }
             GlobalStateMgr.getCurrentState().getEditLog().logRecoverPartitionVersion(
                     new PartitionVersionRecoveryInfo(Lists.newArrayList(partitionVersion), visibleVersionTime));
             LOG.info("Successfully set partition: {} version to {}, table: {}, db: {}",

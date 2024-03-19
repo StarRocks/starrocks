@@ -201,7 +201,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     @Override
     public List<Replica> getAllReplicas() {
-        return replicas;
+        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+            return new ArrayList<>(replicas);
+        }
     }
 
     /**
