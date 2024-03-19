@@ -16,10 +16,12 @@
 
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "column/column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
+#include "types/logical_type.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -40,6 +42,7 @@ public:
     JsonColumn(JsonColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {
         _flat_columns = std::move(rhs._flat_columns);
         _flat_column_paths = std::move(rhs._flat_column_paths);
+        _flat_column_types = std::move(rhs._flat_column_types);
     }
 
     MutableColumnPtr clone() const override;
@@ -97,11 +100,13 @@ public:
     void check_or_die() const override;
 
     // support flat json on storage
-    bool is_flat_json() const { return !_flat_column_paths.empty(); }
+    bool is_flat_json() const { return !_flat_column_types.empty(); }
 
     ColumnPtr& get_flat_field(const std::string& path);
 
     const ColumnPtr& get_flat_field(const std::string& path) const;
+
+    LogicalType get_flat_field_type(const std::string& path) const;
 
     Columns& get_flat_fields() { return _flat_columns; };
 
@@ -111,9 +116,13 @@ public:
 
     const std::vector<std::string>& flat_column_paths() const { return _flat_column_paths; }
 
+    const std::vector<LogicalType>& flat_column_types() const { return _flat_column_types; }
+
     bool has_flat_column(const std::string& path) const;
 
     void init_flat_columns(const std::vector<std::string>& paths);
+
+    void init_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types);
 
     std::string debug_flat_paths() const;
 
@@ -123,6 +132,7 @@ private:
 
     // flat-column paths
     std::vector<std::string> _flat_column_paths;
+    std::vector<LogicalType> _flat_column_types;
     std::unordered_map<std::string, int> _path_to_index;
 };
 

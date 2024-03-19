@@ -1747,4 +1747,27 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, " CAST(9: id_date AS DOUBLE) = 1998.0");
     }
+
+    @Test
+    public void testJsonQuery() throws Exception {
+        String sql = "select parse_json('{\"a\": true}')->\"a\"->\"b\"->\"c\"->\"d\"";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.b.c.d')");
+
+        sql = "select parse_json('{\"a\": true}')->\"$.a\"->\"$.b\"->\"$.c\"->\"$.d\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), '$.a.b.c.d')");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$.*\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.*");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$$$$\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.$$$$')");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$....\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(json_query(parse_json('{\"a\": true}'), 'a'), '$....')");
+    }
 }

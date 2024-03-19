@@ -117,6 +117,12 @@ public:
     /**
      * @param: [json_string, tagged_value]
      * @paramType: [JsonColumn, BinaryColumn]
+     * @return: BooleanColumn
+     */
+    DEFINE_VECTORIZED_FN(get_native_json_bool);
+    /**
+     * @param: [json_string, tagged_value]
+     * @paramType: [JsonColumn, BinaryColumn]
      * @return: Int32Column
      */
     DEFINE_VECTORIZED_FN(get_native_json_int);
@@ -259,6 +265,13 @@ private:
      */
     DEFINE_VECTORIZED_FN(_flat_json_length);
     DEFINE_VECTORIZED_FN(_full_json_length);
+
+    /**
+     * Returns the keys from the top-level value of a JSON object as a JSON array
+     */
+    DEFINE_VECTORIZED_FN(_json_keys_without_path);
+    DEFINE_VECTORIZED_FN(_flat_json_keys_with_path);
+    DEFINE_VECTORIZED_FN(_full_json_keys_with_path);
 
     /**
      * Parse string column as json column

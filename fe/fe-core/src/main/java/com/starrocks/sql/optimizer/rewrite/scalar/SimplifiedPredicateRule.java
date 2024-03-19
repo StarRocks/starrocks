@@ -36,6 +36,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.text.StrTokenizer;
 
 import java.util.Arrays;
 import java.util.List;
@@ -366,6 +368,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return simplifiedDateTrunc(call);
         } else if (FunctionSet.COALESCE.equalsIgnoreCase(call.getFnName())) {
             return simplifiedCoalesce(call);
+        } else if (FunctionSet.JSON_QUERY.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedJsonQuery(call);
         }
         return call;
     }
@@ -511,5 +515,39 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         return ((ConstantOperator) call.getChild(0)).getBoolean() ? call.getChild(1) : call.getChild(2);
+    }
+
+    // fold json_query
+    // e.g. json_query(json_query(json_query(k1, '$.a'), '$.b'), '$.c') => json_query(k1, '$.a.b.c')
+    private static ScalarOperator simplifiedJsonQuery(CallOperator call) {
+        if (!(call.getChild(0) instanceof CallOperator)) {
+            return call;
+        }
+        CallOperator child = call.getChild(0).cast();
+        if (!FunctionSet.JSON_QUERY.equalsIgnoreCase(child.getFnName())) {
+            return call;
+        }
+
+        if (!child.getChild(1).isConstantRef() || !call.getChild(1).isConstantRef()) {
+            return call;
+        }
+
+        String path1 = ((ConstantOperator) child.getChild(1)).getVarchar();
+        String path2 = ((ConstantOperator) call.getChild(1)).getVarchar();
+
+        if (StringUtils.isBlank(path2) || StringUtils.contains(path2, "..") ||
+                StringUtils.countMatches(path2, "\"") % 2 != 0) {
+            // .. is recursive search in json path, not supported
+            // unpaired quota char
+            return call;
+        }
+
+        StrTokenizer tokenizer = new StrTokenizer(path2, '.', '"');
+        String[] result = tokenizer.getTokenArray();
+        int skip = result.length >= 1 && "$".equalsIgnoreCase(result[0]) ? 1 : 0;
+        path2 = Arrays.stream(result).skip(skip).collect(Collectors.joining("."));
+        String mergePath = path1 + (StringUtils.isBlank(path2) ? "" : "." + path2);
+        return new CallOperator(child.getFnName(), call.getType(), Lists.newArrayList(child.getChild(0),
+                ConstantOperator.createVarchar(mergePath)), child.getFunction());
     }
 }
