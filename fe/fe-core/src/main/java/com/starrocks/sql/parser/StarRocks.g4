@@ -758,7 +758,7 @@ adminCheckTabletsStatement
     ;
 
 adminSetPartitionVersion
-    : ADMIN SET TABLE qualifiedName PARTITION '('partitionName=identifierOrString | partitionId=INTEGER_VALUE ')' VERSION TO version=INTEGER_VALUE
+    : ADMIN SET TABLE qualifiedName PARTITION '('(partitionName=identifierOrString | partitionId=INTEGER_VALUE)')' VERSION TO version=INTEGER_VALUE
     ;
 
 killStatement
