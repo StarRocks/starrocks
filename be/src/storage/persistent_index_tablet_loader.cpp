@@ -80,7 +80,7 @@ Status PersistentIndexTabletLoader::rowset_iterator(
             return res.status();
         }
         auto& itrs = res.value();
-        CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
         RETURN_IF_ERROR(handler(itrs, rowset->rowset_meta()->get_rowset_seg_id()));
     }
     return Status::OK();

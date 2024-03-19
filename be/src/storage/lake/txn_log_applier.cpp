@@ -239,7 +239,7 @@ private:
         }
 
         if (op_replication.txn_meta().incremental_snapshot()) {
-            CHECK(_new_version - _base_version == op_replication.op_writes_size())
+            DCHECK(_new_version - _base_version == op_replication.op_writes_size())
                     << ", base_version: " << _base_version << ", new_version: " << _new_version
                     << ", op_write_size: " << op_replication.op_writes_size();
             for (const auto& op_write : op_replication.op_writes()) {

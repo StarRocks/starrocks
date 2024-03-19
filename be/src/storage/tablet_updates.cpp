@@ -135,7 +135,7 @@ Status TabletUpdates::_load_meta_and_log(const TabletUpdatesPB& tablet_updates_p
     _next_rowset_id = tablet_updates_pb.next_rowset_id();
     _next_log_id = tablet_updates_pb.next_log_id();
     auto apply_log_func = [&](uint64_t logid, const TabletMetaLogPB& tablet_meta_log_pb) -> bool {
-        CHECK(!tablet_meta_log_pb.ops().empty());
+        DCHECK(!tablet_meta_log_pb.ops().empty());
         for (auto& tablet_meta_op_pb : tablet_meta_log_pb.ops()) {
             switch (tablet_meta_op_pb.type()) {
             case OP_ROWSET_COMMIT:
@@ -237,10 +237,11 @@ Status TabletUpdates::_load_pending_rowsets() {
     // Load pending rowsets
     _pending_commits.clear();
     return TabletMetaManager::pending_rowset_iterate(
-            _tablet.data_dir(), _tablet.tablet_id(), [&](int64_t version, std::string_view rowset_meta_data) -> bool {
+            _tablet.data_dir(), _tablet.tablet_id(),
+            [&](int64_t version, std::string_view rowset_meta_data) -> StatusOr<bool> {
                 bool parse_ok = false;
                 auto rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_data, &parse_ok);
-                CHECK(parse_ok) << "Corrupted rowset meta";
+                RETURN_ERROR_IF_FALSE(parse_ok, "Corrupted rowset meta");
                 RowsetSharedPtr rowset;
                 auto st = RowsetFactory::create_rowset(_tablet.tablet_schema(), _tablet.schema_hash_path(), rowset_meta,
                                                        &rowset);
@@ -552,7 +553,7 @@ void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& edit_version
     edit_version_info->creation_time = edit_version_meta_pb.creation_time();
     if (edit_version_meta_pb.rowsets_add_size() > 0 || edit_version_meta_pb.rowsets_del_size() > 0) {
         // incremental
-        CHECK(!_edit_version_infos.empty()) << "incremental edit without full last version";
+        DCHECK(!_edit_version_infos.empty()) << "incremental edit without full last version";
         auto& last_rowsets = _edit_version_infos.back()->rowsets;
         auto new_rowsets = modify(last_rowsets, edit_version_meta_pb.rowsets_add().begin(),
                                   edit_version_meta_pb.rowsets_add().end(), edit_version_meta_pb.rowsets_del().begin(),
@@ -907,7 +908,7 @@ void TabletUpdates::do_apply() {
         }
     }
     std::lock_guard<std::mutex> lg(_apply_running_lock);
-    CHECK(_apply_running) << "illegal state: _apply_running should be true";
+    DCHECK(_apply_running) << "illegal state: _apply_running should be true";
     _apply_running = false;
     _apply_stopped_cond.notify_all();
 }
@@ -1916,8 +1917,9 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
             return Status::Cancelled(msg);
         }
     }
-    CHECK(inputs.size() <= ors.size()) << strings::Substitute("compaction input size($0) > rowset size($1) tablet:$2",
-                                                              inputs.size(), ors.size(), _tablet.tablet_id());
+    RETURN_ERROR_IF_FALSE(inputs.size() <= ors.size(),
+                          strings::Substitute("compaction input size($0) > rowset size($1) tablet:$2", inputs.size(),
+                                              ors.size(), _tablet.tablet_id()));
     std::vector<uint32_t> nrs = modify(ors, &rowsetid, &rowsetid + 1, inputs.begin(), inputs.end());
     if (nrs.size() <= 16) {
         // full copy
@@ -1999,7 +2001,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
     // NOTE: after commit, apply must success or fatal crash
     auto info = version_info.compaction.get();
-    CHECK(info != nullptr) << "compaction info empty";
+    DCHECK(info != nullptr) << "compaction info empty";
     // if compaction_state == null, it must be the case that BE restarted
     // need to rebuild/load state from disk
     if (!_compaction_state) {
@@ -2244,7 +2246,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                 st.ok() ? "" : st.message());
         LOG(ERROR) << msg << debug_string();
         _set_error(msg + _debug_version_info(true));
-        CHECK(st.ok()) << msg;
+        DCHECK(st.ok()) << msg;
     }
 }
 

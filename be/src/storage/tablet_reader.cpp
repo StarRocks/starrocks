@@ -161,9 +161,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed tablet_id:" << _tablet->tablet_id();
-    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
     PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
 
     // get rowid using pk index

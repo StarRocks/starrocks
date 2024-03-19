@@ -436,7 +436,7 @@ public:
     uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
-            CHECK(res.ok()) << res.status(); // FIXME: no abort
+            DCHECK(res.ok()) << res.status(); // FIXME: no abort
             return *res;
         } else {
             return 0;

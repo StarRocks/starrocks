@@ -271,7 +271,7 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
                                                 int32_t upsert_idx, int32_t condition_column,
                                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
                                                 int64_t tablet_id, DeletesMap* new_deletes) {
-    CHECK(condition_column >= 0);
+    RETURN_ERROR_IF_FALSE(condition_column >= 0);
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
     const auto& tablet_column = tablet_schema->column(condition_column);
     std::vector<uint32_t> read_column_ids;

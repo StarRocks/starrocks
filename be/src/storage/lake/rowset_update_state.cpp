@@ -173,9 +173,7 @@ Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_wr
     }
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
 
     auto root_path = tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
@@ -201,8 +199,9 @@ Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_wr
         return res.status();
     }
     auto& itrs = res.value();
-    CHECK(itrs.size() == rowset_ptr->num_segments())
-            << "itrs.size != num_segments " << itrs.size() << ", " << rowset_ptr->num_segments();
+    RETURN_ERROR_IF_FALSE(itrs.size() == rowset_ptr->num_segments(),
+                          "itrs.size != num_segments " + std::to_string(itrs.size()) + ", " +
+                                  std::to_string(rowset_ptr->num_segments()));
     _upserts.resize(rowset_ptr->num_segments());
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
@@ -479,7 +478,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
-    CHECK(op_write.rewrite_segments_size() == rowset_meta.segments_size());
+    RETURN_ERROR_IF_FALSE(op_write.rewrite_segments_size() == rowset_meta.segments_size());
     // currently assume it's a partial update
     const auto& txn_meta = op_write.txn_meta();
     // columns supplied in rowset

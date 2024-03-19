@@ -95,7 +95,7 @@ Status DeltaColumnGroup::load(int64_t version, const char* data, size_t length) 
         old_parsed = true;
     }
 
-    CHECK((parsed && !old_parsed) || (!parsed && old_parsed));
+    RETURN_ERROR_IF_FALSE((parsed && !old_parsed) || (!parsed && old_parsed));
 
     if (!parsed && old_parsed) {
         auto column_ids = dcg_pb.add_column_ids();
