@@ -1299,12 +1299,12 @@ public class StmtExecutor {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
         Table table = MetaUtils.getTable(context, dropHistogramStmt.getTableName());
         if (dropHistogramStmt.isExternal()) {
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
+            List<String> columns = dropHistogramStmt.getColumnNames();
 
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalHistogramStatsMetaAndData(
-                    StatisticUtils.buildConnectContext(), dropHistogramStmt.getTableName(), table,
-                    dropHistogramStmt.getColumnNames());
-            // todo(ywb): expire external histogram statistics
+                    StatisticUtils.buildConnectContext(), dropHistogramStmt.getTableName(), table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
