@@ -2549,6 +2549,10 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     bool filter = _filter(shard_idx, keys_info, &check_keys_info);
     if (!filter) {
         check_keys_info.swap(keys_info);
+    } else {
+        if (stat != nullptr) {
+            stat->filtered_kv_cnt += (keys_info.size() - check_keys_info.size());
+        }
     }
 
     if (check_keys_info.empty()) {

@@ -1939,6 +1939,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 }
 
 TEST_P(PersistentIndexTest, test_bloom_filter_working) {
+    write_pindex_bf = true;
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_working";
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
     bool created;
@@ -1957,7 +1958,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_working) {
     key_slices.reserve(N);
 
     for (int i = 0; i < N; i++) {
-        keys[i] = "test_varlen_" + std::to_string(i);
+        keys[i] = fmt::format("test_varlen_{:016X}", i);
         values.emplace_back(i);
         key_slices.emplace_back(keys[i]);
     }
@@ -1967,6 +1968,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_working) {
         ASSERT_OK(wfile->close());
     }
 
+    PersistentIndex index(kPersistentIndexDir);
     {
         EditVersion version(0, 0);
         index_meta.set_key_size(0);
@@ -1977,7 +1979,6 @@ TEST_P(PersistentIndexTest, test_bloom_filter_working) {
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
-        PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(1, 0), N));
         std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
@@ -1987,37 +1988,38 @@ TEST_P(PersistentIndexTest, test_bloom_filter_working) {
     }
 
     {
-        // test if bf working well - case 1: bf hit
+        // test if bf working well - case 1: bf missing
+        CHECK(index.has_bf());
         config::enable_parallel_get_and_bf = false;
-        PersistentIndex index(kPersistentIndexDir);
-        ASSERT_OK(index.load(index_meta));
-        CHECK(index._has_l1);
-        ASSERT_OK(index.prepare(EditVersion(1, 0), N));
-        std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
-        IOStat io_stat;
-        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), &io_stat));
-        // should be filtered by bf
-        ASSERT_TRUE(io_stat.get_in_shard_cnt == 0);
-        ASSERT_OK(index.commit(&index_meta));
-        ASSERT_OK(index.on_commited());
-        config::enable_parallel_get_and_bf = true;
-    }
-    {
-        // test if bf working well - case 2: bf miss
-        for (int i = 0; i < N; i++) {
-            keys[i] = "test_varlen_" + std::to_string(i + N);
-            values[i] = i + N;
-        }
-        config::enable_parallel_get_and_bf = false;
-        PersistentIndex index(kPersistentIndexDir);
-        ASSERT_OK(index.load(index_meta));
         CHECK(index._has_l1);
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
         std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
         IOStat io_stat;
         ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), &io_stat));
         // should be filtered by bf
-        ASSERT_TRUE(io_stat.get_in_shard_cnt > 0);
+        LOG(INFO) << io_stat.print_str();
+        ASSERT_TRUE(io_stat.filtered_kv_cnt == 0);
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        config::enable_parallel_get_and_bf = true;
+    }
+    {
+        // test if bf working well - case 2: bf hit
+        for (int i = 0; i < N; i++) {
+            keys[i] = fmt::format("test_varlen_{:016X}", i + N);
+            values[i] = i + N;
+            key_slices[i] = keys[i];
+        }
+        config::enable_parallel_get_and_bf = false;
+        CHECK(index.has_bf());
+        CHECK(index._has_l1);
+        ASSERT_OK(index.prepare(EditVersion(3, 0), N));
+        std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+        IOStat io_stat;
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), &io_stat));
+        // should not be filtered by bf
+        LOG(INFO) << io_stat.print_str();
+        ASSERT_TRUE(io_stat.filtered_kv_cnt > 0);
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
         config::enable_parallel_get_and_bf = true;
