@@ -11,7 +11,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```Haskell
-ARRAY_AGG(col [order by col0 [desc | asc] [nulls first | nulls last] ...])
+ARRAY_AGG([distinct] col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 ```
 
 ## 参数说明
