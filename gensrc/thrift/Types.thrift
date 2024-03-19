@@ -566,3 +566,9 @@ struct TSinkCommitInfo {
     100: optional bool is_overwrite;
     101: optional string staging_dir
 }
+
+struct TSnapshotInfo {
+    1: required TBackend backend
+    2: required string snapshot_path
+    3: required bool incremental_snapshot
+}
