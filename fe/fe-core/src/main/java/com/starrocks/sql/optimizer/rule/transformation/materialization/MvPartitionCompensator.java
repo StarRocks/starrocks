@@ -22,7 +22,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -69,7 +71,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
@@ -282,6 +283,21 @@ public class MvPartitionCompensator {
         return partitionPredicate;
     }
 
+    private static boolean supportCompensatePartitionPredicateForHiveScan(List<PartitionKey> partitionKeys) {
+        for (PartitionKey partitionKey : partitionKeys) {
+            // only support one partition column now.
+            if (partitionKey.getKeys().size() != 1) {
+                return false;
+            }
+            LiteralExpr e = partitionKey.getKeys().get(0);
+            // Only support date/int type
+            if (!(e instanceof DateLiteral || e instanceof IntLiteral)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static List<ScalarOperator> compensatePartitionPredicateForExternalTables(MaterializationContext mvContext,
                                                                                       LogicalScanOperator scanOperator) {
         ScanOperatorPredicates scanOperatorPredicates = null;
@@ -303,6 +319,12 @@ public class MvPartitionCompensator {
         // only used for hive
         if (operatorType == OperatorType.LOGICAL_HIVE_SCAN && scanOperatorPredicates.getSelectedPartitionIds().size()
                 == scanOperatorPredicates.getIdToPartitionKey().size()) {
+            return Lists.newArrayList();
+        }
+        // do not support compensate partition predicate for hive scan if partition key has more than one column,
+        // we could return empty list here because queryConjuncts in queryExpression for external table will add all conjuncts
+        if (operatorType == OperatorType.LOGICAL_HIVE_SCAN &&
+                !supportCompensatePartitionPredicateForHiveScan(scanOperatorPredicates.getSelectedPartitionKeys())) {
             return Lists.newArrayList();
         }
 
@@ -560,9 +582,18 @@ public class MvPartitionCompensator {
             Column partitionColumn,
             MaterializedView mv,
             Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
-        Set<String> refBaseTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
-        List<Range<PartitionKey>> refBaseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
-                refBaseTableUpdatedPartitionNames, MaterializedView.getPartitionExpr(mv));
+        // materialized view latest partition ranges except to-refresh partitions
+        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
+
+        List<Range<PartitionKey>> refBaseTableRanges = Lists.newArrayList();
+        try {
+            refBaseTableRanges = Lists.newArrayList(PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn,
+                    MaterializedView.getPartitionExpr(mv)).values());
+        } catch (UserException e) {
+            LOG.warn("Materialized view Optimizer compute partition range failed.", e);
+            return Lists.newArrayList();
+        }
+
         // date to varchar range
         Map<Range<PartitionKey>, Range<PartitionKey>> baseRangeMapping = null;
         boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getFirstPartitionRefTableExpr(), partitionColumn);
@@ -577,8 +608,6 @@ public class MvPartitionCompensator {
             }
             refBaseTableRanges = baseTableDateRanges;
         }
-        // materialized view latest partition ranges except to-refresh partitions
-        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
 
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : refBaseTableRanges) {
@@ -612,23 +641,6 @@ public class MvPartitionCompensator {
         }
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionTable.getPartitionInfo();
         return rangePartitionInfo.getRangeList(filteredIds, false);
-    }
-
-    private static List<Range<PartitionKey>> getLatestPartitionRange(
-            Table table, Column partitionColumn, Set<String> modifiedPartitionNames, Expr partitionExpr) {
-        if (table.isNativeTableOrMaterializedView()) {
-            return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
-        } else {
-            Map<String, Range<PartitionKey>> partitionMap;
-            try {
-                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, partitionExpr);
-            } catch (UserException e) {
-                LOG.warn("Materialized view Optimizer compute partition range failed.", e);
-                return Lists.newArrayList();
-            }
-            return partitionMap.entrySet().stream().filter(entry -> !modifiedPartitionNames.contains(entry.getKey())).
-                    map(Map.Entry::getValue).collect(Collectors.toList());
-        }
     }
 
     private static List<ScalarOperator> getScanOpPrunedPartitionPredicates(MaterializedView mv,
