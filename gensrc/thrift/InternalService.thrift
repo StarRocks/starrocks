@@ -256,6 +256,13 @@ struct TQueryOptions {
 
   119: optional bool enable_result_sink_accumulate;
   120: optional bool enable_connector_split_io_tasks = false;
+<<<<<<< HEAD
+=======
+  121: optional i64 connector_max_split_size = 0;
+
+  130: optional bool enable_wait_dependent_event = false;
+
+>>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
 }
 
 

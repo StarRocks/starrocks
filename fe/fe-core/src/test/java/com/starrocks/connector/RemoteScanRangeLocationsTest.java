@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DefaultCoordinator;
@@ -37,13 +36,12 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
-        Config.hive_max_split_size = 512 * 1024 * 1024;
+        connectContext.getSessionVariable().setConnectorMaxSplitSize(512 * 1024 * 1024);
     }
 
     @AfterClass
     public static void afterClass() {
-        // reset all configures
-        Config.hive_max_split_size = 64 * 1024 * 1024;
+        connectContext.getSessionVariable().setConnectorMaxSplitSize(64 * 1024 * 1024);
         connectContext.getSessionVariable().setForceScheduleLocal(false);
     }
 
