@@ -379,6 +379,7 @@ public:
     DEF_VISIT_METHOD(Int32Type);
     DEF_VISIT_METHOD(Int64Type);
     DEF_VISIT_METHOD(StringType);
+    DEF_VISIT_METHOD(ListType);
 
 #undef DEF_VISIT_METHOD
 
