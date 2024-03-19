@@ -57,12 +57,22 @@ public:
 private:
     int _chunk_size;
 
+<<<<<<< HEAD
     // parse footer of parquet file
     Status _parse_footer();
+=======
+    // get footer of parquet file from cache or parquet file
+    Status _get_footer();
+
+    std::string _build_metacache_key();
+
+    std::shared_ptr<MetaHelper> _build_meta_helper();
+
+    Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
+>>>>>>> 07c8c23cf1 ([Feature] support parquet scanner to split task (#42586))
 
     void _prepare_read_columns();
 
-    // init row group readers.
     Status _init_group_readers();
 
     // filter row group by min/max conjuncts
@@ -98,8 +108,11 @@ private:
 
     bool _has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order) const;
 
-    // get the data page start offset in parquet file
+    // get the data page start/end offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
+    static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group);
+
+    void _build_split_tasks();
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
@@ -113,6 +126,12 @@ private:
     size_t _scan_row_count = 0;
     bool _no_materialized_column_scan = false;
 
+<<<<<<< HEAD
+=======
+    BlockCache* _cache = nullptr;
+    FileMetaDataPtr _file_metadata = nullptr;
+
+>>>>>>> 07c8c23cf1 ([Feature] support parquet scanner to split task (#42586))
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
     HdfsScannerContext* _scanner_ctx = nullptr;

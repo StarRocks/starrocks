@@ -371,6 +371,71 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         src_slot_index++;
     }
 
+<<<<<<< HEAD
+=======
+Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
+    // create wrapped input stream.
+    RETURN_IF_ERROR(open_random_access_file());
+    if (_input_stream == nullptr) {
+        _input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
+                                                            _shared_buffered_input_stream.get());
+        _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx.lazy_column_coalesce_counter);
+        _input_stream->set_app_stats(&_app_stats);
+    }
+    ORCHdfsFileStream* orc_hdfs_file_stream = _input_stream.get();
+
+    // create orc reader on this input stream.
+    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
+    std::unique_ptr<orc::Reader> reader;
+    try {
+        errno = 0;
+        orc::ReaderOptions options;
+        options.setMemoryPool(*getOrcMemoryPool());
+        if (_split_context != nullptr) {
+            auto* split_context = down_cast<const HdfsOrcScannerSplitContext*>(_split_context);
+            options.setSerializedFileTail(*(split_context->footer.get()));
+        }
+        reader = orc::createReader(std::move(_input_stream), options);
+    } catch (std::exception& e) {
+        bool is_not_found = (errno == ENOENT);
+        auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
+        LOG(WARNING) << s;
+        if (is_not_found || s.find("404") != std::string::npos) {
+            return Status::RemoteFileNotFound(s);
+        }
+        return Status::InternalError(s);
+    }
+
+    // select stripes to read and resolve columns aganist this orc file.
+    std::vector<DiskRange> stripes;
+    RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
+
+    // we can split task if we enable split tasks feature and have >= 2 stripes.
+    // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
+    bool enable_split_tasks =
+            _scanner_params.enable_split_tasks && stripes.size() >= 2 && (_scanner_params.split_context == nullptr);
+    if (enable_split_tasks) {
+        auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
+        for (const auto& info : stripes) {
+            auto ctx = std::make_unique<HdfsOrcScannerSplitContext>();
+            ctx->footer = footer;
+            ctx->split_start = info.offset;
+            ctx->split_end = info.offset + info.length;
+            _split_tasks.emplace_back(std::move(ctx));
+        }
+        VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
+                      << ", size = " << stripes.size();
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
+    RETURN_IF_ERROR(resolve_columns(reader.get()));
+    if (_should_skip_file) {
+        return Status::OK();
+    }
+
+    // create orc chunk reader .
+>>>>>>> 07c8c23cf1 ([Feature] support parquet scanner to split task (#42586))
     _orc_reader = std::make_unique<OrcChunkReader>(runtime_state->chunk_size(), _src_slot_descriptors);
     _orc_row_reader_filter = std::make_shared<OrcRowReaderFilter>(_scanner_ctx, _orc_reader.get());
     _orc_reader->disable_broker_load_mode();

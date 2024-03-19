@@ -216,8 +216,16 @@ struct HdfsScannerContext {
     // partition column value which read from hdfs file path
     std::vector<ColumnPtr> partition_values;
 
+<<<<<<< HEAD
     // scan ranges
     std::vector<const THdfsScanRange*> scan_ranges;
+=======
+    // scan range
+    const THdfsScanRange* scan_range = nullptr;
+    bool enable_split_tasks = false;
+    const pipeline::ScanSplitContext* split_context = nullptr;
+    std::vector<pipeline::ScanSplitContextPtr>* split_tasks = nullptr;
+>>>>>>> 07c8c23cf1 ([Feature] support parquet scanner to split task (#42586))
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
