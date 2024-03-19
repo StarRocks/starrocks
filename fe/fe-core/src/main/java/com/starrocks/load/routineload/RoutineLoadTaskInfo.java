@@ -185,7 +185,7 @@ public abstract class RoutineLoadTaskInfo {
     public void setMsg(String msg) {
         this.msg = msg;
         RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
-        routineLoadJob.setOtherMsg(msg);
+        routineLoadJob.setOtherMsg(String.format("[task id: %s] [txn id: %s] %s", DebugUtil.printId(id), txnId, msg));
     }
 
     public boolean isRunningTimeout() {

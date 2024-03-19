@@ -244,8 +244,11 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             ss << msg->errstr() << ", this is no data in partition: " << msg->partition()
                << " at offset: " << msg->offset();
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << ss.str();
+            auto alter_doc_url =
+                    "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD";
             st = Status::InternalError(fmt::format(
-                    "{}. you can modify kafka_offsets by alter routine load, then resume the job", ss.str()));
+                    "{}. you can modify kafka_offsets by alter routine load, then resume the job. refer to {}",
+                    ss.str(), alter_doc_url));
             break;
         }
         case RdKafka::ERR__PARTITION_EOF: {

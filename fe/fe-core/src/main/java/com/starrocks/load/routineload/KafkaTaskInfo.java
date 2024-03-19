@@ -39,6 +39,7 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
@@ -145,7 +146,8 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                 } else if (latestOffset < consumeOffset) {
                     throw new RoutineLoadPauseException(
                             "there is no data in partition: " + partitionId + " at offset: " + consumeOffset + ". " +
-                                    "you can modify kafka_offsets by alter routine load, then resume the job");
+                                    "you can modify kafka_offsets by alter routine load, then resume the job. " +
+                                    "refer to " + FeConstants.DOCUMENT_ALTER_ROUTINE_LOAD);
                 }
             }
         }
