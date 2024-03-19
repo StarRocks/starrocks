@@ -1143,7 +1143,7 @@ BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重�
 - 单位：-
 - 是否动态：否
 - 描述：是否为 Primary Key 表开启 Size-tiered Compaction 策略。`true` 代表开启。`false` 代表关闭。
-- 引入版本：v3.2.4, v3.1.10
+- 引入版本：存算分离自v3.2.4, v3.1.10起生效，存算一体自v3.2.5, v3.1.10起生效
 
 ##### size_tiered_min_level_size
 
