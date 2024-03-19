@@ -1173,7 +1173,7 @@ You can only set the static parameters of a BE by changing them in the correspon
 - Unit: -
 - Is mutable: No
 - Description: Whether to enable the Size-tiered Compaction policy for Primary Key tables. `true` indicates the Size-tiered Compaction strategy is enabled, and `false` indicates it is disabled.
-- Introduced in: v3.2.4, v3.1.10
+- Introduced in: This item takes effect for shared-data clusters from v3.2.4 and v3.1.10 onwards, and for shared-nothing clusters from v3.2.5 and v3.1.10 onwards.
 
 ##### size_tiered_min_level_size
 
