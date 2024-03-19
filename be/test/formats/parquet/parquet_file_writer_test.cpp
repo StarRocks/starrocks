@@ -940,7 +940,7 @@ TEST_F(ParquetFileWriterTest, TestFactory) {
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto fs = std::make_shared<MemoryFileSystem>();
     auto factory = formats::ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names,
-                                                     std::move(column_evaluators), nullptr, nullptr);
+                                                     std::move(column_evaluators), std::nullopt, nullptr, nullptr);
     ASSERT_OK(factory.init());
     auto maybe_writer = factory.create(_file_path);
     ASSERT_OK(maybe_writer.status());
