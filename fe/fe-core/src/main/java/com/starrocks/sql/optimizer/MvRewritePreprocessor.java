@@ -472,8 +472,9 @@ public class MvRewritePreprocessor {
         return mvWithPlanContexts;
     }
 
-    private boolean canMVRewriteIfMVHasExtraTables(MaterializedView mv,
-                                                   Set<Table> queryTables) {
+    private static boolean canMVRewriteIfMVHasExtraTables(ConnectContext connectContext,
+                                                          MaterializedView mv,
+                                                          Set<Table> queryTables) {
         // 1. when mv has foreign key constraints, it's ok whether query has extra tables or mv has extra tables.
         if (mv.hasForeignKeyConstraints()) {
             return true;
@@ -496,14 +497,15 @@ public class MvRewritePreprocessor {
         return true;
     }
 
-    private boolean isMVValidToRewriteQuery(MaterializedView mv,
-                                            Set<Table> queryTables) {
+    public static boolean isMVValidToRewriteQuery(ConnectContext connectContext,
+                                                  MaterializedView mv,
+                                                  Set<Table> queryTables) {
         if (!mv.isActive())  {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
             return false;
         }
         // if mv is a subset of query tables, it can be used for rewrite.
-        if (!canMVRewriteIfMVHasExtraTables(mv, queryTables)) {
+        if (!canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
             return false;
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
@@ -559,7 +561,7 @@ public class MvRewritePreprocessor {
 
         // 2. choose all valid mvs and filter mvs that cannot be rewritten for the query
         validMVs = validMVs.stream()
-                .filter(mv -> isMVValidToRewriteQuery(mv, queryTables))
+                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, queryTables))
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
@@ -716,7 +718,8 @@ public class MvRewritePreprocessor {
                 candidateMvNames);
     }
 
-    private void preprocessMv(MaterializedView mv, MvPlanContext mvPlanContext,
+    private void preprocessMv(MaterializedView mv,
+                              MvPlanContext mvPlanContext,
                               Set<Table> queryTables,
                               Set<ColumnRefOperator> originQueryColumns) throws AnalysisException {
         Preconditions.checkState(mvPlanContext != null);
@@ -801,7 +804,6 @@ public class MvRewritePreprocessor {
                     refTableUpdatedPartitionNames);
         }
 
-
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
         MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv) : mv;
@@ -812,7 +814,8 @@ public class MvRewritePreprocessor {
                         mvPartialPartitionPredicates, refTableUpdatedPartitionNames);
         List<ColumnRefOperator> mvOutputColumns = mvPlanContext.getOutputColumns();
         // generate scan mv plan here to reuse it in rule applications
-        LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);
+        LogicalOlapScanOperator scanMvOp = createScanMvOperator(mv,
+                materializationContext.getQueryRefFactory(), partitionNamesToRefresh);
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
@@ -833,10 +836,10 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
-        logMVPrepare(connectContext, copiedMV, "Prepare MV {} success", copiedMV.getName());
+        logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
     }
 
-    public List<Column> getMvOutputColumns(MaterializedView mv) {
+    public static List<Column> getMvOutputColumns(MaterializedView mv) {
         if (mv.getQueryOutputIndices() == null || mv.getQueryOutputIndices().isEmpty()) {
             return mv.getBaseSchema();
         } else {
@@ -856,14 +859,12 @@ public class MvRewritePreprocessor {
      * - original MV's predicates which can be deduced from MV opt expression and be used
      * for partition/distribution pruning.
      */
-    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext,
-                                                         Set<String> excludedPartitions) {
-        final MaterializedView mv = mvContext.getMv();
-
+    public static LogicalOlapScanOperator createScanMvOperator(MaterializedView mv,
+                                                               ColumnRefFactory columnRefFactory,
+                                                               Set<String> excludedPartitions) {
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         final ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
 
-        final ColumnRefFactory columnRefFactory = mvContext.getQueryRefFactory();
         int relationId = columnRefFactory.getNextRelationId();
 
         // first add base schema to avoid replaced in full schema.
@@ -912,7 +913,7 @@ public class MvRewritePreprocessor {
                 .setTable(mv)
                 .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                 .setColumnMetaToColRefMap(columnMetaToColRefMap)
-                .setDistributionSpec(getTableDistributionSpec(mvContext, columnMetaToColRefMap))
+                .setDistributionSpec(getTableDistributionSpec(mv, columnMetaToColRefMap))
                 .setSelectedIndexId(mv.getBaseIndexId())
                 .setSelectedPartitionId(selectPartitionIds)
                 .setPartitionNames(partitionNames)
@@ -924,10 +925,8 @@ public class MvRewritePreprocessor {
                 .build();
     }
 
-    private DistributionSpec getTableDistributionSpec(
-            MaterializationContext mvContext, Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
-        final MaterializedView mv = mvContext.getMv();
-
+    private static DistributionSpec getTableDistributionSpec(MaterializedView mv,
+                                                             Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         DistributionSpec distributionSpec = null;
         // construct distribution
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();

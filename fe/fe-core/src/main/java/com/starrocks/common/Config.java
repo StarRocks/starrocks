@@ -1132,6 +1132,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_materialized_view = true;
 
+    @ConfField(mutable = true, comment = "Control whether to cache the ast tree of materialized view for text based rewrite")
+    public static boolean enable_materialized_view_text_based_rewrite = true;
+
     /**
      * Control whether to enable spill for all materialized views in the refresh mv.
      */

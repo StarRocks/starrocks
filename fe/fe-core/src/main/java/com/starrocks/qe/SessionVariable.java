@@ -456,6 +456,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
             "enable_materialized_view_rewrite_partition_compensate";
 
+    public static final String ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE =
+            "enable_materialized_view_text_match_rewrite";
+    public static final String MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT =
+            "materialized_view_subuqery_text_match_max_count";
+
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
@@ -1441,6 +1446,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_TEXT_MATCH_REWRITE)
+    private boolean enableMaterializedViewTextMatchRewrite = false;
+
+    @VarAttr(name = MATERIALIZED_VIEW_SUBQUERY_TEXT_MATCH_MAX_COUNT)
+    private int materializedViewSubQueryTextMatchMaxCount = 4;
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
@@ -2852,6 +2863,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             nestedMvRewriteMaxLevel = 1;
         }
         this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
+    }
+
+    public boolean isEnableMaterializedViewTextMatchRewrite() {
+        return enableMaterializedViewTextMatchRewrite;
+    }
+
+    public void setEnableMaterializedViewTextMatchRewrite(boolean enable) {
+        this.enableMaterializedViewTextMatchRewrite = enable;
+    }
+
+    public int getMaterializedViewSubQueryTextMatchMaxCount() {
+        return materializedViewSubQueryTextMatchMaxCount;
+    }
+
+    public void setMaterializedViewSubQueryTextMatchMaxCount(int materializedViewSubQueryTextMatchMaxCount) {
+        this.materializedViewSubQueryTextMatchMaxCount = materializedViewSubQueryTextMatchMaxCount;
     }
 
     public boolean isEnableRuleBasedMaterializedViewRewrite() {

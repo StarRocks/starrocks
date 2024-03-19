@@ -25,6 +25,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
@@ -40,6 +41,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
@@ -67,13 +69,16 @@ class QueryTransformer {
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
     private final boolean inlineView;
+    private final Map<Operator, ParseNode> optToAstMap;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext, boolean inlineView) {
+                            CTETransformerContext cteContext, boolean inlineView,
+                            Map<Operator, ParseNode> optToAstMap) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
         this.inlineView = inlineView;
+        this.optToAstMap = optToAstMap;
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -160,11 +165,8 @@ class QueryTransformer {
         // and the internal cte with the same name will overwrite the original mapping
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         TransformerContext transformerContext = new TransformerContext(
-                columnRefFactory,
-                session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                newCteContext,
-                inlineView);
+                columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                newCteContext, inlineView, optToAstMap);
         return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
