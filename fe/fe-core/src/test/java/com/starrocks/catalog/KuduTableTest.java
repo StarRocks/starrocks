@@ -17,9 +17,7 @@ package com.starrocks.catalog;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import mockit.Mocked;
 import org.apache.kudu.ColumnSchema;
-import org.apache.paimon.table.AbstractFileStoreTable;
 import org.assertj.core.api.Assertions;
 import org.junit.Assert;
 import org.junit.Test;
@@ -31,7 +29,7 @@ import java.util.List;
 public class KuduTableTest {
 
     @Test
-    public void testPartitionKeys(@Mocked AbstractFileStoreTable paimonNativeTable) {
+    public void testPartitionKeys() {
         List<ColumnSchema> columns = Arrays.asList(
                 genColumnSchema("a", org.apache.kudu.Type.INT32),
                 genColumnSchema("b", org.apache.kudu.Type.STRING),
