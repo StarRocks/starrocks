@@ -1435,10 +1435,18 @@ public class MvUtils {
             Column partitionColumn,
             MaterializedView mv,
             Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
-        Set<String> refBaseTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
-        // ref base table latest partition ranges except to-refresh partitions
-        List<Range<PartitionKey>> refBaseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
-                refBaseTableUpdatedPartitionNames, MaterializedView.getPartitionExpr(mv));
+        // materialized view latest partition ranges except to-refresh partitions
+        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
+
+        List<Range<PartitionKey>> refBaseTableRanges = Lists.newArrayList();
+        try {
+            refBaseTableRanges = Lists.newArrayList(PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn,
+                    MaterializedView.getPartitionExpr(mv)).values());
+        } catch (UserException e) {
+            LOG.warn("Materialized view Optimizer compute partition range failed.", e);
+            return Lists.newArrayList();
+        }
+
         // date to varchar range
         Map<Range<PartitionKey>, Range<PartitionKey>> baseRangeMapping = null;
         boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getFirstPartitionRefTableExpr(), partitionColumn);
@@ -1453,9 +1461,6 @@ public class MvUtils {
             }
             refBaseTableRanges = baseTableDateRanges;
         }
-
-        // materialized view latest partition ranges except to-refresh partitions
-        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
 
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : refBaseTableRanges) {
@@ -1489,23 +1494,6 @@ public class MvUtils {
         }
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionTable.getPartitionInfo();
         return rangePartitionInfo.getRangeList(filteredIds, false);
-    }
-
-    private static List<Range<PartitionKey>> getLatestPartitionRange(
-            Table table, Column partitionColumn, Set<String> modifiedPartitionNames, Expr partitionExpr) {
-        if (table.isNativeTableOrMaterializedView()) {
-            return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
-        } else {
-            Map<String, Range<PartitionKey>> partitionMap;
-            try {
-                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, partitionExpr);
-            } catch (UserException e) {
-                LOG.warn("Materialized view Optimizer compute partition range failed.", e);
-                return Lists.newArrayList();
-            }
-            return partitionMap.entrySet().stream().filter(entry -> !modifiedPartitionNames.contains(entry.getKey())).
-                    map(Map.Entry::getValue).collect(Collectors.toList());
-        }
     }
 
     public static String toString(Object o) {
