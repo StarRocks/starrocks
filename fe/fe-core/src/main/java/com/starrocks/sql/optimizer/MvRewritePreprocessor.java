@@ -472,8 +472,9 @@ public class MvRewritePreprocessor {
         return mvWithPlanContexts;
     }
 
-    private boolean canMVRewriteIfMVHasExtraTables(MaterializedView mv,
-                                                   Set<Table> queryTables) {
+    private static boolean canMVRewriteIfMVHasExtraTables(ConnectContext connectContext,
+                                                          MaterializedView mv,
+                                                          Set<Table> queryTables) {
         // 1. when mv has foreign key constraints, it's ok whether query has extra tables or mv has extra tables.
         if (mv.hasForeignKeyConstraints()) {
             return true;
@@ -496,14 +497,15 @@ public class MvRewritePreprocessor {
         return true;
     }
 
-    private boolean isMVValidToRewriteQuery(MaterializedView mv,
-                                            Set<Table> queryTables) {
+    public static boolean isMVValidToRewriteQuery(ConnectContext connectContext,
+                                                  MaterializedView mv,
+                                                  Set<Table> queryTables) {
         if (!mv.isActive())  {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
             return false;
         }
         // if mv is a subset of query tables, it can be used for rewrite.
-        if (!canMVRewriteIfMVHasExtraTables(mv, queryTables)) {
+        if (!canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
             return false;
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
@@ -559,7 +561,7 @@ public class MvRewritePreprocessor {
 
         // 2. choose all valid mvs and filter mvs that cannot be rewritten for the query
         validMVs = validMVs.stream()
-                .filter(mv -> isMVValidToRewriteQuery(mv, queryTables))
+                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, queryTables))
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());

@@ -1026,18 +1026,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
-    /**
-     * Whether this mv can be used for mv rewrite configured by {@code enable_query_rewrite} table property.
-     * @return: true if it is configured to enable mv rewrite, otherwise false.
-     */
-    public boolean isEnableRewrite() {
-        TableProperty tableProperty = getTableProperty();
-        if (tableProperty == null) {
-            return true;
-        }
-        return tableProperty.getMvQueryRewriteSwitch().isEnable();
-    }
-
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
         if (!isLoadTriggeredRefresh()) {
             return false;

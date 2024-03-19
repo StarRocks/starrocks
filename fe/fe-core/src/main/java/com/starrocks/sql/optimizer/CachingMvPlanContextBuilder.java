@@ -156,7 +156,7 @@ public class CachingMvPlanContextBuilder {
      * This method is used to put mv into ast cache, this will be only called in the first time.
      */
     public void putAstIfAbsent(MaterializedView mv) {
-        if (mv == null || !mv.isEnableRewrite()) {
+        if (mv == null) {
             return;
         }
         // initialize define query parse node each time

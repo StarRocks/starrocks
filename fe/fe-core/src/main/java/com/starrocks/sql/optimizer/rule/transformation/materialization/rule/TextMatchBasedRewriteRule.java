@@ -26,7 +26,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -205,9 +204,9 @@ public class TextMatchBasedRewriteRule extends Rule {
             int mvRelatedCount = 0;
             Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
             for (MaterializedView mv : candidateMvs) {
-                Pair<Boolean, String> status = isMVValidToRewriteQuery(connectContext, mv, false, queryTables);
-                if (!status.first) {
-                    logMVRewrite(context, this, "MV {} cannot be used for rewrite, {}", mv.getName(), status.second);
+                boolean isValid = isMVValidToRewriteQuery(connectContext, mv, queryTables);
+                if (!isValid) {
+                    logMVRewrite(context, this, "MV {} cannot be used for rewrite", mv.getName());
                     continue;
                 }
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
