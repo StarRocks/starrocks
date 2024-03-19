@@ -76,7 +76,7 @@ From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_lim
 | concurrency_limit   | 0           | The concurrency limit for the resource group on a single BE node. It takes effect only when it is set to greater than `0`. |
 | max_cpu_cores       | 0           | The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. |
 
-You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information for each resource group on each BE node, as described in [View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information).
+You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information for each resource group on each BE node, as described in [View Resource Group Usage Information](./resource_management.mdxx#view-resource-group-usage-information).
 
 ### Manage query concurrency
 
@@ -117,7 +117,7 @@ You can view information related to query queues using the following methods.
 
 ### SHOW PROC
 
-You can check the number of running queries, and memory and CPU usages in BE nodes using [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW_PROC.md):
+You can check the number of running queries, and memory and CPU usages in BE nodes using [SHOW PROC](../../../sql-reference/sql-statements/Administration/SHOW_PROC.md):
 
 ```Plain
 mysql> SHOW PROC '/backends'\G
@@ -130,7 +130,7 @@ mysql> SHOW PROC '/backends'\G
 
 ### SHOW PROCESSLIST
 
-You can check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md):
+You can check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../../../sql-reference/sql-statements/Administration/SHOW_PROCESSLIST.md):
 
 ```Plain
 mysql> SHOW PROCESSLIST;

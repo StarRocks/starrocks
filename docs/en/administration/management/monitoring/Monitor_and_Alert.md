@@ -10,7 +10,7 @@ StarRocks provides a monitor and alert solution by using Prometheus and Grafana.
 
 StarRocks provides a Prometheus-compatible information collection interface. Prometheus can retrieve metric information of StarRocks by connecting to the HTTP ports of BE and FE nodes and storing the information in its own time-series database. Grafana can then use Prometheus as a data source to visualize the metric information. By using the dashboard templates provided by StarRocks, you can easily monitor your StarRocks cluster and set alerts for it with Grafana.
 
-![MA-1](../assets/monitor/monitor1.png)
+![MA-1](../../../assets/monitor/monitor1.png)
 
 Follow these steps to integrate your StarRocks cluster with Prometheus and Grafana:
 
@@ -46,7 +46,7 @@ For StarRocks, you only need to download the installation package of the Prometh
 
 Take the LTS version v2.45.0 as an example, click the package to download it.
 
-![MA-2](../assets/monitor/monitor2.png)
+![MA-2](../../../assets/monitor/monitor2.png)
 
 Alternatively, you can download it using the `wget` command:
 
@@ -210,7 +210,7 @@ You can access the Prometheus Web UI through a browser, and the default port is 
 
 On the Prometheus homepage, navigate to **Status** --> **Targets** in the top menu. Here, you can see all the monitored nodes for each group job configured in the **prometheus.yml** file. Usually, the status of all nodes should be UP, indicating that the service communication is normal.
 
-![MA-3](../assets/monitor/monitor3.jpeg)
+![MA-3](../../../assets/monitor/monitor3.jpeg)
 
 At this point, Prometheus is configured and set up. For more detailed information, you can refer to the [Prometheus Documentation](https://prometheus.io/docs/).
 
@@ -288,33 +288,33 @@ For more information, refer to the [Grafana Documentation](https://grafana.com/d
 
 You can access the Grafana Web UI through a browser, and the default port is 3000. For the monitoring node in this tutorial, you need to visit `192.168.110.23:3000`. The default username and password required for login are both set to `admin`. Upon the initial login, Grafana will prompt you to change the default login password. If you want to skip this for now, you can click `Skip`. Then, you will be re-directed to the Grafana Web UI homepage.
 
-![MA-4](../assets/monitor/monitor4.png)
+![MA-4](../../../assets/monitor/monitor4.png)
 
 #### 1.2.4 Configure data sources
 
 Click on the menu button in the upper-left corner, expand **Administration**, and then click **Data sources**.
 
-![MA-5](../assets/monitor/monitor5.png)
+![MA-5](../../../assets/monitor/monitor5.png)
 
 On the page that appears, click **Add data source**, and then choose **Prometheus**.
 
-![MA-6](../assets/monitor/monitor6.png)
+![MA-6](../../../assets/monitor/monitor6.png)
 
-![MA-7](../assets/monitor/monitor7.png)
+![MA-7](../../../assets/monitor/monitor7.png)
 
 To integrate Grafana with your Prometheus service, you need to modify the following configuration:
 
 - **Name**: The name of the data source. You can customize the name for the data source.
 
-  ![MA-8](../assets/monitor/monitor8.png)
+  ![MA-8](../../../assets/monitor/monitor8.png)
 
 - **Prometheus Server URL**: The URL of the Prometheus server, which, in this tutorial, is `http://192.168.110.23:9090`.
 
-  ![MA-9](../assets/monitor/monitor9.png)
+  ![MA-9](../../../assets/monitor/monitor9.png)
 
 After the configuration is complete, click **Save & Test** to save and test the configuration. If **Successfully queried the Prometheus API** is displayed, it means the data source is accessible.
 
-![MA-10](../assets/monitor/monitor10.png)
+![MA-10](../../../assets/monitor/monitor10.png)
 
 #### 1.2.5 Configure Dashboard
 
@@ -332,37 +332,37 @@ After the configuration is complete, click **Save & Test** to save and test the 
 
    Click on the menu button in the upper-left corner and click **Dashboards**.
 
-   ![MA-11](../assets/monitor/monitor11.png)
+   ![MA-11](../../../assets/monitor/monitor11.png)
 
    On the page that appears, expand the **New** button and click **Import**.
 
-   ![MA-12](../assets/monitor/monitor12.png)
+   ![MA-12](../../../assets/monitor/monitor12.png)
 
    On the new page, click on **Upload Dashboard JSON file** and upload the template file you downloaded earlier.
 
-   ![MA-13](../assets/monitor/monitor13.png)
+   ![MA-13](../../../assets/monitor/monitor13.png)
 
     After uploading the file, you can rename the Dashboard. By default, it is named `StarRocks Overview`. Then, select the data source, which is the one you created earlier (`starrocks_monitor`). Then, click **Import**.
 
-   ![MA-14](../assets/monitor/monitor14.png)
+   ![MA-14](../../../assets/monitor/monitor14.png)
 
    After the import is complete, you should see the StarRocks Dashboard displayed.
 
-   ![MA-15](../assets/monitor/monitor15.png)
+   ![MA-15](../../../assets/monitor/monitor15.png)
 
 #### 1.2.6 Monitor StarRocks via Grafana
 
 Log in to the Grafana Web UI, click on the menu button in the upper-left corner, and click **Dashboards**.
 
-![MA-16](../assets/monitor/monitor16.png)
+![MA-16](../../../assets/monitor/monitor16.png)
 
 On the page that appears, select **StarRocks Overview** from the **General** directory.
 
-![MA-17](../assets/monitor/monitor17.png)
+![MA-17](../../../assets/monitor/monitor17.png)
 
 After you enter the StarRocks monitoring Dashboard, you can manually refresh the page in the upper-right corner or set the automatic refresh interval for monitoring the StarRocks cluster status.
 
-![MA-18](../assets/monitor/monitor18.png)
+![MA-18](../../../assets/monitor/monitor18.png)
 
 ## Step 2: Understand the core monitoring metrics
 
@@ -469,11 +469,11 @@ You need to create an alert channel (Contact Point) in Grafana to specify how to
 
 1. Log in to the Grafana Web UI, click on the menu button in the upper-left corner, expand **Alerting**, and select **Contact Points**. On the **Contact points** page, click **Add contact point** to create a new alert channel.
 
-   ![MA-19](../assets/monitor/monitor19.png)
+   ![MA-19](../../../assets/monitor/monitor19.png)
 
 2. In the **Name** field, customize the name of the contact point. Then, in the **Integration** dropdown list, select **Email**.
 
-   ![MA-20](../assets/monitor/monitor20.png)
+   ![MA-20](../../../assets/monitor/monitor20.png)
 
 3. In the **Addresses** field, enter the email addresses of the contacts to receive the alert. If there are multiple email addresses, separate the addresses using semicolons (`;`), commas (`,`), or line breaks.
 
@@ -484,9 +484,9 @@ You need to create an alert channel (Contact Point) in Grafana to specify how to
 
 4. After the configuration is complete, click the **Test** button in the upper-right corner of the page. In the prompt that appears, click **Sent test notification**. If your SMTP service and address configuration are correct, the target email account should receive a test email with the subject "TestAlert Grafana". Once you confirm that you can receive the test alert email successfully, click the **Save contact point** button at the bottom of the page to complete the configuration.
 
-   ![MA-21](../assets/monitor/monitor21.png)
+   ![MA-21](../../../assets/monitor/monitor21.png)
 
-   ![MA-22](../assets/monitor/monitor22.png)
+   ![MA-22](../../../assets/monitor/monitor22.png)
 
 You can configure multiple notification methods for each contact point through "Add contact point integration", which will not be detailed here. For more details about Contact Points, you can refer to the [Grafana Documentation](https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/contact-points/).
 
@@ -498,13 +498,13 @@ Grafana uses notification policies to associate contact points with alert rules.
 
 1. Log in to the Grafana Web UI, click on the menu button in the upper-left corner, expand **Alerting**, and select **Notification policies**.
 
-   ![MA-23](../assets/monitor/monitor23.png)
+   ![MA-23](../../../assets/monitor/monitor23.png)
 
 2. On the **Notification policies** page, click the more (**...**) icon to the right of **Default policy** and click **Edit** to modify the Default policy.
 
-   ![MA-24](../assets/monitor/monitor24.png)
+   ![MA-24](../../../assets/monitor/monitor24.png)
 
-   ![MA-25](../assets/monitor/monitor25.png)
+   ![MA-25](../../../assets/monitor/monitor25.png)
 
    Notification policies use a tree-like structure, and the Default policy represents the default root policy for notification. When no other policies are set, all alert rules will default to matching this policy. It will then use the default contact point configured within it for notifications.
 
@@ -512,7 +512,7 @@ Grafana uses notification policies to associate contact points with alert rules.
 
    2. **Group by** is a key concept in Grafana Alerting, grouping alert instances with similar characteristics into a single funnel. This tutorial does not involve grouping, and you can use the default setting.
 
-      ![MA-26](../assets/monitor/monitor26.png)
+      ![MA-26](../../../assets/monitor/monitor26.png)
 
    3. Expand the **Timing options** field and configure **Group wait**, **Group interval**, and **Repeat interval**.
 
@@ -522,7 +522,7 @@ Grafana uses notification policies to associate contact points with alert rules.
 
       You can configure the parameters as shown below so that Grafana will send the alert by these rules: 0 seconds (Group wait) after the **alert conditions are met**, Grafana will send the first alert email. After that, Grafana will re-send the alert every 1 minute (Group interval + Repeat interval).
 
-      ![MA-27](../assets/monitor/monitor27.png)
+      ![MA-27](../../../assets/monitor/monitor27.png)
 
       > **NOTE**
       >
@@ -534,13 +534,13 @@ Grafana uses notification policies to associate contact points with alert rules.
 
    Nested policies use labels to define matching rules. The labels defined in a nested policy can be used as conditions to match when configuring alert rules later. The following example configures a label as `Group=Development_team`.
 
-   ![MA-28](../assets/monitor/monitor28.png)
+   ![MA-28](../../../assets/monitor/monitor28.png)
 
    In the **Contact point** field, select "StarRocksDev". This way, when configuring alert rules with the label `Group=Development_team`, "StarRocksDev" is set to receive the alerts.
 
    You can have the nested policy inherit the timing options from the parent policy. After the configuration is complete, click **Save policy** to save the policy.
 
-   ![MA-29](../assets/monitor/monitor29.png)
+   ![MA-29](../../../assets/monitor/monitor29.png)
 
 If you are interested in the details of notification policies or if your business has more complex alerting scenarios, you can refer to the [Grafana Documentation](https://grafana.com/docs/grafana-cloud/alerting-and-irm/alerting/fundamentals/contact-points/) for more information.
 
@@ -550,9 +550,9 @@ After setting up notification policies, you also need to define alert rules for 
 
 Log in to the Grafana Web UI, and search for and navigate to the previously configured StarRocks Overview Dashboard.
 
-![MA-30](../assets/monitor/monitor30.png)
+![MA-30](../../../assets/monitor/monitor30.png)
 
-![MA-31](../assets/monitor/monitor31.jpeg)
+![MA-31](../../../assets/monitor/monitor31.jpeg)
 
 #### 3.4.1 FE and BE status alert rule
 
@@ -566,15 +566,15 @@ Follow these procedures to configure alerts for **Frontends Status**:
 
 1. Click on the More (...) icon to the right of the **Frontends Status** monitoring item, and click **Edit**.
 
-   ![MA-32](../assets/monitor/monitor32.jpeg)
+   ![MA-32](../../../assets/monitor/monitor32.jpeg)
 
 2. On the new page, choose **Alert**, then click **Create alert rule** from this panel to enter the rule creation page.
 
-   ![MA-33](../assets/monitor/monitor33.jpeg)
+   ![MA-33](../../../assets/monitor/monitor33.jpeg)
 
 3. Set the rule name in the **Rule name** field. The default value is the title of the monitoring metric. If you have multiple clusters, you can add the cluster name as a prefix for differentiation, for example, "[PROD]Frontends Status".
 
-   ![MA-34](../assets/monitor/monitor34.jpeg)
+   ![MA-34](../../../assets/monitor/monitor34.jpeg)
 
 4. Configure the alert rule as follows.
 
@@ -586,7 +586,7 @@ Follow these procedures to configure alerts for **Frontends Status**:
 
    After completing these settings, the page will appear as shown below:
 
-   ![MA-35](../assets/monitor/monitor35.jpeg)
+   ![MA-35](../../../assets/monitor/monitor35.jpeg)
 
    <details>
      <summary>Click to view detailed instructions</summary>
@@ -602,7 +602,7 @@ Follow these procedures to configure alerts for **Frontends Status**:
 
    According to the Grafana documentation, you need to configure the frequency for evaluating alert rules and the frequency at which their status changes. In simple terms, this involves configuring "how often to check with the alert rules" and "how long the abnormal state must persist after detection before triggering the alert (to avoid false alerts caused by transient spikes)". Each Evaluation group contains an independent evaluation interval to determine the frequency of checking the alert rules. You can create a new folder named **PROD** specifically for the StarRocks production cluster and create a new Evaluation group `01` within it. Then, configure this group to check every `10` seconds, and trigger the alert if the anomaly persists for `30` seconds.
 
-   ![MA-36](../assets/monitor/monitor36.png)
+   ![MA-36](../../../assets/monitor/monitor36.png)
 
    > **NOTE**
    >
@@ -612,7 +612,7 @@ Follow these procedures to configure alerts for **Frontends Status**:
 
    In the **Add details for your alert rule** section, click **Add annotation** to configure the content of the alert email. Please note not to modify the **Dashboard UID** and **Panel ID** fields.
 
-   ![MA-37](../assets/monitor/monitor37.jpeg)
+   ![MA-37](../../../assets/monitor/monitor37.jpeg)
 
    In the **Choose** drop-down list, select **Description**, and add the descriptive content for the alert email, for example, "FE node in your StarRocks production cluster failed, please check!"
 
@@ -620,19 +620,19 @@ Follow these procedures to configure alerts for **Frontends Status**:
 
    Specify the notification policy for the alert rule. By default, all alert rules match the Default policy. When the alert condition is met, Grafana will use the "StarRocksOp" contact point in the Default policy to send alert messages to the configured email group.
 
-   ![MA-38](../assets/monitor/monitor38.jpeg)
+   ![MA-38](../../../assets/monitor/monitor38.jpeg)
 
    If you want to use a nested policy, set the **Label** field to the corresponding nested policy, for example, `Group=Development_team`.
 
    Example:
 
-   ![MA-39](../assets/monitor/monitor39.jpeg)
+   ![MA-39](../../../assets/monitor/monitor39.jpeg)
 
    When the alert condition is met, emails will be sent to "StarRocksDev" instead of "StarRocksOp" in the Default policy.
 
 8. Once all configurations are complete, click **Save rule and exit**.
 
-   ![MA-40](../assets/monitor/monitor40.jpeg)
+   ![MA-40](../../../assets/monitor/monitor40.jpeg)
 
 ##### Test alert trigger
 
@@ -640,15 +640,15 @@ You can manually stop an FE node to test the alert. At this point, the heart-sha
 
 **Green**: Indicates that during the last periodic check, the status of each instance of the metric item was normal, and no alert was triggered. The green status does not guarantee that the current node is in normal status. There may be a delay in status change after a node service anomaly, but typically, the delay is not in the order of minutes.
 
-![MA-41](../assets/monitor/monitor41.png)
+![MA-41](../../../assets/monitor/monitor41.png)
 
 **Yellow**: Indicates that during the last periodic check, an instance of the metric item was found abnormal, but the abnormal state duration has not yet reached the "Duration" configured above. At this point, Grafana will not send an alert and will continue periodic checks until the abnormal state duration reaches the configured "Duration". During this period, if the status is restored, the symbol will change back to green.
 
-![MA-42](../assets/monitor/monitor42.jpeg)
+![MA-42](../../../assets/monitor/monitor42.jpeg)
 
 **Red**: When the abnormal state duration reaches the configured "Duration", the symbol changes to red, and Grafana will send an email alert. The symbol will remain red until the abnormal state is resolved, at which point it will change back to green.
 
-![MA-43](../assets/monitor/monitor43.jpeg)
+![MA-43](../../../assets/monitor/monitor43.jpeg)
 
 ##### Manually pause Alerts
 
@@ -656,11 +656,11 @@ Suppose the anomaly requires an extended period for resolution or the alerts are
 
 Navigate to the Alert tab corresponding to the metric item on the Dashboard and click the edit icon:
 
-![MA-44](../assets/monitor/monitor44.png)
+![MA-44](../../../assets/monitor/monitor44.png)
 
 In the **Alert Evaluation Behavior** section, toggle the **Pause Evaluation** switch to the ON position.
 
-![MA-45](../assets/monitor/monitor45.png)
+![MA-45](../../../assets/monitor/monitor45.png)
 
 > **NOTE**
 >

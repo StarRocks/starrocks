@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 This topic describes the resource group feature of StarRocks.
 
-![resource group](../assets/resource_group.png)
+![resource group](../../../assets/resource_group.png)
 
 With this feature, you could simultaneously run several workloads in a single cluster, including short query, ad-hoc query, ETL jobs, to save extra cost of deploying multiple clusters. From technical perspective, the execution engine would schedule concurrent workloads according to users' specification and isolate the interference among them.
 
@@ -330,7 +330,7 @@ The resource limits of `default_wg` are as follows:
 
 ### Monitoring resource groups
 
-You can set [monitor and alert](Monitor_and_Alert.md) for your resource groups.
+You can set up [monitoring and alerting](../monitoring/Monitor_and_Alert.md) for your resource groups.
 
 Resource group-related FE and BE metrics are as follows. All the metrics below have a `name` label indicating their corresponding resource group.
 
@@ -365,7 +365,7 @@ The following FE metrics only provide statistics within the current FE node:
 
 ### View resource group usage information
 
-From v3.1.4 onwards, StarRocks supports the SQL statement [SHOW USAGE RESOURCE GROUPS](../sql-reference/sql-statements/Administration/SHOW_USAGE_RESOURCE_GROUPS.md), which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
+From v3.1.4 onwards, StarRocks supports the SQL statement [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/Administration/SHOW_USAGE_RESOURCE_GROUPS.md), which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
 
 - `Name`: The name of the resource group.
 - `Id`: The ID of the resource group.
@@ -400,6 +400,6 @@ MySQL [(none)]> SHOW USAGE RESOURCE GROUPS;
 
 After you configure resource groups, you can manage memory resources and queries. For more information, see the following topics:
 
-- [Memory management](../administration/Memory_management.md)
+- [Memory management](./Memory_management.md)
 
-- [Query management](../administration/Query_management.md)
+- [Query management](./Query_management.md)

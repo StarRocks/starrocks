@@ -72,13 +72,13 @@ If the BE storage space runs out as your raw data grows, you can supplement it b
 
 - Add new BE nodes to your StarRocks cluster
 
-  You can add new BE nodes to your StarRocks cluster so that the data can be re-distributed evenly to more nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE out](../administration/Scale_up_down.md).
+  You can add new BE nodes to your StarRocks cluster so that the data can be re-distributed evenly to more nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE out](../administration/management/Scale_up_down).
 
   After new BE nodes are added, StarRocks automatically re-balances the data among all BE nodes. Such auto-balancing is supported on all table types.
 
 - Add extra storage volumes to your BE nodes
 
-  You can also add extra storage volumes to existing BE nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE up](../administration/Scale_up_down.md).
+  You can also add extra storage volumes to existing BE nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE up](../administration/management/Scale_up_down).
 
   After extra storage volumes are added, StarRocks automatically re-balances the data in all tables.
 

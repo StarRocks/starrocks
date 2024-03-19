@@ -620,11 +620,11 @@ The following parameters are supported:
 
 - `timezone`
 
-  Specifies the time zone of the load job. Default value: `Asia/Shanghai`. The time zone setting affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. For more information, see [Configure a time zone](../../../administration/timezone.md). The time zone specified in the `timezone` parameter is a session-level time zone.
+  Specifies the time zone of the load job. Default value: `Asia/Shanghai`. The time zone setting affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. For more information, see [Configure a time zone](../../../administration/management/timezone). The time zone specified in the `timezone` parameter is a session-level time zone.
 
 - `priority`
 
-  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/FE_configuration.md) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs will be waiting to be scheduled based on their priorities.
+  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/management/management.mdx) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs will be waiting to be scheduled based on their priorities.
 
   You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER_LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
@@ -704,7 +704,7 @@ For examples about loading JSON-formatted data by using the matched mode, see [L
 
 ## Related configuration items
 
-The [FE configuration item](../../../administration/FE_configuration.md) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
+The [FE configuration item](../../../administration/management/management.mdx) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
 
 In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs will be queued and scheduled based on their submission time.
 

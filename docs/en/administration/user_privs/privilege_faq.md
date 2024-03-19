@@ -6,9 +6,9 @@ displayed_sidebar: "English"
 
 ## Why is the error message "no permission" still reported even after the required role has been assigned to a user?
 
-This error may happen if the role is not activated. You can run `select current_role();` to query the roles that have been activated for the user in the current session. If the required role is not activated, run [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md) to activate this role and perform operations using this role.
+This error may happen if the role is not activated. You can run `select current_role();` to query the roles that have been activated for the user in the current session. If the required role is not activated, run [SET ROLE](../../sql-reference/sql-statements/account-management/SET_ROLE.md) to activate this role and perform operations using this role.
 
-If you want roles to be automatically activated upon login, the `user_admin` role can run [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER DEFAULT ROLE](../sql-reference/sql-statements/account-management/ALTER_USER.md) to set a default role for each user. After the default role is set, it will be automatically activated when the user logs in.
+If you want roles to be automatically activated upon login, the `user_admin` role can run [SET DEFAULT ROLE](../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER DEFAULT ROLE](../../sql-reference/sql-statements/account-management/ALTER_USER.md) to set a default role for each user. After the default role is set, it will be automatically activated when the user logs in.
 
 If you want all the assigned roles of all users to be automatically activated upon login, you can run the following command. This operation requires the OPERATE permission at the System level.
 
@@ -23,7 +23,7 @@ However, we recommend that you follow the principle of "least privilege" by sett
 
 This approach helps ensure that users are assigned roles with appropriate permissions, reducing the risk of unintended operations.
 
-You can run [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to assign the required privileges or roles to users.
+You can run [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) to assign the required privileges or roles to users.
 
 ## I have granted a user the privilege on all tables in a database (`GRANT ALL ON ALL TABLES IN DATABASE <db_name> TO USER <user_identity>;`), but the user still cannot create tables in the database. Why?
 

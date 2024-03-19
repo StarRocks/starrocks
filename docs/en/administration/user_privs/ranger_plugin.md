@@ -100,13 +100,13 @@ If you do not have the permissions to operate the Ranger cluster or do not need 
 
 3. Access `http://<ranger-ip>:<ranger-host>/login.jsp` to log in to the Apache Ranger page. The STARROCKS service appears on the page.
 
-   ![home](../assets/ranger_home.png)
+   ![home](../../assets/ranger_home.png)
 
 4. Click the plus sign (`+`) after **STARROCKS** to configure StarRocks Service.
 
-   ![service detail](../assets/ranger_service_details.png)
+   ![service detail](../../assets/ranger_service_details.png)
 
-   ![property](../assets/ranger_properties.png)
+   ![property](../../assets/ranger_properties.png)
 
    - `Service Name`: You must enter a service name.
    - `Display Name`: The name you want to display for the service under STARROCKS. If it is not specified, `Service Name` will be displayed.
@@ -115,11 +115,11 @@ If you do not have the permissions to operate the Ranger cluster or do not need 
 
    The following figure shows a configuration example.
 
-   ![example](../assets/ranger_show_config.png)
+   ![example](../../assets/ranger_show_config.png)
 
    The following figure shows the added service.
 
-   ![added service](../assets/ranger_added_service.png)
+   ![added service](../../assets/ranger_added_service.png)
 
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful.
 6. On each FE machine of the StarRocks cluster, create [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml) in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:

@@ -45,7 +45,7 @@ The following procedures are performed on an FE instance.
       >
       > If you want to deploy multiple FE nodes in a cluster, you must assign the same `http_port` to each FE node.
 
-   c. If you want to enable IP address access for your cluster, you must add the configuration item `priority_networks` in the configuration file and assign a dedicated IP address (in the CIDR format) to the FE node. You can ignore this configuration item if you want to enable [FQDN access](../administration/enable_fqdn.md) for your cluster.
+   c. If you want to enable IP address access for your cluster, you must add the configuration item `priority_networks` in the configuration file and assign a dedicated IP address (in the CIDR format) to the FE node. You can ignore this configuration item if you want to enable [FQDN access](../administration/management/enable_fqdn.md) for your cluster.
 
       ```YAML
       priority_networks = x.x.x.x/x
@@ -62,7 +62,7 @@ The following procedures are performed on an FE instance.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   f.  For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/FE_configuration.md).
+   f.  For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/management/management.mdx).
 
 3. Start the FE node.
 
@@ -138,7 +138,7 @@ The following procedures are performed on the BE instances.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/BE_configuration.md).
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/management/management.mdx).
 
 3. Start the BE node.
 
@@ -197,7 +197,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
       JAVA_HOME = <path_to_JDK>
       ```
 
-   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/BE_configuration.md) because most of CN's parameters are inherited from BE.
+   For information about advanced configuration items, see [Parameter Configuration - BE configuration items](../administration/management/management.mdx) because most of CN's parameters are inherited from BE.
 
 2. Start the CN node.
 

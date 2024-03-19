@@ -10,7 +10,7 @@ FE parameters are classified into dynamic parameters and static parameters.
 
 - Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
 
-Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md). `TRUE` indicates a dynamic parameter.
+Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md). `TRUE` indicates a dynamic parameter.
 
 Note that both dynamic and static FE parameters can be configured in the **fe.conf** file.
 
@@ -22,7 +22,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
 
-For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
+For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
 
 > **NOTE**
 >
@@ -32,7 +32,7 @@ For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -2049,7 +2049,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 ##### routine_load_task_timeout_second
@@ -2058,7 +2058,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- Description: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 - Introduced in: -
 
 <!--
@@ -2296,7 +2296,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command.
+- Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/data-definition/RECOVER.md) command.
 - Introduced in: -
 
 ##### enable_auto_tablet_distribution
@@ -2316,7 +2316,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the [hybrid row-column storage](../table_design/hybrid_table.md).
+- Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md).
 - Introduced in: v3.2.3
 
 ##### storage_usage_soft_limit_percent
@@ -2380,7 +2380,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 > **NOTE**
 >
 > - StarRocks shared-data clusters do not support this parameter.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### recover_with_empty_tablet
 
