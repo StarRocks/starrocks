@@ -51,7 +51,8 @@ public:
                   const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                   TCompressionType::type compression_type, const std::shared_ptr<ORCWriterOptions>& writer_options,
-                  const std::function<void()> rollback_action, PriorityThreadPool* executors);
+                  const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                  RuntimeState* runtime_state);
 
     ~ORCFileWriter() override = default;
 
@@ -108,6 +109,7 @@ private:
     std::function<void()> _rollback_action;
     // If provided, submit task to executors and return future to the caller. Otherwise execute synchronously.
     PriorityThreadPool* _executors;
+    RuntimeState* _runtime_state;
 };
 
 class ORCFileWriterFactory : public FileWriterFactory {
@@ -116,7 +118,7 @@ public:
                          const std::map<std::string, std::string>& options,
                          const std::vector<std::string>& column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                         PriorityThreadPool* executors = nullptr);
+                         PriorityThreadPool* executors, RuntimeState* runtime_state);
 
     Status init() override;
 
@@ -131,6 +133,7 @@ private:
     std::vector<std::string> _column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
     PriorityThreadPool* _executors;
+    RuntimeState* _runtime_state;
 };
 
 } // namespace starrocks::formats

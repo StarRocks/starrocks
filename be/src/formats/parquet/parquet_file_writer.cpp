@@ -59,7 +59,10 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
 
     auto task = [writer = _writer, output_stream = _output_stream, p = promise,
                  has_field_id = _writer_options->column_ids.has_value(), rollback = _rollback_action,
-                 location = _location] {
+                 location = _location, state = _runtime_state] {
+#ifndef BE_TEST
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+#endif
         FileWriter::CommitResult result{
                 .io_status = Status::OK(), .format = PARQUET, .location = location, .rollback_action = rollback};
         try {
@@ -109,7 +112,10 @@ std::future<Status> ParquetFileWriter::_flush_row_group() {
     auto promise = std::make_shared<std::promise<Status>>();
     std::future<Status> future = promise->get_future();
 
-    auto task = [rowgroup_writer = _rowgroup_writer, p = promise] {
+    auto task = [rowgroup_writer = _rowgroup_writer, p = promise, state = _runtime_state] {
+#ifndef BE_TEST
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+#endif
         try {
             rowgroup_writer->close();
         } catch (const ::parquet::ParquetStatusException& e) {
@@ -240,14 +246,12 @@ FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileM
     return file_statistics;
 }
 
-ParquetFileWriter::ParquetFileWriter(const std::string& location,
-                                     std::unique_ptr<parquet::ParquetOutputStream> output_stream,
-                                     const std::vector<std::string>& column_names,
-                                     const std::vector<TypeDescriptor>& type_descs,
-                                     std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                                     TCompressionType::type compression_type,
-                                     const std::shared_ptr<ParquetWriterOptions>& writer_options,
-                                     const std::function<void()> rollback_action, PriorityThreadPool* executors)
+ParquetFileWriter::ParquetFileWriter(
+        const std::string& location, std::unique_ptr<parquet::ParquetOutputStream> output_stream,
+        const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
+        std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators, TCompressionType::type compression_type,
+        const std::shared_ptr<ParquetWriterOptions>& writer_options, const std::function<void()> rollback_action,
+        PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _location(location),
           _output_stream(std::move(output_stream)),
           _column_names(column_names),
@@ -256,7 +260,8 @@ ParquetFileWriter::ParquetFileWriter(const std::string& location,
           _compression_type(compression_type),
           _writer_options(writer_options),
           _rollback_action(std::move(rollback_action)),
-          _executors(executors) {}
+          _executors(executors),
+          _runtime_state(runtime_state) {}
 
 StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_type(TCompressionType::type type) {
     ::parquet::Compression::type converted_type;
@@ -471,14 +476,15 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> f
                                                    const std::vector<std::string>& column_names,
                                                    std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                                    std::optional<std::vector<formats::FileColumnId>> field_ids,
-                                                   PriorityThreadPool* executors)
+                                                   PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
           _field_ids(field_ids),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),
-          _executors(executors) {}
+          _executors(executors),
+          _runtime_state(runtime_state) {}
 
 Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
@@ -497,7 +503,7 @@ StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const std
     auto output_stream = std::make_unique<parquet::ParquetOutputStream>(std::move(file));
     return std::make_shared<ParquetFileWriter>(path, std::move(output_stream), _column_names, types,
                                                std::move(column_evaluators), _compression_type, _parsed_options,
-                                               rollback_action, _executors);
+                                               rollback_action, _executors, _runtime_state);
 }
 
 } // namespace starrocks::formats

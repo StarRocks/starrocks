@@ -141,7 +141,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
                 std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->parquet_field_ids, ctx->executor);
+                ctx->parquet_field_ids, ctx->executor, runtime_state);
     } else {
         file_writer_factory = std::make_unique<formats::UnknownFileWriterFactory>(ctx->format);
     }

@@ -61,7 +61,8 @@ public:
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type,
                       const std::shared_ptr<ParquetWriterOptions>& writer_options,
-                      const std::function<void()> rollback_action, PriorityThreadPool* executors);
+                      const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                      RuntimeState* runtime_state);
 
     ~ParquetFileWriter() override;
 
@@ -105,6 +106,7 @@ private:
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
     const std::function<void()> _rollback_action;
     PriorityThreadPool* _executors;
+    RuntimeState* _runtime_state;
 };
 
 class ParquetFileWriterFactory : public FileWriterFactory {
@@ -113,8 +115,8 @@ public:
                              const std::map<std::string, std::string>& options,
                              const std::vector<std::string>& column_names,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                             std::optional<std::vector<formats::FileColumnId>> field_ids = std::nullopt,
-                             PriorityThreadPool* executors = nullptr);
+                             std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
+                             RuntimeState* runtime_state);
 
     Status init() override;
 
@@ -130,6 +132,7 @@ private:
     std::vector<std::string> _column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
     PriorityThreadPool* _executors;
+    RuntimeState* _runtime_state;
 };
 
 } // namespace starrocks::formats

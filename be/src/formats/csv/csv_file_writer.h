@@ -36,7 +36,8 @@ public:
                   const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& types,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                   TCompressionType::type compression_type, const std::shared_ptr<CSVWriterOptions>& writer_options,
-                  const std::function<void()> rollback_action, PriorityThreadPool* executors);
+                  const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                  RuntimeState* runtime_state);
 
     ~CSVFileWriter() override;
 
@@ -58,6 +59,7 @@ private:
     std::shared_ptr<CSVWriterOptions> _writer_options;
     const std::function<void()> _rollback_action;
     PriorityThreadPool* _executors;
+    RuntimeState* _runtime_state;
 
     int64_t _num_rows = 0;
     // (nullable converter, not-null converter)
@@ -70,7 +72,7 @@ public:
                          const std::map<std::string, std::string>& options,
                          const std::vector<std::string>& column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                         PriorityThreadPool* executors = nullptr);
+                         PriorityThreadPool* executors, RuntimeState* runtime_state);
 
     Status init() override;
 
@@ -85,6 +87,7 @@ private:
     std::vector<std::string> _column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
     PriorityThreadPool* _executors;
+    RuntimeState* _runtime_state;
 };
 
 } // namespace starrocks::formats
