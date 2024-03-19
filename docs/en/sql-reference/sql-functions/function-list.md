@@ -31,21 +31,6 @@ You can find a function based on the following categories:
 
 ## Aggregate functions
 
-<<<<<<< HEAD
-- [any_value](../sql-functions/aggregate-functions/any_value.md)
-- [approx_count_distinct](../sql-functions/aggregate-functions/approx_count_distinct.md)
-- [array_agg](../sql-functions/array-functions/array_agg.md)
-- [avg](../sql-functions/aggregate-functions/avg.md)
-- [bitmap](../sql-functions/aggregate-functions/bitmap.md)
-- [bitmap_agg](../sql-functions/bitmap-functions/bitmap_agg.md)
-- [corr](../sql-functions/aggregate-functions/corr.md)
-- [covar_pop](../sql-functions/aggregate-functions/covar_pop.md)
-- [covar_samp](../sql-functions/aggregate-functions/covar_samp.md)
-- [count](../sql-functions/aggregate-functions/count.md)
-- [group_concat](../sql-functions/aggregate-functions/group_concat.md)
-- [grouping](../sql-functions/aggregate-functions/grouping.md)
-- [grouping_id](../sql-functions/aggregate-functions/grouping_id.md)
-=======
 - [any_value](./aggregate-functions/any_value.md)
 - [approx_count_distinct](./aggregate-functions/approx_count_distinct.md)
 - [approx_top_k](./aggregate-functions/approx_top_k.md)
@@ -57,8 +42,6 @@ You can find a function based on the following categories:
 - [covar_pop](./aggregate-functions/covar_pop.md)
 - [covar_samp](./aggregate-functions/covar_samp.md)
 - [count](./aggregate-functions/count.md)
-- [count_if](./aggregate-functions/count_if.md)
->>>>>>> 936d30911a ([Doc] optimize description and examples in array_agg and approx_top_k (#42789))
 - [group_concat](./string-functions/group_concat.md)
 - [hll_empty](../sql-functions/aggregate-functions/hll_empty.md)
 - [hll_hash](../sql-functions/aggregate-functions/hll_hash.md)
