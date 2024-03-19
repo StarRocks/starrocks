@@ -21,14 +21,6 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-import com.starrocks.common.Config;
-=======
-import com.starrocks.datacache.DataCacheExprRewriter;
-import com.starrocks.datacache.DataCacheMgr;
-import com.starrocks.datacache.DataCacheOptions;
-import com.starrocks.datacache.DataCacheRule;
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -80,21 +72,13 @@ public class RemoteScanRangeLocations {
     }
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
-<<<<<<< HEAD
                                        Optional<RemoteFileBlockDesc> blockDesc) {
-        // NOTE: Config.hive_max_split_size should be extracted to a local variable,
-        // because it may be changed before calling 'splitScanRangeLocations'
-        // and after needSplit has been calculated.
-        final long splitSize = Config.hive_max_split_size;
-=======
-                                       Optional<RemoteFileBlockDesc> blockDesc, DataCacheOptions dataCacheOptions) {
         SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
         ConnectContext connectContext = ConnectContext.get();
         if (connectContext != null) {
             sv = connectContext.getSessionVariable();
         }
 
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
         long totalSize = fileDesc.getLength();
         long offset = 0;
         if (blockDesc.isPresent()) {

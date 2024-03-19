@@ -646,10 +646,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
 
-<<<<<<< HEAD
-=======
-    public static final String JIT_LEVEL = "jit_level";
-
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
      */
@@ -662,7 +658,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String CONNECTOR_HUGE_FILE_SIZE = "connector_huge_file_size";
 
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -967,15 +962,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
 
-<<<<<<< HEAD
-=======
-    @VariableMgr.VarAttr(name = ENABLE_SPILL_TO_REMOTE_STORAGE)
-    private boolean enableSpillToRemoteStorage = false;
-
-    @VariableMgr.VarAttr(name = DISABLE_SPILL_TO_LOCAL_DISK)
-    private boolean disableSpillToLocalDisk = false;
-
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
     // this is used to control which operators can spill, only meaningful when enable_spill=true
     // it uses a bit to identify whether the spill of each operator is in effect, 0 means no, 1 means yes
     // at present, only the lowest 4 bits are meaningful, corresponding to the four operators
@@ -1340,33 +1326,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePerBucketComputeOptimize;
     }
 
-<<<<<<< HEAD
-=======
-    public boolean isEnablePartitionBucketOptimize() {
-        return enablePartitionBucketOptimize;
-    }
-
-    public void setEnablePartitionBucketOptimize(boolean enablePartitionBucketOptimize) {
-        this.enablePartitionBucketOptimize = enablePartitionBucketOptimize;
-    }
-    
-    public void setEnableGroupExecution(boolean enableGroupExecution) {
-        this.enableGroupExecution = enableGroupExecution;
-    }
-
-    public boolean isEnableGroupExecution() {
-        return enableGroupExecution;
-    }
-
-    public int getGroupExecutionGroupScale() {
-        return groupExecutionGroupScale;
-    }
-
-    public int getGroupExecutionMaxGroups() {
-        return groupExecutionMaxGroups;
-    }
-
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
     public int getWindowPartitionMode() {
         return windowPartitionMode;
     }
@@ -1679,18 +1638,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PREPARE_STMT)
     private boolean enablePrepareStmt = true;
 
-<<<<<<< HEAD
-=======
-    @VarAttr(name = JIT_LEVEL)
-    private int jitLevel = 1;
-
     @VarAttr(name = CONNECTOR_MAX_SPLIT_SIZE)
     private long connectorMaxSplitSize = 64L * 1024L * 1024L;
 
     @VarAttr(name = CONNECTOR_HUGE_FILE_SIZE)
     private long connectorHugeFileSize = 1024L * 1024L * 1024L;
 
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
     private int exprChildrenLimit = -1;
 
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
@@ -1845,18 +1798,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_STRICT_ORDER_BY)
     private boolean enableStrictOrderBy = true;
 
-<<<<<<< HEAD
-=======
-    // enable wait dependent event in plan fragment
-    // the operators will wait for the dependent event to be completed before executing
-    // all of the probe side operators will wait for the build side operators to complete.
-    // Scenarios where AGG is present in the probe side will reduce peak memory usage,
-    // but in some cases will result in increased latency for individual queries.
-    //
-    @VarAttr(name = ENABLE_WAIT_DEPENDENT_EVENT)
-    private boolean enableWaitDependentEvent = false;
-
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
     }
@@ -2556,16 +2497,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine && pipelineDop <= 0;
     }
 
-<<<<<<< HEAD
-=======
-    public void setEnableRuntimeAdaptiveDop(boolean on) {
-        enableRuntimeAdaptiveDop = on;
-        if (on) {
-            enablePipelineLevelMultiPartitionedRf = false;
-        }
-    }
-
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
     public boolean isEnableRuntimeAdaptiveDop() {
         return enablePipelineEngine && enableRuntimeAdaptiveDop;
     }
@@ -3296,14 +3227,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
     }
 
-<<<<<<< HEAD
 
     public boolean isCboSplitScanPredicateWithDate() {
         return cboSplitScanPredicateWithDate;
-=======
-    public boolean isEnableFineGrainedRangePredicate() {
-        return enableFineGrainedRangePredicate;
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
     }
 
     public void setCboSplitScanPredicateWithDate(boolean cboSplitScanPredicateWithDate) {
@@ -3501,11 +3427,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
-<<<<<<< HEAD
-=======
-        tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
         tResult.setConnector_max_split_size(connectorMaxSplitSize);
->>>>>>> e87a15386c ([Feature] support fe to decide to split io task nor not (#42642))
         return tResult;
     }
 
