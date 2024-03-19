@@ -579,8 +579,8 @@ Status ScrollParser::_append_json_val(const rapidjson::Value& col, const TypeDes
                                       bool pure_doc_value) {
     std::string s = json_value_to_string(col);
     Slice slice{s};
-    if (!col.IsObject()) {
-        return Status::InternalError("col: " + slice.to_string() + " is not an object");
+    if (!col.IsObject() && !col.IsArray()) {
+        return Status::InternalError("col: " + slice.to_string() + " is not an object/array");
     }
     ASSIGN_OR_RETURN(JsonValue json, JsonValue::parse_json_or_string(slice));
     JsonValue* tmp = &json;

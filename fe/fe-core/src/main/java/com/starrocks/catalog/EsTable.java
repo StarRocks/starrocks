@@ -124,7 +124,8 @@ public class EsTable extends Table implements GsonPostProcessable {
     // Instead,  the (almost) surprising thing is that, by returning less than 20 fields,
     // DocValues performs better than stored fields and the difference gets little as the number of fields returned increases.
     // Asking for 9 DocValues fields and 1 stored field takes an average query time is 6.86 (more than returning 10 stored fields)
-    // Here we have a slightly conservative value of 20, but at the same time we also provide configurable parameters for expert-using
+    // Here we have a slightly conservative value of 20, but at the same time we also provide configurable parameters for
+    // expert-using
     // @see `MAX_DOCVALUE_FIELDS`
     private static final int DEFAULT_MAX_DOCVALUE_FIELDS = 20;
 
@@ -202,6 +203,11 @@ public class EsTable extends Table implements GsonPostProcessable {
         }
         hosts = properties.get(KEY_HOSTS).trim();
         seeds = hosts.split(",");
+        for (String seed : seeds) {
+            if (!seed.startsWith("http://") && !seed.startsWith("https://")) {
+                throw new DdlException("Host of ES table should start with 'http:// or 'https://'. Current value is " + seed);
+            }
+        }
 
         if (!Strings.isNullOrEmpty(properties.get(KEY_USER))
                 && !Strings.isNullOrEmpty(properties.get(KEY_USER).trim())) {
