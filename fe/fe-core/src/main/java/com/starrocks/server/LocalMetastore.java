@@ -148,6 +148,7 @@ import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DisablePartitionRecoveryInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -434,7 +435,10 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             Database db = new Database(createDbInfo.getId(), createDbInfo.getDbName());
             unprotectCreateDb(db);
-            stateMgr.getStorageVolumeMgr().replayBindDbToStorageVolume(createDbInfo.getStorageVolumeId(), db.getId());
+            // If user upgrades from 3.0, the storage volume id will be null
+            if (createDbInfo.getStorageVolumeId() != null) {
+                stateMgr.getStorageVolumeMgr().replayBindDbToStorageVolume(createDbInfo.getStorageVolumeId(), db.getId());
+            }
             LOG.info("finish replay create db, name: {}, id: {}", db.getOriginName(), db.getId());
         } finally {
             unlock();
@@ -2338,7 +2342,8 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        if (table.isCloudNativeTableOrMaterializedView()) {
+        // If user upgrades from 3.0, the storage volume id will be null
+        if (table.isCloudNativeTableOrMaterializedView() && info.getStorageVolumeId() != null) {
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                     .replayBindTableToStorageVolume(info.getStorageVolumeId(), table.getId());
         }
@@ -2605,6 +2610,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayDisableTableRecovery(DisableTableRecoveryInfo disableTableRecoveryInfo) {
         recycleBin.replayDisableTableRecovery(disableTableRecoveryInfo.getTableIds());
+    }
+
+    public void replayDisablePartitionRecovery(DisablePartitionRecoveryInfo disablePartitionRecoveryInfo) {
+        recycleBin.replayDisablePartitionRecovery(disablePartitionRecoveryInfo.getPartitionId());
     }
 
     public void replayRecoverTable(RecoverInfo info) {
@@ -3307,8 +3316,7 @@ public class LocalMetastore implements ConnectorMetadata {
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
     }
 
-    private long getRandomStart(IntervalLiteral interval,
-                                long randomizeStart) throws DdlException {
+    private long getRandomStart(IntervalLiteral interval, long randomizeStart) throws DdlException {
         if (interval == null || randomizeStart == -1) {
             return 0;
         }
@@ -3491,6 +3499,17 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
                         materializedView.isCloudNativeMaterializedView());
             }
+
+            // enable_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+                TableProperty.MVQueryRewriteSwitch value = TableProperty.analyzeQueryRewriteSwitch(str);
+                materializedView.getTableProperty().setMvQueryRewriteSwitch(value);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, str);
+                properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+            }
+
             // lake storage info
             if (materializedView.isCloudNativeMaterializedView()) {
                 String volume = "";

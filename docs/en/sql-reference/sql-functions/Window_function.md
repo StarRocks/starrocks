@@ -2,9 +2,9 @@
 displayed_sidebar: "English"
 ---
 
-# Window function
+# Window functions
 
-- [Window function](#window-function)
+- [Window functions](#window-functions)
   - [Background](#background)
   - [Usage](#usage)
     - [Functions](#functions)

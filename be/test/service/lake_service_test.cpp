@@ -27,9 +27,9 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/test_util.h"
 #include "storage/lake/txn_log.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -60,38 +60,8 @@ public:
     }
 
     void create_tablet() {
-        _tablet_id = next_id();
-        auto metadata = std::make_shared<lake::TabletMetadata>();
-        metadata->set_id(_tablet_id);
-        metadata->set_version(1);
-        metadata->set_next_rowset_id(1);
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(DUP_KEYS);
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(0);
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(1);
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-        }
-
+        auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_id = metadata->id();
         auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         ASSERT_TRUE(tablet_mgr != nullptr);
         ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));

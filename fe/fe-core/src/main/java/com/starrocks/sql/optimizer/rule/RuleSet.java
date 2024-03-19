@@ -59,10 +59,12 @@ import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateGroupByConstantRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.FineGrainedRangePredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctDataSkewEliminateRule;
 import com.starrocks.sql.optimizer.rule.transformation.InlineOneCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.IntersectAddDistinctRule;
@@ -429,6 +431,14 @@ public class RuleSet {
                 new PruneProjectRule(),
                 new PartitionPruneRule(),
                 new DistributionPruneRule()));
+
+        REWRITE_RULES.put(RuleSetType.FINE_GRAINED_RANGE_PREDICATE, ImmutableList.of(
+                FineGrainedRangePredicateRule.INSTANCE,
+                FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
+
+        REWRITE_RULES.put(RuleSetType.ELIMINATE_GROUP_BY, ImmutableList.of(
+                EliminateGroupByConstantRule.INSTANCE
+        ));
     }
 
     public RuleSet() {

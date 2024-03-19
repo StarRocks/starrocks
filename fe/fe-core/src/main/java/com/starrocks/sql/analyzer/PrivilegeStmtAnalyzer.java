@@ -75,7 +75,7 @@ public class PrivilegeStmtAnalyzer {
         new PrivilegeStatementAnalyzerVisitor().analyze(statement, session);
     }
 
-    static class PrivilegeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class PrivilegeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         private AuthenticationMgr authenticationManager = null;
         private AuthorizationMgr authorizationManager = null;
 

@@ -90,6 +90,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -375,7 +376,7 @@ public class ExpressionAnalyzer {
         }
     }
 
-    public static class Visitor extends AstVisitor<Void, Scope> {
+    public static class Visitor implements AstVisitor<Void, Scope> {
         private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
                 FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
         private static final List<String> SUB_DATE_FUNCTIONS =
@@ -1722,6 +1723,9 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitDictQueryExpr(DictQueryExpr node, Scope context) {
+            if (RunMode.isSharedDataMode()) {
+                throw new SemanticException("dict_mapping function do not support shared data mode");
+            }
             List<Expr> params = node.getParams().exprs();
             if (!(params.get(0) instanceof StringLiteral)) {
                 throw new SemanticException("dict_mapping function first param table_name should be string literal");

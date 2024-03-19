@@ -255,7 +255,7 @@ public final class SqlToScalarOperatorTranslator {
         }
     }
 
-    private static class Visitor extends AstVisitor<ScalarOperator, Context> {
+    private static class Visitor implements AstVisitor<ScalarOperator, Context> {
         private ExpressionMapping expressionMapping;
         private final ColumnRefFactory columnRefFactory;
         private final List<ColumnRefOperator> correlation;
@@ -288,8 +288,7 @@ public final class SqlToScalarOperatorTranslator {
                 return expressionMapping.get(expr);
             }
 
-            return super.visit(node, context);
-
+            return node.accept(this, context);
         }
 
         @Override
@@ -674,6 +673,9 @@ public final class SqlToScalarOperatorTranslator {
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
+            if (FunctionSet.nonDeterministicFunctions.contains(node.getFnName().getFunction())) {
+                callOperator.setId(columnRefFactory.getNextUniqueId());
+            }
             return callOperator;
         }
 

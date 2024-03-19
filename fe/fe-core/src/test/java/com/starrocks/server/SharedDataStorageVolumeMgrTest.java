@@ -67,6 +67,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -535,6 +536,10 @@ public class SharedDataStorageVolumeMgrTest {
     @Test
     public void testReplayBindDbToStorageVolume() throws DdlException, AlreadyExistsException {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        sdsvm.replayBindDbToStorageVolume(null, 2L);
+        Assert.assertTrue(sdsvm.dbToStorageVolume.isEmpty());
+        Assert.assertTrue(sdsvm.storageVolumeToDbs.isEmpty());
+
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
         Map<String, String> storageParams = new HashMap<>();
@@ -550,6 +555,10 @@ public class SharedDataStorageVolumeMgrTest {
     @Test
     public void testReplayBindTableToStorageVolume() throws DdlException, AlreadyExistsException {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        sdsvm.replayBindTableToStorageVolume(null, 2L);
+        Assert.assertTrue(sdsvm.tableToStorageVolume.isEmpty());
+        Assert.assertTrue(sdsvm.storageVolumeToTables.isEmpty());
+
         String svName = "test";
         List<String> locations = Arrays.asList("s3://abc");
         Map<String, String> storageParams = new HashMap<>();
@@ -869,5 +878,35 @@ public class SharedDataStorageVolumeMgrTest {
             Assert.assertThrows(DdlException.class,
                     () -> svm.createStorageVolume(svName, "s3", locations, params, Optional.empty(), ""));
         }
+    }
+
+    @Test
+    public void testUpgrade() throws IOException, SRMetaBlockException, SRMetaBlockEOFException,
+            DdlException, AlreadyExistsException {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        svm.createBuiltinStorageVolume();
+        Set<Long> dbs = new HashSet<>();
+        dbs.add(1L);
+        svm.storageVolumeToDbs.put(null, dbs);
+        Set<Long> tables = new HashSet<>();
+        tables.add(2L);
+        svm.storageVolumeToTables.put(null, tables);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(out);
+        svm.save(dos);
+
+        InputStream in = new ByteArrayInputStream(out.toByteArray());
+        DataInputStream dis = new DataInputStream(in);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
+        svm1.load(reader);
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getDefaultStorageVolume().getName());
+        Assert.assertTrue(svm1.storageVolumeToDbs.isEmpty());
+        Assert.assertTrue(svm1.storageVolumeToTables.isEmpty());
+        Assert.assertTrue(svm1.dbToStorageVolume.isEmpty());
+        Assert.assertTrue(svm1.tableToStorageVolume.isEmpty());
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfDb(1L));
+        Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm1.getStorageVolumeNameOfTable(1L));
     }
 }

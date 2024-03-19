@@ -78,6 +78,7 @@ class ParsedPage;
 class ZoneMapIndexPB;
 class ZoneMapPB;
 class Segment;
+struct NgramBloomFilterReaderOptions;
 
 // There will be concurrent users to read the same column. So
 // we should do our best to reduce resource usage through share
@@ -187,8 +188,10 @@ private:
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
     Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
-    // return zero means an invalid gram num
-    size_t _get_gram_num_for_ngram() const;
+
+    NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
+
+    bool _inverted_index_loaded() const { return invoked(_inverted_index_load_once); }
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
@@ -223,7 +226,6 @@ private:
     // is never released before the end of the parent's life cycle,
     // so here we just use a normal pointer
     Segment* _segment = nullptr;
-    mutable std::mutex _load_index_lock;
 
     uint8_t _flags = 0;
     // counter to record the reader's mem usage, sub readers excluded.
@@ -231,6 +233,9 @@ private:
 
     // only for json flat column
     std::string _name;
+
+    // only used for inverted index load
+    OnceFlag _inverted_index_load_once;
 };
 
 } // namespace starrocks

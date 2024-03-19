@@ -197,6 +197,7 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+    public static final String PROPERTY_MV_ENABLE_QUERY_REWRITE = "enable_query_rewrite";
 
     /**
      * Materialized View sort keys
@@ -568,12 +569,6 @@ public class PropertyAnalyzer {
                 tStorageType = TStorageType.COLUMN_WITH_ROW;
                 if (olapTable.getColumns().stream().filter(column -> !column.isKey()).count() == 0) {
                     throw new AnalysisException("column_with_row storage type must have some non-key columns");
-                }
-                for (Column column : olapTable.getColumns()) {
-                    if (!column.isKey() && column.getType().isComplexType()) {
-                        throw new AnalysisException(
-                                "column_with_row storage type does not support complex type. column: " + column.getName());
-                    }
                 }
             } else {
                 throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");

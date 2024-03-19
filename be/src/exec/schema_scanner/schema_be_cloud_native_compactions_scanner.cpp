@@ -25,8 +25,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

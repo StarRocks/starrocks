@@ -115,7 +115,8 @@ public class TableTestBase {
     public static DeleteFile FILE_A_DELETES =
             FileMetadata.deleteFileBuilder(SPEC_A)
                     .ofPositionDeletes()
-                    .withPath("/path/to/data-a-deletes.parquet")
+                    .withPath("/path/to/data-a-deletes.orc")
+                    .withFormat(FileFormat.ORC)
                     .withFileSizeInBytes(10)
                     .withPartitionPath("data_bucket=0") // easy way to set partition data for now
                     .withRecordCount(1)
@@ -124,7 +125,8 @@ public class TableTestBase {
     public static DeleteFile FILE_A2_DELETES =
             FileMetadata.deleteFileBuilder(SPEC_A)
                     .ofEqualityDeletes(1)
-                    .withPath("/path/to/data-a2-deletes.parquet")
+                    .withPath("/path/to/data-a2-deletes.orc")
+                    .withFormat(FileFormat.ORC)
                     .withFileSizeInBytes(10)
                     .withPartitionPath("data_bucket=0")
                     .withRecordCount(1)

@@ -8,4 +8,4 @@ displayed_sidebar: "English"
 
 STRING
 
-A variable length string, maximum length is 65533 byte
+A variable length string. The maximum length is 65533 bytes.

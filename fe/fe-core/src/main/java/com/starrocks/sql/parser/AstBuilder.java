@@ -96,12 +96,15 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -280,6 +283,9 @@ import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.PivotAggregation;
+import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
@@ -390,7 +396,6 @@ import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -458,6 +463,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.IndexDef.IndexType.getIndexType;
@@ -1421,6 +1427,59 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return result;
     }
 
+    private TaskSchedule parseTaskSchedule(StarRocksParser.TaskScheduleDescContext desc) {
+        TaskSchedule schedule = new TaskSchedule();
+
+        if (desc.START() != null) {
+            NodePosition timePos = createPos(desc);
+            StringLiteral stringLiteral = (StringLiteral) visit(desc.string());
+            DateTimeFormatter dateTimeFormatter = null;
+            try {
+                dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
+                LocalDateTime startTime =
+                        DateUtils.parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
+                schedule.setStartTime(startTime.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond());
+            } catch (AnalysisException e) {
+                throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
+                        timePos);
+            }
+        }
+
+        if (desc.interval() != null) {
+            var intervalLiteral = (IntervalLiteral) visit(desc.interval());
+            if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
+                String exprSql = intervalLiteral.getValue().toSql();
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
+                        createPos(desc.interval()));
+
+            }
+
+            long period = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
+            TimeUnit timeUnit = null;
+            try {
+                timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
+                        intervalLiteral.getUnitIdentifier().getDescription());
+            } catch (DdlException e) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(intervalLiteral.toString(),
+                        "INTERVAL "), createPos(desc.interval()));
+            }
+            schedule.setPeriod(period);
+            schedule.setTimeUnit(timeUnit);
+        }
+
+        return schedule;
+    }
+
+    private void parseTaskClause(List<StarRocksParser.TaskClauseContext> clauses, SubmitTaskStmt stmt) {
+        for (var clause : clauses) {
+            if (clause.properties() != null) {
+                stmt.getProperties().putAll(buildProperties(clause.properties()));
+            } else if (clause.taskScheduleDesc() != null) {
+                stmt.setSchedule(parseTaskSchedule(clause.taskScheduleDesc()));
+            }
+        }
+    }
+
     @Override
     public ParseNode visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
         QualifiedName qualifiedName = null;
@@ -1428,9 +1487,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             qualifiedName = getQualifiedName(context.qualifiedName());
         }
 
-        // properties
-        Map<String, String> properties = buildProperties(context.properties());
-        properties.putAll(extractVarHintValues(hintMap.get(context)));
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
         if (context.createTableAsSelectStatement() != null) {
@@ -1453,11 +1509,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             taskName = qualifiedNameToTaskName(qualifiedName);
         }
+        SubmitTaskStmt res;
         if (createTableAsSelectStmt != null) {
-            return new SubmitTaskStmt(taskName, properties, startIndex, createTableAsSelectStmt, pos);
+            res = new SubmitTaskStmt(taskName, startIndex, createTableAsSelectStmt, pos);
         } else {
-            return new SubmitTaskStmt(taskName, properties, startIndex, insertStmt, pos);
+            res = new SubmitTaskStmt(taskName, startIndex, insertStmt, pos);
         }
+        res.getProperties().putAll(extractVarHintValues(hintMap.get(context)));
+        parseTaskClause(context.taskClause(), res);
+        return res;
     }
 
     @Override
@@ -1732,24 +1792,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String catalogName = ((Identifier) visit(context.catalogName)).getValue();
         AlterClause alterClause = (AlterClause) visit(context.modifyPropertiesClause());
         return new AlterCatalogStmt(catalogName, alterClause, createPos(context));
-    }
-
-    // ---------------------------------------- Warehouse Statement -----------------------------------------------------
-
-    @Override
-    public ParseNode visitShowWarehousesStatement(StarRocksParser.ShowWarehousesStatementContext context) {
-        String pattern = null;
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            pattern = stringLiteral.getValue();
-        }
-
-        Expr where = null;
-        if (context.expression() != null) {
-            where = (Expr) visit(context.expression());
-        }
-
-        return new ShowWarehousesStmt(pattern, where, createPos(context));
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -4293,6 +4335,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 from = relation;
             }
+
+            if (fromContext.pivotClause() != null) {
+                PivotRelation pivotRelation = (PivotRelation) visit(fromContext.pivotClause());
+                pivotRelation.setQuery(from);
+                from = pivotRelation;
+            }
         }
 
         /*
@@ -6525,6 +6573,65 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDictionaryGetExpr(StarRocksParser.DictionaryGetExprContext context) {
         List<Expr> params = visit(context.expressionList().expression(), Expr.class);
         return new DictionaryGetExpr(params);
+    }
+
+    @Override
+    public ParseNode visitPivotClause(StarRocksParser.PivotClauseContext ctx) {
+        List<PivotAggregation> aggregations = visit(ctx.pivotAggregationExpression(), PivotAggregation.class);
+        List<Identifier> identifiers;
+        if (ctx.identifierList() != null) {
+            identifiers = visit(ctx.identifierList().identifier(), Identifier.class);
+        } else if (ctx.identifier() != null) {
+            identifiers = ImmutableList.of((Identifier) visit(ctx.identifier()));
+        } else {
+            identifiers = ImmutableList.of();
+        }
+        List<SlotRef> columns = identifiers.stream()
+                .map(id -> {
+                    List<String> parts = ImmutableList.of(id.getValue());
+                    return new SlotRef(QualifiedName.of(parts, createPos(ctx)));
+                })
+                .collect(toList());
+
+        List<PivotValue> values = visit(ctx.pivotValue(), PivotValue.class);
+
+        if (columns.size() != values.get(0).getExprs().size()
+                || values.stream().anyMatch(v -> v.getExprs().size() != columns.size())) {
+            throw new ParsingException(
+                    PARSER_ERROR_MSG.pivotValueArityMismatch(columns.size(), values.get(0).getExprs().size()),
+                    createPos(ctx));
+        }
+        return new PivotRelation(null, aggregations, columns, values, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitPivotAggregationExpression(StarRocksParser.PivotAggregationExpressionContext ctx) {
+        String alias = null;
+        if (ctx.identifier() != null) {
+            alias = ((Identifier) visit(ctx.identifier())).getValue();
+        } else if (ctx.string() != null) {
+            alias = ((StringLiteral) visit(ctx.string())).getStringValue();
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(ctx.functionCall());
+        return new PivotAggregation(functionCallExpr, alias, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitPivotValue(StarRocksParser.PivotValueContext ctx) {
+        ImmutableList.Builder<LiteralExpr> exprs = new ImmutableList.Builder<>();
+        if (ctx.literalExpression() != null) {
+            exprs.add((LiteralExpr) visit(ctx.literalExpression()));
+        } else if (ctx.literalExpressionList() != null) {
+            exprs.addAll(visit(ctx.literalExpressionList().literalExpression(), LiteralExpr.class));
+        }
+
+        String alias = null;
+        if (ctx.identifier() != null) {
+            alias = ((Identifier) visit(ctx.identifier())).getValue();
+        } else if (ctx.string() != null) {
+            alias = ((StringLiteral) visit(ctx.string())).getStringValue();
+        }
+        return new PivotValue(exprs.build(), alias, createPos(ctx));
     }
 
     // ------------------------------------------- COMMON AST --------------------------------------------------------------

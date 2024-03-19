@@ -135,6 +135,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
             "table_uuid", "partition_name", "column_name"
     );
 
+    private static final List<String> EXTERNAL_HISTOGRAM_KEY_COLUMNS = ImmutableList.of(
+            "table_uuid", "column_name"
+    );
+
     private boolean createSampleStatisticsTable(ConnectContext context) {
         LOG.info("create sample statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
@@ -266,6 +270,44 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
     }
 
+    private boolean createExternalHistogramStatisticsTable(ConnectContext context) {
+        LOG.info("create external histogram statistics table start");
+        TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
+                StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+        KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+        try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, EXTERNAL_HISTOGRAM_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, EXTERNAL_HISTOGRAM_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (UserException e) {
+            LOG.warn("Failed to create external histogram statistics table, " + e.getMessage());
+            return false;
+        }
+        LOG.info("create external histogram statistics table done");
+        for (Map.Entry<AnalyzeMgr.StatsMetaColumnKey, ExternalHistogramStatsMeta> entry :
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().entrySet()) {
+            ExternalHistogramStatsMeta histogramStatsMeta = entry.getValue();
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(
+                    new ExternalHistogramStatsMeta(histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
+                            histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn(),
+                            histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties()));
+        }
+        return checkTableExist(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -317,6 +359,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return createHistogramStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
             return createExternalFullStatisticsTable(context);
+        } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
+            return createExternalHistogramStatisticsTable(context);
         } else {
             throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
         }
@@ -356,6 +400,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
+        refreshStatisticsTable(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();

@@ -55,6 +55,7 @@ public class ShowMaterializedViewStatus {
     private String partitionType;
     private long lastCheckTime;
     private String inactiveReason;
+    private String queryRewriteStatus;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
@@ -448,6 +449,13 @@ public class ShowMaterializedViewStatus {
         return status;
     }
 
+    public String getQueryRewriteStatus() {
+        return queryRewriteStatus;
+    }
+
+    public void setQueryRewriteStatus(String queryRewriteStatus) {
+        this.queryRewriteStatus = queryRewriteStatus;
+    }
 
     /**
      * Return the thrift of show materialized views command from be's request.
@@ -498,6 +506,9 @@ public class ShowMaterializedViewStatus {
         // extra message
         status.setExtra_message(refreshJobStatus.getExtraMessage() == null ? "" :
                 GsonUtils.GSON.toJson(refreshJobStatus.getExtraMessage()));
+
+        // query_rewrite_status
+        status.setQuery_rewrite_status(queryRewriteStatus);
 
         return status;
     }
@@ -563,6 +574,8 @@ public class ShowMaterializedViewStatus {
         // extra message
         addField(resultRow, refreshJobStatus.getExtraMessage() == null ? "" :
                 GsonUtils.GSON.toJson(refreshJobStatus.getExtraMessage()));
+        // query_rewrite_status
+        addField(resultRow, queryRewriteStatus);
 
         return resultRow;
     }

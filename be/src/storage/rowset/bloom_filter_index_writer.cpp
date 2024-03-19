@@ -186,11 +186,11 @@ private:
     std::vector<std::unique_ptr<BloomFilter>> _bfs;
 };
 
-template <LogicalType field_type>
+// handle most cases
+template <LogicalType field_type, typename Enable = void>
 class NgramBloomFilterIndexWriterImpl : public BloomFilterIndexWriterImpl<field_type> {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
-    using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
     using BloomFilterIndexWriterImpl<field_type>::_values;
 
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
@@ -199,15 +199,14 @@ public:
     void add_values(const void* values, size_t count) override { return; }
 };
 
-template <>
-class NgramBloomFilterIndexWriterImpl<TYPE_VARCHAR> : public BloomFilterIndexWriterImpl<TYPE_VARCHAR> {
+template <LogicalType field_type>
+class NgramBloomFilterIndexWriterImpl<field_type, std::enable_if_t<is_slice_type<field_type>()>>
+        : public BloomFilterIndexWriterImpl<field_type> {
 public:
-    using CppType = typename CppTypeTraits<TYPE_CHAR>::CppType;
-    using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
-    using BloomFilterIndexWriterImpl<TYPE_VARCHAR>::_values;
-
+    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using BloomFilterIndexWriterImpl<field_type>::_values;
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : BloomFilterIndexWriterImpl<TYPE_VARCHAR>(bf_options, std::move(typeinfo)) {}
+            : BloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
 
     void add_values(const void* values, size_t count) override {
         size_t gram_num = this->_bf_options.gram_num;
@@ -225,11 +224,16 @@ public:
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
-                    // why deep copy?
-                    _values.insert(get_value<TYPE_VARCHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
+                    if (this->_bf_options.case_sensitive) {
+                        _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_pool));
+                    } else {
+                        // todo::exist two copy of ngram, need to optimize
+                        std::string lower_ngram;
+                        Slice lower_ngram_slice = cur_ngram.tolower(lower_ngram);
+                        _values.insert(get_value<field_type>(&lower_ngram_slice, this->_typeinfo, &this->_pool));
+                    }
                 }
             }
-
             // move to next row
             ++cur_slice;
         }

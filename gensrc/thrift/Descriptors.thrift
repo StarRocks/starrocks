@@ -501,6 +501,9 @@ struct TIcebergTable {
 
     // if serialize partition info throws exception, then use unserialized partitions
     6: optional map<i64, THdfsPartition> partitions
+
+    // Iceberg equality delete schema, used to support schema evolution
+    7: optional TIcebergSchema iceberg_equal_delete_schema
 }
 
 struct THudiTable {

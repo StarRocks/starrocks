@@ -437,9 +437,6 @@ void* StorageEngine::_pk_dump_thread_callback(void* arg) {
 
 #ifdef USE_STAROS
 void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* arg) {
-    if (is_as_cn()) {
-        return nullptr;
-    }
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif

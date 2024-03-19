@@ -25,10 +25,10 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
         if (boost::algorithm::to_lower_copy(imp_type) == TYPE_CLUCENE) {
             return InvertedImplementType::CLUCENE;
         } else {
-            return Status::InvertedIndexInvalidParams("Do not support imp_type : " + imp_type);
+            return Status::InvalidArgument("Do not support imp_type : " + imp_type);
         }
     } else {
-        return Status::InvertedIndexInvalidParams("Can not get inverted imp type");
+        return Status::InvalidArgument("Can not get inverted imp type");
     }
 }
 

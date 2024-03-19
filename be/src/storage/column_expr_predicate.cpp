@@ -184,8 +184,9 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     return false;
 }
 
-bool ColumnExprPredicate::ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) const {
-    return _expr_ctxs[0]->ngram_bloom_filter(bf, gram_num);
+bool ColumnExprPredicate::ngram_bloom_filter(const BloomFilter* bf,
+                                             const NgramBloomFilterReaderOptions& reader_options) const {
+    return _expr_ctxs[0]->ngram_bloom_filter(bf, reader_options);
 }
 
 Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -309,8 +310,8 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         }
     }
     auto* like_target = dynamic_cast<VectorizedLiteral*>(vectorized_function_call->get_child(1));
-    RETURN_IF(!like_target, Status::InvertedIndexNotSupport("Not supported like predicate parameters"));
-    ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr))
+    RETURN_IF(!like_target, Status::NotSupported("Not supported like predicate parameters"));
+    ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
     Slice padded_value(literal_col->get(0).get_slice());
     InvertedIndexQueryType query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
     roaring::Roaring roaring;

@@ -50,6 +50,9 @@ public:
     Status set_finished(RuntimeState* state) override;
     Status set_finishing(RuntimeState* state) override;
     Status set_cancelled(RuntimeState* state) override;
+    const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
+    RuntimeFilterProbeCollector* runtime_bloom_filters() override;
+    const RuntimeFilterProbeCollector* runtime_bloom_filters() const override;
     void set_precondition_ready(RuntimeState* state) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;

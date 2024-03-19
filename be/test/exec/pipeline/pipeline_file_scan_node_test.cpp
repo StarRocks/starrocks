@@ -89,8 +89,8 @@ public:
         _runtime_state->set_query_ctx(_query_ctx);
         _runtime_state->set_fragment_ctx(_fragment_ctx);
         _pool = _runtime_state->obj_pool();
-
-        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, false));
+        auto sink_dop = degree_of_parallelism;
+        _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop, false));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
 

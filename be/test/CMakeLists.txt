@@ -22,6 +22,9 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./connector_sink/hive_chunk_sink_test.cpp
+        ./connector_sink/iceberg_chunk_sink_test.cpp
+        ./connector_sink/file_chunk_sink_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
@@ -61,6 +64,7 @@ set(EXEC_FILES
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
         ./exec/csv_scanner_test.cpp
+        ./exec/orc_scanner_test.cpp
         ./exec/file_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scanner_test.cpp
@@ -137,6 +141,7 @@ set(EXEC_FILES
         ./exprs/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
+        ./formats/csv/csv_file_writer_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
@@ -156,7 +161,7 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
-        ./formats/orc/orc_chunk_writer_test.cpp
+        ./formats/orc/orc_file_writer_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/utils_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
@@ -169,6 +174,7 @@ set(EXEC_FILES
         ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./formats/parquet/column_converter_test.cpp
+        ./formats/parquet/parquet_file_writer_test.cpp
         ./formats/parquet/parquet_footer_test.cpp
         ./formats/parquet/parquet_cli_reader.h
         ./formats/parquet/parquet_cli_reader_test.cpp
@@ -233,6 +239,8 @@ set(EXEC_FILES
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
         ./storage/lake/metacache_test.cpp
+        ./storage/lake/compaction_scheduler_test.cpp
+        ./storage/lake/compaction_task_context_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -369,6 +377,7 @@ set(EXEC_FILES
         ./util/cidr_test.cpp
         ./util/coding_test.cpp
         ./util/core_local_test.cpp
+        ./util/core_local_counter_test.cpp
         ./util/countdown_latch_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp

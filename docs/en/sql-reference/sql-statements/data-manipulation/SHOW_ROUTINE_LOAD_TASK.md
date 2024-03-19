@@ -15,6 +15,7 @@ Shows the execution information of load tasks within a Routine Load job.
 - <RoutineLoadPrivNote />
 
 - For the relationship between a Routine Load job and the load tasks in it, see [Load data using Routine Load](../../../loading/RoutineLoad.md#basic-concepts)
+
 :::
 
 ## Syntax

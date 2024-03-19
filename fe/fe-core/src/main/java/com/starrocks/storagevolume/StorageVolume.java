@@ -82,6 +82,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public static String CREDENTIAL_MASK = "******";
 
+    private String dumpMaskedParams(Map<String, String> params) {
+        Gson gson = new Gson();
+        Map<String, String> maskedParams = new HashMap<>(params);
+        addMaskForCredential(maskedParams);
+        return gson.toJson(maskedParams);
+    }
+
     public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) throws DdlException {
         this.id = id;
@@ -95,8 +102,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         preprocessAuthenticationIfNeeded(configurationParams);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
         if (!isValidCloudConfiguration()) {
-            Gson gson = new Gson();
-            throw new SemanticException("Storage params is not valid " + gson.toJson(params));
+            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
         }
         validateStorageVolumeConstraints();
     }
@@ -120,7 +126,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             if (enablePartitionedPrefix) {
                 for (String location : locations) {
                     URI uri = URI.create(location);
-                    if (!uri.getPath().isEmpty()) {
+                    if (!uri.getPath().isEmpty() && !"/".equals(uri.getPath())) {
                         throw new DdlException(String.format(
                                 "Storage volume '%s' has '%s'='true', the location '%s'" +
                                         " should not contain sub path after bucket name!",
@@ -136,8 +142,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams, true);
         if (!isValidCloudConfiguration()) {
-            Gson gson = new Gson();
-            throw new SemanticException("Storage params is not valid " + gson.toJson(newParams));
+            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(newParams));
         }
         this.params = newParams;
     }
@@ -211,15 +216,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public void getProcNodeData(BaseProcResult result) {
-        Gson gson = new Gson();
-        Map<String, String> p = new HashMap<>(params);
-        addMaskForCredential(p);
         result.addRow(Lists.newArrayList(name,
                 svt.name(),
                 String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                         .getDefaultStorageVolumeId().equals(id)),
                 Joiner.on(", ").join(locations),
-                String.valueOf(gson.toJson(p)),
+                dumpMaskedParams(params),
                 String.valueOf(enabled),
                 String.valueOf(comment)));
     }

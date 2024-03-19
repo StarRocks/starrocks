@@ -1061,6 +1061,8 @@ void RowReaderImpl::startNextStripe() {
             throw ParseError(msg.str());
         }
 
+        rowsInCurrentStripe = currentStripeInfo.numberofrows();
+
         bool skipStripe = false;
         bool skipStripeByScanRangeMisMatch = false;
         if (sargsApplier) {
@@ -1093,7 +1095,6 @@ void RowReaderImpl::startNextStripe() {
             contents->stream->releaseToOffset(currentStripeInfo.offset());
         }
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
-        rowsInCurrentStripe = currentStripeInfo.numberofrows();
         // We need to check this stripe is already set in shared buffer(tiny stripe optimize) to avoid shared buffer overlap
         if (isIOCoalesceEnabled &&
             !contents->stream->isAlreadyCollectedInSharedBuffer(currentStripeInfo.offset(), stripeSize)) {

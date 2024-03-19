@@ -23,6 +23,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -38,6 +39,7 @@ import org.junit.Test;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 
 public class PseudoClusterTest {
@@ -86,15 +88,10 @@ public class PseudoClusterTest {
             } catch (Exception e) {
                 Assert.assertTrue(e.getMessage().contains("column_with_row storage type must have some non-key columns"));
             }
-            try {
-                stmt.execute("create table test2 ( pk bigint NOT NULL, v array<int> NOT NULL) " +
-                        "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
-                        "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
-                        "\"storage_type\" = \"column_with_row\")");
-                Assert.fail("should throw exception");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("column_with_row storage type does not support complex type"));
-            }
+            stmt.execute("create table test2 ( pk bigint NOT NULL, v1 array<int> NOT NULL, v2 bitmap NOT NULL) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
+                    "\"storage_type\" = \"column_with_row\")");
             stmt.execute("create table test3 ( pk bigint NOT NULL, v int NOT NULL) " +
                     "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
                     "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
@@ -125,8 +122,9 @@ public class PseudoClusterTest {
             try {
                 stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
                 Assert.fail("expected exception was not occured.");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
+            } catch (SQLException e) {
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
 
             // client prepared stmt
@@ -160,8 +158,9 @@ public class PseudoClusterTest {
             try {
                 stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
                 Assert.fail("expected exception was not occured.");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
+            } catch (SQLException e) {
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.toString(), e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
 
             // client prepared stmt

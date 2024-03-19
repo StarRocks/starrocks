@@ -62,7 +62,7 @@ INTO TABLE <table_name>
 [COLUMNS TERMINATED BY "<column_separator>"]
 [ROWS TERMINATED BY "<row_separator>"]
 [FORMAT AS "CSV | Parquet | ORC"]
-[(fomat_type_options)]
+[(format_type_options)]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -979,7 +979,7 @@ LOAD LABEL test_db.label10
 >
 > - The `hll_empty` function is used to fill the specified default value into `col3` of `table10`.
 
-For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) and [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md).
+For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/scalar-functions/hll_hash.md) and [hll_empty](../../sql-functions/scalar-functions/hll_empty.md).
 
 #### Extract partition field values from file path
 

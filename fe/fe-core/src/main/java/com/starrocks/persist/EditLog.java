@@ -105,6 +105,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -325,6 +326,11 @@ public class EditLog {
                 case OperationType.OP_DISABLE_TABLE_RECOVERY: {
                     DisableTableRecoveryInfo disableTableRecoveryInfo = (DisableTableRecoveryInfo) journal.getData();
                     globalStateMgr.getLocalMetastore().replayDisableTableRecovery(disableTableRecoveryInfo);
+                    break;
+                }
+                case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
+                    DisablePartitionRecoveryInfo disableRecoveryInfo = (DisablePartitionRecoveryInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDisablePartitionRecovery(disableRecoveryInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_PARTITION: {
@@ -1004,6 +1010,17 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     break;
                 }
+                case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
+                    ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
+                    // todo(ywb): refresh connector table histogram statistics cache
+                    break;
+                }
+                case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
+                    ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
@@ -1095,6 +1112,10 @@ public class EditLog {
                 case OperationType.OP_DROP_ROLE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
                     globalStateMgr.getAuthorizationMgr().replayDropRole(info);
+                    break;
+                }
+                case OperationType.OP_AUTH_UPGRADE_V2: {
+                    // for compatibility reason, just ignore the auth upgrade log
                     break;
                 }
                 case OperationType.OP_MV_JOB_STATE: {
@@ -1380,6 +1401,10 @@ public class EditLog {
 
     public void logDropTable(DropInfo info) {
         logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
+    }
+
+    public void logDisablePartitionRecovery(long partitionId) {
+        logEdit(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId));
     }
 
     public void logDisableTableRecovery(List<Long> tableIds) {
@@ -1781,6 +1806,14 @@ public class EditLog {
 
     public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
         logEdit(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, meta);
+    }
+
+    public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, meta);
+    }
+
+    public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {

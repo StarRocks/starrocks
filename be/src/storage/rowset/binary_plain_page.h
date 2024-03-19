@@ -123,7 +123,7 @@ public:
 
     void reset() override {
         _offsets.clear();
-        _buffer.reserve(_options.data_page_size == 0 ? 65536 : _options.data_page_size);
+        _buffer.reserve(_options.data_page_size == 0 ? config::data_page_size : _options.data_page_size);
         _buffer.resize(_reserved_head_size);
         _next_offset = 0;
         _size_estimate = sizeof(uint32_t);

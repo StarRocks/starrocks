@@ -170,6 +170,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
+import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
@@ -438,7 +440,8 @@ public class GlobalStateMgr {
 
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
-    private final SlotProvider slotProvider = new SlotProvider();
+    private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
+    private final SlotProvider localSlotProvider = new LocalSlotProvider();
 
     private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
     private final RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
@@ -702,7 +705,7 @@ public class GlobalStateMgr {
         });
 
         this.replicationMgr = new ReplicationMgr();
-        nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
+        nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
     }
@@ -1195,7 +1198,7 @@ public class GlobalStateMgr {
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
 
         // heartbeat mgr
-        heartbeatMgr.setLeader(nodeMgr.getToken(), epoch);
+        heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
         heartbeatMgr.start();
         // New load scheduler
         pendingLoadTaskScheduler.start();
@@ -2379,8 +2382,12 @@ public class GlobalStateMgr {
         return slotManager;
     }
 
-    public SlotProvider getSlotProvider() {
-        return slotProvider;
+    public GlobalSlotProvider getGlobalSlotProvider() {
+        return globalSlotProvider;
+    }
+
+    public SlotProvider getLocalSlotProvider() {
+        return localSlotProvider;
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {

@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
@@ -41,24 +42,44 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class UpdatePlanner {
+
     public ExecPlan plan(UpdateStmt updateStmt, ConnectContext session) {
         QueryRelation query = updateStmt.getQueryStatement().getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
+
+        List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
+        Table targetTable = updateStmt.getTable();
+
+        //1. Cast output columns type to target type
+        OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
+        optExprBuilder = castOutputColumnsTypeToTargetColumns(columnRefFactory, targetTable,
+                colNames, outputColumns, optExprBuilder);
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
@@ -72,23 +93,23 @@ public class UpdatePlanner {
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
-            Table table = updateStmt.getTable();
-            long tableId = table.getId();
+            long tableId = targetTable.getId();
             Optimizer optimizer = new Optimizer();
             optimizer.setUpdateTableId(tableId);
+
             OptExpression optimizedPlan = optimizer.optimize(
                     session,
-                    logicalPlan.getRoot(),
+                    optExprBuilder.getRoot(),
                     new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    new ColumnRefSet(outputColumns),
                     columnRefFactory);
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
-                    logicalPlan.getOutputColumn(), columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
+                    outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-            for (Column column : table.getFullSchema()) {
+            for (Column column : targetTable.getFullSchema()) {
                 if (updateStmt.usePartialUpdate() && !column.isGeneratedColumn() &&
                         !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
                     // When using partial update, skip columns which aren't key column and not be assign, except for
@@ -109,12 +130,12 @@ public class UpdatePlanner {
             }
             olapTuple.computeMemLayout();
 
-            if (table instanceof OlapTable) {
+            if (targetTable instanceof OlapTable) {
                 List<Long> partitionIds = Lists.newArrayList();
-                for (Partition partition : table.getPartitions()) {
+                for (Partition partition : targetTable.getPartitions()) {
                     partitionIds.add(partition.getId());
                 }
-                OlapTable olapTable = (OlapTable) table;
+                OlapTable olapTable = (OlapTable) targetTable;
                 DataSink dataSink =
                         new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
                                 olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
@@ -139,11 +160,11 @@ public class UpdatePlanner {
                 } catch (UserException e) {
                     throw new SemanticException(e.getMessage());
                 }
-            } else if (table instanceof SystemTable) {
-                DataSink dataSink = new SchemaTableSink((SystemTable) table);
+            } else if (targetTable instanceof SystemTable) {
+                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable);
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
-                throw new SemanticException("Unsupported table type: " + table.getClass().getName());
+                throw new SemanticException("Unsupported table type: " + targetTable.getClass().getName());
             }
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
@@ -153,7 +174,7 @@ public class UpdatePlanner {
                     sinkFragment
                             .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
                 }
-                if (table instanceof OlapTable) {
+                if (targetTable instanceof OlapTable) {
                     sinkFragment.setHasOlapTableSink();
                 }
                 sinkFragment.setForceSetTableSinkDop();
@@ -169,5 +190,49 @@ public class UpdatePlanner {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
         }
+    }
+
+    /**
+     * Cast output columns type to target type.
+     * @param columnRefFactory :  column ref factory of update stmt.
+     * @param targetTable: target table of update stmt.
+     * @param colNames: column names of update stmt.
+     * @param outputColumns: output columns of update stmt.
+     * @param root: root logical plan of update stmt.
+     * @return: new root logical plan with cast operator.
+     */
+    private static OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
+                                                                      Table targetTable,
+                                                                      List<String> colNames,
+                                                                      List<ColumnRefOperator> outputColumns,
+                                                                      OptExprBuilder root) {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
+        Preconditions.checkState(colNames.size() == outputColumns.size(), "Column name's size %s should be equal " +
+                        "to output column refs' size %s", colNames.size(), outputColumns.size());
+
+        for (int columnIdx = 0; columnIdx < outputColumns.size(); ++columnIdx) {
+            ColumnRefOperator outputColumn = outputColumns.get(columnIdx);
+            String colName = colNames.get(columnIdx);
+            // It's safe to use getColumn directly, because the column name's case-insensitive is the same with table's schema.
+            Column column = targetTable.getColumn(colName);
+            Preconditions.checkState(column != null, "Column %s not found in table %s", colName,
+                    targetTable.getName());
+            if (!column.getType().matchesType(outputColumn.getType())) {
+                // This should be always true but add a check here to avoid updating the wrong column type.
+                if (!column.getType().isFullyCompatible(outputColumn.getType())) {
+                    throw new SemanticException(String.format("Output column type %s is not compatible table column type: %s",
+                            outputColumn.getType(), column.getType()));
+                }
+                ColumnRefOperator k = columnRefFactory.create(column.getName(), column.getType(), column.isAllowNull());
+                ScalarOperator castOperator = new CastOperator(column.getType(), outputColumn, true);
+                columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
+                outputColumns.set(columnIdx, k);
+            } else {
+                columnRefMap.put(outputColumn, outputColumn);
+            }
+        }
+        return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 }

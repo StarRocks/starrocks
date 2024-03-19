@@ -508,16 +508,12 @@ Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
                     std::string src_index_path = IndexDescriptor::inverted_index_file_path(
                             _rowset_path, rowset_id().to_string(), i, index.index_id());
 
-                    if (!fs::create_directories(dst_index_path).ok()) {
-                        LOG(WARNING) << "Error to create inverted index dir " << dst_index_path
-                                     << ". errno=" << std::strerror(Errno::no());
-                        return Status::IOError(fmt::format("Error to create inverted index dir {}", dst_index_path));
-                    }
                     std::set<std::string> files;
                     RETURN_IF_ERROR(fs::list_dirs_files(src_index_path, nullptr, &files));
                     for (const auto& file : files) {
                         auto src_absolute_path = fmt::format("{}/{}", src_index_path, file);
-                        auto dst_absolute_path = fmt::format("{}/{}", dst_index_path, file);
+                        auto dst_absolute_path =
+                                fmt::format("{}/{}_{}_{}_{}", dir, rowset_id().to_string(), i, index.index_id(), file);
 
                         if (!fs::copy_file(src_absolute_path, dst_absolute_path).ok()) {
                             LOG(WARNING) << "Error to copy index. src:" << src_absolute_path

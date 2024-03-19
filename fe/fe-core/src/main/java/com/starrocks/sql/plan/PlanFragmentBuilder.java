@@ -391,7 +391,35 @@ public class PlanFragmentBuilder {
         }
 
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
-            return visit(optExpression, context);
+            PlanFragment fragment = visit(optExpression, context);
+            computeFragmentCost(context, fragment);
+            return fragment;
+        }
+
+        private void computeFragmentCost(ExecPlan context, PlanFragment fragment) {
+            for (PlanFragment child : fragment.getChildren()) {
+                computeFragmentCost(context, child);
+            }
+            OptExpression output = getOptExpressionFromPlanNode(context, fragment.getPlanRoot());
+
+            // scan fragment
+            if (fragment.getLeftMostNode() instanceof ScanNode) {
+                fragment.setFragmentCost(output.getCost());
+                return;
+            }
+
+            List<OptExpression> inputs = fragment.getChildren().stream().map(PlanFragment::getPlanRoot)
+                    .map(p -> getOptExpressionFromPlanNode(context, p)).collect(Collectors.toList());
+
+            double childCost = inputs.stream().map(OptExpression::getCost).reduce(Double::sum).orElse(0D);
+            fragment.setFragmentCost(output.getCost() - childCost);
+        }
+
+        private OptExpression getOptExpressionFromPlanNode(ExecPlan context, PlanNode node) {
+            if (context.getOptExpression(node.getId().asInt()) == null && node instanceof ProjectNode) {
+                node = node.getChild(0);
+            }
+            return context.getOptExpression(node.getId().asInt());
         }
 
         @Override
@@ -600,9 +628,13 @@ public class PlanFragmentBuilder {
             });
 
 
-            for (SlotId sid : projectMap.keySet()) {
-                SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(sid.asInt());
-                slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
+            for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
+                SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(entry.getKey().asInt());
+                if (entry.getValue().isLiteral() && !entry.getValue().isNullable()) {
+                    slotDescriptor.setIsNullable(false);
+                } else {
+                    slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
+                }
             }
             tupleDescriptor.computeMemLayout();
 
@@ -724,6 +756,7 @@ public class PlanFragmentBuilder {
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
             scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
+            scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
             // set tablet
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
@@ -1854,7 +1887,7 @@ public class PlanFragmentBuilder {
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
                 if (!withLocalShuffle && node.isMergedLocalAgg() &&
                         hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
+                    aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
                 // Local && un-split aggregate meanings only execute local pre-aggregation, we need promise
@@ -1904,7 +1937,7 @@ public class PlanFragmentBuilder {
 
                 // Check colocate for one-phase local agg.
                 if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
+                    aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isDistinctGlobal()) {
                 aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
@@ -1919,7 +1952,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setIntermediateTuple();
 
                 if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
+                    aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
             } else if (node.getType().isDistinctLocal()) {
                 // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;

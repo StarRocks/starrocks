@@ -146,8 +146,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 // create mv if needed
                 if (mv != null && !mv.isEmpty()) {
                     LOG.info("start to create mv:" + mv);
-                    ExecPlan mvPlan = getExecPlan(mv);
-                    List<String> outputNames = mvPlan.getColNames();
                     String properties = this.properties != null ? "PROPERTIES (\n" +
                             this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +

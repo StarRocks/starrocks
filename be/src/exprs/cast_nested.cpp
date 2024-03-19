@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "column/column_helper.h"
+#include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "exprs/cast_expr.h"
@@ -120,6 +121,9 @@ StatusOr<ColumnPtr> CastArrayExpr::evaluate_checked(ExprContext* context, Chunk*
             ArrayColumn::create(std::move(casted_element_column),
                                 ColumnHelper::as_column<UInt32Column>(array_column->offsets_column()->clone_shared()));
     RETURN_IF_ERROR(casted_array->unfold_const_children(_type));
+    if (orig_column->is_constant()) {
+        return ConstColumn::create(casted_array, orig_column->size());
+    }
     if (!orig_column->is_nullable()) {
         return std::move(casted_array);
     }

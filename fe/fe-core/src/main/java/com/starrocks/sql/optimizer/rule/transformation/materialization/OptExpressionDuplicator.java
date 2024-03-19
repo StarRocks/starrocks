@@ -58,7 +58,7 @@ import java.util.Set;
 public class OptExpressionDuplicator {
     private final ColumnRefFactory columnRefFactory;
     // old ColumnRefOperator -> new ColumnRefOperator
-    private final Map<ColumnRefOperator, ScalarOperator> columnMapping;
+    private final Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private final ReplaceColumnRefRewriter rewriter;
     private final Table partitionByTable;
     private final Column partitionColumn;
@@ -74,19 +74,28 @@ public class OptExpressionDuplicator {
         this.partialPartitionRewrite = !materializationContext.getMvPartitionNamesToRefresh().isEmpty();
     }
 
+    public OptExpressionDuplicator(ColumnRefFactory columnRefFactory) {
+        this.columnRefFactory = columnRefFactory;
+        this.columnMapping = Maps.newHashMap();
+        this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
+        this.partitionByTable = null;
+        this.partitionColumn = null;
+        this.partialPartitionRewrite = false;
+    }
+
     public OptExpression duplicate(OptExpression source) {
         OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor();
         return source.getOp().accept(visitor, source, null);
     }
 
-    public Map<ColumnRefOperator, ScalarOperator> getColumnMapping() {
+    public Map<ColumnRefOperator, ColumnRefOperator> getColumnMapping() {
         return columnMapping;
     }
 
     public List<ColumnRefOperator> getMappedColumns(List<ColumnRefOperator> originColumns) {
         List<ColumnRefOperator> newColumnRefs = Lists.newArrayList();
         for (ColumnRefOperator columnRef : originColumns) {
-            newColumnRefs.add((ColumnRefOperator) columnMapping.get(columnRef));
+            newColumnRefs.add(columnMapping.get(columnRef));
         }
         return newColumnRefs;
     }
@@ -118,7 +127,7 @@ public class OptExpressionDuplicator {
             ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = new ImmutableMap.Builder<>();
             for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
                 ColumnRefOperator key = entry.getValue();
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(key,
+                ColumnRefOperator mapped = columnMapping.computeIfAbsent(key,
                         k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 columnRefFactory.updateColumnRefToColumns(mapped, columnRefFactory.getColumn(key),
                         columnRefFactory.getColumnRefToTable().get(key));
@@ -193,7 +202,7 @@ public class OptExpressionDuplicator {
             LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
             List<ColumnRefOperator> newGroupKeys = Lists.newArrayList();
             for (ColumnRefOperator groupKey : aggregationOperator.getGroupingKeys()) {
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(groupKey,
+                ColumnRefOperator mapped = columnMapping.computeIfAbsent(groupKey,
                         k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 newGroupKeys.add(mapped);
             }
@@ -201,7 +210,7 @@ public class OptExpressionDuplicator {
             aggregationBuilder.setGroupingKeys(newGroupKeys);
             Map<ColumnRefOperator, CallOperator> newAggregates = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
-                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(entry.getKey(),
+                ColumnRefOperator mapped = columnMapping.computeIfAbsent(entry.getKey(),
                         k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                 ScalarOperator newValue = rewriter.rewrite(entry.getValue());
                 Preconditions.checkState(newValue instanceof CallOperator);
@@ -213,7 +222,7 @@ public class OptExpressionDuplicator {
             List<ColumnRefOperator> partitionColumns = aggregationOperator.getPartitionByColumns();
             if (partitionColumns != null) {
                 for (ColumnRefOperator columnRef : partitionColumns) {
-                    ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(columnRef,
+                    ColumnRefOperator mapped = columnMapping.computeIfAbsent(columnRef,
                             k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
                     newPartitionColumns.add(mapped);
                 }
@@ -272,13 +281,13 @@ public class OptExpressionDuplicator {
         private HashDistributionSpec processHashDistributionSpec(
                 HashDistributionSpec originSpec,
                 ColumnRefFactory columnRefFactory,
-                Map<ColumnRefOperator, ScalarOperator> columnMapping) {
+                Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
 
             // HashDistributionDesc
             List<DistributionCol> newColumns = Lists.newArrayList();
             for (DistributionCol column : originSpec.getShuffleColumns()) {
                 ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(column.getColId());
-                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator).cast();
+                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator);
                 Preconditions.checkNotNull(newRefOperator);
                 newColumns.add(new DistributionCol(newRefOperator.getId(), column.isNullStrict()));
             }
@@ -338,7 +347,7 @@ public class OptExpressionDuplicator {
                     columnMapping.put(column, newColumnRef);
                 }
                 ScalarOperator newValue = rewriter.rewrite(entry.getValue());
-                newColumnRefMap.put((ColumnRefOperator) columnMapping.get(column), newValue);
+                newColumnRefMap.put(columnMapping.get(column), newValue);
             }
             return newColumnRefMap;
         }

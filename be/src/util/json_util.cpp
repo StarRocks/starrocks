@@ -165,7 +165,7 @@ void JsonFlater::flatten(const Column* json_column, std::vector<ColumnPtr>* resu
         }
         for (size_t k = 0; k < _flat_paths.size(); k++) {
             auto st = obj->get_obj(_flat_paths[k]);
-            if (st.ok() && !st.value().is_null()) {
+            if (st.ok() && !st.value().is_none()) {
                 flat_jsons[k]->append(st.value());
                 flat_nulls[k]->append(0);
             } else {

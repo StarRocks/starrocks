@@ -44,7 +44,7 @@ INSERT INTO `t0` (`region`, `order_date`, `income`, `ship_mode`, `ship_code`) VA
 ('CHINA', '2022-01-04', 98765, 150, 15),
 ('JAPAN', '2022-01-01', 23456, 75, null);
 
-set enable_jit = true;
+set jit_level = -1;
 
 select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 when region = 'China' then 2 end) = 2 order by 1,2,3,4,5;
 select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 when region = 'China' then 2 end) = 2 order by 1,2,3,4,5;

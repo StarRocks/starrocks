@@ -42,7 +42,7 @@ constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 48 * 1024;
 constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
 constexpr static const char* PARQUET_EMAIC_NUMBER = "PARE";
 
-class FileMetaData;
+using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 
 class FileReader {
 public:
@@ -65,8 +65,10 @@ private:
 
     void _build_metacache_key();
 
+    std::shared_ptr<MetaHelper> _build_meta_helper();
+
     // parse footer of parquet file
-    Status _parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size);
+    Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
 
     void _prepare_read_columns();
 
@@ -124,10 +126,9 @@ private:
     bool _no_materialized_column_scan = false;
 
     BlockCache* _cache = nullptr;
-    FileMetaData* _file_metadata = nullptr;
-    bool _is_metadata_cached = false;
     std::string _metacache_key;
     CacheHandle _cache_handle;
+    FileMetaDataPtr _file_metadata = nullptr;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;

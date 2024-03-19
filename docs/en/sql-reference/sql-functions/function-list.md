@@ -4,9 +4,9 @@ displayed_sidebar: "English"
 
 # Function list
 
-StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions.
+StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions. StarRocks also provides [Hive Bitmap UDFs](../../integrations/hive_bitmap_udf.md). You can generate Bitmap data in Hive and then load Bitmap into StarRocks. You can also export the Bitmap data generated in StarRocks to Hive for other systems to use.
 
-You can find a function based on the following categories:
+You can find a built-in function based on the following categories:
 
 - [Function list](#function-list)
   - [Aggregate functions](#aggregate-functions)
@@ -16,7 +16,7 @@ You can find a function based on the following categories:
   - [Bitmap functions](#bitmap-functions)
   - [Conditional functions](#conditional-functions)
   - [Cryptographic functions](#cryptographic-functions)
-  - [Date functions](#date-functions)
+  - [Date and time functions](#date-and-time-functions)
   - [Geographic functions](#geographic-functions)
   - [Hash functions](#hash-functions)
   - [JSON functions](#json-functions)
@@ -43,11 +43,9 @@ You can find a function based on the following categories:
 - [covar_samp](./aggregate-functions/covar_samp.md)
 - [count](./aggregate-functions/count.md)
 - [count_if](./aggregate-functions/count_if.md)
-- [group_concat](./aggregate-functions/group_concat.md)
+- [group_concat](./string-functions/group_concat.md)
 - [grouping](./aggregate-functions/grouping.md)
 - [grouping_id](./aggregate-functions/grouping_id.md)
-- [hll_empty](./aggregate-functions/hll_empty.md)
-- [hll_hash](./aggregate-functions/hll_hash.md)
 - [hll_raw_agg](./aggregate-functions/hll_raw_agg.md)
 - [hll_union](./aggregate-functions/hll_union.md)
 - [hll_union_agg](./aggregate-functions/hll_union_agg.md)
@@ -61,7 +59,7 @@ You can find a function based on the following categories:
 - [percentile_cont](./aggregate-functions/percentile_cont.md)
 - [percentile_disc](./aggregate-functions/percentile_disc.md)
 - [retention](./aggregate-functions/retention.md)
-- [stddev，stddev_pop](./aggregate-functions/stddev.md)
+- [stddev, stddev_pop](./aggregate-functions/stddev.md)
 - [stddev_samp](./aggregate-functions/stddev_samp.md)
 - [sum](./aggregate-functions/sum.md)
 - [variance, variance_pop, var_pop](./aggregate-functions/variance.md)
@@ -101,7 +99,7 @@ You can find a function based on the following categories:
 - [array_unique_agg](./array-functions/array_unique_agg.md)
 - [cardinality](./array-functions/cardinality.md)
 - [element_at](./array-functions/element_at.md)
-- [reverse](./array-functions/reverse.md)
+- [reverse](./string-functions/reverse.md)
 - [unnest](./array-functions/unnest.md)
 
 ## Binary functions
@@ -173,13 +171,13 @@ You can find a function based on the following categories:
 - [sm3](./crytographic-functions/sm3.md)
 - [to_base64](./crytographic-functions/from_base64.md)
 
-## Date functions
+## Date and time functions
 
 - [add_months](./date-time-functions/add_months.md)
 - [adddate](./date-time-functions/adddate.md)
 - [convert_tz](./date-time-functions/convert_tz.md)
-- [current_date，curdate](./date-time-functions/curdate.md)
-- [current_time，curtime](./date-time-functions/curtime.md)
+- [current_date, curdate](./date-time-functions/curdate.md)
+- [current_time, curtime](./date-time-functions/curtime.md)
 - [current_timestamp](./date-time-functions/current_timestamp.md)
 - [date](./date-time-functions/date.md)
 - [date_add, adddate](./date-time-functions/date_add.md)
@@ -209,6 +207,7 @@ You can find a function based on the following categories:
 - [makedate](./date-time-functions/makedate.md)
 - [microseconds_add](./date-time-functions/microseconds_add.md)
 - [microseconds_sub](./date-time-functions/microseconds_sub.md)
+- [milliseconds_diff](./date-time-functions/milliseconds_diff.md)
 - [minute](./date-time-functions/minute.md)
 - [minutes_add](./date-time-functions/minutes_add.md)
 - [minutes_diff](./date-time-functions/minutes_diff.md)
@@ -420,6 +419,8 @@ You can find a function based on the following categories:
 ## Scalar functions
 
 - [hll_cardinality](./scalar-functions/hll_cardinality.md)
+- [hll_empty](./scalar-functions/hll_empty.md)
+- [hll_hash](./scalar-functions/hll_hash.md)
 
 ## Struct functions
 

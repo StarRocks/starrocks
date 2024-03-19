@@ -807,6 +807,7 @@ set(STARROCKS_LINK_LIBS
     Common
     Column
     Connector
+    ConnectorSink
     Exec
     Exprs
     FileSystem
@@ -1058,6 +1059,7 @@ ENDFUNCTION()
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
+add_subdirectory(${SRC_DIR}/connector_sink)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)
@@ -1117,6 +1119,7 @@ install(FILES
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j2.properties
     ${BASE_DIR}/../conf/udf_security.policy
+    ${BASE_DIR}/../conf/core-site.xml
     DESTINATION ${OUTPUT_DIR}/conf)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")

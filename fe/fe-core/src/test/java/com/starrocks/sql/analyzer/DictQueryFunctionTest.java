@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
@@ -148,6 +150,14 @@ public class DictQueryFunctionTest {
         testDictMappingFunction(
                 "SELECT dict_mapping('dict.dict_table', 'key', null, 'value', true);",
                 "dict_mapping function params not match expected");
+
+        Config.run_mode = "shared_data";
+        RunMode.detectRunMode();
+        testDictMappingFunction(
+                "SELECT dict_mapping('dict.dict_table', 'key', null, 'value', true);",
+                "dict_mapping function do not support shared data mode");
+        Config.run_mode = "shared_nothing";
+        RunMode.detectRunMode();
     }
 
     private void testDictMappingFunction(String sql, String expectException) {

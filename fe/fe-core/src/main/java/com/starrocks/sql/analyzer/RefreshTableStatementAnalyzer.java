@@ -31,7 +31,7 @@ public class RefreshTableStatementAnalyzer {
         new RefreshTableStatementAnalyzer.RefreshTableStatementAnalyzerVisitor().visit(statement, context);
     }
 
-    static class RefreshTableStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class RefreshTableStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         private final MetadataMgr metadataMgr;
 
         public RefreshTableStatementAnalyzerVisitor() {

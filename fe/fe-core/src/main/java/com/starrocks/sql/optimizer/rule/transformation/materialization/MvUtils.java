@@ -29,6 +29,7 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -83,6 +84,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -108,6 +110,8 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
+
+    public static final int OP_UNION_ALL_BIT = 1 << 0;
 
     public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
                                                       int maxLevel,
@@ -431,7 +435,7 @@ public class MvUtils {
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, inlineView);
+                new TransformerContext(columnRefFactory, connectContext, inlineView, null);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
@@ -465,6 +469,30 @@ public class MvUtils {
         };
         expression.getOp().accept(joinCollector, expression, null);
         return joinExprs;
+    }
+
+    public static void splitPredicate(
+            Set<ScalarOperator> predicates,
+            Set<String> equivalenceColumns,
+            Set<String> nonEquivalenceColumns) {
+        for (ScalarOperator operator : predicates) {
+            if (!MVUtils.isPredicateUsedForPrefixIndex(operator)) {
+                continue;
+            }
+
+            if (MVUtils.isEquivalencePredicate(operator)) {
+                equivalenceColumns.add(operator.getColumnRefs().get(0).getName().toLowerCase());
+            } else {
+                nonEquivalenceColumns.add(operator.getColumnRefs().get(0).getName().toLowerCase());
+            }
+        }
+    }
+
+    public static Set<ScalarOperator> getAllValidPredicatesFromScans(OptExpression root) {
+        List<LogicalScanOperator> scanOperators = getScanOperator(root);
+        Set<ScalarOperator> predicates = Sets.newHashSet();
+        scanOperators.stream().forEach(scanOperator -> predicates.addAll(Utils.extractConjuncts(scanOperator.getPredicate())));
+        return predicates.stream().filter(MvUtils::isValidPredicate).collect(Collectors.toSet());
     }
 
     // get all predicates within and below root
@@ -1182,5 +1210,28 @@ public class MvUtils {
         builder.withOperator(logicalTree.getOp());
         Operator newOp = builder.build();
         return OptExpression.create(newOp, inputs);
+    }
+
+    public static void setAppliedUnionAllRewrite(Operator op) {
+        int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
+        op.setOpRuleMask(opRuleMask);
+    }
+
+    public static boolean isAppliedUnionAllRewrite(Operator op) {
+        int opRuleMask = op.getOpRuleMask();
+        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
+    }
+
+    public static ParseNode getQueryAst(String query) {
+        try {
+            List<StatementBase> statementBases =
+                    com.starrocks.sql.parser.SqlParser.parse(query, new com.starrocks.qe.SessionVariable());
+            Preconditions.checkState(statementBases.size() == 1);
+            StatementBase stmt = statementBases.get(0);
+            return stmt;
+        } catch (ParsingException parsingException) {
+            LOG.warn("Parse query {} failed:{}", query, parsingException);
+        }
+        return null;
     }
 }

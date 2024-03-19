@@ -78,6 +78,7 @@ public:
     bool can_estimate_mem_usage() const override { return true; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
+    void _init_chunk(ChunkPtr* chunk, size_t n) override;
 
 private:
     const HiveDataSourceProvider* _provider;
@@ -134,7 +135,7 @@ private:
     bool _no_data = false;
 
     int _min_max_tuple_id = 0;
-    TupleDescriptor* _min_max_tuple_desc = nullptr;
+    const TupleDescriptor* _min_max_tuple_desc = nullptr;
 
     // materialized columns.
     std::vector<SlotDescriptor*> _materialize_slots;
@@ -145,6 +146,9 @@ private:
 
     // iceberg equality delete column slots.
     std::vector<SlotDescriptor*> _equality_delete_slots;
+
+    // iceberg equality delete column tuple desc.
+    TupleDescriptor* _delete_column_tuple_desc;
 
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;

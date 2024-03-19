@@ -30,13 +30,19 @@ namespace starrocks {
     stat.write_bytes += bytes;                  \
     stat.write_time_ns += time_ns
 
-#define ASSERT_IO_STAT_EQ(expect, actual)                \
-    ASSERT_EQ(expect.read_ops, actual.read_ops);         \
-    ASSERT_EQ(expect.read_bytes, actual.read_bytes);     \
-    ASSERT_EQ(expect.read_time_ns, actual.read_time_ns); \
-    ASSERT_EQ(expect.write_ops, actual.write_ops);       \
-    ASSERT_EQ(expect.write_bytes, actual.write_bytes);   \
-    ASSERT_EQ(expect.write_time_ns, actual.write_time_ns)
+#define ADD_SYNC_IO_STAT(stat, time_ns) \
+    stat.sync_ops += 1;                 \
+    stat.sync_time_ns += time_ns
+
+#define ASSERT_IO_STAT_EQ(expect, actual)                  \
+    ASSERT_EQ(expect.read_ops, actual.read_ops);           \
+    ASSERT_EQ(expect.read_bytes, actual.read_bytes);       \
+    ASSERT_EQ(expect.read_time_ns, actual.read_time_ns);   \
+    ASSERT_EQ(expect.write_ops, actual.write_ops);         \
+    ASSERT_EQ(expect.write_bytes, actual.write_bytes);     \
+    ASSERT_EQ(expect.write_time_ns, actual.write_time_ns); \
+    ASSERT_EQ(expect.sync_ops, actual.sync_ops);           \
+    ASSERT_EQ(expect.sync_time_ns, actual.sync_time_ns)
 
 TEST(IOProfilerTest, test_tls_io) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 1);
@@ -62,6 +68,11 @@ TEST(IOProfilerTest, test_tls_io) {
     ADD_READ_IO_STAT(expect, 1048576, 1000000);
     auto actual4 = scope.current_scoped_tls_io();
     ASSERT_IO_STAT_EQ(expect, actual4);
+
+    IOProfiler::add_sync(9883);
+    ADD_SYNC_IO_STAT(expect, 9883);
+    auto actual5 = scope.current_scoped_tls_io();
+    ASSERT_IO_STAT_EQ(expect, actual5);
 }
 
 TEST(IOProfilerTest, test_context_io) {
@@ -104,6 +115,20 @@ TEST(IOProfilerTest, test_context_io) {
     ASSERT_IO_STAT_EQ(expect, scope.current_context_io());
     IOProfiler::stop();
     ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
+}
+
+TEST(IOProfilerTest, test_profile_and_get_topn_stats) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 2);
+    auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
+    ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_ALL));
+    IOProfiler::add_read(4, 4000);
+    ADD_READ_IO_STAT(expect, 4, 0);
+    IOProfiler::add_write(4, 4000);
+    ADD_WRITE_IO_STAT(expect, 4, 0);
+    IOProfiler::stop();
+    ASSERT_FALSE(IOProfiler::is_empty());
+    auto ret = IOProfiler::profile_and_get_topn_stats_str("all", 1, 1);
+    ASSERT_TRUE(IOProfiler::is_empty());
 }
 
 } // namespace starrocks
