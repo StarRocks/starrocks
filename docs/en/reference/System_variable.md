@@ -170,6 +170,12 @@ Whether to enable low cardinality optimization. After this feature is enabled, t
 
 Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
 
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* Description: Specifies the maximum number of candidate materialized views allowed during query planning.
+* Default: 64
+* Introduced in: v3.1.9, v3.2.5
+
 ### character_set_database (global)
 
 The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
