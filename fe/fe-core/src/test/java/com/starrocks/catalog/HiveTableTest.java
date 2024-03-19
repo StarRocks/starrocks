@@ -257,8 +257,8 @@ public class HiveTableTest {
 
         List<String> targetFormats = new ArrayList<>();
         targetFormats.add("AVRO");
-        targetFormats.add("RCBINARY");
-        targetFormats.add("RCTEXT");
+        targetFormats.add("RC_BINARY");
+        targetFormats.add("RC_TEXT");
         targetFormats.add("SEQUENCE");
 
         for (String targetFormat : targetFormats) {

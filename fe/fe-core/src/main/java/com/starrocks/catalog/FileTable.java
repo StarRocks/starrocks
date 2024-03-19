@@ -67,8 +67,8 @@ public class FileTable extends Table {
             "orc", RemoteFileInputFormat.ORC,
             "text", RemoteFileInputFormat.TEXT,
             "avro", RemoteFileInputFormat.AVRO,
-            "rctext", RemoteFileInputFormat.RCTEXT,
-            "rcbinary", RemoteFileInputFormat.RCBINARY,
+            "rctext", RemoteFileInputFormat.RC_TEXT,
+            "rcbinary", RemoteFileInputFormat.RC_BINARY,
             "sequence", RemoteFileInputFormat.SEQUENCE);
 
     @SerializedName(value = "fp")
