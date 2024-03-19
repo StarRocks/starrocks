@@ -942,12 +942,20 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitCreateImageClause(CreateImageClause clause, C context) {
-        return visitNode(clause, context);
+    default R visitAddFollowerClause(AddFollowerClause clause, C context) {
+        return visitFrontendClause(clause, context);
     }
 
-    default R visitCleanTabletSchedQClause(CleanTabletSchedQClause clause, C context) {
-        return visitNode(clause, context);
+    default R visitDropFollowerClause(DropFollowerClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
+    default R visitAddObserverClause(AddObserverClause clause, C context) {
+        return visitFrontendClause(clause, context);
+    }
+
+    default R visitDropObserverClause(DropObserverClause clause, C context) {
+        return visitFrontendClause(clause, context);
     }
 
     default R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
@@ -958,7 +966,19 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAddBackendClause(AddBackendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropBackendClause(DropBackendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitModifyBackendClause(ModifyBackendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDecommissionBackendClause(DecommissionBackendClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -967,6 +987,22 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitComputeNodeClause(ComputeNodeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAddComputeNodeClause(AddComputeNodeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropComputeNodeClause(DropComputeNodeClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitCreateImageClause(CreateImageClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitCleanTabletSchedQClause(CleanTabletSchedQClause clause, C context) {
         return visitNode(clause, context);
     }
 

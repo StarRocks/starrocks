@@ -21,7 +21,7 @@ public class DefaultWarehouse extends Warehouse {
     Cluster cluster;
 
     public DefaultWarehouse(long id, String name, long clusterId) {
-        super(id, name);
+        super(id, name, "An internal warehouse init after FE is ready");
         cluster = new Cluster(clusterId);
     }
 

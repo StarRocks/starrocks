@@ -1,0 +1,13 @@
+# comment with # to ignore
+third_party/include/rocksdb
+third_party/include/brpc
+third_party/include/aws
+third_party/include/boost
+third_party/lib/librocksdb.a
+third_party/lib/libbrpc.a
+third_party/lib/aws*
+third_party/lib/libaws*.a
+third_party/lib/libboost*.a
+third_party/lib/libprotobuf*.a
+third_party/lib/libprotoc.a
+third_party/bin/protoc*

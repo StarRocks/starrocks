@@ -428,6 +428,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
     public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optimize";
     public static final String ENABLE_PARTITION_BUCKET_OPTIMIZE = "enable_partition_bucket_optimize";
+    public static final String ENABLE_GROUP_EXECUTION = "enable_group_execution";
+    public static final String GROUP_EXECUTION_GROUP_SCALE = "group_execution_group_scale";
+    public static final String GROUP_EXECUTION_MAX_GROUPS = "group_execution_max_groups";
+
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
     public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
 
@@ -498,6 +502,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
         LEADER      // proxy queries to leader no matter the follower's replay progress
     }
+
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
 
     public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
@@ -672,6 +677,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
 
     public static final String JIT_LEVEL = "jit_level";
+
+    /**
+     * Used to split files stored in dfs such as object storage or hdfs into smaller files.
+     */
+    public static final String CONNECTOR_MAX_SPLIT_SIZE = "connector_max_split_size";
+
+    /**
+     * BE can split file of some specific formats, so FE don't need to split at all.
+     * But if a file is very huge, we still want FE to split them to more BEs.
+     * And this parameter is to define how huge this file is.
+     */
+    public static final String CONNECTOR_HUGE_FILE_SIZE = "connector_huge_file_size";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -991,7 +1008,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_SPILL_TO_LOCAL_DISK)
     private boolean disableSpillToLocalDisk = false;
 
-
     // this is used to control which operators can spill, only meaningful when enable_spill=true
     // it uses a bit to identify whether the spill of each operator is in effect, 0 means no, 1 means yes
     // at present, only the lowest 4 bits are meaningful, corresponding to the four operators
@@ -1297,6 +1313,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PARTITION_BUCKET_OPTIMIZE, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionBucketOptimize = false;
+    
+    @VarAttr(name = ENABLE_GROUP_EXECUTION)
+    private boolean enableGroupExecution = false;
+
+    @VarAttr(name = GROUP_EXECUTION_GROUP_SCALE)
+    private int groupExecutionGroupScale = 64;
+
+    @VarAttr(name = GROUP_EXECUTION_MAX_GROUPS)
+    private int groupExecutionMaxGroups = 128;
 
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
     private boolean enableParallelMerge = true;
@@ -1403,8 +1428,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnablePartitionBucketOptimize() {
         return enablePartitionBucketOptimize;
     }
+
     public void setEnablePartitionBucketOptimize(boolean enablePartitionBucketOptimize) {
         this.enablePartitionBucketOptimize = enablePartitionBucketOptimize;
+    }
+    
+    public void setEnableGroupExecution(boolean enableGroupExecution) {
+        this.enableGroupExecution = enableGroupExecution;
+    }
+
+    public boolean isEnableGroupExecution() {
+        return enableGroupExecution;
+    }
+
+    public int getGroupExecutionGroupScale() {
+        return groupExecutionGroupScale;
+    }
+
+    public int getGroupExecutionMaxGroups() {
+        return groupExecutionMaxGroups;
     }
 
     public int getWindowPartitionMode() {
@@ -1523,7 +1565,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     /**
      * <= 0: default mode, only try to union all rewrite by logical plan tree after partition compensate
      * 1: eager mode v1, try to pull up query's filter after union when query's output matches mv's define query
-     *  which will increase union rewrite's ability.
+     * which will increase union rewrite's ability.
      * 2: eager mode v2, try to pull up query's filter after union as much as possible.
      */
     @VarAttr(name = MATERIALIZED_VIEW_UNION_REWRITE_MODE)
@@ -1728,6 +1770,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = JIT_LEVEL)
     private int jitLevel = 1;
 
+    @VarAttr(name = CONNECTOR_MAX_SPLIT_SIZE)
+    private long connectorMaxSplitSize = 64L * 1024L * 1024L;
+
+    @VarAttr(name = CONNECTOR_HUGE_FILE_SIZE)
+    private long connectorHugeFileSize = 1024L * 1024L * 1024L;
+
     private int exprChildrenLimit = -1;
 
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
@@ -1878,9 +1926,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // enable wait dependent event in plan fragment
     // the operators will wait for the dependent event to be completed before executing
     // all of the probe side operators will wait for the build side operators to complete.
-    // Scenarios where AGG is present in the probe side will reduce peak memory usage, 
+    // Scenarios where AGG is present in the probe side will reduce peak memory usage,
     // but in some cases will result in increased latency for individual queries.
-    // 
+    //
     @VarAttr(name = ENABLE_WAIT_DEPENDENT_EVENT)
     private boolean enableWaitDependentEvent = false;
 
@@ -2611,6 +2659,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             enablePipelineLevelMultiPartitionedRf = false;
         }
     }
+
     public boolean isEnableRuntimeAdaptiveDop() {
         return enablePipelineEngine && enableRuntimeAdaptiveDop;
     }
@@ -2910,6 +2959,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
     }
+
     public boolean isHashJoinInterpolatePassthrough() {
         return hashJoinInterpolatePassthrough;
     }
@@ -3360,7 +3410,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
     }
 
-
     public boolean isEnableFineGrainedRangePredicate() {
         return enableFineGrainedRangePredicate;
     }
@@ -3445,7 +3494,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getEnableArrayDistinctAfterAggOpt() {
-        return  enableArrayDistinctAfterAggOpt;
+        return enableArrayDistinctAfterAggOpt;
+    }
+
+    public long getConnectorMaxSplitSize() {
+        return connectorMaxSplitSize;
+    }
+
+    public void setConnectorMaxSplitSize(long size) {
+        connectorMaxSplitSize = size;
+    }
+
+    public long getConnectorHugeFileSize() {
+        return connectorHugeFileSize;
+    }
+
+    public void setConnectorHugeFileSize(long size) {
+        connectorHugeFileSize = size;
+    }
+
+    public boolean isEnableConnectorSplitIoTasks() {
+        return enableConnectorSplitIoTasks;
     }
 
     // Serialize to thrift object
@@ -3568,6 +3637,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setJit_level(jitLevel);
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
         tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
+        tResult.setConnector_max_split_size(connectorMaxSplitSize);
         return tResult;
     }
 
