@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -29,9 +32,9 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -46,10 +49,29 @@ public class SubfieldAccessPathNormalizer {
     // simple json patten, same as BE's JsonPathPiece, match: abc[1][2], group: (abc)([1][2])
     private static final Pattern JSON_ARRAY_PATTEN = Pattern.compile("^([\\w#.]+)((?:\\[[\\d:*]+])*)");
 
+    /*
+    get_json_bool,   BOOL,      111111 00
+    get_json_int,    INT,       111110 00
+    get_json_double, DOUBLE,    111100 00
+    get_json_string, VARCHAR,   111000 00
+    json_exists,     VARCHAR,   111000 00
+    json_query,      JSON,      000000 00
+    json_length,     JSON,      000000 00
+     */
+    private static final Map<PrimitiveType, Byte> JSON_COMPATIBLE_TYPE =
+            ImmutableMap.<PrimitiveType, Byte>builder()
+                    .put(PrimitiveType.BOOLEAN, (byte) 0xFC)
+                    .put(PrimitiveType.INT, (byte) (0xFC << 1))
+                    .put(PrimitiveType.DOUBLE, (byte) (0xFC << 2))
+                    .put(PrimitiveType.VARCHAR, (byte) (0xFC << 3))
+                    .put(PrimitiveType.JSON, (byte) 0)
+                    .build();
+
     private final Deque<AccessPath> allAccessPaths = Lists.newLinkedList();
 
     private static class AccessPath {
         private final ScalarOperator root;
+        private Type valueType = Type.INVALID;
         private final List<String> paths = Lists.newArrayList();
         private final List<TAccessPathType> pathTypes = Lists.newArrayList();
 
@@ -71,6 +93,14 @@ public class SubfieldAccessPathNormalizer {
         public ScalarOperator root() {
             return root;
         }
+
+        public Type getValueType() {
+            return valueType;
+        }
+
+        public void setValueType(Type valueType) {
+            this.valueType = valueType;
+        }
     }
 
     public ColumnAccessPath normalizePath(ColumnRefOperator root, String columnName) {
@@ -78,7 +108,7 @@ public class SubfieldAccessPathNormalizer {
                 .sorted((o1, o2) -> Integer.compare(o2.paths.size(), o1.paths.size()))
                 .collect(Collectors.toList());
 
-        ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName);
+        ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName, Type.INVALID);
         for (AccessPath accessPath : paths) {
             ColumnAccessPath parentPath = rootPath;
             int depth = accessPath.paths.size();
@@ -100,18 +130,32 @@ public class SubfieldAccessPathNormalizer {
                                 (childPath.getType() == TAccessPathType.KEY && pathType == TAccessPathType.OFFSET);
                         childPath.setType(isOffsetOrKey ? TAccessPathType.KEY : TAccessPathType.ALL);
                     }
+                    childPath.setValueType(deriverCompatibleType(childPath.getValueType(), accessPath.getValueType()));
                     parentPath = childPath;
                 } else {
-                    ColumnAccessPath childPath =
-                            new ColumnAccessPath(accessPath.pathTypes.get(i), accessPath.paths.get(i));
+                    ColumnAccessPath childPath = new ColumnAccessPath(accessPath.pathTypes.get(i),
+                            accessPath.paths.get(i), accessPath.valueType);
                     parentPath.addChildPath(childPath);
                     parentPath = childPath;
                 }
             }
             parentPath.clearChildPath();
         }
-
+        rootPath.clearUnusedValueType();
         return rootPath;
+    }
+
+    private Type deriverCompatibleType(Type one, Type two) {
+        // json function used, keep same with BE's JsonFlater
+        if (one == Type.INVALID || two == Type.INVALID) {
+            return Type.INVALID;
+        }
+        byte bits = (byte) (JSON_COMPATIBLE_TYPE.getOrDefault(one.getPrimitiveType(), (byte) 0) &
+                JSON_COMPATIBLE_TYPE.getOrDefault(two.getPrimitiveType(), (byte) 0));
+
+        PrimitiveType type = JSON_COMPATIBLE_TYPE.entrySet().stream().filter(e -> e.getValue() == bits).findFirst()
+                .map(Map.Entry::getKey).orElse(PrimitiveType.JSON);
+        return Type.fromPrimitiveType(type);
     }
 
     public boolean hasPath(ColumnRefOperator root) {
@@ -174,13 +218,28 @@ public class SubfieldAccessPathNormalizer {
 
                 String path = ((ConstantOperator) call.getArguments().get(1)).getVarchar();
                 // we flatten whole json path, and control the query hierarchy dynamically through BE-self
-                return childrenAccessPaths.get(0).map(p -> p.appendFieldNames(formatJsonPath(path)));
+                return childrenAccessPaths.get(0).map(p -> {
+                    List<String> flatPaths = Lists.newArrayList();
+                    boolean isOverflown = formatJsonPath(path, flatPaths);
+                    p.appendFieldNames(flatPaths);
+                    if (isOverflown) {
+                        p.setValueType(Type.JSON);
+                    } else if (FunctionSet.JSON_EXISTS.equals(call.getFnName())) {
+                        p.setValueType(Type.STRING);
+                    } else if (FunctionSet.JSON_LENGTH.equals(call.getFnName())) {
+                        p.setValueType(Type.JSON);
+                    } else {
+                        p.setValueType(call.getType());
+                    }
+                    return p;
+                });
             }
 
             return Optional.empty();
         }
 
         // format json path, same as BE's JsonPathPiece, just supported simple path for prune subfield
+        // the result is whether the path is overflown
         // split char: .
         // escape char: \
         // quota char: "
@@ -193,26 +252,22 @@ public class SubfieldAccessPathNormalizer {
         //  $.a.b.c.d.e.f -> [a, b] -- don't support overflown JSON_FLATTEN_DEPTH
         //  a.b.c -> [a, b, c]
         // when meet some unsupported path, return null
-        public static List<String> formatJsonPath(String path) {
+        public static boolean formatJsonPath(String path, List<String> result) {
             path = StringUtils.trimToEmpty(path);
-            if (StringUtils.isBlank(path) || StringUtils.contains(path, "..") || StringUtils.equals("$", path)) {
+            if (StringUtils.isBlank(path) || StringUtils.contains(path, "..") || StringUtils.equals("$", path) ||
+                    StringUtils.countMatches(path, "\"") % 2 != 0) {
                 // .. is recursive search in json path, not supported
-                return Collections.emptyList();
-            }
-            if (StringUtils.countMatches(path, "\"") % 2 != 0) {
                 // unpaired quota char
-                return Collections.emptyList();
+                return false;
             }
             
             StrTokenizer tokenizer = new StrTokenizer(path, '.', '"');
             String[] tokens = tokenizer.getTokenArray();
 
             if (tokens.length < 1) {
-                return Collections.emptyList();
+                return false;
             }
             int size = JSON_FLATTEN_DEPTH;
-            List<String> result = Lists.newArrayList();
-
             int i = 0;
             if (tokens[0].equals("$")) {
                 size++;
@@ -227,20 +282,20 @@ public class SubfieldAccessPathNormalizer {
                 // unsupported path, should stop match
                 Matcher matcher = JSON_ARRAY_PATTEN.matcher(tokens[i]);
                 if (!matcher.matches()) {
-                    break;
+                    return true;
                 }
                 // only extract name, don't needed index
                 String name = matcher.group(1);
                 if (StringUtils.isBlank(name)) {
-                    break;
+                    return true;
                 }
                 result.add(name);
                 if (tokens[i].replaceFirst(name, "").contains("[")) {
                     // can't support flatten array index
-                    break;
+                    return true;
                 }
             }
-            return result;
+            return size < tokens.length;
         }
 
         private Optional<AccessPath> process(ScalarOperator scalarOperator, Deque<AccessPath> accessPaths) {

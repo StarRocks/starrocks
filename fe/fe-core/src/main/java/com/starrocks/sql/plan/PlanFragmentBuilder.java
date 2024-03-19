@@ -743,7 +743,7 @@ public class PlanFragmentBuilder {
             normalizer.collect(collector.getComplexExpressions());
 
             for (ColumnRefOperator key : scan.getColRefToColumnMetaMap().keySet()) {
-                if (!key.getType().isComplexType()) {
+                if (!key.getType().isStructType()) {
                     continue;
                 }
 
