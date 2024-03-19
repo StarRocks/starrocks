@@ -413,9 +413,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         sink_ctx->partition_column_indices = iceberg_table_desc->partition_index_in_schema();
         sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
         sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
-        if (t_iceberg_sink.__isset.compression_codec) {
-            sink_ctx->options[formats::COMPRESSION_CODEC] = t_iceberg_sink.compression_codec;
-        }
+        sink_ctx->compression_type = t_iceberg_sink.compression_type;
         if (t_iceberg_sink.__isset.target_max_file_size) {
             sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
         }
@@ -469,9 +467,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         sink_ctx->partition_column_evaluators = ColumnExprEvaluator::from_exprs(partition_exprs, runtime_state);
         sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
         sink_ctx->format = t_hive_sink.file_format;
-        if (t_hive_sink.__isset.compression_codec) {
-            sink_ctx->options[formats::COMPRESSION_CODEC] = t_hive_sink.compression_codec;
-        }
+        sink_ctx->compression_type = t_hive_sink.compression_type;
         if (t_hive_sink.__isset.target_max_file_size) {
             sink_ctx->max_file_size = t_hive_sink.target_max_file_size;
         }
@@ -544,9 +540,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         if (target_table.__isset.write_single_file && target_table.write_single_file) {
             sink_ctx->max_file_size = INT64_MAX;
         }
-        if (target_table.__isset.compression_codec) {
-            sink_ctx->options[formats::COMPRESSION_CODEC] = target_table.compression_codec;
-        }
+        sink_ctx->compression_type = target_table.compression_type;
         sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
         sink_ctx->fragment_context = fragment_ctx;
 
