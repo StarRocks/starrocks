@@ -2520,7 +2520,7 @@ public class PlanFragmentBuilder {
                 if (constraints != null) {
                     UKFKConstraints.JoinProperty joinProperty = constraints.getJoinProperty();
                     if (joinProperty != null) {
-                        joinProperty.buildExpr(context);
+                        joinProperty.setOneMatchProbe(joinNode.getJoinOp());
                         joinNode.setUkfkProperty(joinProperty);
                     }
                 }

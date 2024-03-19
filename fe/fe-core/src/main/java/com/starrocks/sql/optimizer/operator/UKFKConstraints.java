@@ -13,14 +13,12 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.operator;
 
-import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import org.apache.hadoop.shaded.com.google.common.collect.Maps;
 
 import java.util.Map;
@@ -104,8 +102,7 @@ public class UKFKConstraints {
         public final ColumnRefOperator ukColumnRef;
         public final ColumnRefOperator fkColumnRef;
         public final boolean isLeftUK;
-        public Expr ukColumn;
-        public Expr fkColumn;
+        public boolean useOneMatchProbe = false;
 
         public JoinProperty(BinaryPredicateOperator predicate,
                             UniqueConstraintWrapper ukConstraint,
@@ -120,11 +117,13 @@ public class UKFKConstraints {
             this.isLeftUK = isLeftUK;
         }
 
-        public void buildExpr(ExecPlan context) {
-            ukColumn = ScalarOperatorToExpr.buildExecExpression(ukColumnRef,
-                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
-            fkColumn = ScalarOperatorToExpr.buildExecExpression(fkColumnRef,
-                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+        public void setOneMatchProbe(JoinOperator joinOp) {
+            if (isLeftUK) {
+                return;
+            }
+            if ((joinOp.isOuterJoin() || joinOp.isInnerJoin())) {
+                useOneMatchProbe = true;
+            }
         }
     }
 }

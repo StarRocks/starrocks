@@ -106,3 +106,10 @@ SELECT * FROM t_uk RIGHT SEMI JOIN t_fk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
 SELECT * FROM t_uk RIGHT SEMI JOIN t_fk ON t_uk.uk = t_fk.fk AND t_uk.uk = 1 ORDER BY t_fk.id;
 SELECT * FROM t_uk RIGHT SEMI JOIN t_fk ON t_uk.uk = t_fk.fk AND t_uk.uk * (t_uk.uk + 3) < 10 ORDER BY t_fk.id;
 SELECT * FROM t_uk RIGHT SEMI JOIN t_fk ON t_uk.uk = t_fk.fk AND t_uk.uk > 2 AND t_uk.uk < 5 ORDER BY t_fk.id;
+
+set enable_ukfk_opt=true;
+set enable_ukfk_join_reorder=false;
+
+-- test one match probe
+SELECT * FROM t_fk JOIN t_uk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+SELECT * FROM t_fk LEFT OUTER JOIN t_uk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;

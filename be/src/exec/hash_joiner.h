@@ -73,7 +73,7 @@ struct HashJoinerParam {
                     TPlanNodeType::type probe_node_type, bool build_conjunct_ctxs_is_empty,
                     std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters, std::set<SlotId> build_output_slots,
                     std::set<SlotId> probe_output_slots, const TJoinDistributionMode::type distribution_mode,
-                    bool mor_reader_mode)
+                    bool mor_reader_mode, bool use_one_match_probe)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _node_id(node_id),
@@ -93,7 +93,8 @@ struct HashJoinerParam {
               _build_output_slots(std::move(build_output_slots)),
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
-              _mor_reader_mode(mor_reader_mode) {}
+              _mor_reader_mode(mor_reader_mode),
+              _use_one_match_probe(use_one_match_probe) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -120,6 +121,7 @@ struct HashJoinerParam {
 
     const TJoinDistributionMode::type _distribution_mode;
     const bool _mor_reader_mode;
+    const bool _use_one_match_probe;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -307,6 +309,7 @@ public:
     }
 
     const TJoinOp::type& join_type() const { return _join_type; }
+    const bool& use_one_match_probe() const { return _use_one_match_probe; }
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -395,6 +398,8 @@ private:
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;
     bool _is_closed = false;
+
+    const bool& _use_one_match_probe;
 
     const std::vector<bool>& _is_null_safes;
     // Equal conjuncts in Join On.

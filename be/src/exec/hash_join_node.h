@@ -108,6 +108,7 @@ private:
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
+    bool _use_one_match_probe = false;
     std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
