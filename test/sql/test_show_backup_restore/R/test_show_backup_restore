@@ -1,0 +1,16 @@
+-- name: test_show_empty_backup_restore;
+CREATE DATABASE test1;
+-- result:
+-- !result
+CREATE DATABASE test2;
+-- result:
+-- !result
+CREATE DATABASE test3;
+-- result:
+-- !result
+SHOW BACKUP;
+-- result:
+-- !result
+SHOW RESTORE;
+-- result:
+-- !result
