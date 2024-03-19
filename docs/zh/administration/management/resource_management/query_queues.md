@@ -78,7 +78,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 | concurrency_limit | 0          | 该资源组在单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。 |
 | max_cpu_cores     | 0          | 该资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。 |
 
-您可以通过 SHOW USAGE RESOURECE GROUPS 来查看每个资源组在每个 BE 上的资源使用信息，参见[查看资源组的使用信息](./resource_management.mdxx#查看资源组的使用信息)。
+您可以通过 SHOW USAGE RESOURECE GROUPS 来查看每个资源组在每个 BE 上的资源使用信息，参见[查看资源组的使用信息](./resource_management.mdx#查看资源组的使用信息)。
 
 ### 管理查询并发数量
 
