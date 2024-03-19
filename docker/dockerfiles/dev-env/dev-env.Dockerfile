@@ -54,6 +54,14 @@ FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet-ubuntu
 FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
+# remove unnecessary and big starlet dependencies
+COPY --from=builder /root/starrocks/docker/dockerfiles/dev-env/starlet_exclude.txt .
+RUN while read line; do \
+        if [[ "$line" == \#* ]] ; then \
+            continue ; \
+        fi ; \
+        rm -rvf /release/$line ; \
+    done < starlet_exclude.txt
 
 FROM base as dev-env
 ARG commit_id
