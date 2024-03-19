@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 【公测中】中间结果落盘
 
-本文介绍如何将大算子的中间计算结果落盘。
+本文介绍如何将大算子的中间计算结果落盘 (Spill to disk)。
 
 ## 概述
 

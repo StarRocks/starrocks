@@ -6,12 +6,12 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。在 3.0 版本之前，该函数不保证数组里元素的顺序。从 3.0 版本开始，array_agg() 支持使用 ORDER BY 对数组里的元素进行排序。
+将一列中的值（包括空值 null）串联成一个数组（多行转一行）。在 3.0 版本之前，该函数不保证数组里元素的顺序。从 3.0 版本开始，array_agg() 支持使用 ORDER BY 对数组里的元素进行排序。
 
 ## 语法
 
 ```Haskell
-ARRAY_AGG(col [order by col0 [desc | asc] [nulls first | nulls last] ...])
+ARRAY_AGG([distinct] col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 ```
 
 ## 参数说明
@@ -33,6 +33,7 @@ ARRAY_AGG(col [order by col0 [desc | asc] [nulls first | nulls last] ...])
 - 如果不指定 ORDER BY，数组中元素的顺序是随机的，不能保证与原来列值的顺序相同。
 - 返回数组中元素的类型与 `col` 类型一致。
 - 如果没有满足条件的输入值，返回 NULL。
+- ARRAY_AGG_DISTINCT() 是 ARRAY_AGG(DISTINCT) 的别名。
 
 ## 示例
 
