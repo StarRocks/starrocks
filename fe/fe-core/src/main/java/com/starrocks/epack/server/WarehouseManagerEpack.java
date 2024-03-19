@@ -141,7 +141,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
                     "Warehouse '%s' doesn't exist", warehouseName);
 
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
-            if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
+            if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouseName);
             }
             warehouse.suspendSelf();
@@ -166,7 +166,7 @@ public class WarehouseManagerEpack extends WarehouseManager {
             Preconditions.checkState(nameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
-            if (warehouse.getState() == Warehouse.WarehouseState.AVAILABLE) {
+            if (warehouse.getState() == LocalWarehouse.WarehouseState.AVAILABLE) {
                 ErrorReport.reportDdlException("Can't resume an available warehouse");
             }
             warehouse.resumeSelf();

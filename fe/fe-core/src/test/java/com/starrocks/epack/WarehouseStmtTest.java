@@ -10,13 +10,13 @@ import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -122,15 +122,15 @@ public class WarehouseStmtTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(suspendSql);
         Assert.assertTrue(stmt instanceof SuspendWarehouseStmt);
         DDLStmtExecutorEPack.execute(stmt, connectCtx);
-        Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED,
-                warehouseMgr.getWarehouse("warehouse_1").getState());
+        Assert.assertEquals(LocalWarehouse.WarehouseState.SUSPENDED,
+                ((LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getState());
 
         String resumeSql = "RESUME WAREHOUSE warehouse_1";
         stmt = AnalyzeTestUtil.analyzeSuccess(resumeSql);
         Assert.assertTrue(stmt instanceof ResumeWarehouseStmt);
         DDLStmtExecutorEPack.execute(stmt, connectCtx);
-        Assert.assertEquals(Warehouse.WarehouseState.AVAILABLE,
-                warehouseMgr.getWarehouse("warehouse_1").getState());
+        Assert.assertEquals(LocalWarehouse.WarehouseState.AVAILABLE,
+                ((LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getState());
 
         warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "warehouse_1"));
         Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));

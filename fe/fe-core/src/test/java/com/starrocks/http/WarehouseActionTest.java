@@ -354,7 +354,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     private void mockWarehouses(List<Warehouse> warehouses) {
         new MockUp<WarehouseManager>() {
             @Mock
-            Collection<Warehouse> getWarehouses() {
+            Collection<Warehouse> getAllWarehouses() {
                 return warehouses;
             }
         };

@@ -74,7 +74,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
 
         new MockUp<Cluster>() {
             @Mock
-            public List<Long> getAvailableComputeNodeIds() {
+            public List<Long> getComputeNodeIds() {
                 List<Long> result = new ArrayList<>();
                 result.add(computeNode.getId());
                 return result;

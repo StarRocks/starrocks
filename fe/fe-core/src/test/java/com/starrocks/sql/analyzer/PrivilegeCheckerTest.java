@@ -45,8 +45,10 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -3464,7 +3466,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testSetWarehouseVar() throws Exception {
+    public void testSetWarehouseVar(@Mocked StarOSAgentEpack starOSAgent) throws Exception {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -3476,6 +3478,25 @@ public class PrivilegeCheckerTest {
             @Mock
             public void initCluster() throws DdlException {
 
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new Expectations() {
+            {
+                starOSAgent.deleteWorkerGroup(anyLong);
+                result = null;
+                minTimes = 0;
+
+                starOSAgent.createWorkerGroup(anyString);
+                result = -1L;
+                minTimes = 0;
             }
         };
 

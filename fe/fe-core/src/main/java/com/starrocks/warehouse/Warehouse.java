@@ -30,14 +30,6 @@ public abstract class Warehouse implements Writable {
     @SerializedName(value = "comment")
     protected String comment;
 
-    public enum WarehouseState {
-        AVAILABLE,
-        SUSPENDED,
-    }
-
-    @SerializedName(value = "state")
-    protected WarehouseState state = WarehouseState.AVAILABLE;
-
     public Warehouse(long id, String name, String comment) {
         this.id = id;
         this.name = name;
@@ -50,14 +42,6 @@ public abstract class Warehouse implements Writable {
 
     public String getName() {
         return name;
-    }
-
-    public void setState(WarehouseState state) {
-        this.state = state;
-    }
-
-    public WarehouseState getState() {
-        return state;
     }
 
     public abstract Cluster getAnyAvailableCluster();

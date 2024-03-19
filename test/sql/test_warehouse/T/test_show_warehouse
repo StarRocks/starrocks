@@ -1,3 +1,0 @@
--- name: test_show_warehouse_proc
-SHOW PROC '/warehouses/0';
-SHOW PROC '/warehouses/default_warehouse';

@@ -1176,13 +1176,6 @@ public class SchemaChangeHandler extends AlterHandler {
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
-        // check warehouse
-        long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-        if (warehouse.getAnyAvailableCluster().getComputeNodeIds().isEmpty()) {
-            throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
-        }
-
         // create job
         SchemaChangeData.Builder dataBuilder = SchemaChangeData.newBuilder();
         dataBuilder.withDatabase(db)
@@ -1190,8 +1183,18 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withTimeoutInSeconds(timeoutSecond)
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumns, bfFpp)
-                .withBloomFilterColumnsChanged(hasBfChange)
-                .withWarehouse(warehouseId);
+                .withBloomFilterColumnsChanged(hasBfChange);
+
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
+            if (warehouse.getAnyAvailableCluster().getComputeNodeIds().isEmpty()) {
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+
+            dataBuilder.withWarehouse(warehouseId);
+        }
 
         long baseIndexId = olapTable.getBaseIndexId();
         // begin checking each table

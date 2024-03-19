@@ -81,7 +81,7 @@ public class LocalWarehouse extends Warehouse {
         return Lists.newArrayList(
                 String.valueOf(getId()),
                 getName(),
-                getState().toString(),
+                state.toString(),
                 String.valueOf(cluster.getComputeNodeIds().size()),
                 String.valueOf(1L),
                 String.valueOf(1L),
@@ -92,6 +92,10 @@ public class LocalWarehouse extends Warehouse {
                 TimeUtils.longToTimeString(resumedTime),
                 TimeUtils.longToTimeString(updatedTime),
                 comment);
+    }
+
+    public WarehouseState getState() {
+        return state;
     }
 
     public Map<Long, Cluster> getClusters() {

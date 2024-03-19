@@ -16,8 +16,6 @@ package com.starrocks.server;
 
 import com.google.common.collect.ImmutableMap;
 import com.staros.util.LockCloseable;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.warehouse.LocalWarehouse;
@@ -80,25 +78,11 @@ public class WarehouseManager implements Writable {
     }
 
     public Warehouse getAvailbleWarehouse(long warehouseId) throws WarehouseUnavailableException {
-        Warehouse warehouse = getWarehouse(warehouseId);
-        if (warehouse == null) {
-            ErrorReport.reportWarehouseUnavailableException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.valueOf(warehouseId));
-        }
-        if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
-            ErrorReport.reportWarehouseUnavailableException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouse.getName());
-        }
-        return warehouse;
+        return getWarehouse(DEFAULT_WAREHOUSE_NAME);
     }
 
     public Warehouse getAvailbleWarehouse(String warehouseName) throws WarehouseUnavailableException {
-        Warehouse warehouse = getWarehouse(warehouseName);
-        if (warehouse == null) {
-            ErrorReport.reportWarehouseUnavailableException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
-        }
-        if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
-            ErrorReport.reportWarehouseUnavailableException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouseName);
-        }
-        return warehouse;
+        return getWarehouse(DEFAULT_WAREHOUSE_NAME);
     }
 
     public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
