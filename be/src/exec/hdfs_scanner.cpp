@@ -138,6 +138,8 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.stats = &_app_stats;
     ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
     ctx.split_context = _scanner_params.split_context;
+    ctx.split_tasks = &_split_tasks;
+    ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     return Status::OK();
 }
 
