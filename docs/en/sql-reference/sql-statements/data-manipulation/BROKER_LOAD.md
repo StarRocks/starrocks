@@ -620,7 +620,7 @@ The following parameters are supported:
 
 - `timezone`
 
-  Specifies the time zone of the load job. Default value: `Asia/Shanghai`. The time zone setting affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. For more information, see [Configure a time zone](../../../administration/management/timezone). The time zone specified in the `timezone` parameter is a session-level time zone.
+  Specifies the time zone of the load job. Default value: `Asia/Shanghai`. The time zone setting affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. For more information, see [Configure a time zone](../../../administration/management/timezone.md). The time zone specified in the `timezone` parameter is a session-level time zone.
 
 - `priority`
 

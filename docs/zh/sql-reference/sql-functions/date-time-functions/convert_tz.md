@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 将给定的时间转化为另一个时区的时间。
 
-该函数受时区影响，具体参见 [设置时区](../../../administration/management/timezone)。
+该函数受时区影响，具体参见 [设置时区](../../../administration/management/timezone.md)。
 
 ## 语法
 
