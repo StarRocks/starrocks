@@ -292,6 +292,14 @@ bool JsonValue::is_null() const {
     return to_vslice().isNull();
 }
 
+bool JsonValue::is_none() const {
+    return to_vslice().isNone();
+}
+
+bool JsonValue::is_null_or_none() const {
+    return is_null() || is_none();
+}
+
 std::ostream& operator<<(std::ostream& os, const JsonValue& json) {
     return os << json.to_string_uncheck();
 }

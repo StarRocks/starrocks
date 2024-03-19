@@ -44,6 +44,7 @@ public:
     void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx) const override;
     std::string debug_item(size_t idx) const override;
     std::string get_name() const override;
+    bool is_json() const override { return true; }
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
     uint32_t serialize_size(size_t idx) const override;
