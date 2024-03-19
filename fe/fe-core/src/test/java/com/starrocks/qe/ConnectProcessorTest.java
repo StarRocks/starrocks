@@ -589,4 +589,17 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }
+
+    @Test
+    public void testErrTypeInQueryState() throws Exception {
+        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        ctx.setQueryId(UUIDUtil.genUUID());
+        StmtExecutor executor = new StmtExecutor(ctx, "select * from testDb1.testTable1");
+        executor.execute();
+        Assert.assertEquals(QueryState.ErrType.UNKNOWN, ctx.getState().getErrType());
+
+        executor = new StmtExecutor(ctx, "select * from testDb1.testTable1xxx");
+        executor.execute();
+        Assert.assertEquals(QueryState.ErrType.ANALYSIS_ERR, ctx.getState().getErrType());
+    }
 }

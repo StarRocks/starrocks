@@ -189,7 +189,7 @@ public class ConnectProcessor {
 
         // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
         String errorCode = "";
-        if (ctx.getState().getErrType() != QueryState.ErrType.EMPTY) {
+        if (ctx.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
             // error happens in FE execution.
             errorCode = ctx.getState().getErrType().name();
         } else if (StringUtils.isNotEmpty(ctx.getErrorCode())) {
