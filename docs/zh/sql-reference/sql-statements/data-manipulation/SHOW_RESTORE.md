@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-查看指定数据库中的恢复任务。更多信息，请见 [备份和恢复](../../../administration/management/Backup_and_restore.md)。
+查看指定数据库中的恢复任务。更多信息，请见 [备份和恢复](../../../administration/management/management.mdx)。
 
 > **说明**
 >
