@@ -14,8 +14,11 @@
 
 #include "exprs/is_null_predicate.h"
 
+#include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "exprs/unary_function.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -28,14 +31,6 @@ namespace starrocks {
 
 DEFINE_UNARY_FN_WITH_IMPL(isNullImpl, v) {
     return v;
-}
-
-DEFINE_UNARY_FN_WITH_IMPL(isJsonNullImpl, v) {
-    return v->is_null_or_none();
-}
-
-DEFINE_UNARY_FN_WITH_IMPL(isNotJsonNullImpl, v) {
-    return !v->is_null_or_none();
 }
 
 class VectorizedIsNullPredicate final : public Predicate {
@@ -51,7 +46,13 @@ public:
 
         if (column->is_json()) {
             // Consider JSON NULL as NULL
-            return VectorizedStrictUnaryFunction<isJsonNullImpl>::evaluate<TYPE_JSON, TYPE_BOOLEAN>(column);
+            ColumnViewer<TYPE_JSON> viewer(column);
+            ColumnBuilder<TYPE_BOOLEAN> builder(column->size());
+            for (size_t i = 0; i < column->size(); i++) {
+                bool value = viewer.is_null(i) || viewer.value(i)->is_null_or_none();
+                builder.append(value);
+            }
+            return builder.build(column->is_constant());
         }
 
         if (!column->is_nullable() || !column->has_null()) {
@@ -80,7 +81,13 @@ public:
 
         if (column->is_json()) {
             // Consider JSON NULL as NULL
-            return VectorizedStrictUnaryFunction<isNotJsonNullImpl>::evaluate<TYPE_JSON, TYPE_BOOLEAN>(column);
+            ColumnViewer<TYPE_JSON> viewer(column);
+            ColumnBuilder<TYPE_BOOLEAN> builder(column->size());
+            for (size_t i = 0; i < column->size(); i++) {
+                bool value = viewer.is_null(i) || viewer.value(i)->is_null_or_none();
+                builder.append(value);
+            }
+            return builder.build(column->is_constant());
         }
 
         if (!column->is_nullable() || !column->has_null()) {
