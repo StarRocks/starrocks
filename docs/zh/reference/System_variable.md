@@ -160,6 +160,12 @@ SELECT /*+ SET_VAR
 
 用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
 
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* 含义：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
+* 默认值：64
+* 引入版本：v3.1.9, v3.2.5
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
