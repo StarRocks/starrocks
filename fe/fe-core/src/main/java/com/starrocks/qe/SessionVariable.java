@@ -479,6 +479,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
         LEADER      // proxy queries to leader no matter the follower's replay progress
     }
+
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
 
     public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
@@ -644,6 +645,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
+
+    /**
+     * Used to split files stored in dfs such as object storage or hdfs into smaller files.
+     */
+    public static final String CONNECTOR_MAX_SPLIT_SIZE = "connector_max_split_size";
+
+    /**
+     * BE can split file of some specific formats, so FE don't need to split at all.
+     * But if a file is very huge, we still want FE to split them to more BEs.
+     * And this parameter is to define how huge this file is.
+     */
+    public static final String CONNECTOR_HUGE_FILE_SIZE = "connector_huge_file_size";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1426,7 +1439,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     /**
      * <= 0: default mode, only try to union all rewrite by logical plan tree after partition compensate
      * 1: eager mode v1, try to pull up query's filter after union when query's output matches mv's define query
-     *  which will increase union rewrite's ability.
+     * which will increase union rewrite's ability.
      * 2: eager mode v2, try to pull up query's filter after union as much as possible.
      */
     @VarAttr(name = MATERIALIZED_VIEW_UNION_REWRITE_MODE)
@@ -1624,6 +1637,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PREPARE_STMT)
     private boolean enablePrepareStmt = true;
+
+    @VarAttr(name = CONNECTOR_MAX_SPLIT_SIZE)
+    private long connectorMaxSplitSize = 64L * 1024L * 1024L;
+
+    @VarAttr(name = CONNECTOR_HUGE_FILE_SIZE)
+    private long connectorHugeFileSize = 1024L * 1024L * 1024L;
 
     private int exprChildrenLimit = -1;
 
@@ -2765,6 +2784,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
     }
+
     public boolean isHashJoinInterpolatePassthrough() {
         return hashJoinInterpolatePassthrough;
     }
@@ -3288,7 +3308,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getEnableArrayDistinctAfterAggOpt() {
-        return  enableArrayDistinctAfterAggOpt;
+        return enableArrayDistinctAfterAggOpt;
+    }
+
+    public long getConnectorMaxSplitSize() {
+        return connectorMaxSplitSize;
+    }
+
+    public void setConnectorMaxSplitSize(long size) {
+        connectorMaxSplitSize = size;
+    }
+
+    public long getConnectorHugeFileSize() {
+        return connectorHugeFileSize;
+    }
+
+    public void setConnectorHugeFileSize(long size) {
+        connectorHugeFileSize = size;
+    }
+
+    public boolean isEnableConnectorSplitIoTasks() {
+        return enableConnectorSplitIoTasks;
     }
 
     // Serialize to thrift object
@@ -3387,6 +3427,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
+        tResult.setConnector_max_split_size(connectorMaxSplitSize);
         return tResult;
     }
 
