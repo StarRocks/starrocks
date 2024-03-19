@@ -82,9 +82,9 @@ KVStore::~KVStore() {
 Status KVStore::init(bool read_only) {
     DBOptions options;
     options.IncreaseParallelism();
-    options.create_if_missing = true;
-    options.create_missing_column_families = true;
     std::string db_path = _root_path + META_POSTFIX;
+
+    RETURN_IF_ERROR(rocksdb::GetDBOptionsFromString(options, config::rocksdb_db_options_string, &options));
 
     ColumnFamilyOptions meta_cf_options;
     RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,
