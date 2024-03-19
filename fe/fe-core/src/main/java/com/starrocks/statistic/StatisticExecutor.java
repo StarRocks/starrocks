@@ -157,6 +157,11 @@ public class StatisticExecutor {
         return executeStatisticDQL(statsConnectCtx, sql);
     }
 
+    public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildQueryConnectorHistogramStatisticsSQL(tableUUID, columnNames);
+        return executeStatisticDQL(statsConnectCtx, sql);
+    }
+
     public List<TStatisticData> queryMCV(ConnectContext statsConnectCtx, String sql) {
         return executeStatisticDQL(statsConnectCtx, sql);
     }
@@ -315,7 +320,9 @@ public class StatisticExecutor {
                             statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
 
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(histogramStatsMeta);
-                    // todo(ywb): refresh external histogram statistics cache
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
+                            statsJob.getCatalogName(), db.getFullName(), table.getName(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
                 }
             }
         } else {

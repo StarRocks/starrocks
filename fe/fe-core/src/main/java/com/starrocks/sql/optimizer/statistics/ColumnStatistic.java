@@ -120,6 +120,10 @@ public class ColumnStatistic {
         return this.type == StatisticType.UNKNOWN;
     }
 
+    public boolean hasNonStats() {
+        return isUnknown() && histogram == null;
+    }
+
     public boolean isInfiniteRange() {
         return this.minValue == NEGATIVE_INFINITY || this.maxValue == POSITIVE_INFINITY;
     }
@@ -146,6 +150,7 @@ public class ColumnStatistic {
                 + nullsFraction + separator
                 + averageRowSize + separator
                 + distinctValuesCount + "] "
+                + (histogram == null ? "" : histogram.getMcvString() + " ")
                 + type;
     }
 

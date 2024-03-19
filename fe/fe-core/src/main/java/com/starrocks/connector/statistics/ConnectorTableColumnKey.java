@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.connector;
+package com.starrocks.connector.statistics;
 
 import java.util.Objects;
 

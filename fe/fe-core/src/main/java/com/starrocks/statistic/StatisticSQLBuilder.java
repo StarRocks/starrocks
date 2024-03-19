@@ -30,6 +30,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TA
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
@@ -67,6 +68,12 @@ public class StatisticSQLBuilder {
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name,"
                     + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
                     + " FROM " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate";
+
+    private static final String QUERY_EXTERNAL_HISTOGRAM_STATISTIC_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as INT), column_name,"
+                    + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
+                    + " FROM " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
@@ -198,6 +205,23 @@ public class StatisticSQLBuilder {
 
         context.put("predicate", Joiner.on(" and ").join(predicateList));
         return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
+    }
+
+    public static String buildQueryConnectorHistogramStatisticsSQL(String tableUUID, List<String> columnNames) {
+        VelocityContext context = new VelocityContext();
+
+        List<String> predicateList = Lists.newArrayList();
+        if (tableUUID != null) {
+            predicateList.add("table_uuid = '" + tableUUID + "'");
+        }
+
+        if (!columnNames.isEmpty()) {
+            predicateList.add("column_name in (" + Joiner.on(", ")
+                    .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")");
+        }
+
+        context.put("predicate", Joiner.on(" and ").join(predicateList));
+        return build(context, QUERY_EXTERNAL_HISTOGRAM_STATISTIC_TEMPLATE);
     }
 
     public static String buildDropHistogramSQL(Long tableId, List<String> columnNames) {
