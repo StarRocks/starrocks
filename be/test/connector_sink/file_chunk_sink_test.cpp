@@ -268,6 +268,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->partition_column_indices = {0};
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET; // iceberg sink only supports parquet
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {};              // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
@@ -284,6 +285,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->partition_column_indices = {0};
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET;
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {};
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
@@ -300,6 +302,7 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->partition_column_indices = {0};
         sink_ctx->executor = nullptr;
         sink_ctx->format = "unknown";
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(

@@ -73,6 +73,7 @@ struct HiveChunkSinkContext : public ConnectorChunkSinkContext {
     std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators;
     int64_t max_file_size = 128L * 1024 * 1024;
     std::string format;
+    TCompressionType::type compression_type;
     std::map<std::string, std::string> options;
     PriorityThreadPool* executor;
     TCloudConfiguration cloud_conf;

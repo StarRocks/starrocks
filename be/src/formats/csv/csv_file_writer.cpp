@@ -22,6 +22,7 @@ namespace starrocks::formats {
 CSVFileWriter::CSVFileWriter(std::string location, std::unique_ptr<csv::OutputStream> output_stream,
                              const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& types,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             TCompressionType::type compression_type,
                              const std::shared_ptr<CSVWriterOptions>& writer_options,
                              const std::function<void()> rollback_action, PriorityThreadPool* executors)
         : _location(std::move(location)),
@@ -29,6 +30,7 @@ CSVFileWriter::CSVFileWriter(std::string location, std::unique_ptr<csv::OutputSt
           _column_names(column_names),
           _types(types),
           _column_evaluators(std::move(column_evaluators)),
+          _compression_type(compression_type),
           _writer_options(writer_options),
           _rollback_action(rollback_action),
           _executors(executors) {}
@@ -36,6 +38,10 @@ CSVFileWriter::CSVFileWriter(std::string location, std::unique_ptr<csv::OutputSt
 CSVFileWriter::~CSVFileWriter() = default;
 
 Status CSVFileWriter::init() {
+    if (_compression_type != TCompressionType::NO_COMPRESSION) {
+        return Status::NotSupported(fmt::format("not supported compression type {}", _compression_type));
+    }
+
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _column_converters.reserve(_types.size());
     for (auto& type : _types) {
@@ -131,12 +137,13 @@ std::future<FileWriter::CommitResult> CSVFileWriter::commit() {
     return future;
 }
 
-CSVFileWriterFactory::CSVFileWriterFactory(std::shared_ptr<FileSystem> fs,
+CSVFileWriterFactory::CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
                                            const std::map<std::string, std::string>& options,
                                            const std::vector<std::string>& column_names,
                                            std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                            PriorityThreadPool* executors)
         : _fs(std::move(fs)),
+          _compression_type(compression_type),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),
@@ -147,11 +154,11 @@ Status CSVFileWriterFactory::init() {
         RETURN_IF_ERROR(e->init());
     }
     _parsed_options = std::make_shared<CSVWriterOptions>();
-    if (_options.contains("column_terminated_by")) {
-        _parsed_options->column_terminated_by = _options["column_terminated_by"];
+    if (_options.contains(CSVWriterOptions::COLUMN_TERMINATED_BY)) {
+        _parsed_options->column_terminated_by = _options[CSVWriterOptions::COLUMN_TERMINATED_BY];
     }
-    if (_options.contains("line_terminated_by")) {
-        _parsed_options->line_terminated_by = _options["line_terminated_by"];
+    if (_options.contains(CSVWriterOptions::LINE_TERMINATED_BY)) {
+        _parsed_options->line_terminated_by = _options[CSVWriterOptions::LINE_TERMINATED_BY];
     }
     return Status::OK();
 }
@@ -165,7 +172,8 @@ StatusOr<std::shared_ptr<FileWriter>> CSVFileWriterFactory::create(const std::st
     auto types = ColumnEvaluator::types(_column_evaluators);
     auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(file), 1024);
     return std::make_shared<CSVFileWriter>(path, std::move(output_stream), _column_names, types,
-                                           std::move(column_evaluators), _parsed_options, rollback_action, _executors);
+                                           std::move(column_evaluators), _compression_type, _parsed_options,
+                                           rollback_action, _executors);
 }
 
 } // namespace starrocks::formats

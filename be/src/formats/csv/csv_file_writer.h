@@ -35,8 +35,8 @@ public:
     CSVFileWriter(std::string location, std::unique_ptr<csv::OutputStream> output_stream,
                   const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& types,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                  const std::shared_ptr<CSVWriterOptions>& writer_options, const std::function<void()> rollback_action,
-                  PriorityThreadPool* executors);
+                  TCompressionType::type compression_type, const std::shared_ptr<CSVWriterOptions>& writer_options,
+                  const std::function<void()> rollback_action, PriorityThreadPool* executors);
 
     ~CSVFileWriter() override;
 
@@ -54,6 +54,7 @@ private:
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _types;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
+    TCompressionType::type _compression_type;
     std::shared_ptr<CSVWriterOptions> _writer_options;
     const std::function<void()> _rollback_action;
     PriorityThreadPool* _executors;
@@ -65,7 +66,8 @@ private:
 
 class CSVFileWriterFactory : public FileWriterFactory {
 public:
-    CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::map<std::string, std::string>& options,
+    CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
+                         const std::map<std::string, std::string>& options,
                          const std::vector<std::string>& column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                          PriorityThreadPool* executors = nullptr);
@@ -76,6 +78,7 @@ public:
 
 private:
     std::shared_ptr<FileSystem> _fs;
+    TCompressionType::type _compression_type;
     std::map<std::string, std::string> _options;
     std::shared_ptr<CSVWriterOptions> _parsed_options;
 

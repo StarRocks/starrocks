@@ -72,6 +72,7 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::unique_ptr<OrcOut
                              const std::vector<std::string>& column_names,
                              const std::vector<TypeDescriptor>& type_descs,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             TCompressionType::type compression_type,
                              const std::shared_ptr<ORCWriterOptions>& writer_options,
                              const std::function<void()> rollback_action, PriorityThreadPool* executors)
         : _location(location),
@@ -79,6 +80,7 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::unique_ptr<OrcOut
           _column_names(column_names),
           _type_descs(type_descs),
           _column_evaluators(std::move(column_evaluators)),
+          _compression_type(compression_type),
           _writer_options(writer_options),
           _rollback_action(rollback_action),
           _executors(executors) {}
@@ -87,7 +89,7 @@ Status ORCFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     ASSIGN_OR_RETURN(_schema, _make_schema(_column_names, _type_descs));
     auto options = orc::WriterOptions();
-    ASSIGN_OR_RETURN(auto compression, _compression_type(_writer_options->compression_codec));
+    ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
     options.setCompression(compression);
     _writer = orc::createWriter(*_schema, _output_stream.get(), options);
     return Status::OK();
@@ -474,23 +476,35 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
     _write_column(values_orc_column, values, type.children[1]);
 }
 
-StatusOr<orc::CompressionKind> ORCFileWriter::_compression_type(const string& compression_codec) {
-    orc::CompressionKind type;
-    if (boost::iequals(compression_codec, "uncompressed")) {
-        type = orc::CompressionKind_NONE;
-    } else if (boost::iequals(compression_codec, "snappy")) {
-        type = orc::CompressionKind_SNAPPY;
-    } else if (boost::iequals(compression_codec, "gzip")) {
-        type = orc::CompressionKind_ZLIB;
-    } else if (boost::iequals(compression_codec, "zstd")) {
-        type = orc::CompressionKind_ZSTD;
-    } else if (boost::iequals(compression_codec, "lz4")) {
-        type = orc::CompressionKind_ZLIB;
-    } else {
-        return Status::NotSupported(fmt::format("not supported compression type {}", compression_codec));
+StatusOr<orc::CompressionKind> ORCFileWriter::_convert_compression_type(TCompressionType::type type) {
+    orc::CompressionKind converted_type;
+    switch (type) {
+    case TCompressionType::NO_COMPRESSION: {
+        converted_type = orc::CompressionKind_NONE;
+        break;
+    }
+    case TCompressionType::SNAPPY: {
+        converted_type = orc::CompressionKind_SNAPPY;
+        break;
+    }
+    case TCompressionType::GZIP: {
+        converted_type = orc::CompressionKind_ZLIB;
+        break;
+    }
+    case TCompressionType::ZSTD: {
+        converted_type = orc::CompressionKind_ZSTD;
+        break;
+    }
+    case TCompressionType::LZ4: {
+        converted_type = orc::CompressionKind_LZ4;
+        break;
+    }
+    default: {
+        return Status::NotSupported(fmt::format("not supported compression type {}", type));
+    }
     }
 
-    return type;
+    return converted_type;
 }
 
 StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema(const std::vector<std::string>& column_names,
@@ -575,12 +589,13 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     }
 }
 
-ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs,
+ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
                                            const std::map<std::string, std::string>& options,
                                            const std::vector<std::string>& column_names,
                                            std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                            PriorityThreadPool* executors)
         : _fs(std::move(fs)),
+          _compression_type(compression_type),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),
@@ -591,9 +606,6 @@ Status ORCFileWriterFactory::init() {
         RETURN_IF_ERROR(e->init());
     }
     _parsed_options = std::make_shared<ORCWriterOptions>();
-    if (_options.contains(COMPRESSION_CODEC)) {
-        _parsed_options->compression_codec = _options[COMPRESSION_CODEC];
-    }
     return Status::OK();
 }
 
@@ -606,7 +618,8 @@ StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::st
     auto types = ColumnEvaluator::types(_column_evaluators);
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(file));
     return std::make_shared<ORCFileWriter>(path, std::move(output_stream), _column_names, types,
-                                           std::move(column_evaluators), _parsed_options, rollback_action, _executors);
+                                           std::move(column_evaluators), _compression_type, _parsed_options,
+                                           rollback_action, _executors);
 }
 
 } // namespace starrocks::formats

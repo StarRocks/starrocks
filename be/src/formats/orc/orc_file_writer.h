@@ -43,17 +43,15 @@ private:
     bool _is_closed = false;
 };
 
-struct ORCWriterOptions : public FileWriterOptions {
-    std::string compression_codec = "uncompressed";
-};
+struct ORCWriterOptions : public FileWriterOptions {};
 
 class ORCFileWriter final : public FileWriter {
 public:
     ORCFileWriter(const std::string& location, std::unique_ptr<OrcOutputStream> output_stream,
                   const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                  const std::shared_ptr<ORCWriterOptions>& writer_options, const std::function<void()> rollback_action,
-                  PriorityThreadPool* executors);
+                  TCompressionType::type compression_type, const std::shared_ptr<ORCWriterOptions>& writer_options,
+                  const std::function<void()> rollback_action, PriorityThreadPool* executors);
 
     ~ORCFileWriter() override = default;
 
@@ -66,7 +64,7 @@ public:
     std::future<CommitResult> commit() override;
 
 private:
-    static StatusOr<orc::CompressionKind> _compression_type(const std::string& compression_codec);
+    static StatusOr<orc::CompressionKind> _convert_compression_type(TCompressionType::type type);
 
     static StatusOr<std::unique_ptr<orc::Type>> _make_schema(const std::vector<std::string>& column_names,
                                                              const std::vector<TypeDescriptor>& type_descs);
@@ -103,6 +101,7 @@ private:
 
     std::unique_ptr<orc::Type> _schema;
     std::shared_ptr<orc::Writer> _writer;
+    TCompressionType::type _compression_type;
     std::shared_ptr<ORCWriterOptions> _writer_options;
     int64_t _row_counter{0};
 
@@ -113,7 +112,8 @@ private:
 
 class ORCFileWriterFactory : public FileWriterFactory {
 public:
-    ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::map<std::string, std::string>& options,
+    ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
+                         const std::map<std::string, std::string>& options,
                          const std::vector<std::string>& column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                          PriorityThreadPool* executors = nullptr);
@@ -124,6 +124,7 @@ public:
 
 private:
     std::shared_ptr<FileSystem> _fs;
+    TCompressionType::type _compression_type;
     std::map<std::string, std::string> _options;
     std::shared_ptr<ORCWriterOptions> _parsed_options;
 
