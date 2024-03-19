@@ -19,7 +19,9 @@ import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -150,5 +152,20 @@ public class LakeTableHelper {
      */
     public static boolean isSharedDirectory(String path, long partitionId) {
         return !path.endsWith(String.format("/%d", partitionId));
+    }
+
+    public static int restoreColumnUniqueId(OlapTable table) {
+        LOG.info("Restoring column unique ids of table '{}'(id={})", table.getName(), table.getId());
+        int maxId = 0;
+        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+            final int columnCount = indexMeta.getSchema().size();
+            maxId = Math.max(maxId, columnCount - 1);
+            for (int i = 0; i < columnCount; i++) {
+                Column col = indexMeta.getSchema().get(i);
+                Preconditions.checkState(col.getUniqueId() <= 0, col.getUniqueId());
+                col.setUniqueId(i);
+            }
+        }
+        return maxId;
     }
 }
