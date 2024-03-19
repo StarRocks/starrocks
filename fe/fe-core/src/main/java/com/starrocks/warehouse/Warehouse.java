@@ -23,27 +23,17 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public abstract class Warehouse implements Writable {
-
     @SerializedName(value = "name")
     protected String name;
     @SerializedName(value = "id")
     private long id;
+    @SerializedName(value = "comment")
+    protected String comment;
 
-    public enum WarehouseState {
-        INITIALIZING,
-        RUNNING,
-        SUSPENDED,
-        SCALING
-    }
-
-    @SerializedName(value = "state")
-    protected WarehouseState state = WarehouseState.INITIALIZING;
-
-    private volatile boolean exist = true;
-
-    public Warehouse(long id, String name) {
+    public Warehouse(long id, String name, String comment) {
         this.id = id;
         this.name = name;
+        this.comment = comment;
     }
 
     public long getId() {
@@ -54,16 +44,8 @@ public abstract class Warehouse implements Writable {
         return name;
     }
 
-    public void setState(WarehouseState state) {
-        this.state = state;
-    }
-
-    public WarehouseState getState() {
-        return state;
-    }
-
-    public void setExist(boolean exist) {
-        this.exist = exist;
+    public String getComment() {
+        return comment;
     }
 
     public abstract Cluster getAnyAvailableCluster();
