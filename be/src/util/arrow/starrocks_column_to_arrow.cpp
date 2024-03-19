@@ -14,6 +14,7 @@
 
 #include "util/arrow/starrocks_column_to_arrow.h"
 
+#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
@@ -32,8 +33,18 @@ typedef arrow::Status (*StarRocksToArrowConvertFunc)(const ColumnPtr& column, in
 
 // The context information for a column
 struct ColumnContext {
+    ColumnContext(const TypeDescriptor& desc, const std::shared_ptr<arrow::DataType>& at,
+                  StarRocksToArrowConvertFunc func)
+            : type_desc(desc), arrow_type(at), convert_func(func) {}
+
+    // StarRocks type descriptor for this column
+    const TypeDescriptor& type_desc;
+
+    // Arrow data type for this column
+    const std::shared_ptr<arrow::DataType>& arrow_type;
+
     // Function used to convert column to arrow
-    StarRocksToArrowConvertFunc* convert_func;
+    StarRocksToArrowConvertFunc convert_func;
 
     // Child column contexts which are only available for Array/Struct/Map column.
     // The vector is lazily initialized, and should check whether it's empty before
@@ -240,6 +251,69 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
     }
 };
 
+static inline StarRocksToArrowConvertFunc resolve_convert_func(LogicalType lt, ArrowTypeId at, bool is_nullable);
+
+DEF_PRED_GUARD(ConvArrayGuard, is_conv_array, LogicalType, LT, ArrowTypeId, AT)
+#define IS_CONV_ARRAY_CTOR(LT, AT) DEF_PRED_CASE_CTOR(is_conv_array, LT, AT)
+#define IS_CONV_ARRAY_R(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON_R(IS_CONV_ARRAY_CTOR, AT, ##__VA_ARGS__)
+
+IS_CONV_ARRAY_R(ArrowTypeId::LIST, TYPE_ARRAY)
+
+template <LogicalType LT, ArrowTypeId AT, bool is_nullable>
+struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
+    static inline arrow::Status initialize_child_column_context(const ColumnPtr& column,
+                                                                ColumnContext* column_context) {
+        if (!column_context->child_columns.empty()) {
+            return arrow::Status::OK();
+        }
+
+        auto& child_type_desc = column_context->type_desc.children[0];
+        auto& child_arrow_type = down_cast<arrow::ListType*>(column_context->arrow_type.get())->field(0)->type();
+        auto func = resolve_convert_func(child_type_desc.type, child_arrow_type->id(), column->is_nullable());
+        if (func == nullptr) {
+            return arrow::Status::NotImplemented("");
+        }
+
+        column_context->child_columns.push_back({child_type_desc, child_arrow_type, func});
+        return arrow::Status::OK();
+    }
+
+    static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
+                                        [[maybe_unused]] ColumnContext* column_context,
+                                        arrow::ArrayBuilder* array_builder) {
+        ARROW_RETURN_NOT_OK(initialize_child_column_context(column, column_context));
+        arrow::ListBuilder* builder = down_cast<arrow::ListBuilder*>(array_builder);
+        auto child_builder = builder->value_builder();
+        auto& child_column_context = column_context->child_columns[0];
+        if constexpr (is_nullable) {
+            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
+            const auto* data_column = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+            const auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+            auto& offsets = data_column->offsets().get_data();
+            const auto& child_column = data_column->elements_column();
+            for (auto i = start_idx; i <= end_idx; ++i) {
+                if (nullable_column->is_null(i)) {
+                    ARROW_RETURN_NOT_OK(builder->AppendNull());
+                } else {
+                    ARROW_RETURN_NOT_OK(builder->Append());
+                    ARROW_RETURN_NOT_OK(child_column_context.convert_func(child_column, offsets[i], offsets[i + 1] - 1,
+                                                                          &child_column_context, child_builder));
+                }
+            }
+        } else {
+            const auto* data_column = down_cast<ArrayColumn*>(column.get());
+            auto& offsets = data_column->offsets().get_data();
+            const auto& child_column = data_column->elements_column();
+            for (auto i = start_idx; i <= end_idx; ++i) {
+                ARROW_RETURN_NOT_OK(builder->Append());
+                ARROW_RETURN_NOT_OK(child_column_context.convert_func(child_column, offsets[i], offsets[i + 1] - 1,
+                                                                      &child_column_context, child_builder));
+            }
+        }
+        return arrow::Status::OK();
+    }
+};
+
 constexpr int32_t starrocks_to_arrow_convert_idx(LogicalType lt, ArrowTypeId at, bool is_nullable) {
     return (at << 17) | (lt << 2) | (is_nullable ? 2 : 0);
 }
@@ -266,7 +340,8 @@ static const std::unordered_map<int32_t, StarRocksToArrowConvertFunc> global_sta
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_CHAR, TYPE_HLL),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_LARGEINT, TYPE_DATE, TYPE_DATETIME),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_JSON),
-};
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::LIST, TYPE_ARRAY)};
+
 static inline StarRocksToArrowConvertFunc resolve_convert_func(LogicalType lt, ArrowTypeId at, bool is_nullable) {
     const auto func_id = starrocks_to_arrow_convert_idx(lt, at, is_nullable);
     const auto end = global_starrocks_to_arrow_conv_table.end();
@@ -276,20 +351,20 @@ static inline StarRocksToArrowConvertFunc resolve_convert_func(LogicalType lt, A
 
 class ColumnToArrowArrayConverter : public arrow::TypeVisitor {
 public:
-    ColumnToArrowArrayConverter(const ColumnPtr& column, arrow::MemoryPool* pool, LogicalType lt,
+    ColumnToArrowArrayConverter(const ColumnPtr& column, arrow::MemoryPool* pool, const TypeDescriptor& type_desc,
                                 const std::shared_ptr<arrow::DataType>& arrow_type,
                                 std::shared_ptr<arrow::Array>& array)
-            : _column(column), _pool(pool), _pt(lt), _arrow_type(arrow_type), _array(array) {}
+            : _column(column), _pool(pool), _type_desc(type_desc), _arrow_type(arrow_type), _array(array) {}
 
     using arrow::TypeVisitor::Visit;
 
 #define DEF_VISIT_METHOD(Type)                                                                      \
     arrow::Status Visit(const arrow::Type& type) override {                                         \
-        auto func = resolve_convert_func(_pt, type.type_id, _column->is_nullable());                \
+        auto func = resolve_convert_func(_type_desc.type, type.type_id, _column->is_nullable());    \
         if (func == nullptr) {                                                                      \
             return arrow::Status::NotImplemented("");                                               \
         }                                                                                           \
-        ColumnContext column_context;                                                               \
+        ColumnContext column_context(_type_desc, _arrow_type, func);                                \
         std::unique_ptr<arrow::ArrayBuilder> builder;                                               \
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(_pool, _arrow_type, &builder));                      \
         ARROW_RETURN_NOT_OK(func(_column, 0, _column->size() - 1, &column_context, builder.get())); \
@@ -311,7 +386,7 @@ public:
 private:
     const ColumnPtr& _column;
     arrow::MemoryPool* _pool;
-    LogicalType _pt;
+    const TypeDescriptor& _type_desc;
     const std::shared_ptr<arrow::DataType>& _arrow_type;
     std::shared_ptr<arrow::Array>& _array;
 }; // namespace starrocks
@@ -336,7 +411,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
         }
         auto& array = arrays[i];
         DCHECK(!column->is_constant() && !column->only_null());
-        ColumnToArrowArrayConverter converter(column, pool, expr->type().type, schema->field(i)->type(), array);
+        ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), array);
         auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
         if (!arrow_st.ok()) {
             return Status::InvalidArgument(arrow_st.ToString());
@@ -365,7 +440,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
                     ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(), column, num_rows);
         }
         auto& array = arrays[i];
-        ColumnToArrowArrayConverter converter(column, pool, slot_types[i]->type, schema->field(i)->type(), array);
+        ColumnToArrowArrayConverter converter(column, pool, *slot_types[i], schema->field(i)->type(), array);
         auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
         if (!arrow_st.ok()) {
             return Status::InvalidArgument(arrow_st.ToString());
