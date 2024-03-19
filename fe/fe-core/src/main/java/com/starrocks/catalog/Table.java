@@ -765,10 +765,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         throw new NotImplementedException();
     }
 
-    public Map<String, String> getUniqueProperties() {
-        throw new NotImplementedException();
-    }
-
     // should call this when create materialized view
     public void addRelatedMaterializedView(MvId mvId) {
         relatedMaterializedViews.add(mvId);

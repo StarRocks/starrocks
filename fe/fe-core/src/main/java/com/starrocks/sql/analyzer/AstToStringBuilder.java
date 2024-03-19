@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
@@ -79,7 +78,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
@@ -1542,18 +1540,6 @@ public class AstToStringBuilder {
             }
 
             // properties
-            Map<String, String> tableProperties = olapTable.getProperties();
-            if (separatePartition) {
-                // version info
-                Partition partition = null;
-                if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                    partition = olapTable.getPartition(olapTable.getName());
-                } else {
-                    Preconditions.checkState(partitionId.size() == 1);
-                    partition = olapTable.getPartition(partitionId.get(0));
-                }
-                tableProperties.put(PropertyAnalyzer.PROPERTIES_VERSION_INFO, String.valueOf(partition.getVisibleVersion()));
-            }
             sb.append("\nPROPERTIES (\n");
             sb.append(new PrintableMap<>(olapTable.getProperties(), "=", true, true, hidePassword).toString());
             sb.append("\n)");

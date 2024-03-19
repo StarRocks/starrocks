@@ -2982,6 +2982,7 @@ public class OlapTable extends Table {
 
     @Override
     public Map<String, String> getProperties() {
+        // common properties for olap table, cloud native table
         // use TreeMap to ensure the order of keys, such as for show create table.
         Map<String, String> properties = Maps.newTreeMap();
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
@@ -3050,7 +3051,7 @@ public class OlapTable extends Table {
         return properties;
     }
 
-    @Override
+    // unique properties for olap table, cloud native table
     public Map<String, String> getUniqueProperties() {
         Map<String, String> properties = Maps.newHashMap();
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
