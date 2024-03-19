@@ -154,26 +154,21 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             syncPartitions();
             // refresh external table meta cache before check the partition changed
             refreshExternalTable(context);
+
+            // check whether there are partition changes for base tables, eg: partition rename
+            // retry to sync partitions if any base table changed the partition infos
+            if (checkBaseTablePartitionChange(materializedView)) {
+                retryNum++;
+                if (retryNum > MAX_RETRY_NUM) {
+                    throw new DmlException("materialized view:%s refresh task failed", materializedView.getName());
+                }
+                LOG.info("materialized view:{} base partition has changed. retry to sync partitions, retryNum:{}",
+                        materializedView.getName(), retryNum);
+                continue;
+            }
+            checked = true;
             database.readLock();
             try {
-                // the following steps should be done in the same lock:
-                // 1. check base table partitions change
-                // 2. get affected materialized view partitions
-                // 3. generate insert stmt
-                // 4. generate insert ExecPlan
-
-                // check whether there are partition changes for base tables, eg: partition rename
-                // retry to sync partitions if any base table changed the partition infos
-                if (checkBaseTablePartitionChange(materializedView)) {
-                    retryNum++;
-                    if (retryNum > MAX_RETRY_NUM) {
-                        throw new DmlException("materialized view:%s refresh task failed", materializedView.getName());
-                    }
-                    LOG.info("materialized view:{} base partition has changed. retry to sync partitions, retryNum:{}",
-                            materializedView.getName(), retryNum);
-                    continue;
-                }
-                checked = true;
                 partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
                 if (partitionsToRefresh.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}, query_id:{}",
