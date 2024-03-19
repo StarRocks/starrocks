@@ -269,7 +269,7 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET; // iceberg sink only supports parquet
         sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
-        sink_ctx->options = {};              // default for now
+        sink_ctx->options = {}; // default for now
         sink_ctx->parquet_field_ids = {};
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
