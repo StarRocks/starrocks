@@ -82,22 +82,25 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
-        // simplify case-when
-        if (context.getSessionVariable().isEnableSimplifyCaseWhen()) {
-            predicates = scalarOperatorRewriter.rewrite(predicates, Lists.newArrayList(
-                    SimplifiedCaseWhenRule.INSTANCE,
-                    PruneTediousPredicateRule.INSTANCE
-            ));
+
+        if (!context.isShortCircuit()) {
+            // simplify case-when
+            if (context.getSessionVariable().isEnableSimplifyCaseWhen()) {
+                predicates = scalarOperatorRewriter.rewrite(predicates, Lists.newArrayList(
+                        SimplifiedCaseWhenRule.INSTANCE,
+                        PruneTediousPredicateRule.INSTANCE
+                ));
+            }
+
+            ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
+            predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
+                    .stream().map(rangeExtractor::rewriteOnlyColumn).collect(Collectors.toList())));
+            Preconditions.checkState(predicates != null);
+
+            predicates = scalarOperatorRewriter.rewrite(predicates,
+                    ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+            predicates = Utils.transTrue2Null(predicates);
         }
-
-        ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
-        predicates = rangeExtractor.rewriteOnlyColumn(Utils.compoundAnd(Utils.extractConjuncts(predicates)
-                .stream().map(rangeExtractor::rewriteOnlyColumn).collect(Collectors.toList())));
-        Preconditions.checkState(predicates != null);
-
-        predicates = scalarOperatorRewriter.rewrite(predicates,
-                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
-        predicates = Utils.transTrue2Null(predicates);
 
         // clone a new scan operator and rewrite predicate.
         Operator.Builder builder = OperatorBuilderFactory.build(logicalScanOperator);
