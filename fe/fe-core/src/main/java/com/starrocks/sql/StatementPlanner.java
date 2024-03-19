@@ -2,7 +2,6 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -36,6 +35,7 @@ import com.starrocks.thrift.TResultSinkType;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -246,21 +246,17 @@ public class StatementPlanner {
         if (dbs == null) {
             return;
         }
-        Map<Long, Database> dbMap = Maps.newTreeMap();
-        dbs.stream().forEach(db -> dbMap.put(db.getId(), db));
-        for (Map.Entry<Long, Database> entry : dbMap.entrySet()) {
-            entry.getValue().readLock();
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        for (Database db : dbs) {
+            db.readLock();
         }
     }
     public static void unlockDatabases(Collection<Database> dbs) {
         if (dbs == null) {
             return;
         }
-        // use TreeMap to remove duplicate and sort by db id
-        Map<Long, Database> dbMap = Maps.newTreeMap();
-        dbs.stream().forEach(db -> dbMap.put(db.getId(), db));
-        for (Map.Entry<Long, Database> entry : dbMap.entrySet()) {
-            entry.getValue().readUnlock();
+        for (Database db : dbs) {
+            db.readUnlock();
         }
     }
 
