@@ -393,6 +393,7 @@ Status KafkaDataConsumer::reset() {
     return Status::OK();
 }
 
+// The offsets is the last consumed message for every partition. We need to +1 when we commit offset.
 Status KafkaDataConsumer::commit(const std::string& topic, const std::map<int32_t, int64_t>& offsets) {
     std::vector<RdKafka::TopicPartition*> topic_partitions;
     // delete TopicPartition finally
