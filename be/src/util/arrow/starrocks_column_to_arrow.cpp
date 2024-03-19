@@ -288,7 +288,6 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
             const auto* data_column = down_cast<ArrayColumn*>(nullable_column->data_column().get());
-            const auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
             auto& offsets = data_column->offsets().get_data();
             const auto& child_column = data_column->elements_column();
             for (auto i = start_idx; i <= end_idx; ++i) {
