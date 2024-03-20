@@ -1737,12 +1737,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
-     * Collect all databases of the materialized view's base tables.
+     * Collect all deduplicated databases of the materialized view's base tables.
      * @param materializedView: the materialized view to check
-     * @return: the databases of the materialized view's base tables, throw exception if the database do not exist.
+     * @return: the deduplicated databases of the materialized view's base tables,
+     * throw exception if the database do not exist.
      */
     List<Database> collectDatabases(MaterializedView materializedView) {
-        List<Database> databases = Lists.newArrayList();
+        Map<Long, Database> databaseMap = Maps.newHashMap();
         for (BaseTableInfo baseTableInfo : materializedView.getBaseTableInfos()) {
             Database db = baseTableInfo.getDb();
             if (db == null) {
@@ -1750,9 +1751,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         baseTableInfo.getDbInfoStr(), materializedView.getName());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
             }
-            databases.add(db);
+            databaseMap.put(db.getId(), db);
         }
-        return databases;
+        return Lists.newArrayList(databaseMap.values());
     }
 
     @VisibleForTesting
