@@ -45,7 +45,7 @@ import java.util.List;
  */
 public class LakeTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("NodeId").add("DataSize").add("RowCount")
+            .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
             .build();
 
     private final Database db;
