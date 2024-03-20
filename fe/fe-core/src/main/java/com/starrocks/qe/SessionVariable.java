@@ -575,7 +575,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
-
+    public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
@@ -1344,6 +1344,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
+
+    @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
+    private boolean enableRewriteSimpleAggToHdfsScan = false;
 
     @VariableMgr.VarAttr(name = INTERLEAVING_GROUP_SIZE)
     private int interleavingGroupSize = 10;
@@ -3286,6 +3289,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableRewriteSimpleAggToMetaScan;
     }
 
+    public boolean isEnableRewriteSimpleAggToHdfsScan() {
+        return this.enableRewriteSimpleAggToHdfsScan;
+    }
+
     public boolean getEnablePruneComplexTypes() {
         return this.enablePruneComplexTypes;
     }
@@ -3511,26 +3518,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableArrayDistinctAfterAggOpt() {
         return enableArrayDistinctAfterAggOpt;
-    }
-
-    public long getConnectorMaxSplitSize() {
-        return connectorMaxSplitSize;
-    }
-
-    public void setConnectorMaxSplitSize(long size) {
-        connectorMaxSplitSize = size;
-    }
-
-    public long getConnectorHugeFileSize() {
-        return connectorHugeFileSize;
-    }
-
-    public void setConnectorHugeFileSize(long size) {
-        connectorHugeFileSize = size;
-    }
-
-    public boolean isEnableConnectorSplitIoTasks() {
-        return enableConnectorSplitIoTasks;
     }
 
     // Serialize to thrift object

@@ -387,13 +387,17 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
                                           _scanner_ctx.case_sensitive, _scanner_ctx.orc_use_column_names);
-    _scanner_ctx.update_materialized_columns(known_column_names);
+    RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
         _should_skip_file = true;
         return Status::OK();
     }
+
+    // for (const auto& s : known_column_names) {
+    //     VLOG_OPERATOR << "[xxx] known column name: " << s;
+    // }
 
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx.materialized_columns) {
@@ -533,13 +537,43 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
-    ASSIGN_OR_RETURN(const size_t rows_read, _do_get_next(chunk));
+    size_t rows_read = 0;
+
+    if (_scanner_ctx.return_count_column) {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
+    } else {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
+    }
 
     DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     return Status::OK();
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
+    size_t read_num_values = 0;
+    Status st = Status::OK();
+    while (true) {
+        {
+            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+            orc::RowReader::ReadPosition position;
+            st = _orc_reader->read_next(&position);
+            if (!st.ok()) {
+                break;
+            }
+        }
+        read_num_values += _orc_reader->get_cvb_size();
+        if (!_need_skip_rowids.empty()) {
+            read_num_values -= _orc_reader->get_row_delete_number(_need_skip_rowids);
+        }
+    }
+
+    if (!st.is_end_of_file()) return st;
+    if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
+    _scanner_ctx.append_or_update_count_column_to_chunk(chunk, read_num_values);
+    return 1;
 }
 
 StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {

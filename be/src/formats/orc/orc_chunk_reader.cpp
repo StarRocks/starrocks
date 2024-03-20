@@ -1219,6 +1219,14 @@ ColumnPtr OrcChunkReader::get_row_delete_filter(const std::set<int64_t>& deleted
     return filter_column;
 }
 
+size_t OrcChunkReader::get_row_delete_number(const std::set<int64_t>& deleted_pos) {
+    int64_t start_pos = _row_reader->getRowNumber();
+    auto num_rows = _batch->numElements;
+    auto iter = deleted_pos.lower_bound(start_pos);
+    auto end = deleted_pos.upper_bound(start_pos + num_rows - 1);
+    return std::distance(iter, end);
+}
+
 Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
                                                     Filter* filter) {
     if (dict_filter_eval_cache.size() == 0) {
