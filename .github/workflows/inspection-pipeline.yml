@@ -24,6 +24,14 @@ on:
         description: 'TAR PATH(ASAN)'
         required: false
         type: string
+      UBUNTU_TAR_PATH:
+        description: 'TAR PATH(Release & Ubuntu)'
+        required: false
+        type: string
+      UBUNTU_ASAN_TAR_PATH:
+        description: 'TAR PATH(ASAN & Ubuntu)'
+        required: false
+        type: string
       IS_REBUILD:
         description: 'REBUILD'
         type: boolean
@@ -62,6 +70,8 @@ jobs:
       PR_NUMBER: ${{ steps.param.outputs.PR_NUMBER }}
       TAR_PATH: ${{ steps.param.outputs.TAR_PATH }}
       ASAN_TAR_PATH: ${{ steps.param.outputs.ASAN_TAR_PATH }}
+      UBUNTU_TAR_PATH: ${{ steps.param.outputs.UBUNTU_TAR_PATH }}
+      UBUNTU_ASAN_TAR_PATH: ${{ steps.param.outputs.UBUNTU_ASAN_TAR_PATH }}
       RETAIN_ENV: ${{ steps.param.outputs.RETAIN_ENV }}
     steps:
       - name: CRON PARAM
@@ -82,6 +92,8 @@ jobs:
             echo "PR_NUMBER=${{ inputs.COMMIT_ID }}" >> $GITHUB_OUTPUT
             echo "TAR_PATH=${{ inputs.TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "ASAN_TAR_PATH=${{ inputs.ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_TAR_PATH=${{ inputs.UBUNTU_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_ASAN_TAR_PATH=${{ inputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "RETAIN_ENV=${{ inputs.RETAIN_ENV }}" >> $GITHUB_OUTPUT
           fi
 
@@ -234,6 +246,7 @@ jobs:
       fail-fast: false
       matrix:
         build_type: [ Release, ASAN ]
+        linux: [ centos7, ubuntu ]
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
@@ -258,7 +271,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BUILD-RESULT-${{ matrix.build_type }}
+          name: BUILD-RESULT-${{ matrix.build_type }}-${{ matrix.linux }}
           path: tar.txt
           retention-days: 1
           overwrite: true
@@ -284,8 +297,10 @@ jobs:
       - build
     if: always() && needs.info.result == 'success'
     outputs:
-      RELEASE_TAR_PATH: ${{ steps.set_output.outputs.RELEASE_TAR_PATH }}
-      ASAN_TAR_PATH: ${{ steps.set_output.outputs.ASAN_TAR_PATH }}
+      RELEASE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_TAR_PATH }}
+      ASAN_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_TAR_PATH }}
+      UBUNTU_RELEASE_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_RELEASE_TAR_PATH }}
+      UBUNTU_ASAN_TAR_PATH: ${{ steps.set_output.outputs.UBUNTU_ASAN_TAR_PATH }}
       IS_SELF_BUILD: ${{ steps.set_output.outputs.IS_SELF_BUILD }}
     steps:
       - name: Clean Workspace
@@ -302,19 +317,35 @@ jobs:
         id: analyse_artifact
         if: github.event_name == 'schedule' || inputs.IS_REBUILD
         run: |
-          if [[ -e "./outputs/BUILD-RESULT-Release/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-Release/tar.txt")
-            echo "RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
+          if [[ -e "./outputs/BUILD-RESULT-Release-centos7/tar.txt" ]]; then
+            build_result=$(cat "./outputs/BUILD-RESULT-Release-centos7/tar.txt")
+            echo "CENTOS_RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
           else
-            echo "::error::BUILD FAILED (Release)!"
+            echo "::error::BUILD FAILED (Release & Centos)!"
             exit 1
           fi
           
-          if [[ -e "./outputs/BUILD-RESULT-ASAN/tar.txt" ]]; then
-            build_result=$(cat "./outputs/BUILD-RESULT-ASAN/tar.txt")
-            echo "ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
+          if [[ -e "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" ]]; then
+            build_result=$(cat "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt")
+            echo "CENTOS_ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
           else
-            echo "::error::BUILD FAILED (ASAN)!"
+            echo "::error::BUILD FAILED (ASAN & Centos)!"
+            exit 1
+          fi
+          
+          if [[ -e "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt" ]]; then
+            build_result=$(cat "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt")
+            echo "UBUNTU_RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
+          else
+            echo "::error::BUILD FAILED (Release & Ubuntu)!"
+            exit 1
+          fi
+          
+          if [[ -e "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt" ]]; then
+            build_result=$(cat "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt")
+            echo "UBUNTU_ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
+          else
+            echo "::error::BUILD FAILED (ASAN & Ubuntu)!"
             exit 1
           fi
 
@@ -323,17 +354,19 @@ jobs:
         if: always()
         run: |
           if [[ "${{steps.analyse_artifact.outcome}}" == "skipped" ]]; then
-            echo "RELEASE_TAR_PATH=${{ needs.info.outputs.TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "ASAN_TAR_PATH=${{ needs.info.outputs.ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_RELEASE_TAR_PATH=${{ needs.info.outputs.TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_ASAN_TAR_PATH=${{ needs.info.outputs.ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "IS_SELF_BUILD=false" >> $GITHUB_OUTPUT
           else
-            echo "RELEASE_TAR_PATH=${{ steps.analyse_artifact.outputs.RELEASE_TAR_PATH }}" >> $GITHUB_OUTPUT
-            echo "ASAN_TAR_PATH=${{ steps.analyse_artifact.outputs.ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_RELEASE_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_RELEASE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "CENTOS_ASAN_TAR_PATH=${{ steps.analyse_artifact.outputs.CENTOS_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_RELEASE_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_RELEASE_TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "UBUNTU_ASAN_TAR_PATH=${{ steps.analyse_artifact.outputs.UBUNTU_ASAN_TAR_PATH }}" >> $GITHUB_OUTPUT
             echo "IS_SELF_BUILD=true" >> $GITHUB_OUTPUT
           fi
 
   system-test-release:
-    name: Release
+    name: Release / Centos
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -345,10 +378,11 @@ jobs:
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
       TAR_PATH: ${{ needs.test_filter.outputs.RELEASE_TAR_PATH }}
       BUILD_TYPE: Release
+      LINUX_DISTRO: centos7
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
 
   system-test-asan:
-    name: ASAN
+    name: ASAN / Centos
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -360,6 +394,39 @@ jobs:
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
       TAR_PATH: ${{ needs.test_filter.outputs.ASAN_TAR_PATH }}
       BUILD_TYPE: ASAN
+      LINUX_DISTRO: centos7
+      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
+
+  system-test-release-ubuntu:
+    name: Release / Ubuntu
+    uses: ./.github/workflows/inspection-reusable-pipeline.yml
+    needs:
+      - info
+      - test_filter
+    secrets: inherit
+    if: always() && needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH != ''
+    with:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
+      TAR_PATH: ${{ needs.test_filter.outputs.UBUNTU_RELEASE_TAR_PATH }}
+      BUILD_TYPE: Release
+      LINUX_DISTRO: ubuntu
+      IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
+
+  system-test-asan-ubuntu:
+    name: ASAN / Ubuntu
+    uses: ./.github/workflows/inspection-reusable-pipeline.yml
+    needs:
+      - info
+      - test_filter
+    secrets: inherit
+    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH != ''
+    with:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
+      TAR_PATH: ${{ needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH }}
+      BUILD_TYPE: ASAN
+      LINUX_DISTRO: ubuntu
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
 
   Teardown:
@@ -371,6 +438,8 @@ jobs:
       - fe-ut
       - system-test-release
       - system-test-asan
+      - system-test-release-ubuntu
+      - system-test-asan-ubuntu
     if: always()
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
@@ -380,17 +449,22 @@ jobs:
       ASAN_CONF_FILE: ${{ needs.system-test-asan.outputs.CONF_FILE }}
       RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release.outputs.MYSQL_ECI_ID }}
       ASAN_MYSQL_ECI_ID: ${{ needs.system-test-asan.outputs.MYSQL_ECI_ID }}
+      UBUNTU_RELEASE_CONF_FILE: ${{ needs.system-test-release-ubuntu.outputs.CONF_FILE }}
+      UBUNTU_ASAN_CONF_FILE: ${{ needs.system-test-asan-ubuntu.outputs.CONF_FILE }}
+      UBUNTU_RELEASE_MYSQL_ECI_ID: ${{ needs.system-test-release-ubuntu.outputs.MYSQL_ECI_ID }}
+      UBUNTU_ASAN_MYSQL_ECI_ID: ${{ needs.system-test-asan-ubuntu.outputs.MYSQL_ECI_ID }}
       RETAIN_ENV: ${{ needs.info.outputs.RETAIN_ENV }}
     steps:
       - name: init
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
 
-      - name: Backup SR Info (Release)
+      - name: Backup SR Info (Release & Centos)
         if: env.RELEASE_CONF_FILE != ''
-        id: backup_release
+        id: backup_release_centos
         env:
           build_type: Release
+          linuxdistro: centos7
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${RELEASE_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
@@ -399,14 +473,43 @@ jobs:
             ./bin/elastic-cluster.sh --delete
           fi
 
-      - name: Backup SR Info (ASAN)
+      - name: Backup SR Info (ASAN & Centos)
         if: env.ASAN_CONF_FILE != ''
-        id: backup_asan
+        id: backup_asan_centos
         env:
           build_type: ASAN
+          linuxdistro: centos7
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${ASAN_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
+          
+          if [[ "${RETAIN_ENV}" != "true" ]]; then
+            ./bin/elastic-cluster.sh --delete
+          fi
+
+      - name: Backup SR Info (Release & Ubuntu)
+        if: env.UBUNTU_RELEASE_CONF_FILE != ''
+        id: backup_release_ubuntu
+        env:
+          build_type: Release
+          linuxdistro: ubuntu
+        run: |
+          cd ci-tool && source lib/init.sh
+          ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${UBUNTU_RELEASE_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
+          
+          if [[ "${RETAIN_ENV}" != "true" ]]; then
+            ./bin/elastic-cluster.sh --delete
+          fi
+
+      - name: Backup SR Info (ASAN & Centos)
+        if: env.UBUNTU_ASAN_CONF_FILE != ''
+        id: backup_asan_ubuntu
+        env:
+          build_type: ASAN
+          linuxdistro: ubuntu
+        run: |
+          cd ci-tool && source lib/init.sh
+          ./bin/backup_log_cores.sh --branch "${BRANCH}" --pr "${PR_NUMBER}" --build "${build_type}" --conf "${UBUNTU_ASAN_CONF_FILE}" --repository "${GITHUB_REPOSITORY}" || true
           
           if [[ "${RETAIN_ENV}" != "true" ]]; then
             ./bin/elastic-cluster.sh --delete
