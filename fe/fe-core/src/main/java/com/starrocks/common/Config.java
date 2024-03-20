@@ -2487,6 +2487,13 @@ public class Config extends ConfigBase {
     public static boolean metadata_journal_ignore_replay_failure = true;
 
     /**
+     * In this mode, system will start some damon to recover metadata (Currently only partition version is supported)
+     * and any kind of loads will be rejected.
+     */
+    @ConfField
+    public static boolean metadata_enable_recovery_mode = false;
+
+    /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
      * Default value: 500
      */

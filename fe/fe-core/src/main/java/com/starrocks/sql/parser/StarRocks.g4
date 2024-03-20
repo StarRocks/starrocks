@@ -125,6 +125,7 @@ statement
     | adminRepairTableStatement
     | adminCancelRepairTableStatement
     | adminCheckTabletsStatement
+    | adminSetPartitionVersion
     | killStatement
     | syncStatement
     | executeScriptStatement
@@ -683,6 +684,10 @@ adminCancelRepairTableStatement
 
 adminCheckTabletsStatement
     : ADMIN CHECK tabletList PROPERTIES '('property')'
+    ;
+
+adminSetPartitionVersion
+    : ADMIN SET TABLE qualifiedName PARTITION '('(partitionName=identifierOrString | partitionId=INTEGER_VALUE)')' VERSION TO version=INTEGER_VALUE
     ;
 
 killStatement
@@ -2669,7 +2674,7 @@ nonReserved
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
-    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VOLUME | VOLUMES
+    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT

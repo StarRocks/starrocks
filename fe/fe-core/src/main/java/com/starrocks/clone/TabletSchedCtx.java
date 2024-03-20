@@ -809,7 +809,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         // That is, we may need to use 2 clone tasks to create a new replica. It is inefficient,
         // but there is no other way now.
         TBackend tSrcBe = new TBackend(srcBe.getHost(), srcBe.getBePort(), srcBe.getHttpPort());
-        cloneTask = new CloneTask(destBackendId, dbId, tblId, partitionId, indexId,
+        cloneTask = new CloneTask(destBackendId, destBe.getHost(), dbId, tblId, partitionId, indexId,
                 tabletId, schemaHash, Lists.newArrayList(tSrcBe), storageMedium,
                 visibleVersion, (int) (taskTimeoutMs / 1000));
         cloneTask.setPathHash(srcPathHash, destPathHash);

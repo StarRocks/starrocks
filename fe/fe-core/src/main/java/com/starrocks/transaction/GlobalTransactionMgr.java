@@ -310,9 +310,12 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
         }
 
+        if (Config.metadata_enable_recovery_mode) {
+            throw new AnalysisException("The cluster is under recovery mode, all load jobs are rejected");
+        }
+
         if (GlobalStateMgr.getCurrentState().isSafeMode()) {
-            throw new AnalysisException(String.format("The cluster is under safe mode state," +
-                    " all load jobs are rejected."));
+            throw new AnalysisException("The cluster is under safe mode state, all load jobs are rejected.");
         }
 
         switch (sourceType) {
@@ -1001,6 +1004,15 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
             return "";
         }
         return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
+    }
+
+    public boolean hasCommittedTxnOnPartition(long dbId, long tableId, long partitionId) {
+        DatabaseTransactionMgr databaseTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (databaseTransactionMgr == null) {
+            return false;
+        }
+
+        return databaseTransactionMgr.hasCommittedTxnOnPartition(tableId, partitionId);
     }
 
     @Override

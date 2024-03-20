@@ -117,6 +117,7 @@ import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -2048,6 +2049,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(Long::parseLong).collect(toList());
         }
         return new AdminCheckTabletsStmt(tabletIds, (Property) visitProperty(context.property()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminSetPartitionVersion(StarRocksParser.AdminSetPartitionVersionContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        String partitionName = null;
+        if (context.partitionName != null) {
+            partitionName = ((Identifier) visit(context.partitionName)).getValue();
+        }
+        Long partitionId = null;
+        if (context.partitionId != null) {
+            partitionId = Long.parseLong(context.partitionId.getText());
+        }
+        long version = Long.parseLong(context.version.getText());
+        if (partitionName != null) {
+            return new AdminSetPartitionVersionStmt(targetTableName, partitionName, version, createPos(context));
+        } else {
+            return new AdminSetPartitionVersionStmt(targetTableName, partitionId, version, createPos(context));
+        }
     }
 
     @Override

@@ -410,6 +410,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitSyncStatement(SyncStmt statement, C context) {
         return visitStatement(statement, context);
     }
