@@ -261,7 +261,7 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --build ${{ matrix.build_type }}
+          ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --build ${{ matrix.build_type }} --linuxdistro ${{ matrix.linux }}
 
       - name: BUILD RESULT
         run: |
@@ -366,7 +366,7 @@ jobs:
           fi
 
   system-test-release:
-    name: Release / Centos
+    name: 'Release/Centos'
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -382,7 +382,7 @@ jobs:
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
 
   system-test-asan:
-    name: ASAN / Centos
+    name: 'ASAN/Centos'
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -398,7 +398,7 @@ jobs:
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
 
   system-test-release-ubuntu:
-    name: Release / Ubuntu
+    name: 'Release/Ubuntu'
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -414,7 +414,7 @@ jobs:
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
 
   system-test-asan-ubuntu:
-    name: ASAN / Ubuntu
+    name: 'ASAN/Ubuntu'
     uses: ./.github/workflows/inspection-reusable-pipeline.yml
     needs:
       - info
@@ -501,7 +501,7 @@ jobs:
             ./bin/elastic-cluster.sh --delete
           fi
 
-      - name: Backup SR Info (ASAN & Centos)
+      - name: Backup SR Info (ASAN & Ubuntu)
         if: env.UBUNTU_ASAN_CONF_FILE != ''
         id: backup_asan_ubuntu
         env:

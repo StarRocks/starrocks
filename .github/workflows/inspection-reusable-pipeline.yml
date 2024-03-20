@@ -83,8 +83,8 @@ jobs:
         id: apply_resource
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME}
-          conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-starrocks_deploy.conf
+          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO}
+          conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-starrocks_deploy.conf
           cp conf/starrocks_deploy.conf ${conf_name}
           echo "deploy_conf_file=${conf_name}" >> $GITHUB_OUTPUT
 
