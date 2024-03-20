@@ -2832,6 +2832,23 @@ TEST_F(OrcChunkReaderTest, TestColumnMismatched) {
         ASSERT_FALSE(st.ok()) << st.message();
     }
 
+    // test with column not found
+    {
+        SlotDesc col1{"col11", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+
+        SlotDesc slot_descs[] = {col1, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_use_orc_column_names(true);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), nullptr);
+        ASSERT_FALSE(st.ok()) << st.message();
+    }
+
     // test with col2 not matched, enable invalid_as_null
     {
         SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
