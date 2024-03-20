@@ -132,7 +132,8 @@ public class DecodeNode extends PlanNode {
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalDecodeNode decodeNode = new TNormalDecodeNode();
         List<Pair<SlotId, SlotId>> dictIdAndStrIdPairs = dictIdToStringIds.entrySet().stream().map(
-                e -> Pair.create(normalizer.remapSlotId(new SlotId(e.getKey())), new SlotId(e.getValue()))
+                e -> Pair.create(normalizer.remapSlotId(new SlotId(e.getKey())),
+                        normalizer.remapSlotId(new SlotId(e.getValue())))
         ).sorted(Comparator.comparing(p -> p.first.asInt())).collect(Collectors.toList());
         List<Integer> fromDictIds = dictIdAndStrIdPairs.stream().map(p -> p.first.asInt())
                 .collect(Collectors.toList());
