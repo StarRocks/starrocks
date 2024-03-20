@@ -109,18 +109,37 @@ collect_env_info
 add_self $svc_name || exit $?
 log_stderr "run start_be.sh"
 
+if [ $COREDUMP_ENABLED == "true" ]; then
+  # start inotifywait loop daemon to monitor core dump generation
+  $STARROCKS_ROOT/upload_coredump.sh &
+fi
+
+
 addition_args=
 if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
     # env var `LOG_CONSOLE=1` can be added to enable logging to console
     addition_args="--logconsole"
 fi
-$STARROCKS_HOME/bin/start_be.sh $addition_args
-ret=$?
-if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
-    nol=50
-    log_stderr "Last $nol lines of be.INFO ..."
-    tail -n $nol $STARROCKS_HOME/log/be.INFO
-    log_stderr "Last $nol lines of be.out ..."
-    tail -n $nol $STARROCKS_HOME/log/be.out
-fi
-exit $ret
+
+while true; do
+  $STARROCKS_HOME/bin/start_be.sh $addition_args
+  ret=$?
+  if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
+      nol=50
+      log_stderr "Last $nol lines of be.INFO ..."
+      tail -n $nol $STARROCKS_HOME/log/be.INFO
+      log_stderr "Last $nol lines of be.out ..."
+      tail -n $nol $STARROCKS_HOME/log/be.out
+  fi
+
+  if [ $COREDUMP_ENABLED != "true" ]; then
+    exit $ret
+  fi
+
+  # Print a message indicating the failure
+  log_stderr "starrocks_be process exited with status: $ret"
+  echo "Restarting starrocks_be ..."
+
+  # Wait for a few seconds before restarting
+  sleep 5
+done
