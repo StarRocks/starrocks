@@ -50,7 +50,7 @@ struct ParquetWriterOptions : FileWriterOptions {
     int64_t dictionary_pagesize = 1024 * 1024; // 1MB
     int64_t page_size = 1024 * 1024;           // 1MB
     int64_t write_batch_size = 4096;
-    int64_t rowgroup_size = 128 * 1024 * 1024; // 128MB
+    int64_t rowgroup_size = 128L * 1024 * 1024; // 128MB
     std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
 };
 

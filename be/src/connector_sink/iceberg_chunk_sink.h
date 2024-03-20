@@ -73,12 +73,12 @@ struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
     std::vector<int32_t> partition_column_indices;
     int64_t max_file_size = 128L * 1024 * 1024;
     std::string format;
-    TCompressionType::type compression_type;
+    TCompressionType::type compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::map<std::string, std::string> options;
     std::vector<formats::FileColumnId> parquet_field_ids;
-    PriorityThreadPool* executor;
+    PriorityThreadPool* executor = nullptr;
     TCloudConfiguration cloud_conf;
-    pipeline::FragmentContext* fragment_context;
+    pipeline::FragmentContext* fragment_context = nullptr;
 };
 
 class IcebergChunkSinkProvider : public ConnectorChunkSinkProvider {
