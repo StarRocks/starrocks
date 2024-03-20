@@ -139,11 +139,8 @@ import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
-<<<<<<< HEAD
-import com.starrocks.credential.CredentialUtil;
-=======
 import com.starrocks.consistency.MetaRecoveryDaemon;
->>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;

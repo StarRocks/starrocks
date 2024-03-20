@@ -146,12 +146,8 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
-<<<<<<< HEAD
-=======
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
-import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
->>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.ReplacePartitionOperationLog;

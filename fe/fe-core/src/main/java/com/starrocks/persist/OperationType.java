@@ -614,12 +614,8 @@ public class OperationType {
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PARTITION_V2 = 10243;
-<<<<<<< HEAD
-=======
-    public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
     @IgnorableOnReplayFailed
     public static final short OP_RECOVER_PARTITION_VERSION = 10245;
->>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
 
     // new privilege, all ends with V2
 
