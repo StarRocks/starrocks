@@ -813,6 +813,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         long now = System.currentTimeMillis();
 
         for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
+<<<<<<< HEAD
             int partition = entry.getKey();
             long lag = (now - entry.getValue().longValue()) / 1000;
             if (lag > Config.routine_load_unstable_threshold_second) {
@@ -821,6 +822,18 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                                         "Config.routine_load_unstable_threshold_second [%d]",
                                 lag,  partition, Config.routine_load_unstable_threshold_second)));
                 return;
+=======
+            if (entry.getValue().longValue() > 0 && Config.routine_load_unstable_threshold_second > 0) {
+                int partition = entry.getKey();
+                long lag = (now - entry.getValue().longValue()) / 1000;
+                if (lag > Config.routine_load_unstable_threshold_second) {
+                    updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
+                            String.format("The lag [%d] of partition [%d] exceeds " +
+                                            "Config.routine_load_unstable_threshold_second [%d]",
+                                    lag, partition, Config.routine_load_unstable_threshold_second)));
+                    return;
+                }
+>>>>>>> e6875ecf46 ([Enhancement] No UNSTABLE state is set when offset is not initialized (#42619))
             }
         }
         updateSubstate(JobSubstate.STABLE, null);

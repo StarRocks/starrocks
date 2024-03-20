@@ -193,9 +193,6 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                 delayPutToQueue(routineLoadTaskInfo, msg);
                 return;
             }
-            // Update the job state is the job is too slow.
-            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
-
         } catch (RoutineLoadPauseException e) {
             String msg = "fe abort task with reason: check task ready to execute failed, " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(
@@ -207,6 +204,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         } catch (Exception e) {
             LOG.warn("check task ready to execute failed", e);
             delayPutToQueue(routineLoadTaskInfo, "check task ready to execute failed, err: " + e.getMessage());
+            // Update the job state is the job is too slow.
+            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
             return;
         }
 
@@ -220,6 +219,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                                     "current value is %d",
                             routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000,
                             Config.max_routine_load_task_num_per_be));
+            // Update the job state is the job is too slow.
+            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
             return;
         }
 
