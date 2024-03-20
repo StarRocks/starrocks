@@ -375,6 +375,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitSyncStatement(SyncStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -967,19 +971,19 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAddBackendClause(AddBackendClause clause, C context) {
-        return visitNode(clause, context);
+        return visitBackendClause(clause, context);
     }
 
     default R visitDropBackendClause(DropBackendClause clause, C context) {
-        return visitNode(clause, context);
+        return visitBackendClause(clause, context);
     }
 
     default R visitModifyBackendClause(ModifyBackendClause clause, C context) {
-        return visitNode(clause, context);
+        return visitBackendClause(clause, context);
     }
 
     default R visitDecommissionBackendClause(DecommissionBackendClause clause, C context) {
-        return visitNode(clause, context);
+        return visitBackendClause(clause, context);
     }
 
     default R visitModifyBrokerClause(ModifyBrokerClause clause, C context) {
@@ -991,11 +995,11 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAddComputeNodeClause(AddComputeNodeClause clause, C context) {
-        return visitNode(clause, context);
+        return visitComputeNodeClause(clause, context);
     }
 
     default R visitDropComputeNodeClause(DropComputeNodeClause clause, C context) {
-        return visitNode(clause, context);
+        return visitComputeNodeClause(clause, context);
     }
 
     default R visitCreateImageClause(CreateImageClause clause, C context) {

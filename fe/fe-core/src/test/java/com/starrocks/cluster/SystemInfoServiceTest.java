@@ -48,6 +48,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
@@ -206,13 +207,13 @@ public class SystemInfoServiceTest {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropAllBackend();
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void validHostAndPortTest1() throws Exception {
         createHostAndPort(1);
         systemInfoService.validateHostAndPort(hostPort, false);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void validHostAndPortTest3() throws Exception {
         createHostAndPort(3);
         systemInfoService.validateHostAndPort(hostPort, false);

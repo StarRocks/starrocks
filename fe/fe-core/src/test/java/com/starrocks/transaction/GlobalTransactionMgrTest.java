@@ -47,6 +47,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -934,5 +936,47 @@ public class GlobalTransactionMgrTest {
                         LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         long res = masterTransMgr.getTransactionNumByCoordinateBe("localbe");
         assertEquals(1, res);
+    }
+
+    @Test
+    public void testBeginTransactionFailed() {
+        Config.disable_load_job = true;
+        boolean exceptionThrown = false;
+        try {
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ErrorReportException);
+            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            exceptionThrown = true;
+        } finally {
+            Config.disable_load_job = false;
+        }
+        Assert.assertTrue(exceptionThrown);
+
+        Config.metadata_enable_recovery_mode = true;
+        exceptionThrown = false;
+        try {
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ErrorReportException);
+            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            exceptionThrown = true;
+        } finally {
+            Config.metadata_enable_recovery_mode = false;
+        }
+        Assert.assertTrue(exceptionThrown);
+
+        GlobalStateMgr.getCurrentState().setSafeMode(true);
+        exceptionThrown = false;
+        try {
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ErrorReportException);
+            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            exceptionThrown = true;
+        } finally {
+            GlobalStateMgr.getCurrentState().setSafeMode(false);
+        }
+        Assert.assertTrue(exceptionThrown);
     }
 }
