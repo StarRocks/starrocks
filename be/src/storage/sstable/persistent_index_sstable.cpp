@@ -17,35 +17,39 @@
 #include <butil/time.h> // NOLINT
 
 #include "fs/fs.h"
-#include "storage/lake/persistent_index_memtable.h"
-#include "storage/lake/tablet_manager.h"
+#include "storage/olap_common.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
 
 namespace starrocks::sstable {
 
-Status PersistentIndexSstable::init(RandomAccessFile* rf, const int64_t filesz, Cache* cache) {
+Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const int64_t filesz, Cache* cache) {
     Options options;
     _filter_policy.reset(const_cast<FilterPolicy*>(NewBloomFilterPolicy(10)));
     options.filter_policy = _filter_policy.get();
     options.block_cache = cache;
     Table* table;
-    RETURN_IF_ERROR(Table::Open(options, rf, filesz, &table));
+    RETURN_IF_ERROR(Table::Open(options, rf.get(), filesz, &table));
     _sst.reset(table);
+    _rf = std::move(rf);
+    _filesz = filesz;
     return Status::OK();
 }
 
-Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                             WritableFile* wf, uint64_t* filesz) {
+Status PersistentIndexSstable::build_sstable(
+        const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map, WritableFile* wf,
+        uint64_t* filesz) {
     std::unique_ptr<FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<FilterPolicy*>(NewBloomFilterPolicy(10)));
     Options options;
     options.filter_policy = filter_policy.get();
     TableBuilder builder(options, wf);
-    for (const auto& [k, m] : map) {
+    for (const auto& [k, v] : map) {
         IndexValueWithVerPB index_value_pb;
-        index_value_pb.add_versions(m.first);
-        index_value_pb.add_values(m.second);
+        for (const auto& index_value_with_ver : v) {
+            index_value_pb.add_versions(index_value_with_ver.first);
+            index_value_pb.add_values(index_value_with_ver.second.get_value());
+        }
         builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
     }
     RETURN_IF_ERROR(builder.Finish());

@@ -15,18 +15,31 @@
 #pragma once
 
 #include "storage/persistent_index.h"
+#include "storage/sstable/persistent_index_sstable.h"
 
-namespace starrocks::lake {
+namespace starrocks {
+class Cache;
+struct KeyIndexesInfo;
+class PersistentIndexSstableMetaPB;
+class PersistentIndexSstablePB;
+
+namespace sstable {
+class PersistentIndexSstable;
+} // namespace sstable
+namespace lake {
 
 class PersistentIndexMemtable;
+class TabletManager;
 
 class LakePersistentIndex : public PersistentIndex {
 public:
-    explicit LakePersistentIndex(std::string path);
+    explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
     ~LakePersistentIndex();
 
     DISALLOW_COPY(LakePersistentIndex);
+
+    Status init(const PersistentIndexSstableMetaPB& sstable_meta);
 
     // batch get
     // |n|: size of key/value array
@@ -70,8 +83,24 @@ public:
     Status major_compact(int64_t min_retain_version);
 
 private:
+    void flush_to_immutable_memtable();
+
+    bool is_memtable_full();
+
+    Status get_from_immutable_memtable(size_t n, const Slice* keys, IndexValue* values,
+                                       KeyIndexesInfo* key_indexes_info, int64_t version);
+
+    Status get_from_sstables(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* key_indexes_info,
+                             int64_t version);
+
+private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
     std::unique_ptr<PersistentIndexMemtable> _immutable_memtable;
+    std::unique_ptr<Cache> _cache;
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _tablet_id{0};
+    std::vector<std::unique_ptr<sstable::PersistentIndexSstable>> _sstables;
 };
 
-} // namespace starrocks::lake
+} // namespace lake
+} // namespace starrocks

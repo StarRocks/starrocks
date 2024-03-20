@@ -23,6 +23,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
+#include "storage/olap_common.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -211,9 +212,11 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     // 1. build sstable
     const std::string filename = "test_persistent_index_sstable_1.sst";
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
-    phmap::btree_map<std::string, sstable::IndexValueWithVer, std::less<>> map;
+    phmap::btree_map<std::string, std::list<sstable::IndexValueWithVer>, std::less<>> map;
     for (int i = 0; i < N; i++) {
-        map.insert({fmt::format("test_key_{:016X}", i), std::make_pair(100, i)});
+        std::list<sstable::IndexValueWithVer> index_value_vers;
+        index_value_vers.emplace_front(100, i);
+        map.insert({fmt::format("test_key_{:016X}", i), index_value_vers});
     }
     uint64_t filesz = 0;
     ASSERT_OK(sstable::PersistentIndexSstable::build_sstable(map, file.get(), &filesz));
@@ -222,7 +225,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
     std::unique_ptr<Cache> cache_ptr;
     cache_ptr.reset(new_lru_cache(100));
-    ASSERT_OK(sst->init(read_file.get(), filesz, cache_ptr.get()));
+    ASSERT_OK(sst->init(std::move(read_file), filesz, cache_ptr.get()));
 
     {
         // 3. multi get with version (all keys included)
@@ -230,8 +233,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         std::vector<Slice> keys(N / 2);
         std::vector<IndexValue> values(N / 2, IndexValue(NullIndexValue));
         std::vector<IndexValue> expected_values(N / 2);
-        sstable::KeyIndexesInfo key_indexes_info;
-        sstable::KeyIndexesInfo found_keys_info;
+        KeyIndexesInfo key_indexes_info;
+        KeyIndexesInfo found_keys_info;
         for (int i = 0; i < N / 2; i++) {
             int r = rand() % N;
             keys_str[i] = fmt::format("test_key_{:016X}", r);
@@ -251,8 +254,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         std::vector<Slice> keys(N / 2);
         std::vector<IndexValue> values(N / 2, IndexValue(NullIndexValue));
         std::vector<IndexValue> expected_values(N / 2);
-        sstable::KeyIndexesInfo key_indexes_info;
-        sstable::KeyIndexesInfo found_keys_info;
+        KeyIndexesInfo key_indexes_info;
+        KeyIndexesInfo found_keys_info;
         for (int i = 0; i < N / 2; i++) {
             int r = rand() % N;
             keys_str[i] = fmt::format("test_key_{:016X}", r);
@@ -272,8 +275,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         std::vector<Slice> keys(N / 2);
         std::vector<IndexValue> values(N / 2, IndexValue(NullIndexValue));
         std::vector<IndexValue> expected_values(N / 2);
-        sstable::KeyIndexesInfo key_indexes_info;
-        sstable::KeyIndexesInfo found_keys_info;
+        KeyIndexesInfo key_indexes_info;
+        KeyIndexesInfo found_keys_info;
         for (int i = 0; i < N / 2; i++) {
             int r = rand() % N;
             keys_str[i] = fmt::format("test_key_{:016X}", r);
@@ -293,8 +296,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         std::vector<Slice> keys(N / 2);
         std::vector<IndexValue> values(N / 2, IndexValue(NullIndexValue));
         std::vector<IndexValue> expected_values(N / 2);
-        sstable::KeyIndexesInfo key_indexes_info;
-        sstable::KeyIndexesInfo found_keys_info;
+        KeyIndexesInfo key_indexes_info;
+        KeyIndexesInfo found_keys_info;
         int expected_found_cnt = 0;
         for (int i = 0; i < N / 2; i++) {
             int r = rand() % (N * 2);
@@ -320,8 +323,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         std::vector<Slice> keys(N / 2);
         std::vector<IndexValue> values(N / 2, IndexValue(NullIndexValue));
         std::vector<IndexValue> expected_values(N / 2);
-        sstable::KeyIndexesInfo key_indexes_info;
-        sstable::KeyIndexesInfo found_keys_info;
+        KeyIndexesInfo key_indexes_info;
+        KeyIndexesInfo found_keys_info;
         int expected_found_cnt = 0;
         for (int i = 0; i < N / 2; i++) {
             int r = rand() % (N * 2);
