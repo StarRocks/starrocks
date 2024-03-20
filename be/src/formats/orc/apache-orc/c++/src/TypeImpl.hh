@@ -67,8 +67,6 @@ public:
 
     const Type* getSubtype(uint64_t i) const override;
 
-    const Type* getSubtypeByColumnId(uint64_t columnId) const override;
-
     const std::string& getFieldName(uint64_t i) const override;
 
     uint64_t getFieldNamesCount() const override;

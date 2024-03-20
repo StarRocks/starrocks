@@ -1013,7 +1013,15 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-                    // todo(ywb): refresh connector table histogram statistics cache
+                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // statistic, and the follower's should expire cache here.
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
+                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
+                                histogramStatsMeta.getTableName(),
+                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    }
                     break;
                 }
                 case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
@@ -1198,6 +1206,10 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
+                case OperationType.OP_RECOVER_PARTITION_VERSION:
+                    PartitionVersionRecoveryInfo info = (PartitionVersionRecoveryInfo) journal.getData();
+                    GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
+                    break;
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2011,5 +2023,9 @@ public class EditLog {
 
     public void logCancelDisableDisk(CancelDisableDiskInfo info) {
         logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
+    }
+
+    public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
+        logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
     }
 }

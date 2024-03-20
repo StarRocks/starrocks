@@ -12,21 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.warehouse;
+package com.starrocks.planner;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.Id;
+import com.starrocks.common.IdGenerator;
 
-public class WarehouseClusterProcNode implements ProcNodeInterface {
-    private final Warehouse warehouse;
-
-    public WarehouseClusterProcNode(Warehouse wh) {
-        this.warehouse = wh;
+public class ExecGroupId extends Id<ExecGroupId> {
+    public ExecGroupId(int id) {
+        super(id);
     }
 
-    @Override
-    public ProcResult fetchResult() throws AnalysisException {
-        return warehouse.getClusterProcData();
+    public static IdGenerator<ExecGroupId> createGenerator() {
+        return new IdGenerator<>() {
+            @Override
+            public ExecGroupId getNextId() {
+                return new ExecGroupId(nextId++);
+            }
+
+            @Override
+            public ExecGroupId getMaxId() {
+                return new ExecGroupId(nextId - 1);
+            }
+        };
     }
 }

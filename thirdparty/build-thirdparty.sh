@@ -1091,11 +1091,6 @@ build_fast_float() {
     cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $TP_INSTALL_DIR
 }
 
-build_cachelib() {
-    check_if_source_exist $CACHELIB_SOURCE
-    rm -rf $TP_INSTALL_DIR/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
-}
-
 build_starcache() {
     check_if_source_exist $STARCACHE_SOURCE
     rm -rf $TP_INSTALL_DIR/$STARCACHE_SOURCE && mv $TP_SOURCE_DIR/$STARCACHE_SOURCE $TP_INSTALL_DIR/
@@ -1322,7 +1317,6 @@ build_vpack
 build_opentelemetry
 build_benchmark
 build_fast_float
-build_cachelib
 build_starcache
 build_streamvbyte
 build_jansson

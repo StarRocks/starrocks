@@ -241,7 +241,9 @@ struct HdfsScannerContext {
 
     // scan range
     const THdfsScanRange* scan_range = nullptr;
+    bool enable_split_tasks = false;
     const pipeline::ScanSplitContext* split_context = nullptr;
+    std::vector<pipeline::ScanSplitContextPtr>* split_tasks = nullptr;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;

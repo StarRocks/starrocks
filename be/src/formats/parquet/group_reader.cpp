@@ -134,8 +134,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             _lazy_column_needed = true;
             ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
 
-            SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
-
             if (has_filter) {
                 RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, &chunk_filter, &lazy_chunk));
                 lazy_chunk->filter_range(chunk_filter, 0, count);

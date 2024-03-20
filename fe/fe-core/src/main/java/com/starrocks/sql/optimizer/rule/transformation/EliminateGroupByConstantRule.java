@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -90,12 +91,22 @@ public class EliminateGroupByConstantRule extends TransformationRule {
             newPredicate = rewriter.rewrite(newPredicate);
         }
 
-        aggOp.getAggregations().keySet().forEach(e -> topMap.put(e, e));
+        Map<ColumnRefOperator, CallOperator> newAggCallMap = Maps.newHashMap();
+
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
+            CallOperator callOperator = entry.getValue();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(topMap);
+            CallOperator newCallOperator = (CallOperator) rewriter.rewrite(callOperator);
+            newAggCallMap.put(entry.getKey(), newCallOperator);
+        }
+
+        newAggCallMap.keySet().forEach(e -> topMap.put(e, e));
         newGroupByKeys.forEach(e -> topMap.put(e, e));
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(topMap).build();
 
         LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder()
                 .withOperator(aggOp)
+                .setAggregations(newAggCallMap)
                 .setGroupingKeys(newGroupByKeys)
                 .setPartitionByColumns(newGroupByKeys)
                 .setPredicate(newPredicate)
