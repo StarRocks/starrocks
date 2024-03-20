@@ -170,6 +170,7 @@ When using the fully in-memory primary key indexes, it is recommended to follow 
   - Suppose that the `dt` column, which is of the DATE data type that occupies 4 bytes, and the `id` column, which is of the BIGINT data type that occupies 8 bytes, are defined as the Primary Key. In this case, the Primary Key is 12 bytes in length.
   - Suppose that the table contains 10,000,000 rows of hot data and is stored in three replicas.
   - Given the preceding information, the memory occupied by the primary key indexes is 945 MB based on the following formula: `(12 + 9) x 10,000,000 x 3 x 1.5 = 945 (MB)`
+
     In the preceding formula, `9` is the immutable overhead per row, and `1.5` is the average extra overhead per hash table.
 
 The Primary Key table with the fully in-memory primary key indexes is suitable for scenarios in which the memory occupied by the Primary Key is controllable. Example:
