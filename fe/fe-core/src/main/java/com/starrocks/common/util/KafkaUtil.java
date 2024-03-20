@@ -55,6 +55,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -178,6 +179,7 @@ public class KafkaUtil {
         }
 
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
+<<<<<<< HEAD
             TNetworkAddress address = new TNetworkAddress();
             try {
                 // TODO: need to refactor after be split into cn + dn
@@ -197,11 +199,36 @@ public class KafkaUtil {
                     nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
                     if (nodeIds.isEmpty()) {
                         throw new LoadException("Failed to send proxy request. No alive backends");
+=======
+            // TODO: need to refactor after be split into cn + dn
+            List<Long> nodeIds = new ArrayList<>();
+            if ((RunMode.isSharedDataMode())) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+                for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                    ComputeNode node =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                    if (node != null && node.isAlive()) {
+                        nodeIds.add(nodeId);
+>>>>>>> 25bb1a4556 ([Enhancement] Make routine load error msg more clear (#41306))
                     }
                 }
+                if (nodeIds.isEmpty()) {
+                    throw new LoadException(
+                            "Failed to send get kafka partition info request. err: No alive backends or compute nodes");
+                }
+            } else {
+                nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+                if (nodeIds.isEmpty()) {
+                    throw new LoadException("Failed to send get kafka partition info request. err: No alive backends");
+                }
+            }
 
-                Collections.shuffle(nodeIds);
+            Collections.shuffle(nodeIds);
+            ComputeNode be =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
+            TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
+<<<<<<< HEAD
                 ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
@@ -228,24 +255,52 @@ public class KafkaUtil {
                             throw e;
                         }
                     }
+=======
+            // get info
+            int retryTimes = 0;
+            while (true) {
+                try {
+                    request.timeout = Config.routine_load_kafka_timeout_second;
+                    Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
+                    PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
+>>>>>>> 25bb1a4556 ([Enhancement] Make routine load error msg more clear (#41306))
                     TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                     if (code != TStatusCode.OK) {
-                        LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                        throw new UserException(
-                                "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                        LOG.warn("Failed to process get kafka partition info in BE {}, err: {}",
+                                address, result.status.errorMsgs);
+                        throw new LoadException(
+                                String.format("%s, BE: %s", StringUtils.join(result.status.errorMsgs, ","), address));
+                    }
+                    return result;
+                } catch (LoadException e) {
+                    throw e;
+                } catch (InterruptedException e) {
+                    String msg = String.format(
+                            "Got interrupted exception when sending get kafka partition info request to BE %s", address);
+                    LOG.warn(msg);
+                    Thread.currentThread().interrupt();
+                    throw new LoadException(msg);
+                } catch (Exception e) {
+                    String msg = String.format("Failed to send get kafka partition info request to BE %s, err: %s",
+                            address, e.getMessage());
+                    LOG.warn(msg);
+
+                    // Jprotobuf-rpc-socket throws an ExecutionException when an exception occurs.
+                    // We use the error message to identify the type of exception.
+                    if (e.getMessage().contains("Ocurrs time out")) {
+                        // When getting kafka info timed out, we tried again three times.
+                        if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
+                                Config.routine_load_task_timeout_second) {
+                            throw new LoadException(msg);
+                        }
+                    } else if (e.getMessage().contains("Unable to validate object")) {
+                        throw new LoadException(String.format(
+                                "Failed to send get kafka partition info request to BE %s. err: BE is not alive", address));
                     } else {
-                        return result;
+                        throw new LoadException(msg);
                     }
                 }
-            } catch (InterruptedException ie) {
-                LOG.warn("got interrupted exception when sending proxy request to " + address);
-                Thread.currentThread().interrupt();
-                throw new LoadException("got interrupted exception when sending proxy request to " + address);
-            } catch (Exception e) {
-                LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
-                throw new LoadException("failed to send proxy request to " + address + " err " + e.getMessage());
             }
         }
     }
 }
-
