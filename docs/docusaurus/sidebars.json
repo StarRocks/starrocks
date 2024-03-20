@@ -39,7 +39,7 @@
         {
           "type": "category",
           "label": "Shared-data deployment",
-          "link": {"type": "doc", "id": "cover_pages/shared_data_deployment"},
+          "link": {"type": "doc", "id": "deployment/shared_data/shared_data"},
           "items": ["deployment/shared_data/s3", "deployment/shared_data/gcs", "deployment/shared_data/azure", "deployment/shared_data/minio"]
         },
         {
@@ -1070,7 +1070,7 @@
         {
           "type": "category",
           "label": "存算分离模式部署",
-          "link": {"type": "doc", "id": "cover_pages/shared_data_deployment"},
+          "link": {"type": "doc", "id": "deployment/shared_data/shared_data"},
           "items": ["deployment/shared_data/s3", "deployment/shared_data/gcs", "deployment/shared_data/azure", "deployment/shared_data/minio", "deployment/shared_data/hdfs", "deployment/shared_data/other"]
         },
         {
