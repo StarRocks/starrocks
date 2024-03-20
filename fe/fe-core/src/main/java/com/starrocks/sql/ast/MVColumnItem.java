@@ -122,7 +122,7 @@ public class MVColumnItem {
     public Column toMVColumn(OlapTable olapTable) {
         Column baseColumn = olapTable.getBaseColumn(name);
         Column result;
-        boolean useFastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
+        boolean useFastSchemaEvolution = olapTable.canUseFastSchemaEvolution();
         if (baseColumn == null) {
             result = new Column(name, type, isKey, aggregationType, isAllowNull,
                     null, "");

@@ -131,7 +131,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
-    public boolean getUseFastSchemaEvolution() {
+    public boolean enableFastSchemaEvolution() {
         return false;
     }
 

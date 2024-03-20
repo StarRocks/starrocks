@@ -239,7 +239,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        boolean ligthSchemaChange = olapTable.getUseFastSchemaEvolution();
+        boolean ligthSchemaChange = olapTable.enableFastSchemaEvolution();
         if (alterClause.getGeneratedColumnPos() == null) {
             for (Column column : columns) {
                 ligthSchemaChange &= addColumnInternal(olapTable, column, null, targetIndexId, baseIndexId, indexSchemaMap,
@@ -267,7 +267,7 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private boolean processDropColumn(DropColumnClause alterClause, OlapTable olapTable,
                                       Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes) throws DdlException {
-        boolean fastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
+        boolean fastSchemaEvolution = olapTable.enableFastSchemaEvolution();
         String dropColName = alterClause.getColName();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -408,7 +408,7 @@ public class SchemaChangeHandler extends AlterHandler {
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
-        boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
+        boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.enableFastSchemaEvolution();
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
@@ -777,7 +777,7 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("unsupported default expr:" + newColumn.getDefaultExpr().getExpr());
         }
 
-        boolean fastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
+        boolean fastSchemaEvolution = olapTable.enableFastSchemaEvolution();
         // if column is generated column, need to rewrite table data, so we can not use light schema change
         if (newColumn.isAutoIncrement() || newColumn.isGeneratedColumn()) {
             fastSchemaEvolution = false;
@@ -1445,7 +1445,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable == null) {
             throw new DdlException("olapTable is null");
         }
-        boolean fastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
+        boolean fastSchemaEvolution = olapTable.enableFastSchemaEvolution();
         //for multi add colmuns clauses
         IntSupplier colUniqueIdSupplier = new IntSupplier() {
             private int pendingMaxColUniqueId = olapTable.getMaxColUniqueId();
@@ -1696,6 +1696,7 @@ public class SchemaChangeHandler extends AlterHandler {
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws UserException {
         AlterJobV2 schemaChangeJob = analyzeAndCreateJob(alterClauses, db, olapTable);
+        LOG.info("table: {} max column unique id: {}", olapTable.getName(), olapTable.getMaxColUniqueId());
         if (schemaChangeJob == null) {
             return null;
         }
@@ -1842,6 +1843,11 @@ public class SchemaChangeHandler extends AlterHandler {
             int primaryIndexCacheExpireSec = Integer.parseInt(properties.get(
                     PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
             if (primaryIndexCacheExpireSec == olapTable.primaryIndexCacheExpireSec()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.FAST_SCHEMA_EVOLUTION) {
+            metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION));
+            if (metaValue == olapTable.getUseFastSchemaEvolution()) {
                 return;
             }
         } else {
