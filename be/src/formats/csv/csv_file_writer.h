@@ -55,11 +55,11 @@ private:
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _types;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
-    TCompressionType::type _compression_type;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<CSVWriterOptions> _writer_options;
     const std::function<void()> _rollback_action;
-    PriorityThreadPool* _executors;
-    RuntimeState* _runtime_state;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 
     int64_t _num_rows = 0;
     // (nullable converter, not-null converter)
@@ -80,14 +80,14 @@ public:
 
 private:
     std::shared_ptr<FileSystem> _fs;
-    TCompressionType::type _compression_type;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::map<std::string, std::string> _options;
     std::shared_ptr<CSVWriterOptions> _parsed_options;
 
     std::vector<std::string> _column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
-    PriorityThreadPool* _executors;
-    RuntimeState* _runtime_state;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::formats

@@ -102,14 +102,14 @@ private:
 
     std::unique_ptr<orc::Type> _schema;
     std::shared_ptr<orc::Writer> _writer;
-    TCompressionType::type _compression_type;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<ORCWriterOptions> _writer_options;
     int64_t _row_counter{0};
 
     std::function<void()> _rollback_action;
     // If provided, submit task to executors and return future to the caller. Otherwise execute synchronously.
-    PriorityThreadPool* _executors;
-    RuntimeState* _runtime_state;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 class ORCFileWriterFactory : public FileWriterFactory {
@@ -126,14 +126,14 @@ public:
 
 private:
     std::shared_ptr<FileSystem> _fs;
-    TCompressionType::type _compression_type;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::map<std::string, std::string> _options;
     std::shared_ptr<ORCWriterOptions> _parsed_options;
 
     std::vector<std::string> _column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
-    PriorityThreadPool* _executors;
-    RuntimeState* _runtime_state;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::formats
