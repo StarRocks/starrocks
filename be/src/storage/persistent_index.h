@@ -644,9 +644,7 @@ public:
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
-    double get_write_amp_score() const;
-
-    static double major_compaction_score(size_t l1_count, size_t l2_count);
+    static double major_compaction_score(const PersistentIndexMetaPB& index_meta);
 
     // not thread safe, just for unit test
     size_t kv_num_in_immutable_index() {
@@ -731,8 +729,6 @@ private:
 
     bool _enable_minor_compaction();
 
-    void _calc_write_amp_score();
-
     size_t _get_tmp_l1_count();
 
     bool _l0_is_full(int64_t l1_l2_size = 0);
@@ -785,8 +781,6 @@ private:
     std::vector<KeysInfo> _found_keys_info;
     // set if major compaction is running
     std::atomic<bool> _major_compaction_running{false};
-    // write amplification score, 0.0 means this index doesn't need major compaction
-    std::atomic<double> _write_amp_score{0.0};
     // Latest major compaction time. In second.
     int64_t _latest_compaction_time = 0;
 };
