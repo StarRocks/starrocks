@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.KafkaAllBrokersDownException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PKafkaLoadInfo;
@@ -233,6 +234,10 @@ public class KafkaUtil {
                     TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                     if (code != TStatusCode.OK) {
                         LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                        if (code == TStatusCode.SERVICE_UNAVAILABLE) {
+                            String msg = "all kafka brokers down, be: " + address + ", err: " + result.status.errorMsgs;
+                            throw new KafkaAllBrokersDownException(msg);
+                        }
                         throw new UserException(
                                 "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
                     } else {
@@ -243,6 +248,8 @@ public class KafkaUtil {
                 LOG.warn("got interrupted exception when sending proxy request to " + address);
                 Thread.currentThread().interrupt();
                 throw new LoadException("got interrupted exception when sending proxy request to " + address);
+            } catch (KafkaAllBrokersDownException e) {
+                throw e;
             } catch (Exception e) {
                 LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
                 throw new LoadException("failed to send proxy request to " + address + " err " + e.getMessage());

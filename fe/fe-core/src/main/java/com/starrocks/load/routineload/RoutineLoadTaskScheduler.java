@@ -40,6 +40,7 @@ import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.KafkaAllBrokersDownException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -87,6 +88,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private long lastBackendSlotUpdateTime = -1;
 
+    private long lastKafkaAllBrokerDownTime = -1;
+
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
         super("Routine load task scheduler", 0);
@@ -119,6 +122,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             Thread.sleep(SLOT_FULL_SLEEP_MS);
             return;
         }
+
+        backoff();
 
         try {
             // This step will be blocked when queue is empty
@@ -203,6 +208,10 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                     .add("error_msg", msg)
                     .build());
+            return;
+        } catch (KafkaAllBrokersDownException e) {
+            delayPutToQueue(routineLoadTaskInfo, "check task ready to execute failed, err: " + e.getMessage());
+            setLastKafkaAllBrokerDownTime();
             return;
         } catch (Exception e) {
             LOG.warn("check task ready to execute failed", e);
@@ -390,5 +399,17 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                     .build());
         }
         return true;
+    }
+
+    private void setLastKafkaAllBrokerDownTime() {
+        this.lastKafkaAllBrokerDownTime = System.currentTimeMillis();
+    }
+
+    private void backoff() throws InterruptedException {
+        if (this.lastKafkaAllBrokerDownTime != -1 && Config.routine_load_kafka_all_brokers_down_backoff_interval_second >= 0
+                && System.currentTimeMillis() - this.lastKafkaAllBrokerDownTime
+                < Config.routine_load_kafka_all_brokers_down_backoff_interval_second * 1000) {
+            Thread.sleep(Config.routine_load_kafka_all_brokers_down_backoff_interval_second * 1000);
+        }
     }
 }
