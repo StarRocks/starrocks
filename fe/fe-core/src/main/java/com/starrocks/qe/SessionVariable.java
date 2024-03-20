@@ -3292,6 +3292,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableRewriteSimpleAggToHdfsScan(boolean v) {
         this.enableRewriteSimpleAggToHdfsScan = v;
     }
+
     public boolean isEnableRewriteSimpleAggToHdfsScan() {
         return this.enableRewriteSimpleAggToHdfsScan;
     }
@@ -3521,6 +3522,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableArrayDistinctAfterAggOpt() {
         return enableArrayDistinctAfterAggOpt;
+    }
+
+    public long getConnectorMaxSplitSize() {
+        return connectorMaxSplitSize;
+    }
+
+    public void setConnectorMaxSplitSize(long size) {
+        connectorMaxSplitSize = size;
+    }
+
+    public long getConnectorHugeFileSize() {
+        return connectorHugeFileSize;
+    }
+
+    public void setConnectorHugeFileSize(long size) {
+        connectorHugeFileSize = size;
+    }
+
+    public boolean isEnableConnectorSplitIoTasks() {
+        return enableConnectorSplitIoTasks;
     }
 
     // Serialize to thrift object
