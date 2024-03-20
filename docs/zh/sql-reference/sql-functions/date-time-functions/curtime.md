@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 获取当前的时间，以 TIME 类型返回。
 
-该函数受时区影响，具体参见 [设置时区](../../../administration/management/management.mdx)。
+该函数受时区影响，具体参见 [设置时区](../../../administration/management/timezone.md)。
 
 ## 语法
 

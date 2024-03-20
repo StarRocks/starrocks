@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Views the last RESTORE task in a specified database. For more information, see [data backup and restoration](../../../administration/management/management.mdx).
+Views the last RESTORE task in a specified database. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
 
 > **NOTE**
 >

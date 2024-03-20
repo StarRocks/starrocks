@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Deletes an SQL regular expression from the SQL blacklist.
 
-For more about SQL Blacklist, see [Manage SQL Blacklist](../../../administration/management/resource_management/resource_management.mdx).
+For more about SQL Blacklist, see [Manage SQL Blacklist](../../../administration/management/resource_management/Blacklist.md).
 
 :::tip
 

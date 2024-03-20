@@ -22,7 +22,7 @@ StarRocks provides two precautionary instruments for dealing with big queries - 
 
 ### Filter out big queries via resource groups
 
-Resource groups can automatically identify and terminate big queries. When creating a resource group, you can specify the upper limit of CPU time, memory usage, or scan row count that a query is entitled to. Among all queries that hit the resource group, any queries that require more resources are rejected and returned with an error. For more information, see [Resource Isolation](../../administration/management/resource_management/resource_management.mdx).
+Resource groups can automatically identify and terminate big queries. When creating a resource group, you can specify the upper limit of CPU time, memory usage, or scan row count that a query is entitled to. Among all queries that hit the resource group, any queries that require more resources are rejected and returned with an error. For more information, see [Resource Isolation](../../administration/management/resource_management/resource_group.md).
 
 Before creating resource groups, you must execute the following statement to enable Pipeline Engine, on which the Resource Group feature depends:
 
@@ -55,7 +55,7 @@ If it is your first time setting up resource groups, we recommend you set relati
 
 ### Ease system overload via query queues
 
-Query queues are designed to cushion the system overload deterioration when the cluster resource occupation exceeds the prespecified thresholds. You can set thresholds for maximum concurrency, memory usage, and CPU usage. StarRocks automatically queues the incoming queries when any of these thresholds is reached. Pending queries either wait in the queue for execution or get cancelled when the prespecified resource threshold is reached. For more information, see [Query Queues](../../administration/management/resource_management/resource_management.mdx).
+Query queues are designed to cushion the system overload deterioration when the cluster resource occupation exceeds the prespecified thresholds. You can set thresholds for maximum concurrency, memory usage, and CPU usage. StarRocks automatically queues the incoming queries when any of these thresholds is reached. Pending queries either wait in the queue for execution or get cancelled when the prespecified resource threshold is reached. For more information, see [Query Queues](../../administration/management/resource_management/query_queues.md).
 
 Execute the following statements to enable query queues for the SELECT queries:
 
@@ -239,7 +239,7 @@ After Big Query Logs are enabled, you can then define the rules to trigger Big Q
 
 From the statistics obtained from real-time monitoring and Big Query Logs, you can study the pattern of the omitted big queries (or regular queries that are mistakenly diagnosed as big queries) in your cluster, and then optimize the settings for resource groups and the query queue.
 
-If a notable proportion of big queries conform to a certain SQL pattern, and you want to permanently forbid this SQL pattern, you can add this pattern to SQL Blacklist. StarRocks rejects all queries that match any patterns specified in SQL Blacklist, and returns an error. For more information, see [Manage SQL Blacklist](../../administration/management/resource_management/resource_management.mdx).
+If a notable proportion of big queries conform to a certain SQL pattern, and you want to permanently forbid this SQL pattern, you can add this pattern to SQL Blacklist. StarRocks rejects all queries that match any patterns specified in SQL Blacklist, and returns an error. For more information, see [Manage SQL Blacklist](../../administration/management/resource_management/Blacklist.md).
 
 To enable SQL Blacklist, execute the following statement:
 

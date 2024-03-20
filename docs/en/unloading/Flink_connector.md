@@ -110,7 +110,7 @@ The following parameters apply to both the Flink SQL and Flink DataStream readin
 | connector                   | Yes      | STRING    | The type of connector that you want to use to read data. Set the value to `starrocks`.                                |
 | scan-url                    | Yes      | STRING    | The address that is used to connect the FE from the web server. Format: `<fe_host>:<fe_http_port>`. The default port is `8030`. You can specify multiple addresses, which must be separated with a comma (,). Example: `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`. |
 | jdbc-url                    | Yes      | STRING    | The address that is used to connect the MySQL client of the FE. Format: `jdbc:mysql://<fe_host>:<fe_query_port>`. The default port number is `9030`. |
-| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/user_privs/privilege_overview.md). |
+| username                    | Yes      | STRING    | The username of your StarRocks cluster account. The account must have read permissions on the StarRocks table you want to read. See [User privileges](../administration/user_privs/User_privilege.md). |
 | password                    | Yes      | STRING    | The password of your StarRocks cluster account.              |
 | database-name               | Yes      | STRING    | The name of the StarRocks database to which the StarRocks table you want to read belongs. |
 | table-name                  | Yes      | STRING    | The name of the StarRocks table you want to read.            |

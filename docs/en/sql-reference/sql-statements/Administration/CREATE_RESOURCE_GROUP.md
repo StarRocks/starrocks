@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Creates a resource group.
 
-For more information, see [Resource group](../../../administration/management/resource_management/resource_management.mdx).
+For more information, see [Resource group](../../../administration/management/resource_management/resource_group.md).
 
 :::tip
 
