@@ -1397,6 +1397,7 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 
+<<<<<<< HEAD
 double PrimaryIndex::get_write_amp_score() {
     if (_persistent_index != nullptr) {
         return _persistent_index->get_write_amp_score();
@@ -1406,6 +1407,9 @@ double PrimaryIndex::get_write_amp_score() {
 }
 
 Status PrimaryIndex::major_compaction(Tablet* tablet) {
+=======
+Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
+>>>>>>> 25afd79a4d ([Enhancement] Improve pk index compaction score calculation strategy (#42803))
     if (_persistent_index != nullptr) {
         return _persistent_index->major_compaction(tablet);
     } else {

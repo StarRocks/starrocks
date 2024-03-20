@@ -297,7 +297,7 @@ public:
 
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
-    double get_pk_index_write_amp_score();
+    double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
     Status pk_index_major_compaction();
 
@@ -476,10 +476,14 @@ private:
     std::atomic<bool> _error{false};
     std::string _error_msg;
 
+<<<<<<< HEAD
     ChunkAllocator* _chunk_allocator = nullptr;
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;
+=======
+    std::atomic<double> _pk_index_write_amp_score{0.0};
+>>>>>>> 25afd79a4d ([Enhancement] Improve pk index compaction score calculation strategy (#42803))
 };
 
 } // namespace starrocks
