@@ -1435,14 +1435,6 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 
-double PrimaryIndex::get_write_amp_score() {
-    if (_persistent_index != nullptr) {
-        return _persistent_index->get_write_amp_score();
-    } else {
-        return 0.0;
-    }
-}
-
 Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
     if (_persistent_index != nullptr) {
         return _persistent_index->major_compaction(data_dir, tablet_id, mutex);

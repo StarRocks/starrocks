@@ -1047,6 +1047,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
         failure_handler("primary index on_commit failed", st);
         return;
     }
+    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
 
     _update_total_stats(version_info.rowsets, nullptr, nullptr);
 }
@@ -1493,6 +1494,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         failure_handler(msg, false);
         return;
     }
+    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
 
     // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
     // we should try to remove the index_entry from cache
@@ -2099,6 +2101,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
+    _pk_index_write_amp_score.store(PersistentIndex::major_compaction_score(index_meta));
 
     {
         // Update the stats of affected rowsets.
@@ -4231,31 +4234,6 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     }
 }
 
-static double get_pk_index_write_amp_score_from_meta(Tablet* tablet) {
-    PersistentIndexMetaPB index_meta;
-    auto st = TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta);
-    if (!st.ok()) {
-        // skip compaction if get index meta fail
-        return 0.0;
-    }
-    return PersistentIndex::major_compaction_score((index_meta.has_l1_version() ? 1 : 0),
-                                                   index_meta.l2_versions_size());
-}
-
-double TabletUpdates::get_pk_index_write_amp_score() {
-    double score = 0.0;
-    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
-    auto index_entry = index_cache.get(_tablet.tablet_id());
-    if (index_entry != nullptr) {
-        auto& index = index_entry->value();
-        score = index.get_write_amp_score();
-        index_cache.release(index_entry);
-    } else {
-        score = get_pk_index_write_amp_score_from_meta(&_tablet);
-    }
-    return score;
-}
-
 Status TabletUpdates::pk_index_major_compaction() {
     auto manager = StorageEngine::instance()->update_manager();
     auto index_entry = manager->index_cache().get_or_create(_tablet.tablet_id());
@@ -4278,7 +4256,12 @@ Status TabletUpdates::pk_index_major_compaction() {
         }
     });
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    return index.major_compaction(_tablet.data_dir(), _tablet.tablet_id(), _tablet.updates()->get_index_lock());
+    st = index.major_compaction(_tablet.data_dir(), _tablet.tablet_id(), _tablet.updates()->get_index_lock());
+    if (st.ok()) {
+        // reset score after major compaction finish
+        _pk_index_write_amp_score.store(0.0);
+    }
+    return st;
 }
 
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
