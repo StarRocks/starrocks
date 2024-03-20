@@ -17,7 +17,6 @@
 #include <string>
 
 #include "gen_cpp/lake_types.pb.h"
-#include "storage/lake/key_index.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/table.h"
@@ -26,21 +25,22 @@
 
 namespace starrocks {
 
+struct KeyIndexesInfo;
 class WritableFile;
 
 namespace sstable {
 
-// <version, value>
-using IndexValueWithVer = std::pair<int64_t, int64_t>;
+// <version, IndexValue>
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class PersistentIndexSstable {
 public:
     PersistentIndexSstable() = default;
     ~PersistentIndexSstable() = default;
 
-    Status init(RandomAccessFile* rf, const int64_t filesz, Cache* cache);
+    Status init(std::unique_ptr<RandomAccessFile> rf, const int64_t filesz, Cache* cache);
 
-    static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+    static Status build_sstable(const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz);
 
     // multi_get can get multi keys at onces
@@ -58,6 +58,8 @@ public:
 private:
     std::unique_ptr<Table> _sst{nullptr};
     std::unique_ptr<FilterPolicy> _filter_policy{nullptr};
+    std::unique_ptr<RandomAccessFile> _rf{nullptr};
+    int64_t _filesz{0};
 };
 
 } // namespace sstable

@@ -14,13 +14,14 @@
 
 #pragma once
 
-#include "storage/lake/key_index.h"
 #include "storage/persistent_index.h"
 #include "util/phmap/btree.h"
 
-namespace starrocks::lake {
+namespace starrocks {
+struct KeyIndexesInfo;
+namespace lake {
 
-using IndexValueInfo = std::pair<int64_t, IndexValue>;
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class PersistentIndexMemtable {
 public:
@@ -43,14 +44,23 @@ public:
     Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found, size_t* num_found,
                int64_t version);
 
+    // |version|: version of index values
+    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* keys_info,
+               KeyIndexesInfo* found_keys_info, int64_t version);
+
+    size_t memory_usage();
+
+    Status flush(WritableFile* wf, uint64_t* filesz);
+
     void clear();
 
 private:
-    static void update_index_value(std::list<IndexValueInfo>* index_value_info, int64_t version,
+    static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,
                                    const IndexValue& value);
 
 private:
-    phmap::btree_map<std::string, std::list<IndexValueInfo>, std::less<>> _map;
+    phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>> _map;
 };
 
-} // namespace starrocks::lake
+} // namespace lake
+} // namespace starrocks

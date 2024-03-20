@@ -6,6 +6,7 @@
 #include "common/status.h"
 
 namespace starrocks {
+struct KeyIndexesInfo;
 class Slice;
 class RandomAccessFile;
 namespace sstable {
@@ -15,12 +16,6 @@ class Footer;
 struct Options;
 struct ReadOptions;
 class Iterator;
-
-using KeyIndexInfo = uint32_t;
-struct KeyIndexesInfo {
-    std::vector<KeyIndexInfo> key_index_infos;
-    size_t size() const { return key_index_infos.size(); }
-};
 
 // A Table is a sorted map from strings to strings.  Tables are
 // immutable and persistent.  A Table may be safely accessed from

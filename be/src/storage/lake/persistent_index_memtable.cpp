@@ -14,11 +14,13 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include "storage/sstable/persistent_index_sstable.h"
+
 namespace starrocks::lake {
 
-void PersistentIndexMemtable::update_index_value(std::list<IndexValueInfo>* index_value_infos, int64_t version,
+void PersistentIndexMemtable::update_index_value(std::list<IndexValueWithVer>* index_value_infos, int64_t version,
                                                  const IndexValue& value) {
-    std::list<IndexValueInfo> t;
+    std::list<IndexValueWithVer> t;
     t.emplace_front(version, value);
     index_value_infos->swap(t);
 }
@@ -29,16 +31,16 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
         const auto value = values[i];
-        std::list<IndexValueInfo> index_value_infos;
-        index_value_infos.emplace_front(version, value);
-        if (auto [it, inserted] = _map.emplace(key, index_value_infos); inserted) {
+        std::list<IndexValueWithVer> index_value_vers;
+        index_value_vers.emplace_front(version, value);
+        if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
             not_found->key_index_infos.emplace_back(i);
         } else {
-            auto& old_index_value_infos = it->second;
-            auto old_value = old_index_value_infos.front().second;
+            auto& old_index_value_vers = it->second;
+            auto old_value = old_index_value_vers.front().second;
             old_values[i] = old_value;
             nfound += old_value.get_value() != NullIndexValue;
-            update_index_value(&old_index_value_infos, version, value);
+            update_index_value(&old_index_value_vers, version, value);
         }
     }
     *num_found = nfound;
@@ -50,9 +52,9 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
         auto key = keys[i].to_string();
         auto size = keys[i].get_size();
         const auto value = values[i];
-        std::list<IndexValueInfo> index_value_infos;
-        index_value_infos.emplace_front(version, value);
-        if (auto [it, inserted] = _map.emplace(key, index_value_infos); !inserted) {
+        std::list<IndexValueWithVer> index_value_vers;
+        index_value_vers.emplace_front(version, value);
+        if (auto [it, inserted] = _map.emplace(key, index_value_vers); !inserted) {
             std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
                                                   hexdump((const char*)key.data(), size));
             LOG(WARNING) << msg;
@@ -67,17 +69,17 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
-        std::list<IndexValueInfo> index_value_infos;
-        index_value_infos.emplace_front(version, IndexValue(NullIndexValue));
-        if (auto [it, inserted] = _map.emplace(key, index_value_infos); inserted) {
+        std::list<IndexValueWithVer> index_value_vers;
+        index_value_vers.emplace_front(version, IndexValue(NullIndexValue));
+        if (auto [it, inserted] = _map.emplace(key, index_value_vers); inserted) {
             old_values[i] = NullIndexValue;
             not_found->key_index_infos.emplace_back(i);
         } else {
-            auto& old_index_value_infos = it->second;
-            auto old_index_value = old_index_value_infos.front().second;
+            auto& old_index_value_vers = it->second;
+            auto old_index_value = old_index_value_vers.front().second;
             old_values[i] = old_index_value;
             nfound += old_index_value.get_value() != NullIndexValue;
-            update_index_value(&old_index_value_infos, version, IndexValue(NullIndexValue));
+            update_index_value(&old_index_value_vers, version, IndexValue(NullIndexValue));
         }
     }
     *num_found = nfound;
@@ -89,9 +91,9 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
     for (unsigned long idx : replace_idxes) {
         auto key = keys[idx].to_string();
         const auto value = values[idx];
-        std::list<IndexValueInfo> index_value_infos;
-        index_value_infos.emplace_front(version, value);
-        if (auto [it, inserted] = _map.emplace(key, index_value_infos); !inserted) {
+        std::list<IndexValueWithVer> index_value_vers;
+        index_value_vers.emplace_front(version, value);
+        if (auto [it, inserted] = _map.emplace(key, index_value_vers); !inserted) {
             update_index_value(&it->second, version, value);
         }
     }
@@ -109,14 +111,44 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
             not_found->key_index_infos.emplace_back(i);
         } else {
             // Assuming we want the latest (first) value due to emplace_front in updates/inserts
-            auto& index_value_infos = it->second;
-            auto old_index_value = index_value_infos.front().second;
-            values[i] = old_index_value;
-            nfound += old_index_value.get_value() != NullIndexValue;
+            auto& index_value_vers = it->second;
+            auto index_value = index_value_vers.front().second;
+            values[i] = index_value;
+            nfound += index_value.get_value() != NullIndexValue;
         }
     }
     *num_found = nfound;
     return Status::OK();
+}
+
+Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* keys_info,
+                                    KeyIndexesInfo* found_keys_info, int64_t version) {
+    const auto& key_index_infos = keys_info->key_index_infos;
+    for (size_t i = 0; i < key_index_infos.size(); ++i) {
+        auto key = std::string_view(keys[key_index_infos[i]]);
+        auto it = _map.find(key);
+        if (it != _map.end()) {
+            // Assuming we want the latest (first) value due to emplace_front in updates/inserts
+            auto& index_value_vers = it->second;
+            auto& index_value = index_value_vers.front().second;
+            values[key_index_infos[i]] = index_value.get_value();
+            found_keys_info->key_index_infos.emplace_back(key_index_infos[i]);
+        }
+    }
+    return Status::OK();
+}
+
+size_t PersistentIndexMemtable::memory_usage() {
+    size_t mem_usage = 0;
+    for (auto const& it : _map) {
+        mem_usage += it.first.size();
+        mem_usage += it.second.size() * sizeof(IndexValueWithVer);
+    }
+    return mem_usage;
+}
+
+Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesz) {
+    return sstable::PersistentIndexSstable::build_sstable(_map, wf, filesz);
 }
 
 void PersistentIndexMemtable::clear() {

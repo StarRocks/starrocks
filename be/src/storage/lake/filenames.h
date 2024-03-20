@@ -95,6 +95,10 @@ inline std::string gen_del_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.del", txn_id, generate_uuid_string());
 }
 
+inline std::string gen_sst_filename() {
+    return fmt::format("{}.sst", generate_uuid_string());
+}
+
 inline std::optional<int64_t> extract_txn_id_prefix(std::string_view file_name) {
     constexpr static int kBase = 16;
     if (UNLIKELY(file_name.size() < 17 || file_name[16] != '_')) {
