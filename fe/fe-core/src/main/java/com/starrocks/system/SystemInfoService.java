@@ -49,6 +49,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -977,7 +978,12 @@ public class SystemInfoService implements GsonPostProcessable {
             throw new SemanticException("Invalid host port: " + hostPort);
         }
 
-        String[] hostInfo = NetUtils.resolveHostInfoFromHostPort(hostPort);
+        String[] hostInfo;
+        try {
+            hostInfo = NetUtils.resolveHostInfoFromHostPort(hostPort);
+        } catch (AnalysisException e) {
+            throw new SemanticException("failed to resolve host and port", e);
+        }
         String host = hostInfo[0];
         if (Strings.isNullOrEmpty(host)) {
             throw new SemanticException("Host is null");

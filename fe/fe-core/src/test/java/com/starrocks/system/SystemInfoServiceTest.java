@@ -15,7 +15,6 @@
 package com.starrocks.system;
 
 import com.google.api.client.util.Maps;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
@@ -24,6 +23,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import mockit.Expectations;
 import mockit.Mock;
@@ -325,7 +325,7 @@ public class SystemInfoServiceTest {
             Pair<String, Integer> ipv4Addr = SystemInfoService.validateHostAndPort(ipv4, false);
             Assert.assertEquals("192.168.1.2", ipv4Addr.first);
             Assert.assertEquals(9050, ipv4Addr.second.intValue());
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -333,14 +333,14 @@ public class SystemInfoServiceTest {
             Pair<String, Integer> ipv6Addr = SystemInfoService.validateHostAndPort(ipv6, false);
             Assert.assertEquals("fe80::5054:ff:fec9:dee0", ipv6Addr.first);
             Assert.assertEquals(9050, ipv6Addr.second.intValue());
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             e.printStackTrace();
             Assert.fail();
         }
         try {
             SystemInfoService.validateHostAndPort(ipv6Error, false);
             Assert.fail();
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             e.printStackTrace();
         }
     }
