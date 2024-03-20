@@ -375,6 +375,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitSyncStatement(SyncStmt statement, C context) {
         return visitStatement(statement, context);
     }
