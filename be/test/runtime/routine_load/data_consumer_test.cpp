@@ -42,7 +42,7 @@ TEST_F(KafkaDataConsumerTest, test_get_partition_offset_broker_down) {
     auto st = consumer.get_partition_offset(&partition_ids, &beginning_offsets, &latest_offsets, timeout);
     std::cout << "get partition offset st: " << st << std::endl;
     ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.message().find("Local: All broker connections are down") != string::npos);
+    ASSERT_TRUE(st.get_error_msg().find("Local: All broker connections are down") != string::npos);
     ASSERT_OK(consumer.reset());
 }
 
@@ -63,7 +63,7 @@ TEST_F(KafkaDataConsumerTest, test_get_partition_meta_broker_down) {
     auto st = consumer.get_partition_meta(&partition_ids, timeout);
     std::cout << "get partition meta st: " << st << std::endl;
     ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.message().find("Local: Broker transport failure") != string::npos);
+    ASSERT_TRUE(st.get_error_msg().find("Local: Broker transport failure") != string::npos);
     ASSERT_OK(consumer.reset());
 }
 
