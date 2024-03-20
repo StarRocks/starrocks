@@ -508,8 +508,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     public void setOtherMsg(String otherMsg) {
-        this.otherMsg = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                + ": " + Strings.nullToEmpty(otherMsg);
+        this.otherMsg = String.format("[%s] %s", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                Strings.nullToEmpty(otherMsg));
     }
 
     public String getDbFullName() throws MetaNotFoundException {
