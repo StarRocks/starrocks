@@ -28,17 +28,10 @@ import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.epack.privilege.ObjectTypeEPack;
-import com.starrocks.epack.privilege.PolicyPEntryObject;
-import com.starrocks.epack.privilege.PrivilegeTypeEPack;
-import com.starrocks.epack.sql.analyzer.AnalyzerUtilsEPack;
-import com.starrocks.epack.sql.ast.PolicyName;
-import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -67,7 +60,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.parser.NodePosition;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -76,14 +68,11 @@ import java.util.List;
 import java.util.Set;
 
 public class PrivilegeStmtAnalyzer {
-    private PrivilegeStmtAnalyzer() {
-    }
-
     public static void analyze(StatementBase statement, ConnectContext session) {
         new PrivilegeStatementAnalyzerVisitor().analyze(statement, session);
     }
 
-    static class PrivilegeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class PrivilegeStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         private AuthenticationMgr authenticationManager = null;
         private AuthorizationMgr authorizationManager = null;
 
@@ -248,19 +237,11 @@ public class PrivilegeStmtAnalyzer {
         }
 
         private ObjectType analyzeObjectType(String objectTypeUnResolved) {
-            if (ObjectTypeEPack.NAME_TO_OBJECT.containsKey(objectTypeUnResolved)) {
-                return ObjectTypeEPack.NAME_TO_OBJECT.get(objectTypeUnResolved);
-            }
-
-            if (ObjectTypeEPack.PLURAL_TO_OBJECT.containsKey(objectTypeUnResolved)) {
-                return ObjectTypeEPack.PLURAL_TO_OBJECT.get(objectTypeUnResolved);
-            }
-
-            throw new SemanticException("cannot find privilege object type " + objectTypeUnResolved);
+            return authorizationManager.getObjectType(objectTypeUnResolved);
         }
 
         private PrivilegeType analyzePrivType(ObjectType objectType, String privTypeString) {
-            PrivilegeType privilegeType = PrivilegeTypeEPack.NAME_TO_PRIVILEGE.get(privTypeString);
+            PrivilegeType privilegeType = authorizationManager.getPrivilegeType(privTypeString);
             if (privilegeType == null) {
                 throw new SemanticException("cannot find privilege type " + privTypeString);
             }
@@ -286,276 +267,26 @@ public class PrivilegeStmtAnalyzer {
                 stmt.setObjectType(objectType);
 
                 List<PEntryObject> objectList = new ArrayList<>();
-                if (stmt.isGrantOnALL()) {
-                    Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
-                    Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList().size() == 1);
-
-                    List<String> tokens = stmt.getPrivilegeObjectNameTokensList().get(0);
-                    if (ObjectType.TABLE.equals(objectType)) {
-                        if (tokens.size() != 2) {
-                            throw new SemanticException(
-                                    "Invalid grant statement with error privilege object " + tokens);
-                        }
-                        objectList.add(authorizationManager.generateObject(objectType,
-                                Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0), tokens.get(1))));
-                    } else if (ObjectType.VIEW.equals(objectType)
-                            || ObjectType.MATERIALIZED_VIEW.equals(objectType)
-                            || ObjectType.PIPE.equals(objectType)) {
-                        if (tokens.size() != 2) {
-                            throw new SemanticException(
-                                    "Invalid grant statement with error privilege object " + tokens);
-                        }
-                        objectList.add(authorizationManager.generateObject(objectType, tokens));
-                    } else if (ObjectType.DATABASE.equals(objectType)) {
-                        if (tokens.size() != 1) {
-                            throw new SemanticException(
-                                    "Invalid grant statement with error privilege object " + tokens);
-                        }
-                        objectList.add(authorizationManager.generateObject(objectType,
-                                Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0))));
-                    } else if (ObjectType.USER.equals(objectType)) {
-                        if (tokens.size() != 1) {
-                            throw new SemanticException(
-                                    "Invalid grant statement with error privilege object " + tokens);
-                        }
-                        objectList.add(authorizationManager.generateUserObject(objectType, null));
-                    } else if (ObjectType.RESOURCE.equals(objectType)
-                            || ObjectType.CATALOG.equals(objectType)
-                            || ObjectType.RESOURCE_GROUP.equals(objectType)
-                            || ObjectTypeEPack.WAREHOUSE.equals(objectType) ||
-                            ObjectType.STORAGE_VOLUME.equals(objectType)) {
-                        if (tokens.size() != 1) {
-                            throw new SemanticException(
-                                    "Invalid grant statement with error privilege object " + tokens);
-                        }
-
-                        objectList.add(authorizationManager.generateObject(stmt.getObjectType(), tokens));
-                    } else if (ObjectType.FUNCTION.equals(objectType)) {
-                        if (tokens.size() != 2) {
-                            throw new SemanticException(
-                                    "Invalid grant statement with error privilege object " + tokens);
-                        }
-
-                        if (tokens.get(0).equals("*")) {
-                            objectList.add(authorizationManager.generateFunctionObject(objectType,
-                                    PrivilegeBuiltinConstants.ALL_DATABASE_ID,
-                                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
-                        } else {
-                            Database database = GlobalStateMgr.getServingState().getDb(tokens.get(0));
-                            if (database == null) {
-                                throw new SemanticException("Database %s is not found", tokens.get(0));
-                            }
-
-                            objectList.add(authorizationManager.generateFunctionObject(objectType,
-                                    database.getId(), PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
-                        }
-                    } else if (ObjectType.GLOBAL_FUNCTION.equals(objectType)) {
-                        if (tokens.size() != 1) {
-                            throw new SemanticException(
-                                    "Invalid grant statement with error privilege object " + tokens);
-                        }
-
-                        objectList.add(authorizationManager.generateFunctionObject(stmt.getObjectType(),
-                                PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
-                                PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
-                    } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
-                        PEntryObject pEntryObject = PolicyPEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                                PolicyType.MASKING,
-                                Lists.newArrayList("*", "*", "*"));
-                        objectList.add(pEntryObject);
-                    } else if (ObjectTypeEPack.ROW_ACCESS_POLICY.equals(objectType)) {
-                        PEntryObject pEntryObject = PolicyPEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                                PolicyType.ROW_ACCESS,
-                                Lists.newArrayList("*", "*", "*"));
-                        objectList.add(pEntryObject);
-                    } else {
-                        throw new SemanticException("Grant/Revoke unsupported object type " + objectType.name());
+                if (objectType.equals(ObjectType.USER)) {
+                    List<UserIdentity> userIdentities = analyzeUserPrivToken(stmt);
+                    for (UserIdentity userIdentity : userIdentities) {
+                        objectList.add(authorizationManager.generateUserObject(ObjectType.USER, userIdentity));
                     }
+                } else if (objectType.equals(ObjectType.FUNCTION) || objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
+                    List<Pair<Long, Long>> funcPrivTokenList = analyzeFuncPrivToken(stmt, objectType);
+                    for (Pair<Long, Long> funcPrivToken : funcPrivTokenList) {
+                        objectList.add(authorizationManager.generateFunctionObject(objectType,
+                                funcPrivToken.first, funcPrivToken.second));
+                    }
+                } else if (objectType.equals(ObjectType.SYSTEM)) {
+                    objectList.addAll(Arrays.asList(new PEntryObject[] {null}));
                 } else {
-                    if (ObjectType.TABLE.equals(objectType)) {
-                        Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
-
-                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            TableName tableName;
-                            if (tokens.size() == 3) {
-                                tableName = new TableName(tokens.get(0), tokens.get(1), tokens.get(2));
-                            } else if (tokens.size() == 2) {
-                                tableName = new TableName(tokens.get(0), tokens.get(1));
-                                MetaUtils.normalizationTableName(session, tableName);
-                            } else if (tokens.size() == 1) {
-                                tableName = new TableName("", tokens.get(0));
-                                MetaUtils.normalizationTableName(session, tableName);
-                            } else {
-                                throw new SemanticException(
-                                        "Invalid grant statement with error privilege object " + tokens);
-                            }
-
-                            objectList.add(authorizationManager.generateObject(objectType,
-                                    Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())));
-
-                        }
-                    } else if (ObjectType.VIEW.equals(objectType) || ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
-                        Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
-
-                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            TableName tableName;
-                            if (tokens.size() == 2) {
-                                tableName = new TableName(tokens.get(0), tokens.get(1));
-                            } else if (tokens.size() == 1) {
-                                tableName = new TableName("", tokens.get(0));
-                                MetaUtils.normalizationTableName(session, tableName);
-                            } else {
-                                throw new SemanticException(
-                                        "Invalid grant statement with error privilege object " + tokens);
-                            }
-
-                            objectList.add(authorizationManager.generateObject(objectType,
-                                    Lists.newArrayList(tableName.getDb(), tableName.getTbl())));
-                        }
-                    } else if (ObjectType.PIPE.equals(objectType)) {
-                        Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
-                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            PipeName pipeName;
-                            if (tokens.size() == 2) {
-                                pipeName = new PipeName(tokens.get(0), tokens.get(1));
-                            } else if (tokens.size() == 1) {
-                                pipeName = new PipeName("", tokens.get(0));
-                                PipeAnalyzer.analyzePipeName(pipeName, session);
-                            } else {
-                                throw new SemanticException(
-                                        "Invalid grant statement with error privilege object " + tokens);
-                            }
-
-                            objectList.add(authorizationManager.generateObject(objectType,
-                                    Lists.newArrayList(pipeName.getDbName(), pipeName.getPipeName())));
-                        }
-                    } else if (ObjectType.DATABASE.equals(objectType)) {
-                        Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
-
-                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            if (tokens.size() == 2) {
-                                objectList.add(authorizationManager.generateObject(objectType,
-                                        Lists.newArrayList(tokens.get(0), tokens.get(1))));
-                            } else if (tokens.size() == 1) {
-                                objectList.add(authorizationManager.generateObject(objectType,
-                                        Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0))));
-                            } else {
-                                throw new SemanticException(
-                                        "Invalid grant statement with error privilege object " + tokens);
-                            }
-                        }
-                    } else if (ObjectType.SYSTEM.equals(objectType)) {
-                        objectList.addAll(Arrays.asList(new PEntryObject[] {null}));
-                    } else if (ObjectType.USER.equals(objectType)) {
-                        for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
-                            analyseUser(userIdentity, true);
-                            objectList.add(authorizationManager.generateUserObject(stmt.getObjectType(), userIdentity));
-                        }
-                    } else if (ObjectType.RESOURCE.equals(objectType)
-                            || ObjectType.CATALOG.equals(objectType)
-                            || ObjectType.RESOURCE_GROUP.equals(objectType)
-                            || ObjectTypeEPack.WAREHOUSE.equals(objectType) ||
-                            ObjectType.STORAGE_VOLUME.equals(objectType)) {
-                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            if (tokens.size() != 1) {
-                                throw new SemanticException(
-                                        "Invalid grant statement with error privilege object " + tokens);
-                            }
-
-                            objectList.add(authorizationManager.generateObject(stmt.getObjectType(), tokens));
-                        }
-                    } else if (ObjectType.FUNCTION.equals(objectType)) {
-                        for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
-                            FunctionName functionName = f.first;
-                            if (functionName.getDb() == null) {
-                                String dbName = ConnectContext.get().getDatabase();
-                                if (dbName.equals("")) {
-                                    throw new SemanticException("database not selected");
-                                }
-                                functionName.setDb(dbName);
-                            }
-
-                            FunctionArgsDef argsDef = f.second;
-                            argsDef.analyze();
-                            FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                    argsDef.getArgTypes(), argsDef.isVariadic());
-
-                            Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
-                            long databaseID = db.getId();
-                            Function function = db.getFunction(searchDesc);
-
-                            if (function == null) {
-                                throw new SemanticException("cannot find function " + functionName + "!");
-                            } else {
-                                PEntryObject object = authorizationManager.generateFunctionObject(
-                                        analyzeObjectType(stmt.getObjectTypeUnResolved()), databaseID,
-                                        function.getFunctionId());
-                                objectList.add(object);
-                            }
-                        }
-                    } else if (ObjectType.GLOBAL_FUNCTION.equals(objectType)) {
-                        for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
-                            FunctionName functionName = f.first;
-                            FunctionArgsDef argsDef = f.second;
-                            argsDef.analyze();
-                            FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                    argsDef.getArgTypes(), argsDef.isVariadic());
-
-                            Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
-                                    .getFunction(searchDesc);
-
-                            if (function == null) {
-                                throw new SemanticException("cannot find function " + functionName + "!");
-                            } else {
-                                PEntryObject object = authorizationManager.generateFunctionObject(
-                                        analyzeObjectType(stmt.getObjectTypeUnResolved()),
-                                        PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
-                                        function.getFunctionId());
-                                objectList.add(object);
-                            }
-                        }
-                    } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
-                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            PolicyName policyName;
-                            if (tokens.size() == 2) {
-                                policyName = new PolicyName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                        tokens.get(0), tokens.get(1), NodePosition.ZERO);
-                            } else if (tokens.size() == 1) {
-                                policyName = new PolicyName(null, null, tokens.get(0), NodePosition.ZERO);
-                                AnalyzerUtilsEPack.normalizationPolicyName(session, policyName);
-                            } else {
-                                throw new SemanticException(
-                                        "Invalid grant statement with error privilege object " + tokens);
-                            }
-
-                            PEntryObject pEntryObject = PolicyPEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                                    PolicyType.MASKING,
-                                    Lists.newArrayList(policyName.getCatalog(), policyName.getDbName(), policyName.getName()));
-                            objectList.add(pEntryObject);
-                        }
-                    } else if (ObjectTypeEPack.ROW_ACCESS_POLICY.equals(objectType)) {
-                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                            PolicyName policyName;
-                            if (tokens.size() == 2) {
-                                policyName = new PolicyName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                        tokens.get(0), tokens.get(1), NodePosition.ZERO);
-                            } else if (tokens.size() == 1) {
-                                policyName = new PolicyName(null, null, tokens.get(0), NodePosition.ZERO);
-                                AnalyzerUtilsEPack.normalizationPolicyName(session, policyName);
-                            } else {
-                                throw new SemanticException(
-                                        "Invalid grant statement with error privilege object " + tokens);
-                            }
-
-                            PEntryObject pEntryObject = PolicyPEntryObject.generate(GlobalStateMgr.getCurrentState(),
-                                    PolicyType.ROW_ACCESS,
-                                    Lists.newArrayList(policyName.getCatalog(), policyName.getDbName(), policyName.getName()));
-                            objectList.add(pEntryObject);
-                        }
-                    } else {
-                        throw new SemanticException("Grant/Revoke unsupported object type " + objectType.name());
+                    List<List<String>> tokens = analyzeTokens(stmt, objectType, session);
+                    for (List<String> token : tokens) {
+                        objectList.add(authorizationManager.generateObject(objectType, token));
                     }
                 }
+
                 stmt.setObjectList(objectList);
 
                 List<PrivilegeType> privilegeTypes = new ArrayList<>();
@@ -578,6 +309,239 @@ public class PrivilegeStmtAnalyzer {
                 throw exception;
             }
             return null;
+        }
+
+        public List<UserIdentity> analyzeUserPrivToken(BaseGrantRevokePrivilegeStmt stmt) {
+            List<UserIdentity> userIdentities = new ArrayList<>();
+            if (stmt.isGrantOnALL()) {
+                Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+                Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList().size() == 1);
+
+                List<String> tokens = stmt.getPrivilegeObjectNameTokensList().get(0);
+                if (tokens.size() != 1) {
+                    throw new SemanticException(
+                            "Invalid grant statement with error privilege object " + tokens);
+                }
+                userIdentities.add(null);
+            } else {
+                for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
+                    analyseUser(userIdentity, true);
+                    userIdentities.add(userIdentity);
+                }
+            }
+            return userIdentities;
+        }
+
+        public List<Pair<Long, Long>> analyzeFuncPrivToken(BaseGrantRevokePrivilegeStmt stmt, ObjectType objectType)
+                throws AnalysisException {
+            List<Pair<Long, Long>> funcPrivTokenList = new ArrayList<>();
+
+            if (stmt.isGrantOnALL()) {
+                Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+                Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList().size() == 1);
+
+                List<String> tokens = stmt.getPrivilegeObjectNameTokensList().get(0);
+                if (ObjectType.FUNCTION.equals(objectType)) {
+                    if (tokens.size() != 2) {
+                        throw new SemanticException(
+                                "Invalid grant statement with error privilege object " + tokens);
+                    }
+
+                    if (tokens.get(0).equals("*")) {
+                        funcPrivTokenList.add(new Pair<>(PrivilegeBuiltinConstants.ALL_DATABASE_ID,
+                                PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
+                    } else {
+                        Database database = GlobalStateMgr.getServingState().getDb(tokens.get(0));
+                        if (database == null) {
+                            throw new SemanticException("Database %s is not found", tokens.get(0));
+                        }
+
+                        funcPrivTokenList.add(new Pair<>(database.getId(), PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
+                    }
+                } else if (ObjectType.GLOBAL_FUNCTION.equals(objectType)) {
+                    if (tokens.size() != 1) {
+                        throw new SemanticException(
+                                "Invalid grant statement with error privilege object " + tokens);
+                    }
+
+                    funcPrivTokenList.add(new Pair<>(PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
+                            PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
+                }
+            } else {
+                if (ObjectType.FUNCTION.equals(objectType)) {
+                    for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
+                        FunctionName functionName = f.first;
+                        if (functionName.getDb() == null) {
+                            String dbName = ConnectContext.get().getDatabase();
+                            if (dbName.equals("")) {
+                                throw new SemanticException("database not selected");
+                            }
+                            functionName.setDb(dbName);
+                        }
+
+                        FunctionArgsDef argsDef = f.second;
+                        argsDef.analyze();
+                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
+                                argsDef.getArgTypes(), argsDef.isVariadic());
+
+                        Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
+                        long databaseID = db.getId();
+                        Function function = db.getFunction(searchDesc);
+
+                        if (function == null) {
+                            throw new SemanticException("cannot find function " + functionName + "!");
+                        } else {
+                            funcPrivTokenList.add(new Pair<>(databaseID, function.getFunctionId()));
+                        }
+                    }
+                } else if (ObjectType.GLOBAL_FUNCTION.equals(objectType)) {
+                    for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
+                        FunctionName functionName = f.first;
+                        FunctionArgsDef argsDef = f.second;
+                        argsDef.analyze();
+                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
+                                argsDef.getArgTypes(), argsDef.isVariadic());
+
+                        Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
+                                .getFunction(searchDesc);
+
+                        if (function == null) {
+                            throw new SemanticException("cannot find function " + functionName + "!");
+                        } else {
+                            funcPrivTokenList.add(new Pair<>(PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
+                                    function.getFunctionId()));
+                        }
+                    }
+                }
+            }
+
+            return funcPrivTokenList;
+        }
+
+        public List<List<String>> analyzeTokens(BaseGrantRevokePrivilegeStmt stmt, ObjectType objectType,
+                                                ConnectContext session) {
+            List<List<String>> objectTokenList = new ArrayList<>();
+            if (stmt.isGrantOnALL()) {
+                Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+                Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList().size() == 1);
+
+                List<String> tokens = stmt.getPrivilegeObjectNameTokensList().get(0);
+                if (ObjectType.TABLE.equals(objectType)) {
+                    if (tokens.size() != 2) {
+                        throw new SemanticException(
+                                "Invalid grant statement with error privilege object " + tokens);
+                    }
+                    objectTokenList.add(Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0), tokens.get(1)));
+                } else if (ObjectType.VIEW.equals(objectType)
+                        || ObjectType.MATERIALIZED_VIEW.equals(objectType)
+                        || ObjectType.PIPE.equals(objectType)) {
+                    if (tokens.size() != 2) {
+                        throw new SemanticException(
+                                "Invalid grant statement with error privilege object " + tokens);
+                    }
+                    objectTokenList.add(tokens);
+                } else if (ObjectType.DATABASE.equals(objectType)) {
+                    if (tokens.size() != 1) {
+                        throw new SemanticException(
+                                "Invalid grant statement with error privilege object " + tokens);
+                    }
+                    objectTokenList.add(Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0)));
+                } else if (ObjectType.RESOURCE.equals(objectType)
+                        || ObjectType.CATALOG.equals(objectType)
+                        || ObjectType.RESOURCE_GROUP.equals(objectType)
+                        || ObjectType.STORAGE_VOLUME.equals(objectType)) {
+                    if (tokens.size() != 1) {
+                        throw new SemanticException(
+                                "Invalid grant statement with error privilege object " + tokens);
+                    }
+                    objectTokenList.add(tokens);
+                } else {
+                    throw new SemanticException("Grant/Revoke unsupported object type " + objectType.name());
+                }
+            } else {
+                if (ObjectType.TABLE.equals(objectType)) {
+                    Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+
+                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                        TableName tableName;
+                        if (tokens.size() == 3) {
+                            tableName = new TableName(tokens.get(0), tokens.get(1), tokens.get(2));
+                        } else if (tokens.size() == 2) {
+                            tableName = new TableName(tokens.get(0), tokens.get(1));
+                            MetaUtils.normalizationTableName(session, tableName);
+                        } else if (tokens.size() == 1) {
+                            tableName = new TableName("", tokens.get(0));
+                            MetaUtils.normalizationTableName(session, tableName);
+                        } else {
+                            throw new SemanticException(
+                                    "Invalid grant statement with error privilege object " + tokens);
+                        }
+
+                        objectTokenList.add(Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
+                    }
+                } else if (ObjectType.VIEW.equals(objectType) || ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
+                    Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+
+                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                        TableName tableName;
+                        if (tokens.size() == 2) {
+                            tableName = new TableName(tokens.get(0), tokens.get(1));
+                        } else if (tokens.size() == 1) {
+                            tableName = new TableName("", tokens.get(0));
+                            MetaUtils.normalizationTableName(session, tableName);
+                        } else {
+                            throw new SemanticException(
+                                    "Invalid grant statement with error privilege object " + tokens);
+                        }
+
+                        objectTokenList.add(Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
+                    }
+                } else if (ObjectType.PIPE.equals(objectType)) {
+                    Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                        PipeName pipeName;
+                        if (tokens.size() == 2) {
+                            pipeName = new PipeName(tokens.get(0), tokens.get(1));
+                        } else if (tokens.size() == 1) {
+                            pipeName = new PipeName("", tokens.get(0));
+                            PipeAnalyzer.analyzePipeName(pipeName, session);
+                        } else {
+                            throw new SemanticException(
+                                    "Invalid grant statement with error privilege object " + tokens);
+                        }
+
+                        objectTokenList.add(Lists.newArrayList(pipeName.getDbName(), pipeName.getPipeName()));
+                    }
+                } else if (ObjectType.DATABASE.equals(objectType)) {
+                    Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
+
+                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                        if (tokens.size() == 2) {
+                            objectTokenList.add(Lists.newArrayList(tokens.get(0), tokens.get(1)));
+                        } else if (tokens.size() == 1) {
+                            objectTokenList.add(Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0)));
+                        } else {
+                            throw new SemanticException(
+                                    "Invalid grant statement with error privilege object " + tokens);
+                        }
+                    }
+                } else if (ObjectType.RESOURCE.equals(objectType)
+                        || ObjectType.CATALOG.equals(objectType)
+                        || ObjectType.RESOURCE_GROUP.equals(objectType)
+                        || ObjectType.STORAGE_VOLUME.equals(objectType)) {
+                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                        if (tokens.size() != 1) {
+                            throw new SemanticException(
+                                    "Invalid grant statement with error privilege object " + tokens);
+                        }
+                        objectTokenList.add(tokens);
+                    }
+                } else {
+                    throw new SemanticException("Grant/Revoke unsupported object type " + objectType.name());
+                }
+            }
+
+            return objectTokenList;
         }
 
         @Override

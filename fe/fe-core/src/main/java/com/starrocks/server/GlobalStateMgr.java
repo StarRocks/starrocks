@@ -117,6 +117,7 @@ import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.AuthorizationMgrEpack;
+import com.starrocks.epack.privilege.AuthorizationProviderEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
@@ -627,7 +628,7 @@ public class GlobalStateMgr {
         this.tabletStatMgr = new TabletStatMgr();
         this.authenticationMgr = new AuthenticationMgrEPack();
         this.domainResolver = new DomainResolver(authenticationMgr);
-        this.authorizationMgr = new AuthorizationMgrEpack(this, null);
+        this.authorizationMgr = new AuthorizationMgrEpack(this, new AuthorizationProviderEPack());
         this.securityPolicyManager = new SecurityPolicyMgr();
         this.ldapGroupCacheMgr = new LDAPGroupCacheMgr(authenticationMgr, authorizationMgr);
 

@@ -2,8 +2,6 @@
 
 package com.starrocks.epack.privilege;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.ObjectType;
@@ -11,50 +9,54 @@ import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.hadoop.util.Lists;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 public class AuthorizationProviderEPack extends DefaultAuthorizationProvider {
 
-    private static final Map<ObjectType, List<PrivilegeType>> TYPE_TO_ACTION_LIST_EPACK =
-            ImmutableMap.<ObjectType, List<PrivilegeType>>builder()
-                    .putAll(TYPE_TO_ACTION_LIST)
+    public AuthorizationProviderEPack() {
+        super();
 
-                    .put(ObjectTypeEPack.MASKING_POLICY, ImmutableList.of(
-                            PrivilegeTypeEPack.APPLY,
-                            PrivilegeType.DROP,
-                            PrivilegeType.ALTER))
+        typeToActionList.get(ObjectType.DATABASE).addAll(
+                Lists.newArrayList(PrivilegeTypeEPack.CREATE_MASKING_POLICY, PrivilegeTypeEPack.CREATE_ROW_ACCESS_POLICY));
+        typeToActionList.get(ObjectType.SYSTEM).addAll(
+                Lists.newArrayList(PrivilegeTypeEPack.CREATE_WAREHOUSE, PrivilegeTypeEPack.SECURITY));
 
-                    .put(ObjectTypeEPack.ROW_ACCESS_POLICY, ImmutableList.of(
-                            PrivilegeTypeEPack.APPLY,
-                            PrivilegeType.DROP,
-                            PrivilegeType.ALTER))
+        typeToActionList.put(ObjectTypeEPack.MASKING_POLICY, Lists.newArrayList(
+                PrivilegeTypeEPack.APPLY,
+                PrivilegeType.DROP,
+                PrivilegeType.ALTER));
 
-                    .put(ObjectTypeEPack.WAREHOUSE, ImmutableList.of(
-                            PrivilegeType.USAGE,
-                            PrivilegeType.ALTER,
-                            PrivilegeType.DROP))
-                    .build();
+        typeToActionList.put(ObjectTypeEPack.ROW_ACCESS_POLICY, Lists.newArrayList(
+                PrivilegeTypeEPack.APPLY,
+                PrivilegeType.DROP,
+                PrivilegeType.ALTER));
+
+        typeToActionList.put(ObjectTypeEPack.WAREHOUSE, Lists.newArrayList(
+                PrivilegeType.USAGE,
+                PrivilegeType.ALTER,
+                PrivilegeType.DROP));
+    }
+
 
     @Override
-    public Set<ObjectType> getAllPrivObjectTypes() {
-        return TYPE_TO_ACTION_LIST_EPACK.keySet();
+    public PrivilegeType getPrivilegeType(String privTypeString) {
+        return PrivilegeTypeEPack.NAME_TO_PRIVILEGE.get(privTypeString);
     }
 
     @Override
-    public List<PrivilegeType> getAvailablePrivType(ObjectType objectType) {
-        return new ArrayList<>(TYPE_TO_ACTION_LIST_EPACK.get(objectType));
-    }
-
-    @Override
-    public boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType) {
-        if (!TYPE_TO_ACTION_LIST_EPACK.containsKey(objectType)) {
-            return false;
+    public ObjectType getObjectType(String objectTypeUnResolved) {
+        if (ObjectTypeEPack.NAME_TO_OBJECT.containsKey(objectTypeUnResolved)) {
+            return ObjectTypeEPack.NAME_TO_OBJECT.get(objectTypeUnResolved);
         }
-        return TYPE_TO_ACTION_LIST_EPACK.get(objectType).contains(privilegeType);
+
+        if (ObjectTypeEPack.PLURAL_TO_OBJECT.containsKey(objectTypeUnResolved)) {
+            return ObjectTypeEPack.PLURAL_TO_OBJECT.get(objectTypeUnResolved);
+        }
+
+        throw new SemanticException("cannot find privilege object type " + objectTypeUnResolved);
     }
 
     @Override

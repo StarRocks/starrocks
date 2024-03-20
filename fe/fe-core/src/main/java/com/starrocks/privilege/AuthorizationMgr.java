@@ -124,11 +124,7 @@ public class AuthorizationMgr {
 
     public AuthorizationMgr(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
-        if (provider == null) {
-            this.provider = new AuthorizationProviderEPack();
-        } else {
-            this.provider = provider;
-        }
+        this.provider = provider;
         pluginId = this.provider.getPluginId();
         pluginVersion = this.provider.getPluginVersion();
         roleNameToId = new HashMap<>();
@@ -203,14 +199,9 @@ public class AuthorizationMgr {
             initPrivilegeCollections(
                     rolePrivilegeCollection,
                     ObjectType.SYSTEM,
-                    Arrays.asList(PrivilegeType.NODE, PrivilegeTypeEPack.CREATE_WAREHOUSE),
+                    List.of(PrivilegeType.NODE),
                     null,
                     false);
-
-            // GRANT WAREHOUSE ON SYSTEM
-            ObjectType t = ObjectTypeEPack.WAREHOUSE;
-            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
-            rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 4. user_admin
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID,
@@ -222,8 +213,8 @@ public class AuthorizationMgr {
                     Collections.singletonList(PrivilegeType.GRANT),
                     null,
                     false);
-            t = ObjectType.USER;
-            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
+            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, ObjectType.USER,
+                    provider.getAvailablePrivType(ObjectType.USER));
             rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 5. public
@@ -304,7 +295,6 @@ public class AuthorizationMgr {
         } else if (ObjectType.RESOURCE.equals(objectType)
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
-                || ObjectTypeEPack.WAREHOUSE.equals(objectType)
                 || ObjectType.STORAGE_VOLUME.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*"), globalStateMgr));
@@ -1200,6 +1190,14 @@ public class AuthorizationMgr {
 
     public boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType) {
         return provider.isAvailablePrivType(objectType, privilegeType);
+    }
+
+    public PrivilegeType getPrivilegeType(String privTypeString) {
+        return provider.getPrivilegeType(privTypeString);
+    }
+
+    public ObjectType getObjectType(String objectTypeUnResolved) {
+        return provider.getObjectType(objectTypeUnResolved);
     }
 
     public List<PrivilegeType> getAvailablePrivType(ObjectType objectType) {

@@ -35,8 +35,17 @@ import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 
 public class AnalyzerVisitorEPack extends AnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
+
+    // ---------------------------------------- Privilege Statement ------------------------------------------------
+
+    @Override
+    public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+        PrivilegeStmtAnalyzerEPack.analyze(stmt, session);
+        return null;
+    }
 
     // ---------------------------------------- Security Policy Statement ------------------------------------------
 
