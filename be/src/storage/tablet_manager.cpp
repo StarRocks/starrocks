@@ -127,7 +127,9 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             new_version = (new_rowset == nullptr) ? -1 : new_rowset->end_version();
             old_tablet->release_header_lock();
         }
-        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time);
+        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time) ||
+                           // use for migration of primary key empty tablet
+                           (new_tablet->updates() != nullptr && old_version == 1 && new_version == 1);
 
         if (replace_old) {
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), kMoveFilesToTrash));
