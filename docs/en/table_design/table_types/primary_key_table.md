@@ -98,7 +98,7 @@ However, in real business scenarios, when a Primary Key table is created, additi
 
 For example, the `order_id` field in the order table can uniquely identify data rows, so the `order_id` field can be used as the primary key.
 
-Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key. Therefore, you can choose columns frequently used as query filter conditions to form the sort key. For example, if you frequently query product sales performance based on the combination of two dimensions, order date and merchant, you can specify the sort key as `dt` and `merchant_id` using the `order by (`dt`,`merchant_id`)`clause.
+Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key. Therefore, you can choose columns frequently used as query filter conditions to form the sort key. For example, if you frequently query product sales performance based on the combination of two dimensions, order date and merchant, you can specify the sort key as `dt` and `merchant_id` using the <code>order by (\`dt\`,\`merchant_id\`)</code> clause.
 
 Note that if you use [data distribution strategies](../Data_distribution.md), the Primary Key table currently requires the primary key to include partitioning and bucketing columns. For example, the data distribution strategy uses `dt` as the partitioning column and `merchant_id` as the hash bucketing column. The primary key also needs to include `dt` and `merchant_id`.
 
