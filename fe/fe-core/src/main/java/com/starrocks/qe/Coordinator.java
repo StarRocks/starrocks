@@ -170,7 +170,7 @@ public class Coordinator {
     private Map<String, String> loadCounters;
     private String trackingUrl;
     // for export
-    private List<String> exportFiles;
+    private List<String> exportFiles = Lists.newArrayList();
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
     private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
     // Input parameter
