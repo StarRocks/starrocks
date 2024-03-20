@@ -9,7 +9,7 @@ import TabItem from '@theme/TabItem';
 
 The Primary Key table uses a new storage engine designed by StarRocks. Its main advantage lies in supporting real-time data updates while ensuring efficient performance for complex ad-hoc queries. In real-time business analytics, decision-making can benefit from Primary Key tables which use the newest data to analyze results in real-time, which can mitigate data latency in data analysis.
 
-The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL constraint, and is used to uniquely identify each data row. If the primary key value of a new data row is same as that of the existing data row in the table, UNIQUE constraint violation occurs. Then the new data row will replace the existing data row.
+The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL constraint, and is used to uniquely identify each data row. If the primary key value of a new data row is same as that of an existing data row in the table, UNIQUE constraint violation occurs. Then the new data row will replace the existing data row.
 
 :::info
 
@@ -22,7 +22,7 @@ The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL cons
 
 The Primary Key table can support real-time data updates while ensuring efficient query performance. It is suitable for the following scenarios:
 
-- **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key table. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read table of the Unique Key table is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Realtime synchronization from MySQL](../../loading/Flink_cdc_load.md).
+- **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a Primary Key table. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Unique Key table that adopts the Merge-On-Read strategy is used. For more information, see [Realtime synchronization from MySQL](../../loading/Flink_cdc_load.md).
 - **Join multiple streams by performing [partial updates on individual columns](../../loading/Load_to_Primary_Key_tables.md#partial-updates)**. In business scenarios such as user profiling, flat tables are preferably used to improve multi-dimensional analysis performance and simplify the analytics model that is used by data analysts. Upstream data in these scenarios may come from various apps, such as shopping apps, delivery apps, and banking apps, or from systems, such as machine learning systems that perform computations to obtain the distinct tags and properties of users. The Primary Key table is well suited in these scenarios, because it supports updates to individual columns. Each app or system can update only the columns that hold the data within its own service scope while benefiting from real-time data additions, deletions, and updates at high query performance.
 
 ## How it works
@@ -128,7 +128,7 @@ PROPERTIES (
 
 ### Primary key
 
-The primary key of a table is used to uniquely Identify each row in that table. The one or more columns comprising the primary key are defined in the `PRIMARY KEY`, and have the UNIQUE constraint and NOT NULL constraint.
+The primary key of a table is used to uniquely identify each row in that table. The one or more columns comprising the primary key are defined in the `PRIMARY KEY`, and have the UNIQUE constraint and NOT NULL constraint.
 
 Take note of the following considerations about the primary key:
 
@@ -149,7 +149,7 @@ The primary key index is used to store the mapping between the primary key value
 
 When `enable_persistent_index` is set to `true` (default), the primary key indexes can be persisted to the disk. During loading, a small portion of the primary key indexes is loaded in memory, while the majority is stored on disk to avoid taking up too much memory. In general, query and update performance of the table with the persistent primary key indexes is nearly equivalent to that of the table with the fully in-memory primary key indexes.
 
-If the disk is a SSD, it is recommended to set it to true. If the disk is HDD and the load frequency is not high, you can also set it to true.
+If the disk is an SSD, it is recommended to set it to `true`. If the disk is an HDD and the load frequency is not high, you can also set it to `true`.
 
 :::info
 
@@ -161,13 +161,13 @@ Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters furth
 
 <TabItem value="example2" label="Fully in-memory primary key index">
 
-When `enable_persistent_index` is set to `false`, the primary key indexes are not persisted to the disk,  that is, the primary key indexes are fully stored in memory. During loading, the primary key indexes of tablets related to the data loaded will be loaded into memory, which may result in higher memory consumption. (If a tablet has not had data loaded for a long time, its primary key index will be released from memory).
+When `enable_persistent_index` is set to `false`, the primary key indexes are not persisted to the disk,  that is, the primary key indexes are fully stored in memory. During loading, the primary key indexes of tablets related to the data loaded will be loaded into memory, which may result in higher memory consumption. (If a tablet has not had data loaded for a long time, its primary key index will be released from memory.)
 
-When using the fully in-memory primary key indexes, it is recommended to follow the following guidelines when designing the Primary Key to control memory usage of the primary key indexes:
+When using the fully in-memory primary key indexes, you are advised to follow the following guidelines when designing the Primary Key to control memory usage of the primary key indexes:
 
-- The number and total length of Primary Key columns must be properly designed. We recommend that you identify columns whose data types occupy less memory and define those columns as the Primary Key, such as INT and BIGINT, not VARCHAR.
-- Before you create the table, we recommend that you estimate the memory occupied by the primary key indexes based on the data types of the Primary Key columns and the number of rows in the table. This way, you can prevent running out of memory. The following example explains how to calculate the memory occupied by the primary key indexes:
-  - Suppose that the `dt` column, which is of the DATE data type that occupies 4 bytes, and the `id` column, which is of the BIGINT data type that occupies 8 bytes, are defined as the Primary Key. In this case, the Primary Key is 12 bytes in length.
+- The number and total length of Primary Key columns must be properly designed. We recommend that you identify columns whose data types occupy less memory and define those columns as the primary key, such as INT and BIGINT, not VARCHAR.
+- Before you create the table, we recommend that you estimate the memory occupied by the primary key indexes based on the data types of the primary key columns and the number of rows in the table. This way, you can prevent running out of memory. The following example explains how to calculate the memory occupied by the primary key indexes:
+  - Suppose that the `dt` column, which is of the DATE data type and occupies 4 bytes, and the `id` column, which is of the BIGINT data type and occupies 8 bytes, are defined as the Primary Key. In this case, the Primary Key is 12 bytes in length.
   - Suppose that the table contains 10,000,000 rows of hot data and is stored in three replicas.
   - Given the preceding information, the memory occupied by the primary key indexes is 945 MB based on the following formula: `(12 + 9) x 10,000,000 x 3 x 1.5 = 945 (MB)`
 
