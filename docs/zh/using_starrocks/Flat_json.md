@@ -1,13 +1,13 @@
 本文介绍 Flat JSON 的基础概念，以及如何使用。
 
-自 2.2.0 版本起，StarRocks 支持 JSON 数据类型，用于支持更加灵活的数据存储。 使用JSON 类型的原因大多数是因为需要存储数据的结构易变，难以维护结构变更，但在查询 JSON 时，大部分场景并不是直接读取完整的 JSON 数据，而是访问指定的路径下数据， 例如：
+自 2.2.0 版本起，StarRocks 支持 JSON 数据类型，用于支持更加灵活的数据存储。 使用 JSON 类型的原因大多数是因为需要存储数据的结构易变，难以维护结构变更，但在查询 JSON 时，大部分场景并不是直接读取完整的 JSON 数据，而是访问指定的路径下数据， 例如：
 ```
 // 将日志中必填的字段存储为固定字段，其他经常随业务变更的字段打包为Json存储
 select time, evevnt, user, get_json_string(remain_json, "$.from_system"), get_json_string(remain_json, "$.tag")
 from xxx_logs
 ```
 
-但由于 JSON 类型的特殊性，但在查询中 JSON 类型的性能表现并不如标准类型（INT，STRING等）快，其原因有：
+但由于 JSON 类型的特殊性，在查询中 JSON 类型的性能表现并不如标准类型（INT，STRING等）快，其原因有：
 * JSON 类型是半结构化类型，在存储上需要存储每行数据的结构信息，存储占用多，压缩效率低。
 * 在查询时，需要根据运行时数据检测使用结构信息，难以实现向量化执行优化。
 * 在查询时，需要读取完整的 Json 数据，其中包含了大量冗余的字段。
@@ -16,7 +16,7 @@ from xxx_logs
 
 ## 什么是 Flat Json
 
-Flat JSON 的核心原理，是在导入时检测 JSON 数据，将 JSON 数据中公共的字段提取为标准类型数据存储，在查询JSON时，通过这些公共字段数据优化 JSON 的查询速度，例如：
+Flat JSON 的核心原理是在导入时检测 JSON 数据，将 JSON 数据中公共的字段提取为标准类型数据存储，在查询 JSON 时，通过这些公共字段数据优化 JSON 的查询速度，例如：
 ```plain text
 1, {"a": 1, "b": 21, "c": 3, "d": 4}
 2, {"a": 2, "b": 22, "d": 4}
@@ -26,27 +26,27 @@ Flat JSON 的核心原理，是在导入时检测 JSON 数据，将 JSON 数据�
 6, {"c": 6, "d": 1}
 ```
 
-在导入上述这样一组 JSON 数据时，`a` 和 `b`两个字段在大部分的 JSON 数据中都存在并且其数据类型相似（都是int），那么就可以将`a`，`b`两个字段的数据都从 JSON 中读取出来，单独存储为两列INT。当查询中使用到这两列时，就可以直接读取`a`,`b`两列的数据，减少查询时读取 JSON 中额外的字段数据，在计算时减少对 JSON 结构的处理开销。
+在导入上述这样一组 JSON 数据时，`a` 和 `b`两个字段在大部分的 JSON 数据中都存在并且其数据类型相似（都是int），那么就可以将`a`，`b`两个字段的数据都从 JSON 中读取出来，单独存储为两列 INT 。当查询中使用到这两列时，就可以直接读取`a`,`b`两列的数据，减少查询时读取 JSON 中额外的字段数据，在计算时减少对 JSON 结构的处理开销。
 
 ## 使用 Flat Json
 
-StarRocks 当前对Flat JSON的支持：
+StarRocks 当前对 Flat JSON 的支持：
 * 导入时，支持提取公共字段，单独存储为 JSON 类型，未实现类型推导。
 * 目前只支持最顶层 JSON 字段的提取。
-* 目前会同时存储提取列，和原始 JSON 数据。
+* 目前会同时存储提取列和原始 JSON 数据。
 * 兼容历史数据，无须重新导入。
 * 历史表导入新数据时，自动通过 Compaction 完成 Flat JSON操作。
+* StarRocks 会逐步迭代升级 Flat JSON 功能，在后续版本中支持类型推导和存储优化。
 
-使用 Flat Json 需要在 BE 配置：
+使用 Flat Json 需要在 BE 配置并重启 BE 生效：
 ```plain text
-enable_flat_json = true
+enable_json_flat = true
 ```
 
 开启后新导入的 JSON 数据会自动打平。
 
-在查询 SQL 时，设置Session变量：
+在查询 SQL 时，设置 Session 变量：
 ``` sql
-set cbo_prune_subfield = true;
 set cbo_prune_json_subfield = true;
 ```
 
@@ -66,7 +66,7 @@ set cbo_prune_json_subfield = true;
 
 BE 上：
 * `enable_json_flat`：控制 Flat JSON 是否开启，默认为 false。
-* `json_flat_null_factor`：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不进行提取，默认为0.3。
+* `json_flat_null_factor`：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不进行提取，默认为 0.3 。
 * `json_flat_internal_column_min_limit`：控制 Flat JSON 时，JSON 内部字段数量限制，低于该数量的 JSON 不执行 Flat JSON 优化，默认为 5。
 * `json_flat_column_max`：控制 Flat JSON 时，最多提取的子列数量，默认为 20。
 * `json_flat_sparsity_factor`：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值不进行提取，默认为0.9。
@@ -77,4 +77,4 @@ BE 上：
 * 开启 Flat JSON 后，会加大导入 JSON 的耗时，提取的 JSON 越多，耗时越高。
 * 开启 Flat JSON 后，Compaction 的耗时和内存使用量会增高。
 * `cbo_prune_json_subfield` 只有在命中 Flat JSON 时才有效果，其他情况下可能存在性能负优化。
-* 如果遇到 Crash 或者查询报错的问题，可以通过关闭该功能 以及 Session 变量规避。
+* 如果遇到 Crash 或者查询报错的问题，可以通过关闭 BE config 以及 Session 变量进行规避。
