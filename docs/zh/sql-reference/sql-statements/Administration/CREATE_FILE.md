@@ -59,5 +59,6 @@ PROPERTIES
 (
     "url" = "http://test.bj.bcebos.com/kafka-key/client.key",
     "catalog" = "my_catalog",
+    "md5" = "b5bb901bf10f99205b39a46ac3557dd9"
 );
 ```
