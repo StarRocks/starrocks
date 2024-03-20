@@ -225,6 +225,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // sync partitions between materialized view and base tables out of lock
             // do it outside lock because it is a time-cost operation
             syncPartitions(context);
+<<<<<<< HEAD
             database.readLock();
             try {
                 // the following steps should be done in the same lock:
@@ -248,6 +249,28 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
                 checked = true;
                 mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(context.getProperties());
+=======
+            // check whether there are partition changes for base tables, eg: partition rename
+            // retry to sync partitions if any base table changed the partition infos
+            if (checkBaseTablePartitionChange(materializedView)) {
+                retryNum++;
+                if (retryNum > MAX_RETRY_NUM) {
+                    throw new DmlException("materialized view:%s refresh task failed", materializedView.getName());
+                }
+                LOG.info("materialized view:{} base partition has changed. retry to sync partitions, retryNum:{}",
+                        materializedView.getName(), retryNum);
+                continue;
+            }
+            checked = true;
+            mvEntity.increaseRefreshRetryMetaCount((long) retryNum);
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                Set<String> mvPotentialPartitionNames = Sets.newHashSet();
+                mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(context.getProperties(),
+                        mvPotentialPartitionNames);
+>>>>>>> a7e302720a ([Enhancement] optimize lock of mv refresh (#42637))
                 if (mvToRefreshedPartitions.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
                     return RefreshJobStatus.EMPTY;
@@ -1462,8 +1485,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return false;
     }
 
+<<<<<<< HEAD
     private boolean checkBaseTablePartitionChange(MaterializedView mv) {
         List<Database> dbs = collectDatabases(mv);
+=======
+    /**
+     * Check whether the base table's partition has changed or not. Wait to refresh until all mv's base tables
+     * don't change again.
+     * @return: true if the base table's partition has changed, otherwise false.
+     */
+    private boolean checkBaseTablePartitionChange(MaterializedView materializedView) {
+        List<Database> dbs = collectDatabases(materializedView);
+        Locker locker = new Locker();
+>>>>>>> a7e302720a ([Enhancement] optimize lock of mv refresh (#42637))
         // check snapshotBaseTables and current tables in catalog
         try {
             StatementPlanner.lockDatabases(dbs);
@@ -1510,6 +1544,29 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Collect all deduplicated databases of the materialized view's base tables.
+     * @param materializedView: the materialized view to check
+     * @return: the deduplicated databases of the materialized view's base tables,
+     * throw exception if the database do not exist.
+     */
+    List<Database> collectDatabases(MaterializedView materializedView) {
+        Map<Long, Database> databaseMap = Maps.newHashMap();
+        for (BaseTableInfo baseTableInfo : materializedView.getBaseTableInfos()) {
+            Database db = baseTableInfo.getDb();
+            if (db == null) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}",
+                        baseTableInfo.getDbInfoStr(), materializedView.getName());
+                throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
+            }
+            databaseMap.put(db.getId(), db);
+        }
+        return Lists.newArrayList(databaseMap.values());
+    }
+
+>>>>>>> a7e302720a ([Enhancement] optimize lock of mv refresh (#42637))
     @VisibleForTesting
     public Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
         Map<Long, Pair<BaseTableInfo, Table>> tables = Maps.newHashMap();
