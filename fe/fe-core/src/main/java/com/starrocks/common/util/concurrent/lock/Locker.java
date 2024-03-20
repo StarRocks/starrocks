@@ -205,6 +205,7 @@ public class Locker {
     }
 
     /**
+     * FYI: should deduplicate dbs before call this api.
      * lock databases in ascending order of id.
      * @param dbs: databases to be locked
      * @param lockType: lock type
@@ -220,6 +221,7 @@ public class Locker {
     }
 
     /**
+     * FYI: should deduplicate dbs before call this api.
      * @param dbs: databases to be locked
      * @param lockType: lock type
      */
