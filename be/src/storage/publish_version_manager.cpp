@@ -124,7 +124,7 @@ void PublishVersionManager::wait_publish_task_apply_finish(std::vector<TFinishTa
             _waitting_finish_task_requests[finish_task_requests[i].signature] = std::move(finish_task_requests[i]);
         }
     }
-    CHECK(has_pending_task());
+    DCHECK(has_pending_task());
 }
 
 void PublishVersionManager::update_tablet_version(TFinishTaskRequest& finish_task_request) {
