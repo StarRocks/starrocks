@@ -339,7 +339,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
         CSVReader::Record record(data, row.parsed_end - row.parsed_start);
-        if (row.columns.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
+        if (row.columns.size() != _num_fields_in_csv && !_scan_range.params.null_for_missing_columns) {
             if (status.is_end_of_file()) {
                 break;
             }
@@ -461,7 +461,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         fields.clear();
         _curr_reader->split_record(record, &fields);
 
-        if (fields.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
+        if (fields.size() != _num_fields_in_csv && !_scan_range.params.null_for_missing_columns) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                 std::string error_msg =
                         make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);

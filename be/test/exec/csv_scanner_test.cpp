@@ -1156,7 +1156,7 @@ TEST_P(CSVScannerTest, test_get_schema) {
     }
 }
 
-TEST_P(CSVScannerTest, test_flexible_column_mapping) {
+TEST_P(CSVScannerTest, test_null_for_missing_columns) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_BIGINT);
     types.emplace_back(TYPE_DOUBLE);
@@ -1176,7 +1176,7 @@ TEST_P(CSVScannerTest, test_flexible_column_mapping) {
     TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
     params->__set_row_delimiter('\n');
     params->__set_column_separator('|');
-    params->__set_flexible_column_mapping(true);
+    params->__set_null_for_missing_columns(true);
     auto scanner = create_csv_scanner(types, ranges, params);
     scanner->use_v2(_use_v2);
     EXPECT_OK(scanner->open());

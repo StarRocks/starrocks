@@ -316,7 +316,7 @@ public class FileScanNode extends LoadScanNode {
         params.setEnclose(fileGroup.getEnclose());
         params.setEscape(fileGroup.getEscape());
         params.setJson_file_size_limit(Config.json_file_size_limit);
-        params.setFlexible_column_mapping(flexibleColumnMapping);
+        params.setNull_for_missing_column(flexibleColumnMapping);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }

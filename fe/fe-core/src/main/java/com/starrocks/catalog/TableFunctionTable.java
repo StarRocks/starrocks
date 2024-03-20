@@ -328,7 +328,7 @@ public class TableFunctionTable extends Table {
         params.setEscape(csvEscape);
         params.setSkip_header(csvSkipHeader);
         params.setTrim_space(csvTrimSpace);
-        params.setFlexible_column_mapping(true);
+        params.setNull_for_missing_column(true);
         if (csvColumnSeparator.length() == 1) {
             params.setColumn_separator(csvColumnSeparator.getBytes()[0]);
         } else if (csvColumnSeparator.length() > 1) {

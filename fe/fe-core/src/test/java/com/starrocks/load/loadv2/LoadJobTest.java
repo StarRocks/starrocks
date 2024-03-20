@@ -112,7 +112,7 @@ public class LoadJobTest {
         jobProperties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY, "0.1");
         jobProperties.put(LoadStmt.LOAD_MEM_LIMIT, "1024");
         jobProperties.put(LoadStmt.STRICT_MODE, "True");
-        jobProperties.put(LoadStmt.FLEXIBLE_COLUMN_MAPPING, "True");
+        jobProperties.put(LoadStmt.NULL_FOR_MISSING_COLUMN, "True");
 
         LoadJob loadJob = new BrokerLoadJob();
         try {

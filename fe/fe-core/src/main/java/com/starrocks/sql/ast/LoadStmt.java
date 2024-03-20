@@ -113,7 +113,7 @@ public class LoadStmt extends DdlStmt {
     public static final String JSONPATHS = "jsonpaths";
     public static final String JSONROOT = "json_root";
 
-    public static final String FLEXIBLE_COLUMN_MAPPING = "flexible_column_mapping";
+    public static final String NULL_FOR_MISSING_COLUMN = "null_for_missing_columns";
 
     // mini load params
     public static final String KEY_IN_PARAM_COLUMNS = "columns";
@@ -154,7 +154,7 @@ public class LoadStmt extends DdlStmt {
             .add(STRIP_OUTER_ARRAY)
             .add(JSONPATHS)
             .add(JSONROOT)
-            .add(FLEXIBLE_COLUMN_MAPPING)
+            .add(NULL_FOR_MISSING_COLUMN)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,

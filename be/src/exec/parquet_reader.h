@@ -73,9 +73,9 @@ public:
 
     Status get_schema(std::vector<SlotDescriptor>* schema);
 
-    // When enable_flexible_column_mapping is on, the file columns and table columns
+    // When enable_null_for_missing_columns is on, the file columns and table columns
     // do not need to correspond strictly one-to-one
-    void enable_flexible_column_mapping() { _enable_flexible_column_mapping = true; }
+    void enable_null_for_missing_columns() { _enable_null_for_missing_columns = true; }
 
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
@@ -109,7 +109,7 @@ private:
     int64_t _read_size;
 
     std::string _filename;
-    bool _enable_flexible_column_mapping = false;
+    bool _enable_null_for_missing_columns = false;
 };
 
 // Reader of broker parquet file

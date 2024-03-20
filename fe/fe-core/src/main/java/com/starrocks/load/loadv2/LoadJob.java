@@ -437,8 +437,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
             }
 
-            if (properties.containsKey(LoadStmt.FLEXIBLE_COLUMN_MAPPING)) {
-                flexibleColumnMapping = Boolean.parseBoolean(properties.get(LoadStmt.FLEXIBLE_COLUMN_MAPPING));
+            if (properties.containsKey(LoadStmt.NULL_FOR_MISSING_COLUMN)) {
+                flexibleColumnMapping = Boolean.parseBoolean(properties.get(LoadStmt.NULL_FOR_MISSING_COLUMN));
             }
         }
     }

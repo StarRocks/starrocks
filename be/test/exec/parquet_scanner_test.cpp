@@ -826,7 +826,7 @@ TEST_F(ParquetScannerTest, optional_map_key) {
     }
 }
 
-TEST_F(ParquetScannerTest, test_flexible_column_mapping) {
+TEST_F(ParquetScannerTest, test_null_for_missing_columns) {
     std::vector<std::string> column_names{"col_int", "col_not_existed"};
     std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/data_1.parquet";
     std::vector<std::string> file_names{parquet_file_name};
@@ -835,7 +835,7 @@ TEST_F(ParquetScannerTest, test_flexible_column_mapping) {
     auto ranges = generate_ranges(file_names, column_names.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
     TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
-    params->__set_flexible_column_mapping(true);
+    params->__set_null_for_missing_columns(true);
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     ASSERT_OK(scanner->open());
     auto res = scanner->get_next();
