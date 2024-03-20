@@ -171,7 +171,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (config::get_pindex_worker_count > 0) {
                 max_thread_cnt = config::get_pindex_worker_count;
             }
-            (void)StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
+            (void)StorageEngine::instance()->update_manager()->pindex_apply_thread_pool()->update_max_threads(
                     max_thread_cnt);
         });
         _config_callback.emplace("drop_tablet_worker_count", [&]() {
