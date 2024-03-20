@@ -111,6 +111,8 @@ extern std::shared_ptr<StarOSWorker> g_worker;
 void init_staros_worker();
 void shutdown_staros_worker();
 void update_staros_starcache();
+void update_staros_starcache_memory_limit_bytes();
+void update_staros_starcache_memory_limit_percent();
 
 } // namespace starrocks
 #endif // USE_STAROS
