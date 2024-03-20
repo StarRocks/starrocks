@@ -184,8 +184,7 @@ public class KafkaUtil {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                 for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                    ComputeNode node =
-                            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                    ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
                     if (node != null && node.isAlive()) {
                         nodeIds.add(nodeId);
                     }
