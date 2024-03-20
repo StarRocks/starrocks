@@ -758,6 +758,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             this.finishedTimeMs = System.currentTimeMillis();
 
             journalTask = editLog.logAlterJobNoWait(this);
+            LOG.info("table: {} max column unique id: {}", tbl.getName(), tbl.getMaxColUniqueId());
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }

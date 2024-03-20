@@ -851,7 +851,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
                 case OperationType.OP_ALTER_TABLE_PROPERTIES:
-                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
+                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: 
+                case OperationType.OP_MODIFY_FAST_SCHEMA_EVOLUTION: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.getLocalMetastore().replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1718,6 +1719,10 @@ public class EditLog {
 
     public void logModifyPrimaryIndexCacheExpireSec(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC, info);
+    }
+
+    public void logModifyFastSchemaEvolution(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_FAST_SCHEMA_EVOLUTION, info);
     }
 
     public void logModifyWriteQuorum(ModifyTablePropertyOperationLog info) {

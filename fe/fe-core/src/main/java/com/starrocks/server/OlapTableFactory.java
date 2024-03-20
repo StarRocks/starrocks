@@ -265,16 +265,15 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
             table.setUseFastSchemaEvolution(useFastSchemaEvolution);
+
+            List<Integer> sortKeyUniqueIds = new ArrayList<>();
             for (Column column : baseSchema) {
                 column.setUniqueId(table.incAndGetMaxColUniqueId());
+                LOG.debug("table: {}, newColumn: {}, uniqueId: {}", table.getName(), column.getName(),
+                        column.getUniqueId());
             }
-            List<Integer> sortKeyUniqueIds = new ArrayList<>();
-            if (useFastSchemaEvolution) {
-                for (Integer idx : sortKeyIdxes) {
-                    sortKeyUniqueIds.add(baseSchema.get(idx).getUniqueId());
-                }
-            } else {
-                LOG.debug("table: {} doesn't use light schema change", table.getName());
+            for (Integer idx : sortKeyIdxes) {
+                sortKeyUniqueIds.add(baseSchema.get(idx).getUniqueId());
             }
 
             // analyze bloom filter columns

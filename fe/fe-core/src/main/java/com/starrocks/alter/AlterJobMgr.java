@@ -696,7 +696,8 @@ public class AlterJobMgr {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION));
 
                 olapTable = (OlapTable) db.getTable(tableName);
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
@@ -717,6 +718,15 @@ public class AlterJobMgr {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)) {
                     schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION)) {
+                    if (!olapTable.canUseFastSchemaEvolution()) {
+                        String s = "table: " + olapTable.getName() + " maybe created in old version and does not support"
+                                + " modify meta: FAST_SCHEMA_EVOLUTION";
+                        LOG.warn(s);
+                        throw new DdlException(s);
+                    }
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
+                            TTabletMetaType.FAST_SCHEMA_EVOLUTION);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {

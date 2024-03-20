@@ -319,6 +319,15 @@ public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext>
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
             clause.setNeedTableStable(false);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION).equalsIgnoreCase("true") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION).equalsIgnoreCase("false")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION +
+                                " must be bool type(false/true)");
+            }
+            clause.setNeedTableStable(false);
+            clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

@@ -413,7 +413,8 @@ enum TTabletMetaType {
     BINLOG_CONFIG,
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
-    STORAGE_TYPE
+    STORAGE_TYPE,
+    FAST_SCHEMA_EVOLUTION
 }
 
 struct TTabletMetaInfo {

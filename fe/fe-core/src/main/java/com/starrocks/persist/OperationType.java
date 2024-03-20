@@ -927,6 +927,8 @@ public class OperationType {
     public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
     @IgnorableOnReplayFailed
     public static final short OP_DISABLE_PARTITION_RECOVERY = 13511;
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_FAST_SCHEMA_EVOLUTION = 13512;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

@@ -2806,8 +2806,19 @@ public class OlapTable extends Table {
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
+    public boolean canUseFastSchemaEvolution() {
+        return maxColUniqueId > Column.COLUMN_UNIQUE_ID_INIT_VALUE;
+    }
+
     public boolean getUseFastSchemaEvolution() {
-        if (hasRowStorageType()) {
+        if (tableProperty != null) {
+            return tableProperty.getUseFastSchemaEvolution();
+        }
+        return false;
+    }
+
+    public boolean enableFastSchemaEvolution() {
+        if (!canUseFastSchemaEvolution() || hasRowStorageType()) {
             // row storage type does not support fast schema evolution currently
             return false;
         }
