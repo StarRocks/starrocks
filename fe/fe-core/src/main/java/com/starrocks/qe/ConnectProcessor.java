@@ -170,9 +170,6 @@ public class ConnectProcessor {
         }
 
         // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
-<<<<<<< HEAD
-        String errorCode = StringUtils.isNotEmpty(ctx.getErrorCode()) ? ctx.getErrorCode() : ctx.getState().getErrType().name();
-=======
         String errorCode = "";
         if (ctx.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
             // error happens in FE execution.
@@ -181,7 +178,6 @@ public class ConnectProcessor {
             // error happens in BE execution.
             errorCode = ctx.getErrorCode();
         }
->>>>>>> a92ee8c3b7 ([BugFix] fix audit log error code incorrect (#42746))
 
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
