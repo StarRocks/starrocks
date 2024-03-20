@@ -41,6 +41,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -146,12 +148,18 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             throws LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException, AnalysisException {
 
         if (Config.disable_load_job) {
-            throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
+            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+                    "disable_load_job is set to true, all load jobs are rejected");
+        }
+
+        if (Config.metadata_enable_recovery_mode) {
+            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+                    "The cluster is under recovery mode, all load jobs are rejected");
         }
 
         if (GlobalStateMgr.getCurrentState().isSafeMode()) {
-            throw new AnalysisException(String.format("The cluster is under safe mode state," +
-                    " all load jobs are rejected."));
+            ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+                    "The cluster is under safe mode state, all load jobs are rejected.");
         }
 
         switch (sourceType) {
@@ -831,6 +839,15 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             return "";
         }
         return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
+    }
+
+    public boolean hasCommittedTxnOnPartition(long dbId, long tableId, long partitionId) {
+        DatabaseTransactionMgr databaseTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (databaseTransactionMgr == null) {
+            return false;
+        }
+
+        return databaseTransactionMgr.hasCommittedTxnOnPartition(tableId, partitionId);
     }
 
     @Override

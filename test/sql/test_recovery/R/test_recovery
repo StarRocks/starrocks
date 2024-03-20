@@ -1,0 +1,21 @@
+-- name: test_set_partition_version
+CREATE TABLE t (a int);
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+select * from t;
+-- result:
+1
+-- !result
+admin set table t partition(t) version to 1;
+-- result:
+-- !result
+select * from t;
+-- result:
+-- !result
+-- name: test_show_recovery_info
+show proc '/meta_recovery';
+-- result:
+-- !result

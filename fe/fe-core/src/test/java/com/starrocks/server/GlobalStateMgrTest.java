@@ -231,6 +231,19 @@ public class GlobalStateMgrTest {
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
 
         Config.metadata_journal_ignore_replay_failure = originVal;
+
+        // when metadata_enable_recovery_mode is true, all types of failure can be skipped.
+        originVal = Config.metadata_enable_recovery_mode;
+        Config.metadata_enable_recovery_mode = true;
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
+        Config.metadata_enable_recovery_mode = originVal;
     }
 
     private static class MyGlobalStateMgr extends GlobalStateMgr {
