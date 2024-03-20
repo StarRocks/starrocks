@@ -2491,12 +2491,17 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
 
 Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
                                              KeysInfo* found_keys_info,
-                                             std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const {
+                                             std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                             IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
     std::map<size_t, IndexPage> pages;
     for (auto [pageid, keys_info] : keys_info_by_page) {
         IndexPage page;
         RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + kPageSize * pageid, page.data, kPageSize));
+        if (stat != nullptr) {
+            stat->read_iops++;
+            stat->read_io_bytes += kPageSize;
+        }
         pages[pageid] = std::move(page);
     }
     if (shard_info.key_size != 0) {
@@ -2564,7 +2569,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     if (config::enable_pindex_read_by_page && shard_info.uncompressed_size == 0) {
         std::map<size_t, std::vector<KeyInfo>> keys_info_by_page;
         RETURN_IF_ERROR(_split_keys_info_by_page(shard_idx, check_keys_info, keys_info_by_page));
-        return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page);
+        return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page, stat);
     }
 
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
@@ -2577,7 +2582,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
                                             shard_info.bytes));
     if (stat != nullptr) {
-        stat->get_in_shard_cnt++;
+        stat->read_iops++;
         stat->read_io_bytes += shard_info.bytes;
     }
     if (shard_info.key_size != 0) {
