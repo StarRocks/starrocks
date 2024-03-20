@@ -181,10 +181,11 @@ public class KafkaUtil {
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
             // TODO: need to refactor after be split into cn + dn
             List<Long> nodeIds = new ArrayList<>();
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            if ((RunMode.isSharedDataMode())) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                 for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                    ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                    ComputeNode node = 
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                     if (node != null && node.isAlive()) {
                         nodeIds.add(nodeId);
                     }
@@ -194,14 +195,15 @@ public class KafkaUtil {
                             "Failed to send get kafka partition info request. err: No alive backends or compute nodes");
                 }
             } else {
-                nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
                 if (nodeIds.isEmpty()) {
                     throw new LoadException("Failed to send get kafka partition info request. err: No alive backends");
                 }
             }
 
             Collections.shuffle(nodeIds);
-            ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+            ComputeNode be = 
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
             TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
             // get info
