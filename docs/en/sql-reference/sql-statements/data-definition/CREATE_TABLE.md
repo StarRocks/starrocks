@@ -48,7 +48,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 **col_name**: column name.
 
-Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
+Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
 
 **col_type**: Column type. Specific column information, such as types and ranges:
 
@@ -636,7 +636,7 @@ PROPERTIES (
 
   > **NOTE**
   >
-  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/BE_configuration.md).
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/management/BE_configuration.md).
 
 - `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
@@ -655,7 +655,7 @@ PROPERTIES (
   > **NOTE**
   >
   > - StarRocks shared-data clusters do not support this parameter.
-  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`enable_fast_schema_evolution`](../../../administration/FE_configuration.md#enable_fast_schema_evolution).
+  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution).
 
 ## Examples
 
