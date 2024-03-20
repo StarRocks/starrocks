@@ -62,12 +62,12 @@ public enum HiveStorageFormat {
             AVRO_INPUT_FORMAT_CLASS,
             AVRO_OUTPUT_FORMAT_CLASS
     ),
-    RC_BINARY(
+    RCBINARY(
             LAZY_BINARY_COLUMNAR_SERDE_CLASS,
             RCFILE_INPUT_FORMAT_CLASS,
             RCFILE_OUTPUT_FORMAT_CLASS
     ),
-    RC_TEXT(
+    RCTEXT(
             COLUMNAR_SERDE_CLASS,
             RCFILE_INPUT_FORMAT_CLASS,
             RCFILE_OUTPUT_FORMAT_CLASS
