@@ -21,10 +21,6 @@ When your data is stored in HDFS, however, broker-free unloading may not work an
 - If you export data to multiple HDFS clusters, you need to deploy and configure an independent broker for each of these HDFS clusters.
 - If you export data to a single HDFS cluster and you have configured multiple Kerberos users, you need to deploy one independent broker.
 
-> **NOTE**
->
-> You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
-
 ## Supported storage systems
 
 - Distributed file system HDFS

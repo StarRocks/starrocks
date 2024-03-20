@@ -315,38 +315,38 @@
         {
           "type": "category",
           "label": "Management",
-          "link": {"type": "doc", "id": "cover_pages/management"},
+          "link": {"type": "doc", "id": "administration/management/management"},
           "items": [
-            "administration/Scale_up_down",
-            "administration/Backup_and_restore",
-            "administration/FE_configuration",
-            "administration/BE_configuration",
+            "administration/management/Scale_up_down",
+            "administration/management/Backup_and_restore",
+            "administration/management/FE_configuration",
+            "administration/management/BE_configuration",
             {
               "type": "category",
               "label": "Monitor and Alert",
-              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "link": {"type": "doc", "id": "administration/management/monitoring/Monitor_and_Alert"},
               "items": [
-                "administration/metrics"
+                "administration/management/monitoring/metrics"
               ]
             },
-            "administration/audit_loader",
-            "administration/enable_fqdn",
-            "administration/timezone",
-            "administration/monitor_manage_big_queries",
+            "administration/management/audit_loader",
+            "administration/management/enable_fqdn",
+            "administration/management/timezone",
+            "administration/management/monitor_manage_big_queries",
             {
               "type": "category",
               "label": "Resource management",
-              "link": {"type": "doc", "id": "cover_pages/resource_management"},
+              "link": {"type": "doc", "id": "administration/management/resource_management/resource_management"},
               "items": [ 
-                "administration/resource_group",
-                "administration/query_queues",
-                "administration/Query_management",
-                "administration/Memory_management",
-                "administration/spill_to_disk",
-                "administration/Load_balance",
-                "administration/Replica",
-                "administration/Blacklist",
-                "administration/filemanager"
+                "administration/management/resource_management/resource_group",
+                "administration/management/resource_management/query_queues",
+                "administration/management/resource_management/Query_management",
+                "administration/management/resource_management/Memory_management",
+                "administration/management/resource_management/spill_to_disk",
+                "administration/management/resource_management/Load_balance",
+                "administration/management/resource_management/Replica",
+                "administration/management/resource_management/Blacklist",
+                "administration/management/resource_management/filemanager"
               ]
 
             }
@@ -357,13 +357,13 @@
         {
           "type": "category",
           "label": "User Privileges and Authentication",
-          "link": {"type": "doc", "id": "administration/privilege_overview"},
+          "link": {"type": "doc", "id": "administration/user_privs/privilege_overview"},
           "items": [
-            "administration/privilege_item",
-            "administration/User_privilege",
-            "administration/ranger_plugin",
-            "administration/Authentication",
-            "administration/privilege_faq"
+            "administration/user_privs/privilege_item",
+            "administration/user_privs/User_privilege",
+            "administration/user_privs/ranger_plugin",
+            "administration/user_privs/Authentication",
+            "administration/user_privs/privilege_faq"
           ]
         },
         {
@@ -1006,7 +1006,6 @@
             "faq/Exporting_faq"
           ]
         },
-        "faq/privilege",
         "faq/datalake",
         "faq/Sql_faq",
         "faq/Dump_query",
@@ -1354,38 +1353,38 @@
         {
           "type": "category",
           "label": "运维集群",
-          "link": {"type": "doc", "id": "cover_pages/management"},
+          "link": {"type": "doc", "id": "administration/management/management"},
           "items": [
-            "administration/Scale_up_down",
-            "administration/Backup_and_restore",
-            "administration/FE_configuration",
-            "administration/BE_configuration",
+            "administration/management/Scale_up_down",
+            "administration/management/Backup_and_restore",
+            "administration/management/FE_configuration",
+            "administration/management/BE_configuration",
             {
               "type": "category",
               "label": "监控报警",
-              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "link": {"type": "doc", "id": "administration/management/monitoring/Monitor_and_Alert"},
               "items": [
-                "administration/metrics"
+                "administration/management/monitoring/metrics"
               ]
             },
-            "administration/audit_loader",
-            "administration/enable_fqdn",
-            "administration/timezone",
-            "administration/monitor_manage_big_queries",
+            "administration/management/audit_loader",
+            "administration/management/enable_fqdn",
+            "administration/management/timezone",
+            "administration/management/monitor_manage_big_queries",
             {
               "type": "category",
               "label": "管理资源",
-              "link": {"type": "doc", "id": "cover_pages/resource_management"},
+              "link": {"type": "doc", "id": "administration/management/resource_management/resource_management"},
               "items": [ 
-                "administration/resource_group",
-                "administration/query_queues",
-                "administration/Query_management",
-                "administration/Memory_management",
-                "administration/spill_to_disk",
-                "administration/Load_balance",
-                "administration/Replica",
-                "administration/Blacklist",
-                "administration/filemanager"
+                "administration/management/resource_management/resource_group",
+                "administration/management/resource_management/query_queues",
+                "administration/management/resource_management/Query_management",
+                "administration/management/resource_management/Memory_management",
+                "administration/management/resource_management/spill_to_disk",
+                "administration/management/resource_management/Load_balance",
+                "administration/management/resource_management/Replica",
+                "administration/management/resource_management/Blacklist",
+                "administration/management/resource_management/filemanager"
               ]
             }
           ]
@@ -1395,13 +1394,13 @@
         {
           "type": "category",
           "label": "管理用户权限",
-          "link": {"type": "doc", "id": "administration/privilege_overview"},
+          "link": {"type": "doc", "id": "administration/user_privs/privilege_overview"},
           "items": [
-            "administration/privilege_item",
-            "administration/User_privilege",
-            "administration/ranger_plugin",
-            "administration/Authentication",
-            "administration/privilege_faq"
+            "administration/user_privs/privilege_item",
+            "administration/user_privs/User_privilege",
+            "administration/user_privs/ranger_plugin",
+            "administration/user_privs/Authentication",
+            "administration/user_privs/privilege_faq"
           ]
         },
         {
@@ -2044,7 +2043,6 @@
             "faq/Exporting_faq"
           ]
         },
-        "faq/privilege",
         "faq/datalake",
         "faq/Sql_faq",
         "faq/Dump_query",

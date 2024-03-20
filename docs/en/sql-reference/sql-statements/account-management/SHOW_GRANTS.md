@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Displays all the privileges that have been granted to a user or role.
 
-For more information about roles and privileges, see [Overview of privileges](../../../administration/privilege_overview.md).
+For more information about roles and privileges, see [Overview of privileges](../../../administration/user_privs/privilege_overview.md).
 
 :::tip
 All roles and users can view the privileges granted to them or the roles assigned to them. Only users with the `user_admin` role can view the privileges of a specified user or role.

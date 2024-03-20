@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Views data snapshots in a specified repository. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
+Views data snapshots in a specified repository. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
 
 ## Syntax
 

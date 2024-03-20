@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-基于远端存储系统创建用于存储数据快照的仓库。仓库用于 [备份和恢复](../../../administration/Backup_and_restore.md) 数据库数据。
+基于远端存储系统创建用于存储数据快照的仓库。仓库用于 [备份和恢复](../../../administration/management/Backup_and_restore.md) 数据库数据。
 
 > **注意**
 >

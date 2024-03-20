@@ -21,9 +21,6 @@ displayed_sidebar: "Chinese"
 - 在配置了多 HDFS 集群时，您需要为每一个 HDFS 集群部署一个独立的 Broker。
 - 在配置了单 HDFS 集群、但是多 Kerberos 用户时，您只需要部署一个独立的 Broker。
 
-> **说明**
->
-> 您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的外部存储系统
 
