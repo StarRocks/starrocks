@@ -1361,6 +1361,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public boolean getPartitionNamesToRefreshForMvInLooseMode(Set<String> toRefreshPartitions) {
         Expr partitionExpr = getFirstPartitionRefTableExpr();
         Map<Table, Column> partitionTableAndColumn = getRelatedPartitionTableAndColumn();
+        if (partitionExpr == null || partitionTableAndColumn.isEmpty()) {
+            return this.getPartitions().size() > 0;
+        }
         Map<String, Range<PartitionKey>> mvRangePartitionMap = getRangePartitionMap();
         Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
         RangePartitionDiff rangePartitionDiff = null;
