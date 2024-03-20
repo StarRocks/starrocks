@@ -831,4 +831,22 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"));
     }
+
+    @Test
+    public void testNormalizeNonTrivialProject() throws Exception {
+        SessionVariable sv = new SessionVariable();
+        sv.setPipelineDop(1);
+        sv.setEnableQueryCache(true);
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            sv.setEnableLowCardinalityOptimize(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/normalize_non_trivial_project"), sv,
+                            TExplainLevel.NORMAL);
+            Assert.assertTrue(replayPair.second,
+                    replayPair.second != null && replayPair.second.contains("TABLE: tbl_mock_017"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
 }
