@@ -211,6 +211,8 @@ struct HdfsScannerParams {
     bool can_use_min_max_count_opt = false;
     bool use_file_metacache = false;
     MORParams mor_params;
+
+    int64_t connector_max_split_size = 0;
 };
 
 struct HdfsScannerContext {
@@ -271,6 +273,8 @@ struct HdfsScannerContext {
     HdfsScanStats* stats = nullptr;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
+
+    int64_t connector_max_split_size = 0;
 
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.

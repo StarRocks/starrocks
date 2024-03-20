@@ -37,6 +37,10 @@ struct HdfsOrcScannerSplitContext : public pipeline::ScanSplitContext {
     std::shared_ptr<std::string> footer;
 };
 
+void merge_split_tasks(std::vector<pipeline::ScanSplitContextPtr>& split_tasks, int64_t max_split_size) {
+    
+}
+
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
     OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, OrcChunkReader* reader);
@@ -477,6 +481,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             ctx->split_end = info.offset + info.length;
             _split_tasks.emplace_back(std::move(ctx));
         }
+        merge_split_tasks(_split_tasks, _scanner_params.connector_max_split_size);
         VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
                       << ", size = " << stripes.size();
         return Status::OK();
