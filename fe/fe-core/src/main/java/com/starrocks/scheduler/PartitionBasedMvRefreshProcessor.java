@@ -1697,7 +1697,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         } finally {
             locker.unlockDatabases(dbs, LockType.READ);
-
         }
         return false;
     }
