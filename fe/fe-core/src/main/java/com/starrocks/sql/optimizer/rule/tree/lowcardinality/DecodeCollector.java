@@ -386,14 +386,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return info;
         }
 
-        // unnest must be one input
-        ColumnRefOperator unnestOutput = tableFunc.getFnResultColRefs().get(0);
-        ColumnRefOperator unnestInput = tableFunc.getFnParamColumnRefs().get(0);
+        Preconditions.checkState(tableFunc.getFnParamColumnRefs().size() == tableFunc.getFnResultColRefs().size());
+        for (int i = 0; i < tableFunc.getFnParamColumnRefs().size(); i++) {
+            ColumnRefOperator unnestOutput = tableFunc.getFnResultColRefs().get(i);
+            ColumnRefOperator unnestInput = tableFunc.getFnParamColumnRefs().get(i);
 
-        if (info.inputStringColumns.contains(unnestInput)) {
-            stringRefToDefineExprMap.put(unnestOutput.getId(), unnestInput);
-            expressionStringRefCounter.put(unnestOutput.getId(), 1);
-            info.outputStringColumns.union(unnestOutput);
+            if (info.inputStringColumns.contains(unnestInput)) {
+                stringRefToDefineExprMap.put(unnestOutput.getId(), unnestInput);
+                expressionStringRefCounter.put(unnestOutput.getId(), 1);
+                info.outputStringColumns.union(unnestOutput);
+            }
         }
         return info;
     }

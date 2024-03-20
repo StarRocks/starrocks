@@ -301,14 +301,17 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         TableFunction function = tableFunc.getFn();
         if (FunctionSet.UNNEST.equalsIgnoreCase(tableFunc.getFn().getFunctionName().getFunction()) &&
                 inputStringRefs.containsAny(fnInputs)) {
-            inputStringRefs.union(fnOutputs);
+            for (int i = 0; i < fnInputs.size(); i++) {
+                if (!inputStringRefs.contains(fnInputs.get(i))) {
+                    continue;
+                }
 
-            fnInputs = fnInputs.stream().map(c -> context.stringRefToDictRefMap.getOrDefault(c, c))
-                    .collect(Collectors.toList());
-            fnOutputs = fnOutputs.stream().map(c -> context.stringRefToDictRefMap.getOrDefault(c, c))
-                    .collect(Collectors.toList());
+                inputStringRefs.union(fnOutputs.get(i));
+                fnInputs.set(i, context.stringRefToDictRefMap.getOrDefault(fnInputs.get(i), fnInputs.get(i)));
+                fnOutputs.set(i, context.stringRefToDictRefMap.getOrDefault(fnOutputs.get(i), fnOutputs.get(i)));
+            }
             function = (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST,
-                    new Type[] {fnInputs.get(0).getType()}, function.getArgNames(),
+                    fnInputs.stream().map(ScalarOperator::getType).toArray(Type[]::new), function.getArgNames(),
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
