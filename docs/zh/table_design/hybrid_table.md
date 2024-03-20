@@ -11,13 +11,13 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 | **表存储格式** | **存储方式**                                                 | **适用场景**                                                 |
 | -------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | 行列混存       | 数据同时按照列和行存储。简单来说，行列混存表会额外加一个隐藏的二进制类型的列 `__row`，写入数据至表的同时还会将一行数据所有 value 列编码后的值写入列 `__row`（如下所示）。由于数据同时按照列和行存储，因此会带来额外的存储成本。![img](../assets/table_design/hybrid_table.png) | 兼顾行存和列存的场景，但是会带来额外的存储成本。<ul><li>按行存储的适用场景。</li><ul><li>基于主键的高并发点查。</li><li>表的字段个数比较少，并且通常会查询大部分字段。</li><li>部分列更新（更新多列和少量数据行）</li></ul><li>列存的场景：复杂数据分析。</li></ul> |
-| 列存           | 按列存储数据。![img](../assets/table_design/columnar_table.png) |复杂数据分析。 <ul><li>针对海量数据进行复杂查询分析，比如聚合分析，多表关联查询。 </li><li>表的字段比较多（比如大宽表），但查询的字段不多。</li></ul> |
+| 列存           | 按列存储数据。![img](../assets/table_design/columnar_table.png) |复杂数据分析。 <ul><li>针对海量数据进行复杂查询分析，比如聚合分析、多表关联查询。 </li><li>表的字段比较多（比如大宽表），但查询的字段不多。</li></ul> |
 
 ## 基本操作
 
 ### 创建行列混存表
 
-1. 行列混存特性默认关闭，您可以设置 FE 动态参数 [`enable_experimental_rowstore`](../administration/FE_configuration.md#enable_experimental_rowstore) 为 `true` ，开启该特性。
+1. 行列混存特性默认关闭，您可以设置 FE 动态参数 [`enable_experimental_rowstore`](../administration/FE_configuration.md#enable_experimental_rowstore) 为 `true`，开启该特性。
 
    ```sql
    ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
