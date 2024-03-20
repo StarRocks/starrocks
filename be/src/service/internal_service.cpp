@@ -1168,14 +1168,14 @@ void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcControlle
 }
 
 template <typename T>
-Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest*,
+Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
                                                         PExecShortCircuitResult* response) {
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::COMPACT, t_requests.get()));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_requests.get()));
     }
     ShortCircuitExecutor executor{_exec_env};
     RETURN_IF_ERROR(executor.prepare(*t_requests));
