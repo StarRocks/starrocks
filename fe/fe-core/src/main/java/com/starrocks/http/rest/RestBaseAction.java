@@ -35,7 +35,9 @@
 package com.starrocks.http.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
@@ -44,6 +46,8 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
@@ -51,9 +55,11 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.List;
 
 public class RestBaseAction extends BaseAction {
     protected static final String CATALOG_KEY = "catalog";
@@ -75,9 +81,9 @@ public class RestBaseAction extends BaseAction {
         try {
             execute(request, response);
         } catch (AccessDeniedException accessDeniedException) {
-            LOG.warn("fail to process url: {}", request.getRequest().uri(), accessDeniedException);
+            LOG.warn("failed to process url: {}", request.getRequest().uri(), accessDeniedException);
             response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
-            response.appendContent(new RestBaseResult(accessDeniedException.getMessage()).toJson());
+            response.appendContent(new RestBaseResult(getErrorRespWhenUnauthorized(accessDeniedException)).toJson());
             writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
         } catch (DdlException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
@@ -90,6 +96,25 @@ public class RestBaseAction extends BaseAction {
             }
             response.appendContent(new RestBaseResult(msg).toJson());
             writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @VisibleForTesting
+    public String getErrorRespWhenUnauthorized(AccessDeniedException accessDeniedException) {
+        if (Strings.isNullOrEmpty(accessDeniedException.getMessage())) {
+            ConnectContext context = ConnectContext.get();
+            if (context != null) {
+                AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                UserIdentity userIdentity = context.getCurrentUserIdentity();
+                List<String> activatedRoles = authorizationMgr.getRoleNamesByRoleIds(context.getCurrentRoleIds());
+                List<String> inactivatedRoles =
+                        authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
+                return "Access denied for user " + userIdentity  + ". " +
+                        String.format(ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT, activatedRoles, inactivatedRoles);
+            }
+            return "Access denied.";
+        } else {
+            return accessDeniedException.getMessage();
         }
     }
 
