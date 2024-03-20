@@ -67,7 +67,7 @@ Set the FE configuration item `ignore_unknown_log_id` to `true`. Because it is a
 
 - **If you have enabled FQDN access**
 
-If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
+If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/management/enable_fqdn.md#rollback) for detailed instructions.
 
 ## Downgrade FE
 
