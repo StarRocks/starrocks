@@ -623,6 +623,11 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
                                                  google::protobuf::Closure* done, int timeout_ms) {
     ClosureGuard closure_guard(done);
 
+    // If we use timeout specified by user directly, there will be an issue that librakafka connect to kafka broker
+    // time out, but the BE did not have the opportunity to send the error message back to the FE , and the timer on
+    // the FE side has already timed out. This mean that the FE cannot retrieve the event message from librdkafka.
+    // Therefore, here we are reducing the actual timeout threshold of librdkafka.
+    timeout_ms = timeout_ms * 0.8;
     if (timeout_ms <= 0) {
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
         return;
