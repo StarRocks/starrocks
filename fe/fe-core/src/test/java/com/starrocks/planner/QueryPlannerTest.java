@@ -40,12 +40,14 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -283,5 +285,18 @@ public class QueryPlannerTest {
             connectContext.getSessionVariable().setFollowerQueryForwardMode("follower");
             Assert.assertTrue(executor.isForwardToLeader() == true);
         }
+    }
+
+    @Test
+    public void testErrTypeInQueryState() throws Exception {
+        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        ctx.setQueryId(UUIDUtil.genUUID());
+        StmtExecutor executor = new StmtExecutor(ctx, "select * from test.baseall");
+        executor.execute();
+        Assert.assertEquals(QueryState.ErrType.UNKNOWN, ctx.getState().getErrType());
+
+        executor = new StmtExecutor(ctx, "select * from test.baseallxxx");
+        executor.execute();
+        Assert.assertEquals(QueryState.ErrType.ANALYSIS_ERR, ctx.getState().getErrType());
     }
 }
