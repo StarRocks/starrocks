@@ -1593,10 +1593,5 @@ drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
 -- !result
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
 -- result:
-<<<<<<< HEAD
 E: (1064, "Getting analyzing error. Detail message: Unknown table 't2'.")
 -- !result
-=======
-E: (5502, "Getting analyzing error. Detail message: Unknown table 't2'.")
--- !result
->>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
