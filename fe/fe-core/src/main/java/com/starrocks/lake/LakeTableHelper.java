@@ -154,8 +154,18 @@ public class LakeTableHelper {
         return !path.endsWith(String.format("/%d", partitionId));
     }
 
+    /**
+     * For tables created in the old version of StarRocks cluster, the column unique id is generated on BE and
+     * is not saved in FE catalog. For these tables, we want to be able to record their column unique id in the
+     * catalog after the upgrade, and the column unique id recorded must be consistent with the one on BE.
+     * For shared data mode, the algorithm to generate column unique id on BE is simple: take the subscript of
+     * each column as their unique id, so here we just need to follow the same algorithm to calculate the unique
+     * id of each column.
+     *
+     * @param table the table to restore column unique id
+     * @return the max column unique id
+     */
     public static int restoreColumnUniqueId(OlapTable table) {
-        LOG.info("Restoring column unique ids of table '{}'(id={})", table.getName(), table.getId());
         int maxId = 0;
         for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
             final int columnCount = indexMeta.getSchema().size();
