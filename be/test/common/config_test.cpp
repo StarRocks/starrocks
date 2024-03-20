@@ -19,8 +19,10 @@
 #include "common/configbase.h"
 #undef __IN_CONFIGBASE_CPP__
 
+#include <gmock/gmock.h> // EXPECT_THAT, ElementsAre
 #include <gtest/gtest.h>
 
+#include <sstream>
 #include <thread>
 
 #include "common/status.h"
@@ -29,9 +31,163 @@
 namespace starrocks {
 using namespace config;
 
+using namespace ::testing;
+
 class ConfigTest : public testing::Test {
-    void SetUp() override { config::Register::_s_field_map->clear(); }
+    void SetUp() override { config::TEST_clear_configs(); }
 };
+
+TEST_F(ConfigTest, test_init) {
+    CONF_Bool(cfg_bool, "false");
+    CONF_mBool(cfg_mbool, "true");
+    CONF_Double(cfg_double, "123.456");
+    CONF_mDouble(cfg_mdouble, "-123.456");
+    CONF_Int16(cfg_int16, "2561");
+    CONF_mInt16(cfg_mint16, "-2561");
+    CONF_Int32(cfg_int32, "65536123");
+    CONF_mInt32(cfg_mint32, "-65536123");
+    CONF_Int64(cfg_int64, "4294967296123");
+    CONF_mInt64(cfg_mint64, "-4294967296123");
+    CONF_String(cfg_string, "test_string");
+    CONF_mString(cfg_mstring, "test_mstring");
+    CONF_Bools(cfg_bools, "true,false,true");
+    CONF_Doubles(cfg_doubles, "0.1,0.2,0.3");
+    CONF_Int16s(cfg_int16s, "1,2,3");
+    CONF_Int32s(cfg_int32s, "10,20,30");
+    CONF_Int64s(cfg_int64s, "100,200,300");
+    CONF_Strings(cfg_strings, "s1,s2,s3");
+    CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
+    CONF_Bool(cfg_bool_env, "false");
+    // Invalid config file name
+    { EXPECT_FALSE(config::init("/path/to/nonexist/file")); }
+    // Invalid bool value
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_bool = t
+           )DEL";
+
+        EXPECT_FALSE(config::init(ss));
+    }
+    // Invalid numeric value
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_int32 = 0xAB
+           )DEL";
+
+        EXPECT_FALSE(config::init(ss));
+    }
+
+    // Invalid env
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_string = ${xxxx}
+           )DEL";
+
+        EXPECT_FALSE(config::init(ss));
+    }
+
+    // Valid input
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           #comment
+           cfg_bool = true
+           cfg_mbool = false
+           
+           cfg_double = 10.0
+
+           # cfg_int16 = 12
+           cfg_mint16 = 12
+
+           cfg_string = test string
+           
+           cfg_mstring = key =value 
+           
+           cfg_int32s = 123, 456, 789 
+      
+           cfg_strings = text1, hello world , StarRocks
+           
+           cfg_bool_env = ${ConfigTestEnv2}
+           )DEL";
+
+        ASSERT_EQ(0, ::setenv("ConfigTestEnv1", "env1_value", 1));
+        ASSERT_EQ(0, ::setenv("ConfigTestEnv2", " true", 1));
+
+        EXPECT_TRUE(config::init(ss));
+    }
+
+    EXPECT_EQ(true, cfg_bool);
+    EXPECT_EQ(false, cfg_mbool);
+    EXPECT_EQ(10, cfg_double);
+    EXPECT_EQ(-123.456, cfg_mdouble);
+    EXPECT_EQ(2561, cfg_int16);
+    EXPECT_EQ(12, cfg_mint16);
+    EXPECT_EQ(4294967296123, cfg_int64);
+    EXPECT_EQ(-4294967296123, cfg_mint64);
+    EXPECT_EQ("test string", cfg_string);
+    EXPECT_EQ("key =value", cfg_mstring.value());
+    EXPECT_THAT(cfg_bools, ElementsAre(true, false, true));
+    EXPECT_THAT(cfg_doubles, ElementsAre(0.1, 0.2, 0.3));
+    EXPECT_THAT(cfg_int16s, ElementsAre(1, 2, 3));
+    EXPECT_THAT(cfg_int32s, ElementsAre(123, 456, 789));
+    EXPECT_THAT(cfg_int64s, ElementsAre(100, 200, 300));
+    EXPECT_THAT(cfg_strings, ElementsAre("text1", "hello world", "StarRocks"));
+    EXPECT_EQ("prefix/env1_value/suffix", cfg_string_env);
+    EXPECT_EQ(true, cfg_bool_env);
+}
+
+TEST_F(ConfigTest, test_invalid_default_value) {
+    CONF_Int32(cfg_int32, "false");
+    ASSERT_FALSE(config::init(nullptr));
+}
+
+TEST_F(ConfigTest, test_unknown_config) {
+    CONF_Int32(cfg_int32, "10");
+    std::stringstream ss;
+    ss << "x = y\n";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ(10, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_empty_string_value) {
+    CONF_String(cfg_string, "10");
+    std::stringstream ss;
+    ss << "cfg_string=\n";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ("", cfg_string);
+}
+
+TEST_F(ConfigTest, test_no_string_value) {
+    CONF_String(cfg_string, "10");
+    std::stringstream ss;
+    ss << "cfg_string\n";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ("", cfg_string);
+}
+
+TEST_F(ConfigTest, test_duplicate_assignment) {
+    CONF_Int32(cfg_int32, "10");
+    std::stringstream ss;
+    ss << R"(cfg_int32 = 1
+             cfg_int32 = 2
+            )";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ(2, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_duplicate_alias_assignment) {
+    CONF_Int32(cfg_int32, "10");
+    CONF_Alias(cfg_int32, cfg_int32_alias);
+    std::stringstream ss;
+    ss << R"(cfg_int32 = 1
+             cfg_int32_alias = 2
+            )";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_EQ(2, cfg_int32);
+}
 
 TEST_F(ConfigTest, test_list_configs) {
     CONF_Bool(cfg_bool, "false");
@@ -53,7 +209,7 @@ TEST_F(ConfigTest, test_list_configs) {
     CONF_Int64s(cfg_int64s, "100,200,300");
     CONF_Strings(cfg_strings, "s1,s2,s3");
 
-    config::init(nullptr);
+    ASSERT_TRUE(config::init(nullptr));
 
     std::vector<ConfigInfo> exp_configs = {
             // name,value,type,default,mutable
@@ -61,20 +217,20 @@ TEST_F(ConfigTest, test_list_configs) {
             {"cfg_mbool", "true", "bool", "true", true},
             {"cfg_double", "123.456", "double", "123.456", false},
             {"cfg_mdouble", "-123.456", "double", "-123.456", true},
-            {"cfg_int16", "2561", "int16_t", "2561", false},
-            {"cfg_mint16", "-2561", "int16_t", "-2561", true},
-            {"cfg_int32", "65536123", "int32_t", "65536123", false},
-            {"cfg_mint32", "-65536123", "int32_t", "-65536123", true},
-            {"cfg_int64", "4294967296123", "int64_t", "4294967296123", false},
-            {"cfg_mint64", "-4294967296123", "int64_t", "-4294967296123", true},
-            {"cfg_string", "test_string", "std::string", "test_string", false},
-            {"cfg_mstring", "test_mstring", "MutableString", "test_mstring", true},
-            {"cfg_bools", "true,false,true", "std::vector<bool>", "true,false,true", false},
-            {"cfg_doubles", "0.1,0.2,0.3", "std::vector<double>", "0.1,0.2,0.3", false},
-            {"cfg_int16s", "1,2,3", "std::vector<int16_t>", "1,2,3", false},
-            {"cfg_int32s", "10,20,30", "std::vector<int32_t>", "10,20,30", false},
-            {"cfg_int64s", "100,200,300", "std::vector<int64_t>", "100,200,300", false},
-            {"cfg_strings", "s1,s2,s3", "std::vector<std::string>", "s1,s2,s3", false},
+            {"cfg_int16", "2561", "int16", "2561", false},
+            {"cfg_mint16", "-2561", "int16", "-2561", true},
+            {"cfg_int32", "65536123", "int32", "65536123", false},
+            {"cfg_mint32", "-65536123", "int32", "-65536123", true},
+            {"cfg_int64", "4294967296123", "int64", "4294967296123", false},
+            {"cfg_mint64", "-4294967296123", "int64", "-4294967296123", true},
+            {"cfg_string", "test_string", "string", "test_string", false},
+            {"cfg_mstring", "test_mstring", "string", "test_mstring", true},
+            {"cfg_bools", "true,false,true", "list<bool>", "true,false,true", false},
+            {"cfg_doubles", "0.1,0.2,0.3", "list<double>", "0.1,0.2,0.3", false},
+            {"cfg_int16s", "1,2,3", "list<int16>", "1,2,3", false},
+            {"cfg_int32s", "10,20,30", "list<int32>", "10,20,30", false},
+            {"cfg_int64s", "100,200,300", "list<int64>", "100,200,300", false},
+            {"cfg_strings", "s1,s2,s3", "list<string>", "s1,s2,s3", false},
     };
 
     std::vector<ConfigInfo> configs = config::list_configs();
@@ -97,7 +253,27 @@ TEST_F(ConfigTest, test_list_configs) {
     }
 }
 
-TEST_F(ConfigTest, UpdateConfigs) {
+TEST_F(ConfigTest, test_empty_list) {
+    CONF_Strings(cfg_strings, "");
+    CONF_Int32s(cfg_int32s, "");
+    ASSERT_TRUE(config::init(nullptr));
+    EXPECT_EQ(0, cfg_strings.size());
+    EXPECT_EQ(0, cfg_int32s.size());
+}
+
+TEST_F(ConfigTest, test_list_with_spaces) {
+    CONF_Strings(cfg_strings, "");
+    CONF_Int32s(cfg_int32s, "");
+    std::stringstream ss;
+    ss << R"(cfg_strings=,s1,,s2, s3,s4 
+             cfg_int32s=,10,, 12, 14 
+          )";
+    ASSERT_TRUE(config::init(ss));
+    EXPECT_THAT(cfg_strings, ElementsAre("s1", "s2", "s3", "s4"));
+    EXPECT_THAT(cfg_int32s, ElementsAre(10, 12, 14));
+}
+
+TEST_F(ConfigTest, test_set_config) {
     CONF_Bool(cfg_bool_immutable, "true");
     CONF_mBool(cfg_bool, "false");
     CONF_mDouble(cfg_double, "123.456");
@@ -141,37 +317,31 @@ TEST_F(ConfigTest, UpdateConfigs) {
 
     // not exist
     Status s = config::set_config("cfg_not_exist", "123");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Not found: 'cfg_not_exist' is not found");
+    ASSERT_TRUE(s.is_not_found()) << s;
 
     // immutable
     ASSERT_TRUE(cfg_bool_immutable);
     s = config::set_config("cfg_bool_immutable", "false");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Not supported: 'cfg_bool_immutable' is not support to modify");
+    ASSERT_TRUE(s.is_not_supported()) << s;
     ASSERT_TRUE(cfg_bool_immutable);
 
     // convert error
     s = config::set_config("cfg_bool", "falseeee");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Invalid argument: convert 'falseeee' as bool failed");
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
     ASSERT_TRUE(cfg_bool);
 
     s = config::set_config("cfg_double", "");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Invalid argument: convert '' as double failed");
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
     ASSERT_EQ(cfg_double, 654.321);
 
     // convert error
     s = config::set_config("cfg_int32_t", "4294967296124");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Invalid argument: convert '4294967296124' as int32_t failed");
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
     ASSERT_EQ(cfg_int32_t, 65536124);
 
     // not support
     s = config::set_config("cfg_std_string", "test");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Not supported: 'cfg_std_string' is not support to modify");
+    ASSERT_TRUE(s.is_not_supported()) << s;
     ASSERT_EQ(cfg_std_string, "starrocks_config_test_string");
 }
 
@@ -208,6 +378,64 @@ TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {
     for (auto& t : threads) {
         t.join();
     }
+}
+
+TEST_F(ConfigTest, test_alias01) {
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias);
+
+    std::stringstream ss;
+    ss << R"DEL(
+        cfg_int32_alias = 8080
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(8080, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_alias02) {
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias);
+
+    std::stringstream ss;
+    ss << R"DEL(
+        cfg_int32_alias = 8080
+        cfg_int32 = 8001
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(8001, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_alias03) {
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias1);
+    CONF_Alias(cfg_int32, cfg_int32_alias2);
+
+    std::stringstream ss;
+    ss << R"DEL(
+        cfg_int32_alias1 = 8080
+        cfg_int32_alias2 = 8090
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(8090, cfg_int32);
+}
+
+TEST_F(ConfigTest, test_alias04) {
+    CONF_mInt16(cfg_int32, "8000");
+    CONF_Alias(cfg_int32, cfg_int32_alias1);
+    CONF_Alias(cfg_int32, cfg_int32_alias2);
+
+    // Different assgnment order from test_alias03
+    std::stringstream ss;
+    ss << R"DEL(
+        cfg_int32_alias2 = 8090
+        cfg_int32_alias1 = 8080
+       )DEL";
+
+    EXPECT_TRUE(config::init(ss));
+    EXPECT_EQ(8080, cfg_int32);
 }
 
 } // namespace starrocks

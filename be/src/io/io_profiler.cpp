@@ -106,6 +106,10 @@ public:
 static std::mutex _io_stats_mutex;
 static std::unordered_set<IOStatEntry, IOStatEntryHash> _io_stats;
 
+bool IOProfiler::is_empty() {
+    return _io_stats.empty();
+}
+
 void IOProfiler::reset() {
     uint32_t old_mode = _context_io_mode.load();
     if (old_mode != IOMode::IOMODE_NONE) {
@@ -308,6 +312,7 @@ std::string IOProfiler::profile_and_get_topn_stats_str(const std::string& mode, 
             ss << it << "\n";
         }
     }
+    IOProfiler::reset();
     return ss.str();
 }
 

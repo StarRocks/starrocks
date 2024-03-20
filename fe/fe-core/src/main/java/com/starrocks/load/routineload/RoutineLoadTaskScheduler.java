@@ -183,19 +183,13 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         try {
             // for kafka/pulsar routine load, readyToExecute means there is new data in kafka/pulsar stream
             if (!routineLoadTaskInfo.readyToExecute()) {
-                String msg = "";
-                if (routineLoadTaskInfo instanceof KafkaTaskInfo || routineLoadTaskInfo instanceof PulsarTaskInfo) {
-                    msg = String.format("there is no new data in kafka/pulsar, wait for %d seconds to schedule again",
-                            routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
-                }
+                String msg = String.format("there is no new data in %s, wait for %d seconds to schedule again",
+                        routineLoadTaskInfo.dataSourceType(), routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
                 // The job keeps up with source.
                 routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstateStable();
                 delayPutToQueue(routineLoadTaskInfo, msg);
                 return;
             }
-            // Update the job state is the job is too slow.
-            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
-
         } catch (RoutineLoadPauseException e) {
             String msg = "fe abort task with reason: check task ready to execute failed, " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(
@@ -207,6 +201,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         } catch (Exception e) {
             LOG.warn("check task ready to execute failed", e);
             delayPutToQueue(routineLoadTaskInfo, "check task ready to execute failed, err: " + e.getMessage());
+            // Update the job state is the job is too slow.
+            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
             return;
         }
 
@@ -220,6 +216,8 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                                     "current value is %d",
                             routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000,
                             Config.max_routine_load_task_num_per_be));
+            // Update the job state is the job is too slow.
+            routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateSubstate();
             return;
         }
 

@@ -55,6 +55,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
@@ -314,7 +315,8 @@ public class ColumnDef implements ParseNode {
 
         if (getAggregateType() == AggregateType.SUM) {
             // For the decimal type we extend to decimal128 to avoid overflow
-            typeDef.setType(AggregateType.extendedPrecision(typeDef.getType()));
+            typeDef.setType(AggregateType.extendedPrecision(typeDef.getType(),
+                    Config.enable_legacy_compatibility_for_replication));
         }
 
         typeDef.analyze();

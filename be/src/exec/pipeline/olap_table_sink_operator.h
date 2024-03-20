@@ -77,12 +77,11 @@ private:
 
 class OlapTableSinkOperatorFactory final : public OperatorFactory {
 public:
-    OlapTableSinkOperatorFactory(int32_t id, std::unique_ptr<starrocks::DataSink>& sink,
-                                 FragmentContext* const fragment_ctx, int32_t start_sender_id, size_t tablet_sink_dop,
+    OlapTableSinkOperatorFactory(int32_t id, starrocks::DataSink* sink, FragmentContext* const fragment_ctx,
+                                 int32_t start_sender_id, size_t tablet_sink_dop,
                                  std::vector<std::unique_ptr<starrocks::stream_load::OlapTableSink>>& tablet_sinks)
             : OperatorFactory(id, "olap_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
-              _data_sink(std::move(sink)),
-              _sink0(down_cast<starrocks::stream_load::OlapTableSink*>(_data_sink.get())),
+              _sink0(down_cast<starrocks::stream_load::OlapTableSink*>(sink)),
               _fragment_ctx(fragment_ctx),
               _cur_sender_id(start_sender_id),
               _sinks(std::move(tablet_sinks)) {}

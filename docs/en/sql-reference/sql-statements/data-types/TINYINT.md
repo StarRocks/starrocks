@@ -8,4 +8,4 @@ displayed_sidebar: "English"
 
 TINYINT
 
-1 byte signed integer, range [-128, 127]
+1-byte signed integer. The value range is [-128, 127].

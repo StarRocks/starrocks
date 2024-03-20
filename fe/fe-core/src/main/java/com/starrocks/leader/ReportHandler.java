@@ -50,6 +50,7 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
@@ -61,6 +62,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletChecker;
@@ -117,6 +119,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TWorkGroup;
@@ -778,6 +781,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Map<Long, DiskInfo> hashToDiskInfo = new HashMap<>();
+        for (DiskInfo diskInfo : GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getClusterInfo().getBackend(backendId).getDisks().values()) {
+            hashToDiskInfo.put(diskInfo.getPathHash(), diskInfo);
+        }
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         List<Long> deleteTablets = new ArrayList<>();
         DB_TRAVERSE:
@@ -856,8 +864,22 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                     long currentBackendReportVersion =
                             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId);
-                    if (backendReportVersion < currentBackendReportVersion) {
-                        continue;
+                    DiskInfo diskInfo = hashToDiskInfo.get(replica.getPathHash());
+
+                    // Only check reportVersion when the disk is online,
+                    // as there will be no tablet changes on an unavailable disk
+                    if (diskInfo != null
+                            && diskInfo.getState() == DiskInfo.DiskState.ONLINE
+                            && backendReportVersion < currentBackendReportVersion) {
+                        LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
+                                "latest report version: {}", backendId, backendReportVersion, currentBackendReportVersion);
+                        break DB_TRAVERSE;
+                    } else if (diskInfo == null) {
+                        LOG.warn("disk of path hash {} dose not exist, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
+                    } else if (diskInfo.getState() != DiskInfo.DiskState.ONLINE) {
+                        LOG.warn("disk of path hash {} not available, delete tablet {} on backend {} from meta",
+                                tableId, backendId, replica.getPathHash());
                     }
 
                     ReplicaState state = replica.getState();
@@ -882,22 +904,36 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                                     Set<String> bfColumns = olapTable.getCopiedBfColumns();
                                     double bfFpp = olapTable.getBfFpp();
-                                    CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId,
-                                            tableId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
-                                            indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(),
-                                            partition.getVisibleVersion(),
-                                            indexMeta.getKeysType(),
-                                            olapTable.getStorageType(),
-                                            TStorageMedium.HDD, indexMeta.getSchema(), bfColumns, bfFpp, null,
-                                            olapTable.getCopiedIndexes(),
-                                            olapTable.isInMemory(),
-                                            olapTable.enablePersistentIndex(),
-                                            olapTable.primaryIndexCacheExpireSec(),
-                                            olapTable.getPartitionInfo().getTabletType(partitionId),
-                                            olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                                            indexMeta.getSortKeyUniqueIds());
-                                    createReplicaTask.setRecoverySource(RecoverySource.REPORT);
-                                    createReplicaBatchTask.addTask(createReplicaTask);
+                                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                                            .setId(indexMeta.getSchemaId())
+                                            .setKeysType(indexMeta.getKeysType())
+                                            .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                                            .setSchemaHash(indexMeta.getSchemaHash())
+                                            .setVersion(indexMeta.getSchemaVersion())
+                                            .setStorageType(olapTable.getStorageType())
+                                            .addColumns(indexMeta.getSchema())
+                                            .setBloomFilterColumnNames(bfColumns)
+                                            .setBloomFilterFpp(bfFpp)
+                                            .setIndexes(olapTable.getCopiedIndexes())
+                                            .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                                            .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                                            .build().toTabletSchema();
+                                    CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                            .setNodeId(backendId)
+                                            .setDbId(dbId)
+                                            .setTableId(tableId)
+                                            .setPartitionId(partitionId)
+                                            .setIndexId(indexId)
+                                            .setVersion(partition.getVisibleVersion())
+                                            .setStorageMedium(TStorageMedium.HDD)
+                                            .setEnablePersistentIndex(olapTable.enablePersistentIndex())
+                                            .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
+                                            .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
+                                            .setCompressionType(olapTable.getCompressionType())
+                                            .setRecoverySource(RecoverySource.REPORT)
+                                            .setTabletSchema(tabletSchema)
+                                            .build();
+                                    createReplicaBatchTask.addTask(task);
                                 } else {
                                     // just set this replica as bad
                                     if (replica.setBad(true)) {
@@ -1128,10 +1164,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             long maxRowsetCreationTime = -1L;
             for (Replica replica : tablet.getImmutableReplicas()) {
                 maxRowsetCreationTime = Math.max(maxRowsetCreationTime, replica.getMaxRowsetCreationTime());
-                if (replica.getLastReportVersion() <= 1) {
-                    // unmigratable if it is a empty tablet
-                    return false;
-                }
             }
 
             // get negative max rowset creation time or too close to the max rowset creation time, unmigratable

@@ -198,7 +198,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
             if (rewritten == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite aggregate group-by/agg expr failed: {}", scalarOp.toString());
+                logMVRewrite(mvRewriteContext, "Rewrite projection with aggregate group-by/agg expr " +
+                        "failed: {}", scalarOp.toString());
                 return null;
             }
             newQueryProjection.put(entry.getKey(), rewritten);
@@ -505,7 +506,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 unionExpr, newProjection);
         // Add extra union all predicates above union all operator.
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
-            addUnionAllExtraPredicate(result.getOp(), rewriteContext.getUnionRewriteQueryExtraPredicate());
+            addUnionAllExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
         }
         deriveLogicalProperty(result);
 

@@ -49,7 +49,6 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -71,6 +70,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.system.Backend.BackendState;
@@ -950,7 +950,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
-                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+                    LOG.info("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
                 } else {
                     LOG.warn("failed to update backend report version, db {} does not exist", dbId);
                 }
@@ -971,16 +971,16 @@ public class SystemInfoService implements GsonPostProcessable {
         this.idToReportVersionRef = ImmutableMap.of();
     }
 
-    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) throws AnalysisException {
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
-            throw new AnalysisException("Invalid host port: " + hostPort);
+            throw new SemanticException("Invalid host port: " + hostPort);
         }
 
         String[] hostInfo = NetUtils.resolveHostInfoFromHostPort(hostPort);
         String host = hostInfo[0];
         if (Strings.isNullOrEmpty(host)) {
-            throw new AnalysisException("Host is null");
+            throw new SemanticException("Host is null");
         }
 
         int heartbeatPort;
@@ -999,14 +999,14 @@ public class SystemInfoService implements GsonPostProcessable {
             heartbeatPort = Integer.parseInt(hostInfo[1]);
 
             if (heartbeatPort <= 0 || heartbeatPort >= 65536) {
-                throw new AnalysisException("Port is out of range: " + heartbeatPort);
+                throw new SemanticException("Port is out of range: " + heartbeatPort);
             }
 
             return new Pair<>(host, heartbeatPort);
         } catch (UnknownHostException e) {
-            throw new AnalysisException("Unknown host: " + e.getMessage());
+            throw new SemanticException("Unknown host: " + e.getMessage());
         } catch (Exception e) {
-            throw new AnalysisException("Encounter unknown exception: " + e.getMessage());
+            throw new SemanticException("Encounter unknown exception: " + e.getMessage());
         }
     }
 

@@ -11,53 +11,77 @@ The Kafka connector can seamlessly integrate with Kafka Connect, which allows St
 - Compared with Routine Load which only supports loading data in CSV, JSON, and Avro formats, Kafka connector can load data in more formats, such as Protobuf. As long as data can be converted into JSON and CSV formats using Kafka Connect's converters, data can be loaded into StarRocks via the Kafka connector.
 - Customize data transformation, such as Debezium-formatted CDC data.
 - Load data from multiple Kafka topics.
-- Load data from Confluent cloud.
+- Load data from Confluent Cloud.
 - Need finer control over load batch sizes, parallelism, and other parameters to achieve a balance between load speed and resource utilization.
 
 ## Preparations
 
 ### Set up Kafka environment
 
-Both self-managed Apache Kafka clusters and Confluent cloud are supported.
+Both self-managed Apache Kafka clusters and Confluent Cloud are supported.
 
-- For a self-managed Apache Kafka cluster, make sure that you deploy the Apache Kafka cluster and Kafka Connect cluster and create topics.
-- For Confluent cloud, make sure that you have a Confluent account and create clusters and topics.
+- For a self-managed Apache Kafka cluster, you can refer to [Apache Kafka quickstart](https://kafka.apache.org/quickstart) to quickly deploy a Kafka cluster. Kafka Connect is already integrated into Kafka.
+- For Confluent Cloud, make sure that you have a Confluent account and have created a cluster.
 
-### Install Kafka connector
+### Download Kafka connector
 
 Submit the Kafka connector into Kafka Connect:
 
 - Self-managed Kafka cluster:
 
-  - Download and unzip [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases).
-  - Copy the extracted directory to the path specified in the `plugin.path` property. You can find the `plugin.path` property in the configuration files of worker nodes within the Kafka Connect cluster.
+  Download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases).
 
-- Confluent cloud:
+- Confluent Cloud:
 
-  > **NOTE**
-  >
-  > The Kafka connector is not currently uploaded to Confluent Hub. You need to upload the compressed file to Confluent cloud.
+  Currently, the Kafka connector is not uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a ZIP file and upload the ZIP file to Confluent Cloud.
 
-### Create StarRocks table
+## Usage
 
-Create a table or tables in StarRocks according to Kafka Topics and data.
+This section uses a self-managed Kafka cluster as an example to explain how to configure the Kafka connector and the Kafka Connect, and then run the Kafka Connect to load data into StarRocks.
 
-## Examples
+### Prepare a dataset
 
-The following steps take a self-managed Kafka cluster as an example to demonstrate how to configure the Kafka connector and start the Kafka Connect (no need to restart the Kafka service) in order to load data into StarRocks.
+Suppose that JSON-format data exists in the topic `test` in a Kafka cluster.
 
-1. Create a Kafka connector configuration file named **connect-StarRocks-sink.properties** and configure the  parameters. For detailed information about parameters, see [Parameters](#parameters).
+```JSON
+{"id":1,"city":"New York"}
+{"id":2,"city":"Los Angeles"}
+{"id":3,"city":"Chicago"}
+```
 
-    ```Properties
+### Create a table
+
+Create the table `test_tbl` in the database `example_db` in the StarRocks cluster according to the keys of the JSON-format data.
+
+```SQL
+CREATE DATABASE example_db;
+USE example_db;
+CREATE TABLE test_tbl (id INT, city STRING);
+```
+
+### Configure Kafka connector and Kafka Connect, and then run Kafka Connect to load data
+
+#### Run Kafka Connect in standalone mode
+
+1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and descriptions, see [Parameters](#Parameters).
+
+    ```yaml
     name=starrocks-kafka-connector
     connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
-    topics=dbserver1.inventory.customers
-    starrocks.http.url=192.168.xxx.xxx:8030,192.168.xxx.xxx:8030
-    starrocks.username=root
+    topics=test
+    key.converter=org.apache.kafka.connect.json.JsonConverter
+    value.converter=org.apache.kafka.connect.json.JsonConverter
+    key.converter.schemas.enable=true
+    value.converter.schemas.enable=false
+    # The HTTP URL of the FE in your StarRocks cluster. The default port is 8030.
+    starrocks.http.url=192.168.xxx.xxx:8030
+    # If the Kafka topic name is different from the StarRocks table name, you need to configure the mapping relationship between them.
+    starrocks.topic2table.map=test:test_tbl
+    # Enter the StarRocks username.
+    starrocks.username=user1
+    # Enter the StarRocks password.
     starrocks.password=123456
-    starrocks.database.name=inventory
-    key.converter=io.confluent.connect.json.JsonSchemaConverter
-    value.converter=io.confluent.connect.json.JsonSchemaConverter
+    starrocks.database.name=example_db
     sink.properties.strip_outer_array=true
     ```
 
@@ -65,133 +89,188 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
     >
     > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
 
-2. Run the Kafka Connector (no need to restart the Kafka service). For parameters and description in the following command, see [Kafka Documentation](https://kafka.apache.org/documentation.html#connect_running).
+2. Configure and run the Kafka Connect.
 
-    - Standalone mode
+   1. Configure the Kafka Connect. In the configuration file **config/connect-standalone.properties** in the **config** directory, configure the following parameters. For more parameters and descriptions, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
 
-        ```shell
-        bin/connect-standalone worker.properties connect-StarRocks-sink.properties [connector2.properties connector3.properties ...]
+        ```yaml
+        # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
+        # Note that this example uses PLAINTEXT as the security protocol to access the Kafka cluster. If you are using other security protocol to access the Kafka cluster, you need to configure the relevant information in this file.
+        bootstrap.servers=<kafka_broker_ip>:9092
+        offset.storage.file.filename=/tmp/connect.offsets
+        offset.flush.interval.ms=10000
+        key.converter=org.apache.kafka.connect.json.JsonConverter
+        value.converter=org.apache.kafka.connect.json.JsonConverter
+        key.converter.schemas.enable=true
+        value.converter.schemas.enable=false
+        # The absolute path of the starrocks-kafka-connector after extraction. For example:
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
-    - Distributed mode
+   2. Run the Kafka Connect.
 
-      > **NOTE**
-      >
-      > It is recommended to use the distributed mode in the production environment.
-
-    - Start the worker.
-
-        ```shell
-        bin/connect-distributed worker.properties
+        ```Bash
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
 
-    - Note that in distributed mode the connector configurations are not passed on the command line. Instead, use the REST API described below to configure the Kafka connector and run the Kafka connect.
+#### Run Kafka Connect in distributed mode
 
-        ```Shell
-        curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
+1. Configure and run the Kafka Connect.
+
+    1. Configure the Kafka Connect. In the configuration file `config/connect-distributed.properties` in the **config** directory, configure the following parameters. For more parameters and descriptions, refer to [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
+
+        ```yaml
+        # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
+        # Note that this example uses PLAINTEXT as the security protocol to access the Kafka cluster. If you are using other security protocol to access the Kafka cluster, you need to configure the relevant information in this file.
+        bootstrap.servers=<kafka_broker_ip>:9092
+        offset.storage.file.filename=/tmp/connect.offsets
+        offset.flush.interval.ms=10000
+        key.converter=org.apache.kafka.connect.json.JsonConverter
+        value.converter=org.apache.kafka.connect.json.JsonConverter
+        key.converter.schemas.enable=true
+        value.converter.schemas.enable=false
+        # The absolute path of the starrocks-kafka-connector after extraction. For example:
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+        ```
+
+    2. Run the Kafka Connect.
+
+        ```BASH
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
+        ```
+
+2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka connector through the REST API. For parameters and descriptions, see [Parameters](#Parameters).
+
+      ```Shell
+      curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
         "name":"starrocks-kafka-connector",
         "config":{
-            "connector.class":"com.starrocks.connector.kafka.SinkConnector",
-            "topics":"dbserver1.inventory.customers",
-            "starrocks.http.url":"192.168.xxx.xxx:8030,192.168.xxx.xxx:8030",
-            "starrocks.user":"root",
-            "starrocks.password":"123456",
-            "starrocks.database.name":"inventory",
-            "key.converter":"io.confluent.connect.json.JsonSchemaConverter",
-            "value.converter":"io.confluent.connect.json.JsonSchemaConverter"
+          "connector.class":"com.starrocks.connector.kafka.StarRocksSinkConnector",
+          "topics":"test",
+          "key.converter":"org.apache.kafka.connect.json.JsonConverter",
+          "value.converter":"org.apache.kafka.connect.json.JsonConverter",
+          "key.converter.schemas.enable":"true",
+          "value.converter.schemas.enable":"false",
+          "starrocks.http.url":"192.168.xxx.xxx:8030",
+          "starrocks.topic2table.map":"test:test_tbl",
+          "starrocks.username":"user1",
+          "starrocks.password":"123456",
+          "starrocks.database.name":"example_db",
+          "sink.properties.strip_outer_array":"true"
         }
-        }
-        ```
+      }'
+      ```
 
-3. Query data in the StarRocks table.
+      > **NOTICE**
+      >
+      > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
+
+#### Query StarRocks table
+
+Query the target StarRocks table `test_tbl`.
+
+```mysql
+MySQL [example_db]> select * from test_tbl;
+
++------+-------------+
+| id   | city        |
++------+-------------+
+|    1 | New York    |
+|    2 | Los Angeles |
+|    3 | Chicago     |
++------+-------------+
+3 rows in set (0.01 sec)
+```
+
+The data is successfully loaded when the above result is returned.
 
 ## Parameters
 
-### name                                
+### name
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: Name for this Kafka connector. It must be globally unique among all Kafka connectors within this Kafka Connect cluster. For example, starrocks-kafka-connector.
 
-### connector.class                     
+### connector.class
 
 **Required**: YES<br/>
-**Default value**: com.starrocks.connector.kafka.SinkConnector<br/>
-**Description**: Class used by this Kafka connector's sink.
+**Default value**: <br/>
+**Description**: Class used by this Kafka connector's sink. Set the value to `com.starrocks.connector.kafka.StarRocksSinkConnector`.
 
-### topics                              
+### topics
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: One or more topics to subscribe to, where each topic corresponds to a StarRocks table. By default, StarRocks assumes that the topic name matches the name of the StarRocks table. So StarRocks determines the target StarRocks table by using the topic name. Please choose either to fill in `topics` or `topics.regex` (below), but not both.However, if the StarRocks table name is not the same as the topic name, then use the optional `starrocks.topic2table.map` parameter (below) to specify the mapping from topic name to table name.
 
-### topics.regex                        
+### topics.regex
 
 **Required**:<br/>
 **Default value**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in  `topics.regex`or `topics` (above), but not both. <br/>
 **Description**:
 
-### starrocks.topic2table.map           
+### starrocks.topic2table.map
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: The mapping of the StarRocks table name and the topic name when the topic name is different from the StarRocks table name. The format is `<topic-1>:<table-1>,<topic-2>:<table-2>,...`.
 
-### starrocks.http.url                  
+### starrocks.http.url
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The HTTP URL of the FE in your StarRocks cluster. The format is `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>,...`. Multiple addresses are separated by commas (,). For example, `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`.
 
-### starrocks.database.name             
+### starrocks.database.name
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The name of StarRocks database.
 
-### starrocks.username                  
+### starrocks.username
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The username of your StarRocks cluster account. The user needs the [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) privilege on the StarRocks table.
 
-### starrocks.password                  
+### starrocks.password
 
 **Required**: YES<br/>
 **Default value**:<br/>
 **Description**: The password of your StarRocks cluster account.
 
-### key.converter                       
+### key.converter
 
 **Required**: NO<br/>
 **Default value**: Key converter used by Kafka Connect cluster<br/>
 **Description**: This parameter specifies the key converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the keys of Kafka data. The default key converter is the one used by Kafka Connect cluster.
 
-### value.converter                     
+### value.converter
 
 **Required**: NO<br/>
 **Default value**: Value converter used by Kafka Connect cluster<br/>
 **Description**: This parameter specifies the value converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the values of Kafka data. The default value converter is the one used by Kafka Connect cluster.
 
-### key.converter.schema.registry.url   
+### key.converter.schema.registry.url
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: Schema registry URL for the key converter.
 
-### value.converter.schema.registry.url 
+### value.converter.schema.registry.url
 
 **Required**: NO<br/>
 **Default value**:<br/>
 **Description**: Schema registry URL for the value converter.
 
-### tasks.max                           
+### tasks.max
 
 **Required**: NO<br/>
 **Default value**: 1<br/>
 **Description**: The upper limit for the number of task threads that the Kafka connector can create, which is usually the same as the number of CPU cores on the worker nodes in the Kafka Connect cluster. You can tune this parameter to control load performance.
 
-### bufferflush.maxbytes                
+### bufferflush.maxbytes
 
 **Required**: NO<br/>
 **Default value**: 94371840(90M)<br/>
@@ -219,13 +298,12 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
 
 **Required**: NO<br/>
 **Default value**: json<br/>
-**Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters**](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters)和** [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters).
-
+**Description**: The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters) and [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters).
 
 ## Limits
 
 - It is not supported to flatten a single message from a Kafka topic into multiple data rows and load into StarRocks.
-- The Kafka Connector's Sink guarantees at-least-once semantics.
+- The Kafka connector's sink guarantees at-least-once semantics.
 
 ## Best practices
 

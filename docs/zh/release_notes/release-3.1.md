@@ -4,6 +4,47 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.9
+
+发布日期：2024 年 3 月 8 日
+
+### 新增特性
+
+- 存算分离集群中的云原生主键表支持 Size-tiered 模式 Compaction，以减轻导入较多小文件时 Compaction 的写放大问题。[#41610](https://github.com/StarRocks/starrocks/pull/41610)
+- 新增函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
+- 新增 `information_schema.partitions_meta` 视图，提供丰富的 PARTITION 元信息。[#41101](https://github.com/StarRocks/starrocks/pull/41101)
+- 新增 `sys.fe_memory_usage` 视图，提供 StarRocks 的内存使用信息。[#41083](https://github.com/StarRocks/starrocks/pull/41083)
+
+### 行为变更
+
+- 动态分区语法修改为“如果分区列是日期（DATE）类型，则不支持小时（hour）时间粒度”。注意，时间日期（DATETIME）类型的分区列还是支持小时时间粒度的。[#40328](https://github.com/StarRocks/starrocks/pull/40328)
+- 修改发起物化视图刷新任务的用户，从原本的 `root` 用户变成创建物化视图的用户，已有的物化视图不受影响。[#40698](https://github.com/StarRocks/starrocks/pull/40698)
+- 常量和字符串类型的列进行比较时，默认按字符串进行比较，用户可以通过设置变量 `cbo_eq_base_type` 来调整默认行为。将 `cbo_eq_base_type` 设置为 `decimal` 可以改为按数值进行比较。[#41712](https://github.com/StarRocks/starrocks/pull/41712)
+
+### 功能优化
+
+- 支持通过 `s3_compatible_fs_list` 参数设置可以使用 AWS SDK 接入的 S3 兼容对象存储。同时支持通过 `fallback_to_hadoop_fs_list` 参数配置需要通过 HDFS 的 Schema 接入的非 S3 兼容对象存储（该方法需要使用厂商提供的 JAR 包）。[#41612](https://github.com/StarRocks/starrocks/pull/41612)
+- 优化 Trino 语法兼容性，支持 Trino 的 `current_catalog`、`current_schema`、`to_char`、`from_hex`、`to_date`、`to_timestamp` 以及 `index` 函数的语法转换。[#41505](https://github.com/StarRocks/starrocks/pull/41505) [#41270](https://github.com/StarRocks/starrocks/pull/41270) [#40838](https://github.com/StarRocks/starrocks/pull/40838)
+- 为缓解由于候选物化视图太多而导致查询在 Plan 阶段耗时过高的问题，引入了一个新的会话变量 `cbo_materialized_view_rewrite_related_mvs_limit`，用于控制查询在 Plan 阶段最多拥有的候选物化视图个数，默认是 64 个。[#39829](https://github.com/StarRocks/starrocks/pull/39829)
+- 聚合表中 BITMAP 类型的列支持指定聚合类型为 `replace_if_not_null`，从而支持部分列更新。[#42102](https://github.com/StarRocks/starrocks/pull/42102)
+- 通过修改会话变量 `cbo_eq_base_type`，控制字符串与数值比较时隐式转换规则，默认按字符串进行比较。[#40619](https://github.com/StarRocks/starrocks/pull/41712)
+- 内部支持更多日期类型识别（如 "%Y-%m-%e %H:%i"），从而更好地支持 Iceberg 分区表达。[#40474](https://github.com/StarRocks/starrocks/pull/40474)
+- JDBC Connector 支持 TIME 数据类型。[#31940](https://github.com/StarRocks/starrocks/pull/31940)
+- File External Table 的 `path` 参数支持使用通配符（`*`），但是和 Broker Load 中 `DATA INFILE` 参数一样最多只能匹配一层目录或文件。[#40844](https://github.com/StarRocks/starrocks/pull/40844)
+- 新增内部 SQL 日志，其中包含统计信息和物化视图等相关的日志信息。[#40682](https://github.com/StarRocks/starrocks/pull/40682)
+
+### 问题修复
+
+修复了如下问题：
+
+- 当创建 Hive 视图的查询语句中存在同一个表或视图的名称（或别名）大小写不一致的情况时，会出现“Analyze Error”的问题。[#40921](https://github.com/StarRocks/starrocks/pull/40921)
+- 主键表使用持久化索引会导致磁盘 I/O 打满。[#39959](https://github.com/StarRocks/starrocks/pull/39959)
+- 存算分离集群中，主键索引目录每 5 小时会被错误删除。[#40745](https://github.com/StarRocks/starrocks/pull/40745)
+- List 分区表在 Truncate Table 或 Truncate Partition 之后根据分区键查询不到数据。[#40495](https://github.com/StarRocks/starrocks/pull/40495)
+- 手动执行 ALTER TABLE COMPACT 后，Compaction 内存统计有异常。[#41150](https://github.com/StarRocks/starrocks/pull/41150)
+- 跨集群数据迁移中，如果执行列模式的部分列更新，目标集群可能会 Crash。[#40692](https://github.com/StarRocks/starrocks/pull/40692)
+- 当某些 SQL 语句中包含多个空格、换行符时，SQL 黑名单会不生效。[#40457](https://github.com/StarRocks/starrocks/pull/40457)
+
 ## 3.1.8
 
 发布日期：2024 年 2 月 5 日
@@ -171,7 +212,7 @@ displayed_sidebar: "Chinese"
 - 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。[#34618](https://github.com/StarRocks/starrocks/pull/34618)
 - 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。[#34627](https://github.com/StarRocks/starrocks/pull/34627)
 - 导入数据异常导致 FE Crash 后无法重启。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
-- Stream Load 导入作业在 **PREPARD** 状态下、同时有 Schema Change 在执行，会导致数据丢失。[#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Stream Load 导入作业在 **PREPARED** 状态下、同时有 Schema Change 在执行，会导致数据丢失。[#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。[#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - 打开 `enable_load_profile` 后，Stream Load 会很容易失败。[#34544](https://github.com/StarRocks/starrocks/pull/34544)
 - 使用列模式进行主键表部分列更新后，会有 Tablet 出现副本之间数据不一致。[#34555](https://github.com/StarRocks/starrocks/pull/34555)

@@ -1441,3 +1441,33 @@ class StarrocksSQLApiLib(object):
                 break
             time.sleep(0.5)
         tools.assert_equal(check_status, status, "wait refresh dictionary finish error")
+
+    def set_first_tablet_bad_and_recover(self, table_name):
+        """
+        set table first tablet as bad replica and recover until success
+        """
+        res = self.execute_sql(
+            "SHOW TABLET FROM %s" % table_name,
+            True,
+        )
+
+        tablet_id = res["result"][0][0]
+        backend_id = res["result"][0][2]
+
+        res = self.execute_sql(
+            "ADMIN SET REPLICA STATUS PROPERTIES('tablet_id' = '%s', 'backend_id' = '%s', 'status' = 'bad')" % (tablet_id, backend_id),
+            True,
+        )
+        
+        time.sleep(20)
+        
+        while True:
+            res = self.execute_sql(
+                "SHOW TABLET FROM %s" % table_name,
+                True,
+            )
+
+            if len(res["result"]) != 2:
+                time.sleep(0.5)
+            else:
+                break

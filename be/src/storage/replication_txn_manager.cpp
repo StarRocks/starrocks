@@ -482,10 +482,10 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             return status;
         }
 
-        CHECK(((src_snapshot_info.incremental_snapshot &&
-                snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
-               (!src_snapshot_info.incremental_snapshot &&
-                snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+        DCHECK(((src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
+                (!src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
                 << ", incremental_snapshot: " << src_snapshot_info.incremental_snapshot
                 << ", snapshot_type: " << SnapshotTypePB_Name(snapshot_meta.snapshot_type());
 
@@ -656,9 +656,9 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
         }
     }
 
-    RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
-
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path));
+
+    RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
 
     return Status::OK();
 }
@@ -782,6 +782,7 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
                             DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
 
                     if (dcgs.size() == 0) {
+                        ++idx;
                         continue;
                     }
 

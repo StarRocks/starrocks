@@ -74,7 +74,7 @@ This release mainly includes some features and improvements for loading data to 
 
 **Bug fixes**
 
-- Parse escape characters in the CSV related parameters  `column_seperator` and `row_delimiter`. [#85](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/85)
+- Parse escape characters in the CSV related parameters  `column_separator` and `row_delimiter`. [#85](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/85)
 
 **Doc**
 

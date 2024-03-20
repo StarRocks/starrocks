@@ -186,8 +186,8 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     }
 }
 
-bool ExprContext::ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) {
-    return _root->ngram_bloom_filter(this, bf, gram_num);
+bool ExprContext::ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) {
+    return _root->ngram_bloom_filter(this, bf, reader_options);
 }
 
 bool ExprContext::support_ngram_bloom_filter() {
@@ -207,7 +207,7 @@ Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
         return Status::OK();
     }
     bool replaced = false;
-    auto st = _root->replace_compilable_exprs(&_root, pool, replaced);
+    auto st = _root->replace_compilable_exprs(&_root, pool, _runtime_state, replaced);
     if (!st.ok()) {
         LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (root())->debug_string();
         // Fall back to the non-JIT path.

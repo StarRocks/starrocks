@@ -136,7 +136,6 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 StorageEngine::~StorageEngine() {
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
-    _update_manager.reset();
     _tablet_manager.reset();
 #ifdef BE_TEST
     if (_s_instance == this) {
@@ -966,6 +965,12 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
                 fmt::format("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id()));
     }
 
+    auto tablet_id = best_tablet->tablet_id();
+    auto new_tablet = _tablet_manager->get_tablet(tablet_id);
+    if (new_tablet != nullptr && new_tablet->data_dir()->path_hash() != data_dir->path_hash()) {
+        return Status::InternalError(fmt::format("tablet has been migrated, tablet_id: {}", tablet_id));
+    }
+
     Status res;
     int64_t duration_ns = 0;
     {
@@ -1035,7 +1040,7 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     }
 
     // clear expire incremental rowset, move deleted tablet to trash
-    CHECK(_tablet_manager->start_trash_sweep().ok());
+    RETURN_IF_ERROR(_tablet_manager->start_trash_sweep());
 
     // clean rubbish transactions
     _clean_unused_txns();

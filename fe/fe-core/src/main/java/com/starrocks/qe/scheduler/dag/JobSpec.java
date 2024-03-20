@@ -309,7 +309,7 @@ public class JobSpec {
                     .needReport(false)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
-                    .enablePipeline(true)
+                    .enablePipeline(context.getSessionVariable().isEnablePipelineEngine())
                     .resourceGroup(null)
                     .build();
         }

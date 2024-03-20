@@ -52,13 +52,13 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
     std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
-    DLOG(INFO) << "begin to query the inverted index from clucene"
-               << ", column_name: " << column_name << ", search_str: " << search_str;
+    VLOG(1) << "begin to query the inverted index from clucene"
+            << ", column_name: " << column_name << ", search_str: " << search_str;
     std::wstring column_name_ws = std::wstring(column_name.begin(), column_name.end());
 
-    if (!indexExists(_index_path)) {
+    if (!index_exists(_index_path)) {
         LOG(WARNING) << "inverted index path: " << _index_path << " not exist.";
-        return Status::InvertedIndexFileNotFound(fmt::format("Not exists index_file {}", _index_path.c_str()));
+        return Status::NotFound(fmt::format("Not exists index_file {}", _index_path.c_str()));
     }
 
     std::unique_ptr<MatchOperator> match_operator;
@@ -98,7 +98,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
                 std::make_unique<MatchWildcardOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
         break;
     default:
-        return Status::InvertedIndexInvalidParams("Unknown query type");
+        return Status::InvalidArgument("Unknown query type");
     }
 
     _CLDECDELETE(directory)
@@ -151,8 +151,7 @@ Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, co
             FINALLY_CLOSE_INPUT(dir)
         }
         LOG(WARNING) << "Inverted index read null bitmap error occurred: " << e.what();
-        return Status::InvertedIndexFileNotFound(
-                fmt::format("Inverted index read null bitmap error occurred: ", e.what()));
+        return Status::NotFound(fmt::format("Inverted index read null bitmap error occurred: ", e.what()));
     }
 
     return Status::OK();

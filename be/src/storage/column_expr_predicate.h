@@ -45,7 +45,7 @@ public:
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_bloom_filter() const override { return false; }
     bool support_ngram_bloom_filter() const override { return _expr_ctxs[0]->support_ngram_bloom_filter(); }
-    bool ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) const override;
+    bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const override;
     PredicateType type() const override { return PredicateType::kExpr; }
     bool can_vectorized() const override { return true; }
 

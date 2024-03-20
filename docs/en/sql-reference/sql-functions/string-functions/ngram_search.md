@@ -1,9 +1,6 @@
 ---
 displayed_sidebar: "English"
-
 ---
-
-[toc]
 
 # ngram_search
 
@@ -24,7 +21,7 @@ FLOAT ngram_search(VARCHAR haystack, VARCHAR needle)
 
 > - needle's size can not be larger than 2^15, otherwise error will be thrown.
 > - if haystack's size is larger than 2^15, this function will return 0.
-> - If haystack or needle's size is smaller than N(which is the size of gram, right now is 4), then this fucntion will return 0
+> - If haystack or needle's size is smaller than N(which is the size of gram, right now is 4), then this function will return 0
 
 ## Return value
 
@@ -57,8 +54,6 @@ mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000")
 ## note
 
 Currently we only support Ascii encoding, and choose four gram to calculate similarity of these two strings.This function is case sensitive.
-
-
 
 # ngram_search_case_insensitive
 

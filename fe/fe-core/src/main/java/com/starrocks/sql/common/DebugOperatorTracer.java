@@ -191,7 +191,10 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalAggregation(LogicalAggregationOperator node, Void context) {
         return "LogicalAggregation" + " {type=" + node.getType() +
                 " ,aggregations=" + node.getAggregations() +
-                " ,groupKeys=" + node.getGroupingKeys() + "}";
+                " ,groupKeys=" + node.getGroupingKeys() +
+                " ,projection=" + node.getProjection() +
+                " ,predicate=" + node.getPredicate() +
+                "}";
     }
 
     @Override

@@ -104,7 +104,7 @@ DROP DICTIONARY test_dictionary_basic_operation;
 -- !result
 DROP TABLE test_dictionary_basic_operation;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_dictionary_basic_operation'.")
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_dictionary_basic_operation'.")
 -- !result
 -- name: test_dictionary_type_combination
 CREATE TABLE `t_type_combination` (

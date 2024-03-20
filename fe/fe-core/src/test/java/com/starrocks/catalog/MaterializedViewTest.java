@@ -746,8 +746,8 @@ public class MaterializedViewTest {
         String showCreateSql = "show create materialized view test.index_mv_to_check;";
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet showResultSet = showExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getMetaData().toString());
         System.out.println(showResultSet.getResultRows());
     }
@@ -796,8 +796,8 @@ public class MaterializedViewTest {
         String showCreateSql = "show create materialized view test.index_mv_to_check;";
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet showResultSet = showExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
     }
 

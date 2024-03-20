@@ -15,8 +15,8 @@
 
 package com.starrocks.mysql.security;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.NetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -33,6 +33,11 @@ public class LdapSecurity {
 
     //bind to ldap server to check password
     public static boolean checkPassword(String dn, String password) {
+        if (Strings.isNullOrEmpty(password)) {
+            LOG.warn("empty password is not allowed for simple authentication");
+            return false;
+        }
+
         String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
                 Config.authentication_ldap_simple_server_port);
         Hashtable<String, String> env = new Hashtable<>();
@@ -65,6 +70,11 @@ public class LdapSecurity {
     //2. search user
     //3. if match exactly one, check password
     public static boolean checkPasswordByRoot(String user, String password) {
+        if (Strings.isNullOrEmpty(Config.authentication_ldap_simple_bind_root_pwd)) {
+            LOG.warn("empty password is not allowed for simple authentication");
+            return false;
+        }
+
         String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
                 Config.authentication_ldap_simple_server_port);
         Hashtable<String, String> env = new Hashtable<>();

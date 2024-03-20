@@ -86,21 +86,26 @@ public class GlobalDictMetaService {
             if (method.equals(HttpMethod.POST)) {
                 String tableName = request.getSingleParameter(TABLE_NAME);
                 String dbName = request.getSingleParameter(DB_NAME);
-                if (Strings.isNullOrEmpty(dbName) || Strings.isNullOrEmpty(tableName)) {
-                    response.appendContent("Miss db_name parameter or table_name");
+                String enableParam = request.getSingleParameter(ENABLE);
+                if (Strings.isNullOrEmpty(dbName) || Strings.isNullOrEmpty(tableName) || Strings.isNullOrEmpty(enableParam)) {
+                    response.appendContent("Missing db_name, table_name, or enable parameter");
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                     return;
                 }
-
-                boolean isEnable = "true".equalsIgnoreCase(request.getSingleParameter(ENABLE).trim());
-
+                if (!enableParam.trim().equalsIgnoreCase("true") && !enableParam.trim().equalsIgnoreCase("false")) {
+                    response.appendContent("Invalid enable parameter. It should be either 'true' or 'false'");
+                    writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
+                    return;
+                }
+                boolean isEnable = Boolean.parseBoolean(enableParam.trim());
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .setHasForbiddenGlobalDict(dbName, tableName, isEnable);
                 response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());
+                writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
+                return;
             }
-            writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
             sendResult(request, response);
         }
     }

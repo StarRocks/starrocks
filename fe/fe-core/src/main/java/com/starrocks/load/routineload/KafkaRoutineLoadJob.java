@@ -497,8 +497,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         List<Integer> allKafkaPartitions = getAllKafkaPartitions();
         for (Integer customPartition : customKafkaPartitions) {
             if (!allKafkaPartitions.contains(customPartition)) {
-                throw new LoadException("there is a custom kafka partition " + customPartition
-                        + " which is invalid for topic " + topic);
+                throw new LoadException("there is an invalid custom partition: " + customPartition + " for topic: " + topic);
             }
         }
     }
@@ -816,14 +815,16 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         long now = System.currentTimeMillis();
 
         for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
-            int partition = entry.getKey();
-            long lag = (now - entry.getValue().longValue()) / 1000;
-            if (lag > Config.routine_load_unstable_threshold_second) {
-                updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
-                        String.format("The lag [%d] of partition [%d] exceeds " +
-                                        "Config.routine_load_unstable_threshold_second [%d]",
-                                lag, partition, Config.routine_load_unstable_threshold_second)));
-                return;
+            if (entry.getValue().longValue() > 0 && Config.routine_load_unstable_threshold_second > 0) {
+                int partition = entry.getKey();
+                long lag = (now - entry.getValue().longValue()) / 1000;
+                if (lag > Config.routine_load_unstable_threshold_second) {
+                    updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
+                            String.format("The lag [%d] of partition [%d] exceeds " +
+                                            "Config.routine_load_unstable_threshold_second [%d]",
+                                    lag, partition, Config.routine_load_unstable_threshold_second)));
+                    return;
+                }
             }
         }
         updateSubstate(JobSubstate.STABLE, null);

@@ -185,6 +185,7 @@ add_library(Storage STATIC
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/compaction_task_context.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
@@ -209,6 +210,20 @@ add_library(Storage STATIC
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+    sstable/block_builder.cpp
+    sstable/block.cpp
+    sstable/coding.cpp
+    sstable/comparator.cpp
+    sstable/filter_block.cpp
+    sstable/format.cpp
+    sstable/persistent_index_sstable.cpp
+    sstable/table_builder.cpp
+    sstable/table.cpp
+    sstable/two_level_iterator.cpp
+    sstable/filter_policy.cpp
+    sstable/iterator.cpp
+    sstable/options.cpp
+    sstable/merger.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp

@@ -87,6 +87,7 @@ enum CommitType {
 
 struct IOStat {
     uint32_t get_in_shard_cnt = 0;
+    uint32_t filtered_kv_cnt = 0;
     uint64_t get_in_shard_cost = 0;
     uint64_t read_io_bytes = 0;
     uint64_t l0_write_cost = 0;
@@ -97,10 +98,11 @@ struct IOStat {
 
     std::string print_str() {
         return fmt::format(
-                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
+                "IOStat get_in_shard_cnt: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
+                "l0_write_cost: {} "
                 "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
-                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
-                compaction_cost, reload_meta_cost);
+                get_in_shard_cnt, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
+                flush_or_wal_cost, compaction_cost, reload_meta_cost);
     }
 };
 
@@ -436,7 +438,7 @@ public:
     uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
-            CHECK(res.ok()) << res.status(); // FIXME: no abort
+            DCHECK(res.ok()) << res.status(); // FIXME: no abort
             return *res;
         } else {
             return 0;
@@ -720,7 +722,7 @@ public:
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase
     // |n|: size of key/value array
@@ -782,7 +784,6 @@ public:
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();
-    Status delete_pindex_files();
 
     static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
                                    const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);

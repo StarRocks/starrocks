@@ -43,7 +43,7 @@ public class ShortCircuitPlannerHybrid {
         public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             Table table = scanOp.getTable();
-            if (!(table instanceof OlapTable) && !(((OlapTable) table).getKeysType().equals(KeysType.PRIMARY_KEYS))) {
+            if (!(table instanceof OlapTable) || !(KeysType.PRIMARY_KEYS.equals(((OlapTable) table).getKeysType()))) {
                 return false;
             }
 

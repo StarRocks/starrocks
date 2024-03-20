@@ -127,7 +127,9 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             new_version = (new_rowset == nullptr) ? -1 : new_rowset->end_version();
             old_tablet->release_header_lock();
         }
-        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time);
+        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time) ||
+                           // use for migration of primary key empty tablet
+                           (new_tablet->updates() != nullptr && old_version == 1 && new_version == 1);
 
         if (replace_old) {
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), kMoveFilesToTrash));
@@ -444,6 +446,7 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
         return Status::OK();
     }
     auto num_shards = _tablets_shards.size();
+    std::vector<TabletSharedPtr> dropped_tablets;
     for (int i = 0; i < num_shards; i++) {
         std::unique_lock wlock(_tablets_shards[i].lock);
         for (const TabletInfo& tablet_info : tablet_info_vec) {
@@ -459,9 +462,19 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
                 TabletMap& tablet_map = _get_tablet_map(tablet_id);
                 _remove_tablet_from_partition(*dropped_tablet);
                 tablet_map.erase(tablet_id);
+
+                dropped_tablets.push_back(dropped_tablet);
             }
         }
     }
+
+    for (const auto& dropped_tablet : dropped_tablets) {
+        // make sure dropped tablet state is TABLET_SHUTDOWN
+        std::unique_lock l(dropped_tablet->get_header_lock());
+        (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+        dropped_tablet->save_meta();
+    }
+
     return Status::OK();
 }
 
@@ -1705,6 +1718,8 @@ Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         return tablet->updates()->clear_meta();
     } else {
+        // for non-primary key tablet, make sure clear the dcg cache
+        tablet->remove_all_delta_column_group_cache();
         return TabletMetaManager::remove(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash());
     }
 }

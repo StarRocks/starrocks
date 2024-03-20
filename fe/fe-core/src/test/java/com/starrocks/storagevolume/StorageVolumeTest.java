@@ -26,6 +26,7 @@ import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.hadoop.HadoopExt;
@@ -51,6 +52,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -499,7 +501,10 @@ public class StorageVolumeTest {
                 .setEndpoint("endpoint")
                 .setRegion("region")
                 .setCredential(awsCredBuilder);
-        fsInfoBuilder.setFsKey("0").setFsType(FileStoreType.S3);
+
+        fsInfoBuilder.setFsKey("0")
+                .setFsType(FileStoreType.S3)
+                .addLocations("s3://bucket");
 
         {
             FileStoreInfo fs = fsInfoBuilder.build();
@@ -518,6 +523,20 @@ public class StorageVolumeTest {
             Assert.assertTrue(params.containsKey(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX));
             Assert.assertTrue(params.containsKey(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
             Assert.assertEquals("32", params.get(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX));
+        }
+
+        // It's OK to have trailing '/' after bucket name
+        fsInfoBuilder.addLocations("s3://bucket/");
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            ExceptionChecker.expectThrowsNoException(() -> StorageVolume.fromFileStoreInfo(fs));
+        }
+
+        // can't have more after bucket name
+        fsInfoBuilder.addLocations("s3://bucket/abc");
+        {
+            FileStoreInfo fs = fsInfoBuilder.build();
+            Assert.assertThrows(DdlException.class, () -> StorageVolume.fromFileStoreInfo(fs));
         }
     }
 
@@ -561,5 +580,19 @@ public class StorageVolumeTest {
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_SECRET_KEY));
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SAS_TOKEN));
         Assert.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SHARED_KEY));
+    }
+
+    @Test
+    public void testAddMaskInvalidForInvalidCredential() {
+        String awsSecretKey = "SomeAWSSecretKey";
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_ACCESS_KEY, "accessKey");
+        storageParams.put(AWS_S3_SECRET_KEY, awsSecretKey);
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        Exception exception = Assert.assertThrows(SemanticException.class, () -> new StorageVolume(
+                "1", "test", "obs", Collections.singletonList("s3://foobar"), storageParams, true, ""
+        ));
+        Assert.assertFalse(exception.getMessage().contains(awsSecretKey));
+        Assert.assertTrue(exception.getMessage().contains(StorageVolume.CREDENTIAL_MASK));
     }
 }

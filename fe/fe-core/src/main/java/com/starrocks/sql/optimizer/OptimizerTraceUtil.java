@@ -64,9 +64,11 @@ public class OptimizerTraceUtil {
             Object[] args = new Object[] {
                     mvRewriteContext.getRule().type().name(),
                     mvContext.getMv().getName(),
+                    mvRewriteContext.getMaterializationContext().getOptimizerContext().isInMemoPhase(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] {}", args).getMessage();
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] [InMemo:{}] {}",
+                    args).getMessage();
         });
     }
 
@@ -75,9 +77,10 @@ public class OptimizerTraceUtil {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
                     rule.type().name(),
+                    optimizerContext.isInMemoPhase(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] {}", args).getMessage();
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] {}", args).getMessage();
         });
     }
 

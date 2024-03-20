@@ -73,7 +73,7 @@ netstat -tunlp | grep 8060
 
 ## 主机名
 
-如需为您的 StarRocks 集群 [启用 FQDN 访问](../administration/enable_fqdn.md)，您必须为每个实例设置一个主机名。
+如需为您的 StarRocks 集群 [启用 FQDN 访问](../administration/management/enable_fqdn.md)，您必须为每个实例设置一个主机名。
 
 在每个实例的 **/etc/hosts** 文件中，您必须指定集群中其他实例的 IP 地址和相应的主机名。
 
@@ -379,7 +379,7 @@ sysctl -p
 4. 检查 NTP 服务连接和监控状态。
 
    ```Bash
-   netstat -tlunp | grep ntp
+   netstat -tunlp | grep ntp
    ```
 
 5. 检查服务是否与 NTP 服务器同步。

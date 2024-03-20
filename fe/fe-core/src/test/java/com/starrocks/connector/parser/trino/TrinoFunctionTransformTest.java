@@ -78,6 +78,16 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select contains_sequence(array[1,2,3], array[1,2])";
         assertPlanContains(sql, "array_contains_seq([1,2,3], [1,2])");
+
+        sql = "select concat_ws('_', array['1','2','3'])";
+        assertPlanContains(sql, "concat_ws('_', ['1','2','3'])");
+
+        sql = "select concat_ws('|', array_agg(event_type)) from "
+            + "(select 1 as event_type union all select 1 as event_type union all select 2 as event_type)";
+        assertPlanContains(sql, "concat_ws('|', CAST(8: array_agg AS ARRAY<VARCHAR>))");
+
+        sql = "select concat_ws('.', 5,6,'s',8,9,10)";
+        assertPlanContains(sql, "'5.6.s.8.9.10'");
     }
 
     @Test

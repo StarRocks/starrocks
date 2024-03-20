@@ -253,11 +253,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
 
         int32_t delete_column_index = slots.size();
-        auto* delete_column_tuple_desc =
-                state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
+        _delete_column_tuple_desc = state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
 
-        std::vector<SlotDescriptor*> equality_delete_slots;
-        for (SlotDescriptor* d_slot_desc : delete_column_tuple_desc->slots()) {
+        for (SlotDescriptor* d_slot_desc : _delete_column_tuple_desc->slots()) {
             _equality_delete_slots.emplace_back(d_slot_desc);
             if (!id_to_slots.contains(d_slot_desc->id())) {
                 _materialize_slots.push_back(d_slot_desc);
@@ -781,6 +779,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         MORParams& mor_params = scanner_params.mor_params;
         mor_params.tuple_desc = _tuple_desc;
         mor_params.equality_slots = _equality_delete_slots;
+        mor_params.delete_column_tuple_desc = _delete_column_tuple_desc;
         mor_params.mor_tuple_id = _provider->_hdfs_scan_node.mor_tuple_id;
         mor_params.runtime_profile = _runtime_profile;
     }
@@ -792,6 +791,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
+        scanner_params.iceberg_equal_delete_schema = tbl->get_iceberg_equal_delete_schema();
     }
     scanner_params.use_datacache = _use_datacache;
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
@@ -887,6 +887,25 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     ChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
 
     return Status::OK();
+}
+
+void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
+    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+
+    if (!_equality_delete_slots.empty()) {
+        std::map<SlotId, SlotDescriptor*> id_to_slots;
+        for (const auto& slot : _tuple_desc->slots()) {
+            id_to_slots.emplace(slot->id(), slot);
+        }
+
+        for (const auto& slot : _equality_delete_slots) {
+            if (!id_to_slots.contains(slot->id())) {
+                const auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+                column->reserve(n);
+                (*chunk)->append_column(column, slot->id());
+            }
+        }
+    }
 }
 
 const std::string HiveDataSource::get_custom_coredump_msg() const {

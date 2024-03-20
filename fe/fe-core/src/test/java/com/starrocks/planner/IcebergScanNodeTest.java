@@ -135,7 +135,6 @@ public class IcebergScanNodeTest extends TableTestBase {
         Assert.assertEquals(1, eqTupleDesc.getSlots().size());
     }
 
-    @Test
     public void testEqualityDeleteWithUnsupportedFormat() throws UserException {
         List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",

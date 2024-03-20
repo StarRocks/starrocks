@@ -82,7 +82,7 @@ Common data quality errors are as follows:
 
 ## 4. What do I do if RPC times out?
 
-Check the setting of the `write_buffer_size` configuration item in the BE configuration file **be.conf** of each BE. This configuration item is used to control the maximum size per memory block on the BE. The default maximum size is 100 MB. If the maximum size is exceedingly large, Remote Procedure Call (RPC) may time out. To resolve this issue, adjust the settings of the `write_buffer_size` and `tablet_writer_rpc_timeout_sec` configuration items in the BE configuration file. For more information, see [BE configurations](../../loading/Loading_intro.md#be-configurations).
+Check the setting of the `write_buffer_size` configuration item in the BE configuration file **be.conf** of each BE. This configuration item is used to control the maximum size per memory block on the BE. The default maximum size is 100 MB. If the maximum size is exceedingly large, Remote Procedure Call (RPC) may time out. To resolve this issue, adjust the settings of the `write_buffer_size` and `tablet_writer_rpc_timeout_sec` configuration items in the BE configuration file. For more information, see [BE configurations](../../loading/loading_introduction/loading_considerations.md#be-configurations).
 
 ## 5. What do I do if the "Value count does not match column count" error occurs?
 

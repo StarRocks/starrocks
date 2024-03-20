@@ -34,9 +34,9 @@ HLL类型使用的存储空间取决于 HLL 中插入的 hash 值的去重数量
 
 **[HLL_CARDINALITY(hll)](../../sql-functions/scalar-functions/hll_cardinality.md)**：此函数用于计算单条 hll 列的基数估算。
 
-**[HLL_HASH(column_name)](../../sql-functions/aggregate-functions/hll_hash.md)**：生成 HLL 列类型，用于 insert 或导入的时候，导入的使用见相关说明。
+**[HLL_HASH(column_name)](../../sql-functions/scalar-functions/hll_hash.md)**：生成 HLL 列类型，用于 insert 或导入的时候，导入的使用见相关说明。
 
-**[HLL_EMPTY()](../../sql-functions/aggregate-functions/hll_empty.md)**：生成空 HLL 列，用于 insert 或导入的时候补充默认值，导入的使用见相关说明。
+**[HLL_EMPTY()](../../sql-functions/scalar-functions/hll_empty.md)**：生成空 HLL 列，用于 insert 或导入的时候补充默认值，导入的使用见相关说明。
 
 ## 示例
 

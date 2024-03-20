@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.commons.lang3.StringUtils;
 import org.threeten.extra.PeriodDuration;
@@ -217,6 +218,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            // get the updated foreign key constraint from table property.
+            // for external table, create time is added into FOREIGN_KEY_CONSTRAINT
+            Map<String, String> mvProperties = materializedView.getTableProperty().getProperties();
+            String foreignKeys = mvProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+            propClone.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, foreignKeys);
             isChanged = true;
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
@@ -243,6 +249,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             materializedView.getTableProperty().getProperties()
                     .put(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
             materializedView.getTableProperty().setMvQueryRewriteSwitch(queryRewriteSwitch);
+            if (!materializedView.isEnableRewrite()) {
+                // invalidate caches for mv rewrite when disable mv rewrite.
+                CachingMvPlanContextBuilder.getInstance().invalidateFromCache(materializedView, false);
+            } else {
+                CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(materializedView);
+            }
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
