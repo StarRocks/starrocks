@@ -11,7 +11,7 @@ The Primary Key table uses a new storage engine designed by StarRocks. Its main 
 
 The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL constraint, and is used to uniquely identify each data row. If the primary key value of a new data row is same as that of the existing data row in the table, UNIQUE constraint violation occurs. Then the new data row will replace the existing data row.
 
-:::note
+:::info
 
 - Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key, and the sort key can be specified seperately. As such, table creation flexibility is improved.
 - Since v3.1, StarRocks's shared-data mode supports Primary Key tables. Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
@@ -88,7 +88,7 @@ DISTRIBUTED BY HASH(order_id)
 ;
 ```
 
-:::note
+:::info
 
 Because the Primary Key table only supports hash bucketing as the bucketing strategy, you also need to define the hash bucketing key by using `DISTRIBUTED BY HASH()`.
 
@@ -143,15 +143,15 @@ Take note of the following considerations about the primary key:
 
 The primary key index is used to store the mapping between the primary key values and the locations of the data rows identified by the primary key values. Typically, the primary key indexes of relevant tablets are loaded into memory only during data loading (which involves a batch of data changes). You can consider persisting the primary key indexes after comprehensively evaluating the performance requirement for queries and updates, as well as the memory and disk.
 
-<Tabs groupId="primary key Index">
+<Tabs groupId="primary key index">
 
-  <TabItem value="example1" label="Persistent primary keyIndex" default>
+  <TabItem value="example1" label="Persistent primary key index" default>
 
 When `enable_persistent_index` is set to `true` (default), the primary key indexes can be persisted to the disk. During loading, a small portion of the primary key indexes is loaded in memory, while the majority is stored on disk to avoid taking up too much memory. In general, query and update performance of the table with the persistent primary key indexes is nearly equivalent to that of the table with the fully in-memory primary key indexes.
 
 If the disk is a SSD, it is recommended to set it to true. If the disk is HDD and the load frequency is not high, you can also set it to true.
 
-:::note
+:::info
 
 Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
 
@@ -159,7 +159,7 @@ Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters furth
 
 </TabItem>
 
-<TabItem value="example2" label="fully in-memory primary key index">
+<TabItem value="example2" label="Fully in-memory primary key index">
 
 When `enable_persistent_index` is set to `false`, the primary key indexes are not persisted to the disk,  that is, the primary key indexes are fully stored in memory. During loading, the primary key indexes of tablets related to the data loaded will be loaded into memory, which may result in higher memory consumption. (If a tablet has not had data loaded for a long time, its primary key index will be released from memory).
 
@@ -196,7 +196,7 @@ From v3.0, the Primary Key table decouples the sort key from the Primary Key. Th
 
 During data loading, the data is stored after being sorted according to the sort key. The sort key is also used to build the Prefix index to accelerate queries. It is recommended to [design the sort key appropriately to form the Prefix index that can accelerate queries](../indexes/Prefix_index_sort_key.md#how-to-design-the-sort-key-appropriately-to-form-the-prefix-index-that-can-accelerate-queries).
 
-:::note
+:::info
 
 - If the sort key is specified, the Prefix index is built based on the sort key. If no sorti key is specified,the Prefix index are built based on the Primary Key.
 - After table creation, you can use `ALTER TABLE ... ORDER BY ...` to change the sort key. Deleting the sort key is not supported, and modifying the data types of sort columns is not supported.
