@@ -398,15 +398,7 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
-<<<<<<< HEAD
-=======
         ./service/service_be/internal_service_test.cpp
-        ./storage/compaction_parallelization_test.cpp
-        ./storage/lake/persistent_index_memtable_test.cpp
-        ./storage/lake/lake_persistent_index_test.cpp
-        ./storage/lake/replication_txn_manager_test.cpp
-        ./storage/sstable/persistent_index_sstable_test.cpp
->>>>>>> 25bb1a4556 ([Enhancement] Make routine load error msg more clear (#41306))
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
