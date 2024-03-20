@@ -1175,7 +1175,7 @@ Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, 
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_requests.get()));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::COMPACT, t_requests.get()));
     }
     ShortCircuitExecutor executor{_exec_env};
     RETURN_IF_ERROR(executor.prepare(*t_requests));
