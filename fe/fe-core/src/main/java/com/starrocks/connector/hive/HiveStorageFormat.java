@@ -14,14 +14,9 @@
 
 package com.starrocks.connector.hive;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.hive.HiveClassNames.AVRO_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.AVRO_OUTPUT_FORMAT_CLASS;
@@ -82,17 +77,6 @@ public enum HiveStorageFormat {
     private final String serde;
     private final String inputFormat;
     private final String outputFormat;
-
-    // name consistency check.
-    {
-        List<String> hiveStorageFormats =
-                Arrays.stream(HiveStorageFormat.values()).map(x -> x.name()).collect(Collectors.toList());
-        List<String> remoteInputFormats =
-                Arrays.stream(RemoteFileInputFormat.values()).map(x -> x.name()).collect(Collectors.toList());
-        Collections.sort(hiveStorageFormats);
-        Collections.sort(remoteInputFormats);
-        Preconditions.checkArgument(hiveStorageFormats.equals(remoteInputFormats));
-    }
 
     public static HiveStorageFormat get(String format) {
         for (HiveStorageFormat storageFormat : HiveStorageFormat.values()) {
