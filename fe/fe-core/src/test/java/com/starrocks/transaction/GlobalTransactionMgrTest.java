@@ -47,6 +47,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -897,4 +899,78 @@ public class GlobalTransactionMgrTest {
         Assert.assertThrows(UserException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRetryCommitOnRateLimitExceededThrowLockTimeoutException()
+            throws UserException {
+        Database db = new Database(10L, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = new TransactionState();
+        doReturn(transactionState)
+                .when(globalTransactionMgr)
+                .getTransactionState(10L, 1001L);
+
+        doThrow(LockTimeoutException.class)
+                .when(globalTransactionMgr)
+                .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);
+        Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+                Collections.emptyList(), Collections.emptyList(), 10L, null));
+    }
+
+    @Test
+    public void testGetTransactionNumByCoordinateBe() throws LabelAlreadyUsedException, AnalysisException,
+            RunningTxnExceedException, DuplicatedRequestException {
+        masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable1,
+                        transactionSourceBe,
+                        LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        long res = masterTransMgr.getTransactionNumByCoordinateBe("localbe");
+        assertEquals(1, res);
+    }
+
+    @Test
+    public void testBeginTransactionFailed() {
+        Config.disable_load_job = true;
+        boolean exceptionThrown = false;
+        try {
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ErrorReportException);
+            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            exceptionThrown = true;
+        } finally {
+            Config.disable_load_job = false;
+        }
+        Assert.assertTrue(exceptionThrown);
+
+        Config.metadata_enable_recovery_mode = true;
+        exceptionThrown = false;
+        try {
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ErrorReportException);
+            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            exceptionThrown = true;
+        } finally {
+            Config.metadata_enable_recovery_mode = false;
+        }
+        Assert.assertTrue(exceptionThrown);
+
+        GlobalStateMgr.getCurrentState().setSafeMode(true);
+        exceptionThrown = false;
+        try {
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ErrorReportException);
+            Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
+            exceptionThrown = true;
+        } finally {
+            GlobalStateMgr.getCurrentState().setSafeMode(false);
+        }
+        Assert.assertTrue(exceptionThrown);
+    }
+>>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
 }
