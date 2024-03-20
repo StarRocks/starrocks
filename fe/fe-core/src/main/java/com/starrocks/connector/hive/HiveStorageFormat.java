@@ -48,7 +48,7 @@ public enum HiveStorageFormat {
             PARQUET_HIVE_SERDE_CLASS,
             MAPRED_PARQUET_INPUT_FORMAT_CLASS,
             MAPRED_PARQUET_OUTPUT_FORMAT_CLASS),
-    TEXTFILE(
+    TEXT(
             LAZY_SIMPLE_SERDE_CLASS,
             TEXT_INPUT_FORMAT_CLASS,
             HIVE_IGNORE_KEY_OUTPUT_FORMAT_CLASS),
@@ -57,12 +57,12 @@ public enum HiveStorageFormat {
             AVRO_INPUT_FORMAT_CLASS,
             AVRO_OUTPUT_FORMAT_CLASS
     ),
-    RCBINARY(
+    RC_BINARY(
             LAZY_BINARY_COLUMNAR_SERDE_CLASS,
             RCFILE_INPUT_FORMAT_CLASS,
             RCFILE_OUTPUT_FORMAT_CLASS
     ),
-    RCTEXT(
+    RC_TEXT(
             COLUMNAR_SERDE_CLASS,
             RCFILE_INPUT_FORMAT_CLASS,
             RCFILE_OUTPUT_FORMAT_CLASS
