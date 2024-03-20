@@ -114,11 +114,7 @@ public class AuthorizationMgr {
 
     public AuthorizationMgr(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
-        if (provider == null) {
-            this.provider = new DefaultAuthorizationProvider();
-        } else {
-            this.provider = provider;
-        }
+        this.provider = provider;
         pluginId = this.provider.getPluginId();
         pluginVersion = this.provider.getPluginVersion();
         roleNameToId = new HashMap<>();
@@ -1136,6 +1132,14 @@ public class AuthorizationMgr {
 
     public boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType) {
         return provider.isAvailablePrivType(objectType, privilegeType);
+    }
+
+    public PrivilegeType getPrivilegeType(String privTypeString) {
+        return provider.getPrivilegeType(privTypeString);
+    }
+
+    public ObjectType getObjectType(String objectTypeUnResolved) {
+        return provider.getObjectType(objectTypeUnResolved);
     }
 
     public List<PrivilegeType> getAvailablePrivType(ObjectType objectType) {
