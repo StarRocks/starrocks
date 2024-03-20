@@ -571,7 +571,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Description:** Whether to enable hybrid row-column storage (this feature is currrently in preview). If this parameter is set to `TRUE` and `"STORE_TYPE" = "column_with_row"` is configured in the `PROPERTIES` clause at table creation, data in that table is stored in both row-by-row and column-by-column fashions. This feature can improve performance for high-concurrency point queries and partial data updates，while retaining the efficient analytical capabilities of columnar storage. For detailed user guide, see [Hybrid row-column storage](../table_design/hybrid_table.md).
 - **Default**: FALSE
-- **Introduced in**: v3.2.0
+- **Introduced in**: v3.2.3
 
 #### storage_usage_soft_limit_percent
 
