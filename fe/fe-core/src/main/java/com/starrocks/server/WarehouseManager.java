@@ -42,7 +42,6 @@ public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
-
     public static final long DEFAULT_WAREHOUSE_ID = 0L;
     public static final long DEFAULT_CLUSTER_ID = 0L;
 

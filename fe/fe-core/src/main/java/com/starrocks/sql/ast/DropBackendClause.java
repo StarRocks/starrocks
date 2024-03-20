@@ -36,12 +36,12 @@ public class DropBackendClause extends BackendClause {
         this.force = force;
     }
 
-    public DropBackendClause(List<String> hostPorts, boolean force, NodePosition pos, String warehouseName) {
-        super(hostPorts, pos, warehouseName);
-        this.force = force;
-    }
-
     public boolean isForce() {
         return force;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropBackendClause(this, context);
     }
 }

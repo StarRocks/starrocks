@@ -28,12 +28,4 @@ public class AddComputeNodeClause extends ComputeNodeClause {
     public AddComputeNodeClause(List<String> hostPorts, NodePosition pos) {
         super(hostPorts, pos);
     }
-
-    public AddComputeNodeClause(List<String> hostPorts, String warehouseName) {
-        this(hostPorts, NodePosition.ZERO, warehouseName);
-    }
-
-    public AddComputeNodeClause(List<String> hostPorts, NodePosition pos, String warehouseName) {
-        super(hostPorts, pos, warehouseName);
-    }
 }

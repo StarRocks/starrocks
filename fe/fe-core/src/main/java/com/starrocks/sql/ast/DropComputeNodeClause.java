@@ -20,8 +20,8 @@ import java.util.List;
 
 public class DropComputeNodeClause extends ComputeNodeClause {
 
-    public DropComputeNodeClause(List<String> hostPorts, NodePosition pos, String warehouseName) {
-        super(hostPorts, pos, warehouseName);
+    public DropComputeNodeClause(List<String> hostPorts) {
+        this(hostPorts, NodePosition.ZERO);
     }
 
     public DropComputeNodeClause(List<String> hostPorts, NodePosition pos) {

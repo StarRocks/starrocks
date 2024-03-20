@@ -25,33 +25,25 @@ import java.util.List;
 import java.util.Map;
 
 public class BackendClause extends AlterClause {
-    protected List<String> hostPorts;
-
+    protected List<String> hostPortsUnResolved;
     protected List<Pair<String, Integer>> hostPortPairs;
 
-    protected String warehouseName;
-
-    protected BackendClause(List<String> hostPorts, NodePosition pos) {
+    protected BackendClause(List<String> hostPortsUnResolved, NodePosition pos) {
         super(AlterOpType.ALTER_OTHER, pos);
-        this.hostPorts = hostPorts;
+        this.hostPortsUnResolved = hostPortsUnResolved;
         this.hostPortPairs = new LinkedList<>();
-    }
-
-    protected BackendClause(List<String> hostPorts, NodePosition pos, String warehouseName) {
-        this(hostPorts, pos);
-        this.warehouseName = warehouseName;
     }
 
     public List<Pair<String, Integer>> getHostPortPairs() {
         return hostPortPairs;
     }
 
-    public List<String> getHostPorts() {
-        return hostPorts;
+    public void setHostPortPairs(List<Pair<String, Integer>> hostPortPairs) {
+        this.hostPortPairs = hostPortPairs;
     }
 
-    public String getWarehouseName() {
-        return warehouseName;
+    public List<String> getHostPortsUnResolved() {
+        return hostPortsUnResolved;
     }
 
     @Override

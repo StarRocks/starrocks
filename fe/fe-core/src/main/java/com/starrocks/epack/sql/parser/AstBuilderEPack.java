@@ -9,6 +9,8 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Type;
+import com.starrocks.epack.sql.ast.AddBackendClauseEPack;
+import com.starrocks.epack.sql.ast.AddComputeNodeClauseEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
@@ -33,6 +35,8 @@ import com.starrocks.epack.sql.ast.DatabaseName;
 import com.starrocks.epack.sql.ast.DecommissionDiskClause;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DisableDiskClause;
+import com.starrocks.epack.sql.ast.DropBackendClauseEPack;
+import com.starrocks.epack.sql.ast.DropComputeNodeClauseEPack;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
@@ -947,53 +951,52 @@ public class AstBuilderEPack extends AstBuilder {
         }
     }
 
-    // add/drop be or cn with warehouse
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
-        List<String> backends =
-                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString());
             whName = identifier.getValue();
         }
-        return new AddBackendClause(backends, createPos(context), whName);
+
+        AddBackendClause addBackendClause = (AddBackendClause) super.visitAddBackendClause(context);
+        return new AddBackendClauseEPack(addBackendClause, whName);
     }
 
     @Override
     public ParseNode visitDropBackendClause(StarRocksParser.DropBackendClauseContext context) {
-        List<String> backends =
-                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString());
             whName = identifier.getValue();
         }
-        return new DropBackendClause(backends, context.FORCE() != null, createPos(context), whName);
+
+        DropBackendClause dropBackendClause = (DropBackendClause) super.visitDropBackendClause(context);
+        return new DropBackendClauseEPack(dropBackendClause, whName);
     }
 
     @Override
     public ParseNode visitAddComputeNodeClause(StarRocksParser.AddComputeNodeClauseContext context) {
-        List<String> hostPorts =
-                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString());
             whName = identifier.getValue();
         }
-        return new AddComputeNodeClause(hostPorts, whName);
+
+        AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) super.visitAddComputeNodeClause(context);
+        return new AddComputeNodeClauseEPack(addComputeNodeClause, whName);
     }
 
     @Override
     public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
-        List<String> hostPorts =
-                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         String whName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         if (context.warehouseName != null) {
             Identifier identifier = (Identifier) visit(context.identifierOrString());
             whName = identifier.getValue();
         }
-        return new DropComputeNodeClause(hostPorts, createPos(context), whName);
+
+        DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) super.visitDropComputeNodeClause(context);
+        return new DropComputeNodeClauseEPack(dropComputeNodeClause, whName);
     }
 
     @Override

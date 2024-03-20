@@ -44,6 +44,10 @@ public abstract class Warehouse implements Writable {
         return name;
     }
 
+    public String getComment() {
+        return comment;
+    }
+
     public abstract Cluster getAnyAvailableCluster();
 
     @Override

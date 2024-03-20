@@ -85,6 +85,22 @@ public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAddBackendClause(AddBackendClauseEPack clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAddComputeNodeClause(AddComputeNodeClauseEPack clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropBackendClause(DropBackendClauseEPack clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropComputeNodeClause(DropComputeNodeClauseEPack clause, C context) {
+        return visitNode(clause, context);
+    }
+
     // ---------------------------------------- Authz Statement ----------------------------------------------------
 
     default R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {

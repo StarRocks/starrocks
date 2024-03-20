@@ -174,10 +174,9 @@ public class SystemInfoServiceEpack extends SystemInfoService {
         LOG.info("finished to drop {}", dropComputeNode);
     }
 
-    public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
+    public void dropBackends(DropBackendClause dropBackendClause, String warehouseName) throws DdlException {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
         boolean needCheckUnforce = !dropBackendClause.isForce();
-        String warehouseName = dropBackendClause.getWarehouseName();
 
         // check if the warehouse exist
         if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName) == null) {
