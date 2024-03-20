@@ -195,7 +195,7 @@ Release date: October 20, 2022
 
 - Supports granting a specific role or IMPERSONATE permission to a user via GRANT and revoking them via REVOKE, and supports executing an SQL statement with IMPERSONATE permission via  EXECUTE AS. For more information, see [GRANT](../sql-reference/sql-statements/account-management/GRANT.md), [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md), and [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE_AS.md).
 
-- Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/enable_fqdn.md).
+- Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/management/enable_fqdn.md).
 
 - flink-connector-starrocks supports Primary Key table partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
