@@ -21,15 +21,12 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.server.GlobalStateMgr;
@@ -76,8 +73,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 continue;
             }
 
-            Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.READ);
+            database.readLock();
             try {
                 for (Table table : database.getTables()) {
                     if (!table.isOlapTableOrMaterializedView()) {
@@ -88,90 +84,87 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
                     for (Partition partition : olapTable.getAllPartitions()) {
                         short replicaNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
-
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            long recoverVersion = -1L;
-                            // commonVersion is used to record all replica versions on this partition.
-                            // key is the version, value is a flag means whether this version is existing on all tablets.
-                            Map<Long, Boolean> commonVersion = new HashMap<>();
-                            StringBuilder info = new StringBuilder();
-                            boolean isFirstTablet = true;
-                            boolean foundCommonVersion = true;
-                            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
-                                    MaterializedIndex.IndexExtState.VISIBLE)) {
-                                for (Tablet tablet : idx.getTablets()) {
-                                    LocalTablet localTablet = (LocalTablet) tablet;
-                                    long quorumVersion = localTablet.getQuorumVersion(replicaNum / 2 + 1);
-                                    if (quorumVersion == -1L) {
-                                        foundCommonVersion = false;
-                                        info.append(String.format("cannot find quorum version for tablet: %d; ",
-                                                tablet.getId()));
-                                        LOG.warn("cannot find quorum version for tablet: {}, " +
-                                                "ignore partition: {}-{} table: {}-{} db: {}-{}",
-                                                tablet.getId(), physicalPartition.getId(), partition.getName(),
-                                                table.getId(), table.getName(), database.getId(), database.getFullName());
-                                    }
-                                    if (recoverVersion == -1L) {
-                                        recoverVersion = quorumVersion;
-                                    } else if (recoverVersion != quorumVersion) {
-                                        foundCommonVersion = false;
-                                        info.append(String.format("found different quorum versions: %d %d; ",
-                                                recoverVersion, quorumVersion));
-                                        LOG.warn("found different quorum versions: {} {}, " +
-                                                        "ignore partition: {}-{} table: {}-{} db: {}-{}",
-                                                recoverVersion, quorumVersion, physicalPartition.getId(), partition.getName(),
-                                                table.getId(), table.getName(), database.getId(), database.getFullName());
-                                    }
-
-                                    Set<Long> replicaVersions = localTablet.getAllReplicaVersions();
-                                    if (isFirstTablet) {
-                                        for (Long version : replicaVersions) {
-                                            commonVersion.put(version, true);
-                                        }
-                                        isFirstTablet = false;
-                                    } else {
-                                        for (Map.Entry<Long, Boolean> entry : commonVersion.entrySet()) {
-                                            if (!replicaVersions.contains(entry.getKey())) {
-                                                entry.setValue(false);
-                                            }
-                                        }
-                                    }
+                        long recoverVersion = -1L;
+                        // commonVersion is used to record all replica versions on this partition.
+                        // key is the version, value is a flag means whether this version is existing on all tablets.
+                        Map<Long, Boolean> commonVersion = new HashMap<>();
+                        StringBuilder info = new StringBuilder();
+                        boolean isFirstTablet = true;
+                        boolean foundCommonVersion = true;
+                        for (MaterializedIndex idx : partition.getMaterializedIndices(
+                                MaterializedIndex.IndexExtState.VISIBLE)) {
+                            for (Tablet tablet : idx.getTablets()) {
+                                LocalTablet localTablet = (LocalTablet) tablet;
+                                long quorumVersion = localTablet.getQuorumVersion(replicaNum / 2 + 1);
+                                if (quorumVersion == -1L) {
+                                    foundCommonVersion = false;
+                                    info.append(String.format("cannot find quorum version for tablet: %d; ",
+                                            tablet.getId()));
+                                    LOG.warn("cannot find quorum version for tablet: {}, " +
+                                            "ignore partition: {}-{} table: {}-{} db: {}-{}",
+                                            tablet.getId(), partition.getId(), partition.getName(),
+                                            table.getId(), table.getName(), database.getId(), database.getFullName());
                                 }
-                            }
-                            if (foundCommonVersion && recoverVersion != physicalPartition.getVisibleVersion()) {
-                                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                                        .hasCommittedTxnOnPartition(dbId, table.getId(), physicalPartition.getId())) {
-                                    LOG.warn("There are committed txns waiting to publish, " +
+                                if (recoverVersion == -1L) {
+                                    recoverVersion = quorumVersion;
+                                } else if (recoverVersion != quorumVersion) {
+                                    foundCommonVersion = false;
+                                    info.append(String.format("found different quorum versions: %d %d; ",
+                                            recoverVersion, quorumVersion));
+                                    LOG.warn("found different quorum versions: {} {}, " +
                                                     "ignore partition: {}-{} table: {}-{} db: {}-{}",
-                                            physicalPartition.getId(), partition.getName(), table.getId(),
-                                            table.getName(), database.getId(), database.getFullName());
-                                    UnRecoveredPartition recoveryInfo = new UnRecoveredPartition(database.getFullName(),
-                                            table.getName(), partition.getName(), physicalPartition.getId(),
-                                            "There are committed txns waiting to publish, ignore this partition");
-                                    addToUnRecoveredPartitions(recoveryInfo);
-                                } else {
-                                    partitionsToRecover.add(new PartitionVersion(dbId, table.getId(),
-                                            physicalPartition.getId(), recoverVersion));
+                                            recoverVersion, quorumVersion, partition.getId(), partition.getName(),
+                                            table.getId(), table.getName(), database.getId(), database.getFullName());
                                 }
-                            } else if (!foundCommonVersion) {
-                                long maxCommonVersion = -1L;
-                                for (Map.Entry<Long, Boolean> entry : commonVersion.entrySet()) {
-                                    if (entry.getValue() && entry.getKey() > maxCommonVersion) {
-                                        maxCommonVersion = entry.getKey();
+
+                                Set<Long> replicaVersions = localTablet.getAllReplicaVersions();
+                                if (isFirstTablet) {
+                                    for (Long version : replicaVersions) {
+                                        commonVersion.put(version, true);
+                                    }
+                                    isFirstTablet = false;
+                                } else {
+                                    for (Map.Entry<Long, Boolean> entry : commonVersion.entrySet()) {
+                                        if (!replicaVersions.contains(entry.getKey())) {
+                                            entry.setValue(false);
+                                        }
                                     }
                                 }
-                                UnRecoveredPartition recoveryInfo = new UnRecoveredPartition(database.getFullName(),
-                                        table.getName(), partition.getName(), physicalPartition.getId(), info.toString());
-                                if (maxCommonVersion != -1L) {
-                                    recoveryInfo.setMaxCommonVersion(maxCommonVersion);
-                                }
-                                addToUnRecoveredPartitions(recoveryInfo);
                             }
+                        }
+                        if (foundCommonVersion && recoverVersion != partition.getVisibleVersion()) {
+                            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                    .hasCommittedTxnOnPartition(dbId, table.getId(), partition.getId())) {
+                                LOG.warn("There are committed txns waiting to publish, " +
+                                                "ignore partition: {}-{} table: {}-{} db: {}-{}",
+                                        partition.getId(), partition.getName(), table.getId(),
+                                        table.getName(), database.getId(), database.getFullName());
+                                UnRecoveredPartition recoveryInfo = new UnRecoveredPartition(database.getFullName(),
+                                        table.getName(), partition.getName(), partition.getId(),
+                                        "There are committed txns waiting to publish, ignore this partition");
+                                addToUnRecoveredPartitions(recoveryInfo);
+                            } else {
+                                partitionsToRecover.add(new PartitionVersion(dbId, table.getId(),
+                                        partition.getId(), recoverVersion));
+                            }
+                        } else if (!foundCommonVersion) {
+                            long maxCommonVersion = -1L;
+                            for (Map.Entry<Long, Boolean> entry : commonVersion.entrySet()) {
+                                if (entry.getValue() && entry.getKey() > maxCommonVersion) {
+                                    maxCommonVersion = entry.getKey();
+                                }
+                            }
+                            UnRecoveredPartition recoveryInfo = new UnRecoveredPartition(database.getFullName(),
+                                    table.getName(), partition.getName(), partition.getId(), info.toString());
+                            if (maxCommonVersion != -1L) {
+                                recoveryInfo.setMaxCommonVersion(maxCommonVersion);
+                            }
+                            addToUnRecoveredPartitions(recoveryInfo);
                         }
                     }
                 }
             } finally {
-                locker.unLockDatabase(database, LockType.READ);
+                database.readUnlock();
             }
         }
 
@@ -191,8 +184,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
             }
-            Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.WRITE);
+            database.writeLock();
             try {
                 Table table = database.getTable(version.getTableId());
                 if (table == null) {
@@ -203,23 +195,17 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                     LOG.warn("recover partition version failed, table is not OLAP table, versionInfo: {}", version);
                     continue;
                 }
-                PhysicalPartition physicalPartition = table.getPhysicalPartition(version.getPartitionId());
-                if (physicalPartition == null) {
-                    LOG.warn("recover partition version failed, partition is null, versionInfo: {}", version);
-                    continue;
-                }
-
-                Partition partition = table.getPartition(physicalPartition.getParentId());
+                Partition partition = table.getPartition(version.getPartitionId());
                 if (partition == null) {
                     LOG.warn("recover partition version failed, partition is null, versionInfo: {}", version);
                     continue;
                 }
 
-                long originVisibleVersion = physicalPartition.getVisibleVersion();
-                long originNextVersion = physicalPartition.getNextVersion();
-                physicalPartition.setVisibleVersion(version.getVersion(), recoveryInfo.getRecoverTime());
-                physicalPartition.setNextVersion(version.getVersion() + 1);
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                long originVisibleVersion = partition.getVisibleVersion();
+                long originNextVersion = partition.getNextVersion();
+                partition.setVisibleVersion(version.getVersion(), recoveryInfo.getRecoverTime());
+                partition.setNextVersion(version.getVersion() + 1);
+                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         if (!(tablet instanceof LocalTablet)) {
                             continue;
@@ -238,12 +224,12 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 }
                 LOG.info("set partition visible version from {} to {}, " +
                         "set partition next version from {} to {}, versionInfo: {}, db name: {}, table name: {}",
-                        originVisibleVersion, physicalPartition.getVisibleVersion(), originNextVersion,
-                        physicalPartition.getNextVersion(), version, database.getFullName(), table.getName());
+                        originVisibleVersion, partition.getVisibleVersion(), originNextVersion,
+                        partition.getNextVersion(), version, database.getFullName(), table.getName());
                 removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
-                        table.getName(), partition.getName(), physicalPartition.getId(), null));
+                        table.getName(), partition.getName(), partition.getId(), null));
             } finally {
-                locker.unLockDatabase(database, LockType.WRITE);
+                database.writeUnlock();
             }
         }
     }

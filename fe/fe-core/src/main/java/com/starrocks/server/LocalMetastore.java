@@ -105,7 +105,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -4822,47 +4821,39 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void setPartitionVersion(AdminSetPartitionVersionStmt stmt) {
+    public void setPartitionVersion(AdminSetPartitionVersionStmt stmt) throws DdlException {
         Database database = getDb(stmt.getTableName().getDb());
         if (database == null) {
-            ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(database, LockType.WRITE);
+        database.writeLock();
         try {
             Table table = database.getTable(stmt.getTableName().getTbl());
             if (table == null) {
-                ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
             }
             if (!table.isOlapTableOrMaterializedView()) {
-                ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
+                ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
             }
 
-            PhysicalPartition physicalPartition;
+            Partition partition;
             OlapTable olapTable = (OlapTable) table;
             if (stmt.getPartitionId() != -1) {
-                physicalPartition = olapTable.getPhysicalPartition(stmt.getPartitionId());
-                if (physicalPartition == null) {
-                    ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
-                }
+                partition = olapTable.getPartition(stmt.getPartitionId());
             } else {
-                Partition partition = olapTable.getPartition(stmt.getPartitionName());
-                if (partition == null) {
-                    ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
-                }
-                if (partition.getSubPartitions().size() >= 2) {
-                    ErrorReportException.report(ErrorCode.ERR_MULTI_SUB_PARTITION, stmt.getPartitionName());
-                }
-                physicalPartition = partition;
+                partition = olapTable.getPartition(stmt.getPartitionName());
+            }
+            if (partition == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
             }
 
             long visibleVersionTime = System.currentTimeMillis();
-            physicalPartition.setVisibleVersion(stmt.getVersion(), visibleVersionTime);
-            physicalPartition.setNextVersion(stmt.getVersion() + 1);
+            partition.setVisibleVersion(stmt.getVersion(), visibleVersionTime);
+            partition.setNextVersion(stmt.getVersion() + 1);
 
             PartitionVersion partitionVersion = new PartitionVersion(database.getId(), table.getId(),
-                    physicalPartition.getId(), stmt.getVersion());
-            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    partition.getId(), stmt.getVersion());
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     if (!(tablet instanceof LocalTablet)) {
                         continue;
@@ -4884,7 +4875,7 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("Successfully set partition: {} version to {}, table: {}, db: {}",
                     stmt.getPartitionName(), stmt.getVersion(), table.getName(), database.getFullName());
         } finally {
-            locker.unLockDatabase(database, LockType.WRITE);
+            database.writeUnlock();
         }
     }
 
