@@ -839,4 +839,22 @@ public class ReplayFromDumpTest {
                 "  |  1347 <-> [1347: responsible_department_name, VARCHAR, true]\n" +
                 "  |  1371 <-> [1371: induction_duration, INT, true]"));
     }
+
+    @Test
+    public void testNormalizeNonTrivialProject() throws Exception {
+        SessionVariable sv = new SessionVariable();
+        sv.setPipelineDop(1);
+        sv.setEnableQueryCache(true);
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            sv.setEnableLowCardinalityOptimize(true);
+            Pair<QueryDumpInfo, String> replayPair =
+                    getPlanFragment(getDumpInfoFromFile("query_dump/normalize_non_trivial_project"), sv,
+                            TExplainLevel.NORMAL);
+            Assert.assertTrue(replayPair.second,
+                    replayPair.second != null && replayPair.second.contains("TABLE: tbl_mock_017"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
 }
