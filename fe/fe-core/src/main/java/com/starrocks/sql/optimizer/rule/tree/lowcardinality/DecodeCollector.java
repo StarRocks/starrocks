@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -357,6 +358,45 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
         }
 
+        return info;
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalTableFunction(OptExpression optExpression, DecodeInfo context) {
+        if (context.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+        DecodeInfo info = context.createOutputInfo();
+        PhysicalTableFunctionOperator tableFunc = optExpression.getOp().cast();
+
+        if (!FunctionSet.UNNEST.equalsIgnoreCase(tableFunc.getFn().getFunctionName().getFunction())) {
+            info.decodeStringColumns.union(info.inputStringColumns);
+            info.decodeStringColumns.intersect(tableFunc.getFnParamColumnRefs());
+            info.inputStringColumns.except(info.decodeStringColumns);
+        }
+
+        info.outputStringColumns.clear();
+        for (ColumnRefOperator outerColRef : tableFunc.getOuterColRefs()) {
+            if (info.inputStringColumns.contains(outerColRef)) {
+                info.outputStringColumns.union(outerColRef);
+            }
+        }
+
+        if (!FunctionSet.UNNEST.equalsIgnoreCase(tableFunc.getFn().getFunctionName().getFunction())) {
+            return info;
+        }
+
+        Preconditions.checkState(tableFunc.getFnParamColumnRefs().size() == tableFunc.getFnResultColRefs().size());
+        for (int i = 0; i < tableFunc.getFnParamColumnRefs().size(); i++) {
+            ColumnRefOperator unnestOutput = tableFunc.getFnResultColRefs().get(i);
+            ColumnRefOperator unnestInput = tableFunc.getFnParamColumnRefs().get(i);
+
+            if (info.inputStringColumns.contains(unnestInput)) {
+                stringRefToDefineExprMap.put(unnestOutput.getId(), unnestInput);
+                expressionStringRefCounter.put(unnestOutput.getId(), 1);
+                info.outputStringColumns.union(unnestOutput);
+            }
+        }
         return info;
     }
 
