@@ -5054,8 +5054,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (database == null) {
             ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(database, LockType.WRITE);
+        database.writeLock();
         try {
             Table table = database.getTable(stmt.getTableName().getTbl());
             if (table == null) {
@@ -5111,7 +5110,7 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("Successfully set partition: {} version to {}, table: {}, db: {}",
                     stmt.getPartitionName(), stmt.getVersion(), table.getName(), database.getFullName());
         } finally {
-            locker.unLockDatabase(database, LockType.WRITE);
+            database.writeUnlock();
         }
     }
 

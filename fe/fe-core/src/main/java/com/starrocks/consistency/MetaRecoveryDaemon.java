@@ -28,8 +28,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.server.GlobalStateMgr;
@@ -76,8 +74,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 continue;
             }
 
-            Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.READ);
+            database.readLock();
             try {
                 for (Table table : database.getTables()) {
                     if (!table.isOlapTableOrMaterializedView()) {
@@ -171,7 +168,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                     }
                 }
             } finally {
-                locker.unLockDatabase(database, LockType.READ);
+                database.readUnlock();
             }
         }
 
@@ -191,8 +188,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
             }
-            Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.WRITE);
+            database.writeLock();
             try {
                 Table table = database.getTable(version.getTableId());
                 if (table == null) {
@@ -243,7 +239,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
                         table.getName(), partition.getName(), physicalPartition.getId(), null));
             } finally {
-                locker.unLockDatabase(database, LockType.WRITE);
+                database.writeUnlock();
             }
         }
     }
