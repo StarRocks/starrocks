@@ -289,7 +289,7 @@ public:
 
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
-    double get_pk_index_write_amp_score();
+    double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
     Status pk_index_major_compaction();
 
@@ -464,6 +464,7 @@ private:
 
     TabletUpdates(const TabletUpdates&) = delete;
     const TabletUpdates& operator=(const TabletUpdates&) = delete;
+    std::atomic<double> _pk_index_write_amp_score{0.0};
 };
 
 } // namespace starrocks

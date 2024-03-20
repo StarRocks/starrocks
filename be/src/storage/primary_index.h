@@ -99,8 +99,6 @@ public:
 
     Status on_commited();
 
-    double get_write_amp_score();
-
     Status major_compaction(Tablet* tablet);
 
     Status abort();
