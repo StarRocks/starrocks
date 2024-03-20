@@ -119,7 +119,11 @@ public class AgentTaskTest {
 
         // clone
         cloneTask =
+<<<<<<< HEAD
                 new CloneTask(backendId1, dbId, tableId, partitionId, indexId1, tabletId1, schemaHash1,
+=======
+                new CloneTask(backendId1, "127.0.0.1", dbId, tableId, partitionId, indexId1, tabletId1, 0,
+>>>>>>> eeb4da95b4 ([Enhancement] Print dest backend host for clone task (#42774))
                         Arrays.asList(new TBackend("host1", 8290, 8390)), TStorageMedium.HDD, -1, 3600);
 
         // modify tablet meta
