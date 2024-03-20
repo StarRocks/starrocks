@@ -779,6 +779,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
     scanner_params.split_context = _split_context;
     scanner_params.enable_split_tasks = _enable_split_tasks;
+    if (state->query_options().__isset.connector_max_split_size) {
+        scanner_params.connector_max_split_size = state->query_options().connector_max_split_size;
+    }
 
     if (!_equality_delete_slots.empty()) {
         MORParams& mor_params = scanner_params.mor_params;
