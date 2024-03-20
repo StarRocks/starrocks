@@ -1594,3 +1594,4 @@ drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 force;
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Unknown table 't2'.")
+-- !result
