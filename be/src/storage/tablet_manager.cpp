@@ -1775,8 +1775,7 @@ void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabl
     if (iter != _shutdown_tablets.end() && (iter->second).tablet != nullptr) {
         // clear meta for the previous shutdown tablet
         if (auto st = _remove_tablet_meta((iter->second).tablet); !st.ok()) {
-            LOG(FATAL) << "Fail to remove previous table meta, id: " << tablet_id
-                       << " status: " << st;
+            LOG(FATAL) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
         }
         _shutdown_tablets.erase(iter);
     }
