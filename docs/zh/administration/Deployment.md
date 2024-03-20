@@ -56,7 +56,7 @@ ALTER SYSTEM DROP FOLLOWER "host:port";
 ALTER SYSTEM drop OBSERVER "host:port";
 ```
 
-具体操作参考[扩容缩容](../administration/Scale_up_down.md)。
+具体操作参考[扩容缩容](../administration/management/Scale_up_down.md)。
 
 ## 连接 FE 节点
 
