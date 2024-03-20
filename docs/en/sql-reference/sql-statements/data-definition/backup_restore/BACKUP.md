@@ -6,9 +6,9 @@ displayed_sidebar: "English"
 
 ## Description
 
-Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables. For more information, see [data backup and restoration](../../../administration/management/Backup_and_restore.md).
+Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables.
 
-BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../data-manipulation/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../data-definition/CANCEL_BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](../data-manipulation/SHOW_SNAPSHOT.md).
+BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../../data-manipulation/backup_restore/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../../data-definition/backup_restore/CANCEL_BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](../../data-manipulation/SHOW_SNAPSHOT.md).
 
 > **CAUTION**
 >
@@ -32,7 +32,7 @@ TO <repository_name>
 | --------------- | ------------------------------------------------------------ |
 | db_name         | Name of the database that stores the data to be backed up.   |
 | snapshot_name   | Specify a name for the data snapshot. Globally unique.       |
-| repository_name | Repository name. You can create a repository using [CREATE REPOSITORY](../data-definition/CREATE_REPOSITORY.md). |
+| repository_name | Repository name. You can create a repository using [CREATE REPOSITORY](../../data-definition/backup_restore/CREATE_REPOSITORY.md). |
 | ON              | Name of the tables to be backed up. The whole database is backed up if this parameter is not specified. |
 | PARTITION       | Name of the partitions to be backed up. The whole table is backed up if this parameter is not specified. |
 | PROPERTIES      | Properties of the data snapshot. Valid keys:`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.`timeout`: Task timeout. Unit: second. Default: `86400`. |

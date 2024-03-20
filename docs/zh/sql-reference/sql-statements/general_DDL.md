@@ -25,7 +25,7 @@ displayed_sidebar: "Chinese"
 - [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
 - [CREATE IDEX](./data-definition/CREATE_INDEX.md)
 - [CREATE MATERIALIZED VIEW](./data-definition/CREATE_MATERIALIZED_VIEW.md)
-- [CREATE REPOSITORY](./data-definition/CREATE_REPOSITORY.md)
+- [CREATE REPOSITORY](./data-definition/backup_restore/CREATE_REPOSITORY.md)
 - [CREATE RESOURCE](./data-definition/CREATE_RESOURCE.md)
 - [CREATE TABLE](./data-definition/CREATE_TABLE.md)
 - [CREATE TABLE AS SELECT](./data-definition/CREATE_TABLE_AS_SELECT.md)

@@ -755,16 +755,17 @@
             {
               "type": "category",
               "label": "Backup and restore",
+              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-definition/backup_restore/backup_restore"},
               "items": [
-                "sql-reference/sql-statements/data-definition/BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_RESTORE",
-                "sql-reference/sql-statements/data-definition/CREATE_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/DROP_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/RECOVER",
-                "sql-reference/sql-statements/data-definition/RESTORE",
-                "sql-reference/sql-statements/data-manipulation/SHOW_BACKUP",
-                "sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES"
+                "sql-reference/sql-statements/data-definition/backup_restore/BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_RESTORE",
+                "sql-reference/sql-statements/data-definition/backup_restore/CREATE_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/DROP_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/RECOVER",
+                "sql-reference/sql-statements/data-definition/backup_restore/RESTORE",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES"
               ]
             },
             {
@@ -1792,16 +1793,17 @@
             {
               "type": "category",
               "label": "备份与恢复",
+              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-definition/backup_restore/backup_restore"},
               "items": [
-                "sql-reference/sql-statements/data-definition/BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_RESTORE",
-                "sql-reference/sql-statements/data-definition/CREATE_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/DROP_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/RECOVER",
-                "sql-reference/sql-statements/data-definition/RESTORE",
-                "sql-reference/sql-statements/data-manipulation/SHOW_BACKUP",
-                "sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES"
+                "sql-reference/sql-statements/data-definition/backup_restore/BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_RESTORE",
+                "sql-reference/sql-statements/data-definition/backup_restore/CREATE_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/DROP_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/RECOVER",
+                "sql-reference/sql-statements/data-definition/backup_restore/RESTORE",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES"
               ]
             },
             {

@@ -28,7 +28,7 @@ StarRocks 支持以数据库、表、或分区为粒度全量备份数据。
 
 ### 创建仓库
 
-仓库用于在远端存储系统中存储备份文件。备份数据前，您需要基于远端存储系统路径在 StarRocks 中创建仓库。您可以在同一集群中创建多个仓库。详细使用方法参阅 [CREATE REPOSITORY](../../sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md)。
+仓库用于在远端存储系统中存储备份文件。备份数据前，您需要基于远端存储系统路径在 StarRocks 中创建仓库。您可以在同一集群中创建多个仓库。详细使用方法参阅 [CREATE REPOSITORY](../../sql-reference/sql-statements/data-definition/backup_restore/CREATE_REPOSITORY.md)。
 
 - 在 HDFS 集群中创建仓库
 
@@ -160,7 +160,7 @@ StarRocks 支持以下粒度的备份还原操作：
 - 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
 :::
 
-数据备份为异步操作。您可以通过 [SHOW BACKUP](../../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md) 语句取消备份作业。
+数据备份为异步操作。您可以通过 [SHOW BACKUP](../../sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md) 语句取消备份作业。
 
 ## 恢复或迁移数据
 

@@ -54,7 +54,7 @@ displayed_sidebar: "Chinese"
 - [SHOW ANALYZE STATUS](./data-definition/SHOW_ANALYZE_STATUS.md)
 - [SHOW ALTER TABLE](./data-manipulation/SHOW_ALTER.md)
 - [SHOW ALTER MATERIALIZED VIEW](./data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md)
-- [SHOW BACKUP](./data-manipulation/SHOW_BACKUP.md)
+- [SHOW BACKUP](./data-manipulation/backup_restore/SHOW_BACKUP.md)
 - [SHOW CATALOGS](./data-manipulation/SHOW_CATALOGS.md)
 - [SHOW CREATE CATALOG](./data-manipulation/SHOW_CREATE_CATALOG.md)
 - [SHOW CREATE DATABASE](./data-manipulation/SHOW_CREATE_DATABASE.md)

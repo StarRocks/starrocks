@@ -165,8 +165,8 @@ The partitioning method divides a table into multiple partitions. Partitioning p
 
 ##### How to choose partitioning columns and granularity
 
-- Selecting a proper partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly adopted to resolve certain issues caused by the deletion of expired data and facilitate management of tiered storage of hot and cold data. In this case, you can use expression partitioning or range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on enum values, you can use expression partitioning or list partitioning and specify a column including these values as the partitioning column.
-- When choosing the partitioning granularity, you need to consider factors data volume, query patterns, and data management granularity.
+- Selecting a proper partitioning column can effectively reduce the amount of data scanned during queries. In most business systems, partitioning based on time is commonly adopted to resolve certain issues caused by the deletion of expired data and facilitate the management of tiered storage of hot and cold data. In this case, you can use expression partitioning or range partitioning and specify a time column as the partitioning column. Additionally, if the data is frequently queried and managed based on ENUM values, you can use expression partitioning or list partitioning and specify a column including these values as the partitioning column.
+- When choosing the partitioning granularity, you need to consider data volume, query patterns, and data management granularity.
   - Example 1: If the monthly data volume in a table is small, partitioning by month can reduce the amount of metadata compared to partitioning by day, thereby reducing the resource consumption of metadata management and scheduling.
   - Example 2: If the monthly data volume in a table is large and queries mostly request data of certain days, partitioning by day can effectively reduce the amount of data scanned during queries.
   - Example 3: If the data needs to expire on a daily basis, partitioning by day is recommended.
@@ -181,7 +181,7 @@ The supported bucketing methods are [random bucketing](#random-bucketing-since-v
 
 - Hash Bucketing: When creating a table or adding partitions, you need to specify a bucketing key. Data within the same partition is divided into buckets based on the values of the bucketing key, and rows with the same value in the bucketing key are distributed to the corresponding and unique bucket.
 
-The number of buckets: By default, StarRocks automatically sets the number of buckets (from v2.5.7). And you can also manually set the number of buckets. For more information, please refer to [determining the number of buckets](#set-the-number-of-buckets).
+The number of buckets: By default, StarRocks automatically sets the number of buckets (from v2.5.7). You can also manually set the number of buckets. For more information, please refer to [determining the number of buckets](#set-the-number-of-buckets).
 
 ## Create and manage partitions
 
@@ -386,7 +386,7 @@ The following statement deletes partition `p1` from table `site_access`.
 
 > **NOTE**
 >
-> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command to restore the partition and its data.
+> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) command to restore the partition and its data.
 
 ```SQL
 ALTER TABLE site_access
