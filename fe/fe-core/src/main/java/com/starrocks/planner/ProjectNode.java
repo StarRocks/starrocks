@@ -192,7 +192,9 @@ public class ProjectNode extends PlanNode {
     // digest from Q1, the ProjectNode is trivial, it just extract v1 from outputs of the
     // OlapScanNode, so we can ignore the trivial project when we compute digest of the fragment.
     public boolean isTrivial() {
-        return slotMap.values().stream().allMatch(e -> e instanceof SlotRef) && commonSlotMap.isEmpty();
+        return slotMap.entrySet().stream().allMatch(
+                e -> e.getValue() instanceof SlotRef && ((SlotRef) e.getValue()).getSlotId().equals(e.getKey())) &&
+                commonSlotMap.isEmpty();
     }
 
     @Override
