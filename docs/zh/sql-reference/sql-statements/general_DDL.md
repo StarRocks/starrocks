@@ -47,7 +47,7 @@ displayed_sidebar: "Chinese"
 - [DROP DATABASE](./data-definition/DROP_DATABASE.md)
 - [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
 - [DROP MATERIALIZED VIEW](./data-definition/DROP_MATERIALIZED_VIEW.md)
-- [DROP REPOSITORY](./data-definition/DROP_REPOSITORY.md)
+- [DROP REPOSITORY](./data-definition/backup_restore/DROP_REPOSITORY.md)
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [DROP STATS](./data-definition/DROP_STATS.md)
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
@@ -64,9 +64,9 @@ displayed_sidebar: "Chinese"
 
 ## BACKUP and RESTORE
 
-- [BACKUP](./data-definition/BACKUP.md)
-- [RECOVER](./data-definition/RECOVER.md)
-- [RESTORE](./data-definition/RESTORE.md)
+- [BACKUP](./data-definition/backup_restore/BACKUP.md)
+- [RECOVER](./data-definition/backup_restore/RECOVER.md)
+- [RESTORE](./data-definition/backup_restore/RESTORE.md)
 
 ## SET
 
@@ -75,9 +75,9 @@ displayed_sidebar: "Chinese"
 ## CANCEL
 
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
-- [CANCEL BACKUP](./data-definition/CANCEL_BACKUP.md)
+- [CANCEL BACKUP](./data-definition/backup_restore/CANCEL_BACKUP.md)
 - [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
-- [CANCEL RESTORE](./data-definition/CANCEL_RESTORE.md)
+- [CANCEL RESTORE](./data-definition/backup_restore/CANCEL_RESTORE.md)
 
 ## KILL
 

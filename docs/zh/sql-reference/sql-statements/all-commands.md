@@ -269,16 +269,16 @@ displayed_sidebar: "Chinese"
 
 ## 备份与恢复
 
-- [BACKUP](./data-definition/BACKUP.md)
-- [CANCEL BACKUP](./data-definition/CANCEL_BACKUP.md)
-- [CANCEL RESTORE](./data-definition/CANCEL_RESTORE.md)
+- [BACKUP](./data-definition/backup_restore/BACKUP.md)
+- [CANCEL BACKUP](./data-definition/backup_restore/CANCEL_BACKUP.md)
+- [CANCEL RESTORE](./data-definition/backup_restore/CANCEL_RESTORE.md)
 - [CREATE REPOSITORY](./data-definition/backup_restore/CREATE_REPOSITORY.md)
-- [DROP REPOSITORY](./data-definition/DROP_REPOSITORY.md)
-- [RECOVER](./data-definition/RECOVER.md)
-- [RESTORE](./data-definition/RESTORE.md)
+- [DROP REPOSITORY](./data-definition/backup_restore/DROP_REPOSITORY.md)
+- [RECOVER](./data-definition/backup_restore/RECOVER.md)
+- [RESTORE](./data-definition/backup_restore/RESTORE.md)
 - [SHOW BACKUP](./data-manipulation/backup_restore/SHOW_BACKUP.md)
-- [SHOW REPOSITORIES](./data-manipulation/SHOW_REPOSITORIES.md)
-- [SHOW RESTORE](./data-manipulation/SHOW_RESTORE.md)
+- [SHOW REPOSITORIES](./data-manipulation/backup_restore/SHOW_REPOSITORIES.md)
+- [SHOW RESTORE](./data-manipulation/backup_restore/SHOW_RESTORE.md)
 - [SHOW SNAPSHOT](./data-manipulation/SHOW_SNAPSHOT.md)
 
 ## 工具辅助语句
