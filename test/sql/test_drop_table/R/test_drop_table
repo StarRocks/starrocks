@@ -32,7 +32,7 @@ DROP TABLE t0 FORCE;
 -- !result
 RECOVER TABLE t0;
 -- result:
-E: (5502, "Unknown table 't0'")
+E: (1051, "Unknown table 't0'")
 -- !result
 CREATE TABLE t0(c0 INT, c1 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num'='1');
 -- result:

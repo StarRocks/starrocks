@@ -410,15 +410,11 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-<<<<<<< HEAD
-    public R visitSyncStatement(SyncStmt statement, C context) {
-=======
-    default R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
+    public R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    default R visitSyncStatement(SyncStmt statement, C context) {
->>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
+    public R visitSyncStatement(SyncStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

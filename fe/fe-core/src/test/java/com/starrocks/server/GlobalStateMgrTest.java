@@ -189,53 +189,7 @@ public class GlobalStateMgrTest {
     @Test(expected = DdlException.class)
     public void testAddRepeatedFe() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-<<<<<<< HEAD
         globalStateMgr.addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
-=======
-        globalStateMgr.getNodeMgr().addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
-    }
-
-    @Test
-    public void testCanSkipBadReplayedJournal() {
-        boolean originVal = Config.metadata_journal_ignore_replay_failure;
-        Config.metadata_journal_ignore_replay_failure = false;
-
-        // when recover_on_load_journal_failed is false, the failure of every operation type can not be skipped.
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
-
-        Config.metadata_journal_ignore_replay_failure = true;
-        // when recover_on_load_journal_failed is false, the failure of recoverable operation type can be skipped.
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
-
-        Config.metadata_journal_ignore_replay_failure = originVal;
-
-        // when metadata_enable_recovery_mode is true, all types of failure can be skipped.
-        originVal = Config.metadata_enable_recovery_mode;
-        Config.metadata_enable_recovery_mode = true;
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
-        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
-                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
-        Config.metadata_enable_recovery_mode = originVal;
->>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
     }
 
     private static class MyGlobalStateMgr extends GlobalStateMgr {
