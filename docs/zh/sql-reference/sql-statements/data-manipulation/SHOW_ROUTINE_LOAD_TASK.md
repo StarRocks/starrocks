@@ -50,7 +50,7 @@ SHOW ROUTINE LOAD TASK
 | CreateTime           | 该导入任务创建时间。                                         |
 | LastScheduledTime    | 上一次调度该导入任务的时间。                                 |
 | ExecuteStartTime     | 该导入任务执行时间。                                         |
-| Timeout              | 导入任务超时时间，由 FE 参数 [`routine_load_task_timeout_second`](../../../administration/FE_configuration.md#routine_load_task_timeout_second) 和 Routine Load 导入作业的 [job_properties](./CREATE_ROUTINE_LOAD.md#job_properties) 中的参数 `task_timeout_second` 控制。 |
+| Timeout              | 导入任务超时时间，由 FE 参数 [`routine_load_task_timeout_second`](../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) 和 Routine Load 导入作业的 [job_properties](./CREATE_ROUTINE_LOAD.md#job_properties) 中的参数 `task_timeout_second` 控制。 |
 | BeId                 | 执行该导入任务的 BE 节点 ID。                                |
 | DataSourceProperties | 该导入任务消费分区数据的进度。                               |
 | Message              | 导入任务的返回信息，包含任务错误信息。                       |

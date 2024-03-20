@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-从用户或角色中撤销指定的权限或角色。有关 StarRocks 支持的权限项，参见 [权限项](../../../administration/privilege_item.md)。
+从用户或角色中撤销指定的权限或角色。有关 StarRocks 支持的权限项，参见 [权限项](../../../administration/user_privs/privilege_item.md)。
 
 :::tip
 
