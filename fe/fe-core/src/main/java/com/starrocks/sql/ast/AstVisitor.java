@@ -396,6 +396,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Cluster Management Statement -------------------------------------------
 
     public R visitAlterSystemStatement(AlterSystemStmt statement, C context) {

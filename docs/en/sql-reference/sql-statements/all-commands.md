@@ -98,6 +98,7 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [ADMIN CHECK TABLET](./Administration/ADMIN_CHECK_TABLET.md)
 - [ADMIN REPAIR TABLE](./Administration/ADMIN_REPAIR.md)
 - [ADMIN SET REPLICA STATUS](./Administration/ADMIN_SET_REPLICA_STATUS.md)
+- [ADMIN SET PARTITION VERSION](./Administration/ADMIN_SET_PARTITION_VERSION.md)
 - [ADMIN SHOW REPLICA DISTRIBUTION](./Administration/ADMIN_SHOW_REPLICA_DISTRIBUTION.md)
 - [ADMIN SHOW REPLICA STATUS](./Administration/ADMIN_SHOW_REPLICA_STATUS.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)

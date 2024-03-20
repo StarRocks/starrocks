@@ -106,6 +106,7 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -1052,6 +1053,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_REPLICATION_JOB:
                 data = ReplicationJobLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_RECOVER_PARTITION_VERSION:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
                 isRead = true;
                 break;
             default: {

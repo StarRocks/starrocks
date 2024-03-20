@@ -609,11 +609,13 @@ public class OperationType {
     @Deprecated
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
 
-    // new operator for add partition 10241 ~ 10260
+    // new operator for partition 10241 ~ 10260
     public static final short OP_ADD_PARTITION_V2 = 10241;
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
     @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PARTITION_V2 = 10243;
+    @IgnorableOnReplayFailed
+    public static final short OP_RECOVER_PARTITION_VERSION = 10245;
 
     // new privilege, all ends with V2
 
