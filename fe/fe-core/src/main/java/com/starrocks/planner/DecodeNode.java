@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
@@ -53,7 +52,7 @@ public class DecodeNode extends PlanNode {
                       Map<Integer, Integer> dictIdToStringIds,
                       Map<SlotId, Expr> stringFunctions,
                       Map<SlotRef, SlotRef> slotRefMap
-                      ) {
+    ) {
         super(id, tupleDescriptor.getId().asList(), "Decode");
         addChild(child);
         this.dictIdToStringIds = dictIdToStringIds;
@@ -113,9 +112,11 @@ public class DecodeNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context,
                                           Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -124,7 +125,8 @@ public class DecodeNode extends PlanNode {
             return false;
         }
 
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr, candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+                candidatesOfSlotExpr(probeExpr, couldBound(description, descTbl)),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
     }
 

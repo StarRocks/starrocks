@@ -13,10 +13,9 @@
 // limitations under the License.
 
 
-package com.starrocks.connector;
+package com.starrocks.connector.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -25,8 +24,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.statistics.ColumnBasicStatsCacheLoader;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.statistic.StatisticExecutor;
@@ -43,6 +40,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+
+import static com.starrocks.connector.statistics.StatisticsUtils.getTableByUUID;
 
 public class ConnectorColumnStatsCacheLoader implements
         AsyncCacheLoader<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> {
@@ -140,17 +139,5 @@ public class ConnectorColumnStatsCacheLoader implements
         ColumnStatistic columnStatistic = ColumnBasicStatsCacheLoader.buildColumnStatistics(statisticData, splits[0],
                 splits[1], splits[3], column);
         return new ConnectorTableColumnStats(columnStatistic, statisticData.rowCount);
-    }
-
-    public static Table getTableByUUID(String tableUUID) {
-        String[] splits = tableUUID.split("\\.");
-
-        Preconditions.checkState(splits.length == 4);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(splits[0], splits[1], splits[2]);
-        if (table.getUUID().equals(tableUUID)) {
-            return table;
-        } else {
-            throw new SemanticException("Table %s is not found", tableUUID);
-        }
     }
 }

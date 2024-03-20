@@ -468,9 +468,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
     bool enable_split_tasks =
             _scanner_params.enable_split_tasks && stripes.size() >= 2 && (_scanner_params.split_context == nullptr);
-    VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename() << ", size = " << stripes.size()
-                  << ", scanner_params.enable_split_tasks = " << _scanner_params.enable_split_tasks
-                  << ", enable_split_tasks = " << enable_split_tasks;
     if (enable_split_tasks) {
         auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
         for (const auto& info : stripes) {
@@ -480,6 +477,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             ctx->split_end = info.offset + info.length;
             _split_tasks.emplace_back(std::move(ctx));
         }
+        VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
+                      << ", size = " << stripes.size();
         return Status::OK();
     }
 
