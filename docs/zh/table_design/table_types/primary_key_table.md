@@ -16,7 +16,6 @@ import TabItem from '@theme/TabItem';
 :::note
 
 - 自 3.1 版本起，存算分离模式支持创建主键表，并且自 3.1.4 版本起，支持持久化主键索引至本地磁盘。
-
 - 自 3.0 版本起，主键表解耦了排序键与主键，支持单独指定排序键，提供更灵活的建表能力。
 
 :::
@@ -60,11 +59,11 @@ StarRocks 属于分析型数据库，底层数据采用列式存储。具体来�
 
   ![pk3](../../assets/table_design/pk3.png)
 
-- **元数据：**保存 Tablet 的版本历史以及每个版本的信息（比如包含哪些 Rowset）。每次 Loadjob 或者 Compaction 的 Commit 阶段都会生成一个新版本。
+- **元数据**：保存 Tablet 的版本历史以及每个版本的信息（比如包含哪些 Rowset）。每次 Loadjob 或者 Compaction 的 Commit 阶段都会生成一个新版本。
 
   ![pk4](../../assets/table_design/pk4.png)
 
-- **主键****索引**：主键索引，用于保存主键标识的数据行与该数据行所在位置之间的映射关系。采用 HashMap 结构，Key 是编码后的主键列值，Value 记录数据行所在的位置（包括 `rowset_id`、`segment_id` 和 `rowid`）。通常只在数据写入时会使用到主键索引，根据主键值查找主键值标识的数据行在哪个 Rowset 的第几行。
+- **主键索引**：主键索引，用于保存主键标识的数据行与该数据行所在位置之间的映射关系。采用 HashMap 结构，Key 是编码后的主键列值，Value 记录数据行所在的位置（包括 `rowset_id`、`segment_id` 和 `rowid`）。通常只在数据写入时会使用到主键索引，根据主键值查找主键值标识的数据行在哪个 Rowset 的第几行。
 - **DelVector**: 每个 Rowset 中每一个 Segment 文件（列存文件）对应的删除标记。
 - **Rowset**：Rowset 是逻辑概念，存储 Tablet 中一次数据变更的数据集合。
 - **Segment**：实际上 Rowset 包含的数据是分段存储在一个或多个 Segment 文件（列存文件）中。Segment 按列包含了具体列值和列相关的索引信息。

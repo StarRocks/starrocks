@@ -1,159 +1,211 @@
 ---
 displayed_sidebar: "English"
 ---
-
 # Primary Key table
 
-When you create a table, you can define the primary key and sort key separately. When data is loaded into a Primary Key table, StarRocks sorts the data according to the sort key before it stores the data. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key table, the Primary Key table does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key table can deliver high query performance despite real-time and frequent data updates.
+import Tabs from '@theme/Tabs';
 
-> **NOTE**
->
-> - In versions earlier than v3.0, the Primary Key table does not support decoupling the primary key and sort key.
-> - Since version 3.1, StarRocks's shared-data mode supports the Primary Key tables. Since version 3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
+import TabItem from '@theme/TabItem';
+
+The Primary Key table uses a new storage engine designed by StarRocks. Its main advantage lies in supporting real-time data updates while ensuring efficient performance for complex ad-hoc queries. In real-time business analytics, decision-making can benefit from Primary Key tables which use the newest data to analyze results in real-time, which can mitigate data latency in data analysis.
+
+The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL constraint, and is used to uniquely identify each data row. If the primary key value of a new data row is same as that of the existing data row in the table, UNIQUE constraint violation occurs. Then the new data row will replace the existing data row.
+
+:::note
+
+- Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key, and the sort key can be specified seperately. As such, table creation flexibility is improved.
+- Since v3.1, StarRocks's shared-data mode supports Primary Key tables. Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
+
+:::
 
 ## Scenarios
 
-- The Primary Key table is suitable for the following scenarios in which data needs to be frequently updated in real time:
-  - **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key table. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read (MoR) table of the Unique Key table is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Load data by using flink-connector-starrocks](../../loading/Flink-connector-starrocks.md).
+The Primary Key table can support real-time data updates while ensuring efficient query performance. It is suitable for the following scenarios:
 
-  - **Join multiple streams by performing update operations on individual columns**. In business scenarios such as user profiling, flat tables are preferably used to improve multi-dimensional analysis performance and simplify the analytics model that is used by data analysts. Upstream data in these scenarios may come from various apps, such as shopping apps, delivery apps, and banking apps, or from systems, such as machine learning systems that perform computations to obtain the distinct tags and properties of users. The Primary Key table is well suited in these scenarios, because it supports updates to individual columns. Each app or system can update only the columns that hold the data within its own service scope while benefiting from real-time data additions, deletions, and updates at high query performance.
+- **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key table. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read (MoR) table of the Unique Key table is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Load data by using flink-connector-starrocks](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/).
+- **Join multiple streams by performing [partial updates on individual columns](../../loading/Load_to_Primary_Key_tables.md#partial-updates)**. In business scenarios such as user profiling, flat tables are preferably used to improve multi-dimensional analysis performance and simplify the analytics model that is used by data analysts. Upstream data in these scenarios may come from various apps, such as shopping apps, delivery apps, and banking apps, or from systems, such as machine learning systems that perform computations to obtain the distinct tags and properties of users. The Primary Key table is well suited in these scenarios, because it supports updates to individual columns. Each app or system can update only the columns that hold the data within its own service scope while benefiting from real-time data additions, deletions, and updates at high query performance.
 
-- The Primary Key table is suitable for scenarios in which the memory occupied by the primary key is controllable.
+## How it works
 
-  The storage engine of StarRocks creates an index for the primary key of each table that uses the Primary Key table. Additionally, when you load data into a table, StarRocks loads the primary key index into the memory. Therefore, the Primary Key table requires a larger memory capacity than the other three table types. **StarRocks limits the total length of the fields that comprise the primary key to 127 bytes after encoding.**
+The Unique Key table and Aggregate table adopt the Merge-On-Read strategy. This strategy makes data writing simple and efficient, but requires merging multiple versions of data files online during data reading. Moreover, because the Merge operator exists, the predicates and indexes cannot be pushed down to the underlying data, which severely impacts query performance.
 
-  Consider using the Primary Key table if a table has the following characteristics:
+However, to balance the performance of real-time updates and query, the metadata structure and the read/write mechanism in the Primary Key table differ from those in the other types of tables. The Primary Key table uses the Delete+Insert strategy. This strategy is realized by using the Primary Key index and the DelVector. This strategy ensures that only the latest record among the records with the same primary key value needs to be read during queries, which eliminates the need to merge multiple versions of data files. Moreover, predicates and indexes can be pushed down to the underlying data, which greatly improves query performance.
 
-  - The table contains both fast-changing data and slow-changing data. Fast-changing data is frequently updated over the most recent days, whereas slow-changing data is rarely updated. Suppose that you need to synchronize a MySQL order table to StarRocks in real time for analytics and queries. In this example, the data of the table is partitioned by day, and most updates are performed on orders that are created within the most recent days. Historical orders are no longer updated after they are completed. When you run a data load job, the primary key index is not loaded into the memory and only the index entries of the recently updated orders are loaded into the memory.
+The overall process of writing and reading data within the Primary Key table is as follows:
 
-    As shown in the following figure, the data in the table is partitioned by day, and the data in the most recent two partitions is frequently updated.
+- The data writing is achieved through StarRocks's internal Loadjob that includes a batch of data change operations (Insert, Update, and Delete). StarRocks loads the Primary Key indexes of the corresponding tablets into memory. For Delete operations, StarRocks first uses the Primary Key index to find the original location (data file and row number) of each data row, marking the data row as deleted in the DelVector (which stores and manages delete markers generated during data loading). For Update operations, in addition to marking the original data row as deleted in the DelVector, StarRocks also writes the latest data row to a new data file, essentially transforming the Update into a Delete+Insert (as shown in figure one). The Primary Key index is also updated to record the new location (data file and row number) of the changed data row.
+   ![pk1](../../assets/table_design/pk1.png)
+- During data reading, because historical duplicate records in various data files have already been marked as deleted during data writing, only the latest data row with the the same primary key value needs to be read. Multiple versions of data files no longer need to be read online to deduplicate data and find the latest data. When the underlying data files are scanned, filter operators and various indexes help reduce scanning overhead (as shown in figure two). Therefore, query performance can be significantly improved. Compared to the Merge-On-Read strategy of the Unique Key table, the Delete+Insert strategy of the Primary Key table can help improve query performance by 3 to 10 times.
 
-    ![Primary index -1](../../assets/3.2-1.png)
+   ![pk2](../../assets/table_design/pk2.png)
 
-  - The table is a flat table that is composed of hundreds or thousands of columns. The primary key comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the primary key is controllable.
+<details>
+<summary>More details</summary>
 
-    As shown in the following figure, the table contains only a few rows, and the primary key of the table comprises only a small portion of the table.
+If you want a deeper understanding of how data is written into or read from Primary Key tables, you can explore the detailed data writing and reading processes as follows:
 
-    ![Primary index -2](../../assets/3.2.4-2.png)
+StarRocks is an analytical database that uses columnar storage. Specifically, a tablet within a table often contains multiple rowset files, and the data of each rowset file is actually stored in segment files. Segment files organize data in columnar format (similar to Parquet) and are immutable.
 
-### Principle
+When the data to be written is distributed to the Executor BE nodes, each Executor BE node executes a Loadjob. A Loadjob includes a batch of data changes and can be considered as a transaction with ACID properties. A Loadjob can be divided into two stages: write and commit.
 
-The Primary Key table is designed based on a new storage engine that is provided by StarRocks. The metadata structure and the read/write mechanism in the Primary Key table differ from those in the Duplicate Key table. As such, the Primary Key table does not require aggregate operations and supports the pushdown of predicates and indexes. These significantly increase query performance.
+1. Write stage: Data is distributed to the corresponding tablet based on partition and bucket information. When a tablet receives data, data is stored in columnar format and then a new rowset is formed.
+2. Commit stage: After all data is successfully written, the FE initiates the commits to all tablets that are involved. Each commit carries a version number representing the latest version of the tablet's data. The commit process mainly includes searching and updating the Primary Key index, marking all the changed data as deleted, creating a DelVector based on the data marked as deleted, and generating metadata for the new version.
 
-The Duplicate Key table adopts the MoR policy. MoR streamlines data writes but requires online aggregation of multiple data versions. Additionally, the Merge operator does not support the pushdown of predicates and indexes. As a result, query performance deteriorates.
+During data reading, the metadata is used to find which rowsets need to be read based on the latest tablet version. When a segment file in the rowset is being read, its latest version of DelVector is also being checked, which can ensure that only the latest data needs to be read and avoid reading old data with the same primary key value. Furthermore, filter operators pushed down to the Scan layer can directly utilize various indexes to reduce scanning overhead.
 
-The Primary Key table adopts the Delete+Insert policy to ensure that each record has a unique primary key. This way, the Primary Key table does not require merge operations. Details are as follows:
+- **Tablet**: A table is divided into multiple tablets based on partition and bucket mechanisms. It is the actual physical storage unit and is distributed as replicas across different BEs.
 
-- When StarRocks receives a request for an update operation on a record, it locates the record by searching the primary key index, marks the record as deleted, and inserts a new record. In other words, StarRocks converts an update operation to a delete operation plus an insert operation.
+   ![pk3](../../assets/table_design/pk3.png)
 
-- When StarRocks receives a delete operation on a record, it locates the record by searching the primary key index and marks the record as deleted.
+- **Metadata**: The metadata stores the version history of the tablet and information about each version (for example, which rowsets are included). The commit phase of each Loadjob or compaction generates a new version.
 
-## Create a table
+   ![pk4](../../assets/table_design/pk4.png)
 
-Example 1: Suppose that you need to analyze orders on a daily basis. In this example, create a table named `orders`, define `dt` and `order_id` as the primary key, and define the other columns as metric columns.
+- **Primary Key index**: The Primary Key index stores the mapping between the data rows identified by those primary key values and the locations of those data rows. It is implemented as a HashMap, where the keys represent the encoded primary key values, and the values represent the locations of data rows( including `rowset_id`, `segment_id` and `rowid`. Normarlly, the Primary Key index is only used during data writing to find the rowset and row in which each data row identified by a specific primary key value resides.
+- **DelVector**: The DelVector stores the delete markers for each segment file (columnar file) in every rowset.
+- **Rowset**: The rowset is a logical concept and stores the dataset from a batch of data changes in a tablet.
+- **Segment**: The data in the rowset is actually segmented and stored in one or more segment files (columnar files). Each segment file contains column values and indexes information related to the columns.
+
+</details>
+
+## Usage
+
+### Create Primary Key table
+
+You just need to define the primary key in the `CREATE TABLE` statement to create a Primary Key table. Example:
 
 ```SQL
-create table orders (
-    dt date NOT NULL,
+CREATE TABLE orders1 (
     order_id bigint NOT NULL,
-    user_id int NOT NULL,
+    dt date NOT NULL,
+    user_id INT NOT NULL,
+    good_id INT NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL,
+)
+PRIMARY KEY (order_id)
+DISTRIBUTED BY HASH(order_id)
+;
+```
+
+:::note
+
+Because the Primary Key table only supports hash bucketing as the bucketing strategy, you also need to define the hash bucketing key by using `DISTRIBUTED BY HASH()`.
+
+:::
+
+However, in real business scenarios, when a Primary Key table is created, additional features such as data distribution and sort key are often used to accelerate queries and manage data more efficiently.
+
+For example, the `order_id` field in the order table can uniquely identify data rows, so the `order_id` field can be used as the primary key.
+
+Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key. Therefore, you can choose columns frequently used as query filter conditions to form the sort key. For example, if you frequently query product sales performance based on the combination of two dimensions, order date and merchant, you can specify the sort key as `dt` and `merchant_id` using the `order by (`dt`,`merchant_id`)`clause.
+
+Note that if you use [data distribution strategies](../Data_distribution.md), the Primary Key table currently requires the primary key to include partitioning and bucketing columns. For example, the data distribution strategy uses `dt` as the partitioning column and `merchant_id` as the hash bucketing column. The primary key also needs to include `dt` and `merchant_id`.
+
+In summary, the CREATE TABLE statement for the above order table can be as follows:
+
+```SQL
+CREATE TABLE orders2 (
+    order_id bigint NOT NULL,
+    dt date NOT NULL,
     merchant_id int NOT NULL,
+    user_id int NOT NULL,
     good_id int NOT NULL,
     good_name string NOT NULL,
     price int NOT NULL,
     cnt int NOT NULL,
     revenue int NOT NULL,
     state tinyint NOT NULL
-) PRIMARY KEY (dt, order_id)
-PARTITION BY RANGE(`dt`) (
-    PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),
-    PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')),
-    ...
-    PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
-    PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
-) DISTRIBUTED BY HASH(order_id)
-PROPERTIES("replication_num" = "3",
-"enable_persistent_index" = "true");
+)
+PRIMARY KEY (order_id,dt,merchant_id)
+PARTITION BY date_trunc('day', dt)
+distributed by hash(merchant_id)
+order by (`dt`,`merchant_id`)
+PROPERTIES (
+    "enable_persistent_index" = "true"
+);
 ```
 
-> **NOTICE**
->
-> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../Data_distribution.md#bucketing).
-> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../Data_distribution.md#set-the-number-of-buckets).
+### Primary key
 
-Example 2: Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
+The primary key of a table is used to uniquely Identify each row in that table. The one or more columns comprising the primary key are defined in the `PRIMARY KEY`, and have the UNIQUE constraint and NOT NULL constraint.
 
-```SQL
-create table users (
-    user_id bigint NOT NULL,
-    name string NOT NULL,
-    email string NULL,
-    address string NULL,
-    age tinyint NULL,
-    sex tinyint NULL,
-    last_active datetime,
-    property0 tinyint NOT NULL,
-    property1 tinyint NOT NULL,
-    property2 tinyint NOT NULL,
-    property3 tinyint NOT NULL,
-    ....
-) PRIMARY KEY (user_id)
-DISTRIBUTED BY HASH(user_id)
-ORDER BY(`address`,`last_active`)
-PROPERTIES("replication_num" = "3",
-"enable_persistent_index" = "true");
-```
+Take note of the following considerations about the primary key:
 
-## Usage notes
+- In the CREATE TABLE statement, the primary key columns must be defined before other columns.
+- The primary key columns must include partitioning and bucketing columns.
+- The primary key columns support the following data types: numeric (including integers and BOOLEAN), string, and date (DATE and DATETIME).
+- The maximum length of a encoded primary key value is 128 bytes.
+- The primary key cannot be modified after table creation.
+- For data consistency purposes, the primary key values cannot be updated.
 
-- Take note of the following points about the primary key of a table:
-  - The primary key is defined by using the `PRIMARY KEY` keyword.
+### Primary key index
 
-  - The primary key must be created on columns on which unique constraints are enforced, and the names of the primary key columns cannot be changed.
+The primary key index is used to store the mapping between the primary key values and the locations of the data rows identified by the primary key values. Typically, the primary key indexes of relevant tablets are loaded into memory only during data loading (which involves a batch of data changes). You can consider persisting the primary key indexes after comprehensively evaluating the performance requirement for queries and updates, as well as the memory and disk.
 
-  - The primary key columns can be any of the following data types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, STRING, VARCHAR, DATE, and DATETIME. However, the primary key columns cannot be defined as `NULL`.
+<Tabs groupId="primary key Index">
 
-  - The partition column and the bucket column must participate in the primary key.
+  <TabItem value="example1" label="Persistent primary keyIndex" default>
 
-  - The number and total length of primary key columns must be properly designed to save memory. We recommend that you identify columns whose data types occupy less memory and define those columns as the primary key. Such data types include INT and BIGINT. We recommend that you do not let a column of the VARCHAR data type to participate in the primary key.
+When `enable_persistent_index` is set to `true` (default), the Primary Key indexes can be persisted to the disk. During loading, a small portion of the Primary Key indexes is loaded in memory, while the majority is stored on disk to avoid taking up too much memory. In general, query and update performance of the table with the persistent Primary Key indexes is nearly equivalent to that of the table with the fully in-memory Primary Key indexes.
 
-  - Before you create the table, we recommend that you estimate the memory occupied by the primary key index based on the data types of the primary key columns and the number of rows in the table. This way, you can prevent the table from running out of memory. The following example explains how to calculate the memory occupied by the primary key index:
-    - Suppose that the `dt` column, which is of the DATE data type that occupies 4 bytes, and the `id` column, which is of the BIGINT data type that occupies 8 bytes, are defined as the primary key. In this case, the primary key is 12 bytes in length.
+If the disk is a SSD, it is recommended to set it to true. If the disk is HDD and the load frequency is not high, you can also set it to true.
 
-    - Suppose that the table contains 10,000,000 rows of hot data and is stored in three replicas.
+:::note
 
-    - Given the preceding information, the memory occupied by the primary key index is 945 MB based on the following formula:
+Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
 
-      (12 + 9) x 10,000,000 x 3 x 1.5 = 945 (MB)
+:::
 
-      In the preceding formula, `9` is the immutable overhead per row, and `1.5` is the average extra overhead per hash table.
+</TabItem>
 
-- `enable_persistent_index`: the primary key index can be persisted to disk and stored in memory to avoid it taking up too much memory. Generally, the primary key index can only take up 1/10 of the memory it does before. You can set this property in `PROPERTIES` when you create a table. Valid values are true or false. Default value is false.
+<TabItem value="example2" label="fully in-memory Primary Key index">
 
-  > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
-  > - It is recommended to set this property to true if the disk is SSD.
-  > - As of version 2.3.0, StarRocks supports to set this property.
-  > - Since version 3.1, StarRocks's shared-data mode supports the Primary Key tables. Since version 3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
+When `enable_persistent_index` is set to `false`, the Primary Key indexes are not persisted to the disk,  that is, the Primary Key indexes are fully stored in memory. During loading, the Primary Key indexes of tablets related to the data loaded will be loaded into memory, which may result in higher memory consumption. (If a tablet has not had data loaded for a long time, its Primary Key index will be released from memory).
 
-- You can specify the sort key as the permutation and combination of any columns by using the `ORDER BY` keyword.
+When using the fully in-memory Primary Key indexes, it is recommended to follow the following guidelines when designing the Primary Key to control memory usage of the Primary Key indexes:
 
-  > **NOTICE**
-  >
-  > If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
+- The number and total length of Primary Key columns must be properly designed. We recommend that you identify columns whose data types occupy less memory and define those columns as the Primary Key, such as INT and BIGINT, not VARCHAR.
+- Before you create the table, we recommend that you estimate the memory occupied by the Primary Key indexes based on the data types of the Primary Key columns and the number of rows in the table. This way, you can prevent running out of memory. The following example explains how to calculate the memory occupied by the Primary Key indexes:
+  - Suppose that the `dt` column, which is of the DATE data type that occupies 4 bytes, and the `id` column, which is of the BIGINT data type that occupies 8 bytes, are defined as the Primary Key. In this case, the Primary Key is 12 bytes in length.
+  - Suppose that the table contains 10,000,000 rows of hot data and is stored in three replicas.
+  - Given the preceding information, the memory occupied by the Primary Key indexes is 945 MB based on the following formula: `(12 + 9) x 10,000,000 x 3 x 1.5 = 945 (MB)`
+    In the preceding formula, `9` is the immutable overhead per row, and `1.5` is the average extra overhead per hash table.
 
-- ALTER TABLE can be used to change table schema, but the following limits exist:
-  - Modifying the primary key is not supported.
-  - Reassigning the sort key by using ALTER TABLE ... ORDER BY .... is supported. Deleting the sort key is not supported. Modifying the data types of columns in the sort key is not supported.
-  - Adjusting the column order is not supported.
+The Primary Key table with the fully in-memory Primary Key indexes is suitable for scenarios in which the memory occupied by the Primary Key is controllable. Example:
 
-- Since version 2.3.0, the columns except for the primary key columns now support the BITMAP and HLL data types.
+- The table contains both fast-changing data and slow-changing data. Fast-changing data is frequently updated over the most recent days, whereas slow-changing data is rarely updated. Suppose that you need to synchronize a MySQL order table to StarRocks in real time for analytics and queries. In this example, the data of the table is partitioned by day, and most updates are performed on orders that are created within the most recent days. Historical orders are no longer updated after they are completed. When you run a data load job, the Primary Key indexes of historical orders are not loaded into the memory. Only the Primary Key indexes of the recently updated orders are loaded into the memory.
+  
+  As shown in the following figure, the data in the table is partitioned by day, and the data in the most recent two partitions is frequently updated.
 
-- When you create a table, you can create BITMAP indexes or Bloom Filter indexes on the columns except for primary key columns.
+   ![pk5](../../assets/table_design/pk5.png)
 
-- Since version 2.4.0, you can create asynchronous materialized views based on Primary Key tables.
+- The table is a flat table that is composed of hundreds or thousands of columns. The Primary Key comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the primary key is controllable.
+  
+  As shown in the following figure, the table contains only a few rows, and the Primary Key of the table comprises only a small portion of the table.
+   ![pk6](../../assets/table_design/pk6.png)
 
-## What to do next
+</TabItem>
 
-After table creation, you can run load jobs to load data into the Primary Key table. For more information about supported loading methods, see [Loading options](../../loading/loading_introduction/Loading_intro.md).
+</Tabs>
 
-If you need to update data in the Primary Key table, you can [run a load job](../../loading/Load_to_Primary_Key_tables.md) or execute a DML statement ([UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md) or [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)). Also, these update operations guarantee atomicity.
+### Sort key
+
+From v3.0, the Primary Key table decouples the sort key from the Primary Key. The sort key is composed of the columns defined in `ORDER BY`, and can consist of any combination of columns, as long as the data type of the columns meets the requirement of the sort key.
+
+During data loading, the data is stored after being sorted according to the sort key. The sort key is also used to build the Prefix index to accelerate queries. It is recommended to [design the sort key appropriately to form the Prefix index that can accelerate queries](../indexes/Prefix_index_sort_key.md#how-to-design-the-sort-key-appropriately-to-form-the-prefix-index-that-can-accelerate-queries).
+
+:::note
+
+- If the sort key is specified, the Prefix index is built based on the sort key. If no sorti key is specified,the Prefix index are built based on the Primary Key.
+- After table creation, you can use `ALTER TABLE ... ORDER BY ...` to change the sort key. Deleting the sort key is not supported, and modifying the data types of sort columns is not supported.
+
+:::
+
+## What's more
+
+- To load data into the table created, you can refer to [Loading overview](../../loading/loading_introduction/Loading_intro.md) to choose an appropriate load options.
+- If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md), [UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)).
+- If you want to further accelerate queries, you can refer to [Query Acceleration](../../cover_pages/query_acceleration.mdx).
+- If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
+- An [AUTO_INCREMENT](../../sql-reference/sql-statements/generated_columns.md) column can be used as the Primary Key.
