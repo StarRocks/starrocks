@@ -1119,10 +1119,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             long maxRowsetCreationTime = -1L;
             for (Replica replica : tablet.getImmutableReplicas()) {
                 maxRowsetCreationTime = Math.max(maxRowsetCreationTime, replica.getMaxRowsetCreationTime());
-                if (replica.getLastReportVersion() <= 1) {
-                    // unmigratable if it is a empty tablet
-                    return false;
-                }
             }
 
             // get negative max rowset creation time or too close to the max rowset creation time, unmigratable
