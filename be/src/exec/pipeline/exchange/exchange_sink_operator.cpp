@@ -118,7 +118,6 @@ private:
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
-    PInternalService_Stub* _brpc_stub = nullptr;
 
     // If pipeline level shuffle is enable, the size of the _chunks
     // equals with dop of dest pipeline
@@ -172,13 +171,6 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     if (_fragment_instance_id.lo == -1) {
         _is_inited = true;
         return Status::OK();
-    }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
-
-    if (_brpc_stub == nullptr) {
-        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
-        LOG(WARNING) << msg;
-        return Status::InternalError(msg);
     }
 
     _prepare_pass_through();
@@ -256,11 +248,17 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
+        auto brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+        if (brpc_stub == nullptr) {
+            auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
-        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
+        TransmitChunkInfo info = {this->_fragment_instance_id, brpc_stub,      std::move(_chunk_request), attachment,
                                   attachment_physical_bytes,   _brpc_dest_addr};
         RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
@@ -277,12 +275,18 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     if (_ignore_local_data) {
         return Status::OK();
     }
+    auto brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    if (brpc_stub == nullptr) {
+        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     chunk_request->set_node_id(_dest_node_id);
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
-    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(chunk_request), attachment,
+    TransmitChunkInfo info = {this->_fragment_instance_id, brpc_stub,      std::move(chunk_request), attachment,
                               attachment_physical_bytes,   _brpc_dest_addr};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 

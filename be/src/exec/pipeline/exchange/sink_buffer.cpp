@@ -385,6 +385,11 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
                                 print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
+            // work around for brpc bug https://github.com/apache/brpc/issues/2146
+            if (rpc_error_msg.find("EHOSTDOWN") != std::string::npos) {
+                ExecEnv::GetInstance()->brpc_stub_cache()->reset_stub(dest_addr.hostname, dest_addr.port);
+            }
+
             _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
         });
