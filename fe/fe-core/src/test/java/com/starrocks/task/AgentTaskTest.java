@@ -144,7 +144,7 @@ public class AgentTaskTest {
 
         // clone
         cloneTask =
-                new CloneTask(backendId1, dbId, tableId, partitionId, indexId1, tabletId1, 0,
+                new CloneTask(backendId1, "127.0.0.1", dbId, tableId, partitionId, indexId1, tabletId1, 0,
                         Arrays.asList(new TBackend("host1", 8290, 8390)), TStorageMedium.HDD, -1, 3600);
 
         // modify tablet meta

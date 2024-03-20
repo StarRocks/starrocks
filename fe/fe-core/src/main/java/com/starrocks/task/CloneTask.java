@@ -54,6 +54,7 @@ public class CloneTask extends AgentTask {
 
     private long srcPathHash = -1;
     private long destPathHash = -1;
+    private String destBackendHost;
 
     private final int timeoutS;
 
@@ -62,12 +63,13 @@ public class CloneTask extends AgentTask {
     // Migration between different disks on the same backend
     private boolean isLocal = false;
 
-    public CloneTask(long backendId, long dbId, long tableId, long partitionId, long indexId,
+    public CloneTask(long backendId, String destBackendHost, long dbId, long tableId, long partitionId, long indexId,
                      long tabletId, int schemaHash, List<TBackend> srcBackends, TStorageMedium storageMedium,
                      long visibleVersion, int timeoutS) {
         super(null, backendId, TTaskType.CLONE, dbId, tableId, partitionId, indexId, tabletId);
         this.schemaHash = schemaHash;
         this.srcBackends = srcBackends;
+        this.destBackendHost = destBackendHost;
         this.storageMedium = storageMedium;
         this.visibleVersion = visibleVersion;
         this.timeoutS = timeoutS;
@@ -126,7 +128,7 @@ public class CloneTask extends AgentTask {
         sb.append(", visible version(hash): ").append(visibleVersion).append("-").append(0);
         sb.append(", src backend: ").append(srcBackends.get(0).getHost()).append(", src path hash: ")
                 .append(srcPathHash);
-        sb.append(", dest backend: ").append(backendId).append(", dest path hash: ").append(destPathHash);
+        sb.append(", dest backend: ").append(destBackendHost).append(", dest path hash: ").append(destPathHash);
         sb.append(", is local: ").append(isLocal);
         return sb.toString();
     }
