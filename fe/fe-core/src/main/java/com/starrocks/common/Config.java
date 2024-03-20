@@ -2387,6 +2387,16 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean metadata_journal_ignore_replay_failure = true;
+<<<<<<< HEAD
+=======
+
+    /**
+     * In this mode, system will start some damon to recover metadata (Currently only partition version is supported)
+     * and any kind of loads will be rejected.
+     */
+    @ConfField
+    public static boolean metadata_enable_recovery_mode = false;
+>>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

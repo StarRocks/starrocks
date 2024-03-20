@@ -36,6 +36,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.consistency.MetaRecoveryProdDir;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.WarehouseProcDir;
 import org.apache.logging.log4j.LogManager;
@@ -70,7 +71,11 @@ public final class ProcService {
         root.register("colocation_group", new ColocationGroupProcDir());
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
         root.register("compactions", new CompactionsProcNode());
+<<<<<<< HEAD
         root.register("warehouses", new WarehouseProcDir(GlobalStateMgr.getCurrentWarehouseMgr()));
+=======
+        root.register("meta_recovery", new MetaRecoveryProdDir());
+>>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
     }
 
     // Get the corresponding PROC Node by the specified path

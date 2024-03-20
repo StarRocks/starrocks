@@ -106,7 +106,12 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+<<<<<<< HEAD
 import com.starrocks.persist.PrivInfo;
+=======
+import com.starrocks.persist.PartitionVersionRecoveryInfo;
+import com.starrocks.persist.PipeOpEntry;
+>>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -1052,6 +1057,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_REPLICATION_JOB:
                 data = ReplicationJobLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_RECOVER_PARTITION_VERSION:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
                 isRead = true;
                 break;
             default: {

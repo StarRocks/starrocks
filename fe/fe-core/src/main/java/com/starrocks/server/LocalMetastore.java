@@ -105,6 +105,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
@@ -145,6 +146,12 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.PartitionVersionRecoveryInfo;
+import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
+import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
+>>>>>>> 309bc24639 ([Enhancement] Support recover partition version to latest tablet version when some metadata is lost (#39809))
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.ReplacePartitionOperationLog;
@@ -173,6 +180,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -4815,6 +4823,72 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } finally {
             db.writeUnlock();
+        }
+    }
+
+    public void setPartitionVersion(AdminSetPartitionVersionStmt stmt) {
+        Database database = getDb(stmt.getTableName().getDb());
+        if (database == null) {
+            ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(database, LockType.WRITE);
+        try {
+            Table table = database.getTable(stmt.getTableName().getTbl());
+            if (table == null) {
+                ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
+            }
+            if (!table.isOlapTableOrMaterializedView()) {
+                ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
+            }
+
+            PhysicalPartition physicalPartition;
+            OlapTable olapTable = (OlapTable) table;
+            if (stmt.getPartitionId() != -1) {
+                physicalPartition = olapTable.getPhysicalPartition(stmt.getPartitionId());
+                if (physicalPartition == null) {
+                    ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
+                }
+            } else {
+                Partition partition = olapTable.getPartition(stmt.getPartitionName());
+                if (partition == null) {
+                    ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
+                }
+                if (partition.getSubPartitions().size() >= 2) {
+                    ErrorReportException.report(ErrorCode.ERR_MULTI_SUB_PARTITION, stmt.getPartitionName());
+                }
+                physicalPartition = partition;
+            }
+
+            long visibleVersionTime = System.currentTimeMillis();
+            physicalPartition.setVisibleVersion(stmt.getVersion(), visibleVersionTime);
+            physicalPartition.setNextVersion(stmt.getVersion() + 1);
+
+            PartitionVersion partitionVersion = new PartitionVersion(database.getId(), table.getId(),
+                    physicalPartition.getId(), stmt.getVersion());
+            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (Tablet tablet : index.getTablets()) {
+                    if (!(tablet instanceof LocalTablet)) {
+                        continue;
+                    }
+
+                    LocalTablet localTablet = (LocalTablet) tablet;
+                    for (Replica replica : localTablet.getAllReplicas()) {
+                        if (replica.getVersion() > stmt.getVersion() && localTablet.getAllReplicas().size() > 1) {
+                            replica.setBad(true);
+                            LOG.warn("set tablet: {} on backend: {} to bad, " +
+                                            "because its version: {} is higher than partition visible version: {}",
+                                    tablet.getId(), replica.getBackendId(), replica.getVersion(), stmt.getVersion());
+                        }
+                    }
+                }
+            }
+            GlobalStateMgr.getCurrentState().getEditLog().logRecoverPartitionVersion(
+                    new PartitionVersionRecoveryInfo(Lists.newArrayList(partitionVersion), visibleVersionTime));
+            LOG.info("Successfully set partition: {} version to {}, table: {}, db: {}",
+                    stmt.getPartitionName(), stmt.getVersion(), table.getName(), database.getFullName());
+        } finally {
+            locker.unLockDatabase(database, LockType.WRITE);
         }
     }
 

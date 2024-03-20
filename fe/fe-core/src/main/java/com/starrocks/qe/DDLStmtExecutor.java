@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
@@ -720,6 +721,13 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().checkTablets(stmt);
             });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(()
+                    -> context.getGlobalStateMgr().getLocalMetastore().setPartitionVersion(stmt));
             return null;
         }
 

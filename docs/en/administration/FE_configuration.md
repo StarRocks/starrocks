@@ -3398,6 +3398,17 @@ You can only set the static parameters of a FE by changing them in the correspon
 -->
 
 <!--
+#### metadata_enable_recovery_mode
+
+- **Default:** FALSE
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- **Description:** Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
+- **Introduced in:** 3.3
+-->
+
+<!--
 ##### hms_events_batch_size_per_rpc
 
 - Default: 500
