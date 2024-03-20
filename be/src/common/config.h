@@ -1115,6 +1115,9 @@ CONF_mInt32(max_bf_read_bytes_percent, "10");
 // If primary compaction pick all rowsets, we could rebuild pindex directly and skip read from index.
 CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 
+// enable read pindex by page
+CONF_mBool(enable_pindex_read_by_page, "true");
+
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
