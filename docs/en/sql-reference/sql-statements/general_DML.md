@@ -74,7 +74,7 @@ displayed_sidebar: "English"
 - [SHOW REPOSITORIES](./data-manipulation/backup_restore/SHOW_REPOSITORIES.md)
 - [SHOW RESOURCES](./data-definition/SHOW_RESOURCES.md)
 - [SHOW RESTORE](./data-manipulation/backup_restore/SHOW_RESTORE.md)
-- [SHOW SNAPSHOT](./data-definition/backup_restore/SHOW_SNAPSHOT.md)
+- [SHOW SNAPSHOT](./data-manipulation/backup_restore/SHOW_SNAPSHOT.md)
 - [SHOW TABLES](./data-manipulation/SHOW_TABLES.md)
 - [SHOW TABLET](./data-manipulation/SHOW_TABLET.md)
 

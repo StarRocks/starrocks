@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Backs up data in a specified database, table, or partition. Currently, StarRocks only supports backing up data in OLAP tables.
 
-BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../../data-manipulation/backup_restore/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../../data-definition/backup_restore/CANCEL_BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](../../data-definition/backup_restore/SHOW_SNAPSHOT.md).
+BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../../data-manipulation/backup_restore/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../../data-definition/backup_restore/CANCEL_BACKUP.md). You can view the snapshot information using [SHOW SNAPSHOT](../../data-manipulation/backup_restore/SHOW_SNAPSHOT.md).
 
 > **CAUTION**
 >

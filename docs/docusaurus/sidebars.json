@@ -766,7 +766,7 @@
                 "sql-reference/sql-statements/data-definition/backup_restore/RESTORE",
                 "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP",
                 "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES",
-                "sql-reference/sql-statements/data-definition/backup_restore/SHOW_SNAPSHOT"
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_SNAPSHOT"
               ]
             },
             {
@@ -1805,7 +1805,7 @@
                 "sql-reference/sql-statements/data-definition/backup_restore/RESTORE",
                 "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP",
                 "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES",
-                "sql-reference/sql-statements/data-definition/backup_restore/SHOW_SNAPSHOT"
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_SNAPSHOT"
               ]
             },
             {
