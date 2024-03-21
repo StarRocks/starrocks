@@ -2156,24 +2156,16 @@ public class PrivilegeCheckerTest {
                 "COLUMNS(c1) FROM KAFKA " +
                 "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
                 " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) {
+                                                       ImmutableMap<String, String> properties,
+                                                       long warehouseId) {
                 return Lists.newArrayList(0, 1, 2);
             }
         };
 
-        new MockUp<RoutineLoadMgr>() {
-            @Mock
-            public Map<Long, Integer> getBeTasksNum() {
-                Map<Long, Integer> map = new HashMap<>();
-                map.put(1L, 0);
-                map.put(2L, 0);
-                return map;
-            }
-
-        };
         starRocksAssert.withRoutineLoad(createSql);
 
         String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = '" + jobName + "';";

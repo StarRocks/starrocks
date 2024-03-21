@@ -15,6 +15,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -27,6 +28,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -35,6 +37,8 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -42,6 +46,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -56,6 +61,37 @@ public class TabletStatMgrTest {
     private static final long TABLE_ID = 2;
     private static final long PARTITION_ID = 3;
     private static final long INDEX_ID = 4;
+
+    @Before
+    public void before() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(String warehouseName, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+    }
 
     @Test
     public void testUpdateLocalTabletStat(@Mocked GlobalStateMgr globalStateMgr, @Mocked Utils utils,
@@ -166,6 +202,7 @@ public class TabletStatMgrTest {
     @Test
     public void testUpdateLakeTabletStat(@Mocked SystemInfoService systemInfoService,
                                          @Mocked LakeService lakeService) {
+
         LakeTable table = createLakeTableForTest();
 
         long tablet1Id = table.getPartition(PARTITION_ID).getBaseIndex().getTablets().get(0).getId();

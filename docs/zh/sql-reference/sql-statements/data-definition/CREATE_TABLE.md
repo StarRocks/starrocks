@@ -51,7 +51,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 **col_name**：列名称。
 
-注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
+注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/management/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
 
 **col_type**：列数据类型
 
@@ -721,7 +721,7 @@ PROPERTIES (
 
 #### 为 StarRocks 存算分离集群创建云原生表
 
-为了[使用 StarRocks 存算分离集群](../../../deployment/shared_data/s3.md)，您需要通过以下 PROPERTIES 创建云原生表：
+为了[使用 StarRocks 存算分离集群](../../../deployment/shared_data/shared_data.mdx)，您需要通过以下 PROPERTIES 创建云原生表：
 
 ```SQL
 PROPERTIES (
@@ -741,7 +741,7 @@ PROPERTIES (
 
   > **说明**
   >
-  > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/BE_configuration.md)。
+  > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/management/BE_configuration.md)。
 
 - `datacache.partition_duration`：热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。
 
@@ -761,7 +761,7 @@ PROPERTIES (
 > **NOTE**
 >
 > - StarRocks 存算分离集群不支持该参数。
-> - 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/FE_configuration.md#enable_fast_schema_evolution)。
+> - 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/management/FE_configuration.md#enable_fast_schema_evolution)。
 
 ## 示例
 

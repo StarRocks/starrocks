@@ -1363,7 +1363,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (timeoutInfo.length() > 240) {
                 timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
-            status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
+            status.addToError_msgs("Publish timeout. The data will be visible after a while, " + timeoutInfo);
             return;
         }
         // if commit and publish is success, load can be regarded as success

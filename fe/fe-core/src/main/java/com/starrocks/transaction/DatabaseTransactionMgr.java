@@ -771,6 +771,31 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // Check whether there is committed txns on partitionId.
+    public boolean hasCommittedTxnOnPartition(long tableId, long partitionId) {
+        readLock();
+        try {
+            for (TransactionState state : idToRunningTransactionState.values()) {
+                if (state.getTransactionStatus() != TransactionStatus.COMMITTED) {
+                    continue;
+                }
+
+                TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
+                if (tableCommitInfo == null) {
+                    continue;
+                }
+
+                if (tableCommitInfo.getPartitionCommitInfo(partitionId) != null) {
+                    return true;
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+
+        return false;
+    }
+
     public List<TransactionState> getReadyToPublishTxnList() {
         readLock();
         try {

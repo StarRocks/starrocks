@@ -234,7 +234,7 @@ You can also enable bucketization for the COUNT DISTINCT column by adding the `s
 
 ### enable_group_level_query_queue (3.1.4 and later)
 
-Whether to enable resource group-level [query queue](../administration/query_queues.md).
+Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 
 Default value: false, which means this feature is disabled.
 

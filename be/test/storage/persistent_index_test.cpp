@@ -1938,6 +1938,96 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
+TEST_P(PersistentIndexTest, test_bloom_filter_working) {
+    write_pindex_bf = true;
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_working";
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+    const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    // make sure generate l1
+    config::l0_max_mem_usage = 10;
+    const std::string kIndexFile = "./PersistentIndexTest_test_bloom_filter_working/index.l0.0.0";
+
+    using Key = std::string;
+    PersistentIndexMetaPB index_meta;
+    const int N = 100;
+    vector<Key> keys(N);
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    key_slices.reserve(N);
+
+    for (int i = 0; i < N; i++) {
+        keys[i] = fmt::format("test_varlen_{:016X}", i);
+        values.emplace_back(i);
+        key_slices.emplace_back(keys[i]);
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    PersistentIndex index(kPersistentIndexDir);
+    {
+        EditVersion version(0, 0);
+        index_meta.set_key_size(0);
+        index_meta.set_size(0);
+        version.to_pb(index_meta.mutable_version());
+        MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
+        IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+        version.to_pb(snapshot_meta->mutable_version());
+
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(1, 0), N));
+        std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+    }
+
+    {
+        // test if bf working well - case 1: bf missing
+        CHECK(index.has_bf());
+        config::enable_parallel_get_and_bf = false;
+        CHECK(index._has_l1);
+        ASSERT_OK(index.prepare(EditVersion(2, 0), N));
+        std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+        IOStat io_stat;
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), &io_stat));
+        // should be filtered by bf
+        LOG(INFO) << io_stat.print_str();
+        ASSERT_TRUE(io_stat.filtered_kv_cnt == 0);
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        config::enable_parallel_get_and_bf = true;
+    }
+    {
+        // test if bf working well - case 2: bf hit
+        for (int i = 0; i < N; i++) {
+            keys[i] = fmt::format("test_varlen_{:016X}", i + N);
+            values[i] = i + N;
+            key_slices[i] = keys[i];
+        }
+        config::enable_parallel_get_and_bf = false;
+        CHECK(index.has_bf());
+        CHECK(index._has_l1);
+        ASSERT_OK(index.prepare(EditVersion(3, 0), N));
+        std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+        IOStat io_stat;
+        ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data(), &io_stat));
+        // should not be filtered by bf
+        LOG(INFO) << io_stat.print_str();
+        ASSERT_TRUE(io_stat.filtered_kv_cnt > 0);
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        config::enable_parallel_get_and_bf = true;
+    }
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
 TEST_P(PersistentIndexTest, test_multi_l2_tmp_l1) {
     config::l0_max_mem_usage = 50;
     config::max_tmp_l1_num = 10;

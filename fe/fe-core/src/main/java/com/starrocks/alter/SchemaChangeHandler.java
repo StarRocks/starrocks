@@ -105,7 +105,6 @@ import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -1177,28 +1176,25 @@ public class SchemaChangeHandler extends AlterHandler {
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
-        long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-        if (RunMode.isSharedNothingMode()) {
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            if (systemInfoService.backendAndComputeNodeStream().findAny().isEmpty()) {
-                throw new DdlException("no available compute nodes in warehouse");
-            }
-        } else {
-            // check warehouse
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            if (warehouse.getAnyAvailableCluster().getComputeNodeIds().isEmpty()) {
-                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
-            }
-        }
-
+        // create job
         SchemaChangeData.Builder dataBuilder = SchemaChangeData.newBuilder();
         dataBuilder.withDatabase(db)
                 .withTable(olapTable)
                 .withTimeoutInSeconds(timeoutSecond)
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumns, bfFpp)
-                .withBloomFilterColumnsChanged(hasBfChange)
-                .withWarehouse(warehouseId);
+                .withBloomFilterColumnsChanged(hasBfChange);
+
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse.getAnyAvailableCluster().getComputeNodeIds().isEmpty()) {
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+
+            dataBuilder.withWarehouse(warehouseId);
+        }
 
         long baseIndexId = olapTable.getBaseIndexId();
         // begin checking each table

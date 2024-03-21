@@ -244,29 +244,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // sync partitions between materialized view and base tables out of lock
             // do it outside lock because it is a time-cost operation
             syncPartitions(context);
+            // check whether there are partition changes for base tables, eg: partition rename
+            // retry to sync partitions if any base table changed the partition infos
+            if (checkBaseTablePartitionChange(materializedView)) {
+                retryNum++;
+                if (retryNum > MAX_RETRY_NUM) {
+                    throw new DmlException("materialized view:%s refresh task failed", materializedView.getName());
+                }
+                LOG.info("materialized view:{} base partition has changed. retry to sync partitions, retryNum:{}",
+                        materializedView.getName(), retryNum);
+                continue;
+            }
+            checked = true;
+            mvEntity.increaseRefreshRetryMetaCount((long) retryNum);
+
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                // the following steps should be done in the same lock:
-                // 1. check base table partitions change
-                // 2. get affected materialized view partitions
-                // 3. generate insert stmt
-                // 4. generate insert ExecPlan
-
-                // check whether there are partition changes for base tables, eg: partition rename
-                // retry to sync partitions if any base table changed the partition infos
-                if (checkBaseTablePartitionChange(materializedView)) {
-                    retryNum++;
-                    if (retryNum > MAX_RETRY_NUM) {
-                        throw new DmlException("materialized view:%s refresh task failed", materializedView.getName());
-                    }
-                    LOG.info("materialized view:{} base partition has changed. retry to sync partitions, retryNum:{}",
-                            materializedView.getName(), retryNum);
-                    continue;
-                }
-                mvEntity.increaseRefreshRetryMetaCount((long) retryNum);
-
-                checked = true;
                 Set<String> mvPotentialPartitionNames = Sets.newHashSet();
                 mvToRefreshedPartitions = getPartitionsToRefreshForMaterializedView(context.getProperties(),
                         mvPotentialPartitionNames);
@@ -1690,7 +1684,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     /**
      * Check whether the base table's partition has changed or not. Wait to refresh until all mv's base tables
      * don't change again.
-     * @param materializedView: the materialized view to check
      * @return: true if the base table's partition has changed, otherwise false.
      */
     private boolean checkBaseTablePartitionChange(MaterializedView materializedView) {
@@ -1743,12 +1736,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
-     * Collect all databases of the materialized view's base tables.
+     * Collect all deduplicated databases of the materialized view's base tables.
      * @param materializedView: the materialized view to check
-     * @return: the databases of the materialized view's base tables, throw exception if the database do not exist.
+     * @return: the deduplicated databases of the materialized view's base tables,
+     * throw exception if the database do not exist.
      */
     List<Database> collectDatabases(MaterializedView materializedView) {
-        List<Database> databases = Lists.newArrayList();
+        Map<Long, Database> databaseMap = Maps.newHashMap();
         for (BaseTableInfo baseTableInfo : materializedView.getBaseTableInfos()) {
             Database db = baseTableInfo.getDb();
             if (db == null) {
@@ -1756,9 +1750,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         baseTableInfo.getDbInfoStr(), materializedView.getName());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
             }
-            databases.add(db);
+            databaseMap.put(db.getId(), db);
         }
-        return databases;
+        return Lists.newArrayList(databaseMap.values());
     }
 
     @VisibleForTesting

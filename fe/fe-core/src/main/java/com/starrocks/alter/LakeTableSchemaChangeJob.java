@@ -58,6 +58,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -70,7 +71,6 @@ import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.warehouse.DefaultWarehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -355,17 +355,15 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     boolean createSchemaFile = true;
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
-                        LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
-                        DefaultWarehouse warehouse = (DefaultWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-                        Long backendId = warehouse.getComputeNodeId(lakeTablet);
-                        if (backendId == null) {
+                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNode(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) shadowTablet);
+                        if (computeNode == null) {
                             throw new AlterCancelException("No alive backend");
                         }
-                        countDownLatch.addMark(backendId, shadowTabletId);
+                        countDownLatch.addMark(computeNode.getId(), shadowTabletId);
 
                         CreateReplicaTask task = CreateReplicaTask.newBuilder()
-                                .setNodeId(backendId)
+                                .setNodeId(computeNode.getId())
                                 .setDbId(dbId)
                                 .setTableId(tableId)
                                 .setPartitionId(partitionId)
@@ -457,17 +455,16 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        DefaultWarehouse warehouse = (DefaultWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-                        Long backendId = warehouse.getComputeNodeId((LakeTablet) shadowTablet);
-                        if (backendId == null) {
+                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNode(WarehouseManager.DEFAULT_WAREHOUSE_ID, (LakeTablet) shadowTablet);
+                        if (computeNode == null) {
                             throw new AlterCancelException("No alive backend");
                         }
                         long shadowTabletId = shadowTablet.getId();
                         long originTabletId =
                                 physicalPartitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         AlterReplicaTask alterTask =
-                                AlterReplicaTask.alterLakeTablet(backendId, dbId, tableId, partitionId,
+                                AlterReplicaTask.alterLakeTablet(computeNode.getId(), dbId, tableId, partitionId,
                                         shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId,
                                         watershedTxnId);
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);

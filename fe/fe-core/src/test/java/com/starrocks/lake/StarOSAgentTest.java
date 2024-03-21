@@ -312,7 +312,7 @@ public class StarOSAgentTest {
                 minTimes = 0;
                 result = 10;
 
-                client.removeWorker("1", 10);
+                client.removeWorker("1", 10, 0);
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }

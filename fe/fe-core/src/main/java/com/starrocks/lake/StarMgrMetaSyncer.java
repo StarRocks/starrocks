@@ -219,12 +219,17 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             // filter compute node
             List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
             for (ComputeNode computeNode : computeNodes) {
-                if (computeNode.getStarletPort() == 0) {
+                if (computeNode.getStarletPort() != 0) {
                     String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, computeNode.getWorkerGroupId());
-                    LOG.info("unused worker {} removed from star mgr", workerAddr);
-                    cnt++;
+                    workerAddresses.remove(workerAddr);
                 }
+            }
+
+            for (String unusedWorkerAddress : workerAddresses) {
+                GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .removeWorker(unusedWorkerAddress, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                LOG.info("unused worker {} removed from star mgr", unusedWorkerAddress);
+                cnt++;
             }
         } catch (Exception e) {
             LOG.warn("fail to delete unused worker, {}", e);

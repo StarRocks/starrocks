@@ -141,7 +141,10 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
                 end_version = tablet->updates()->max_version();
             }
             res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets);
-            if (!res.ok() || consistent_rowsets.empty()) {
+            if (!res.ok() || (consistent_rowsets.empty() &&
+                              // for primary key empty tablet, it is possible that consistent_rowsets.empty() is true
+                              // in this case, we can continue the migration.
+                              (tablet->updates() == nullptr || (tablet->updates() != nullptr && end_version != 1)))) {
                 LOG(WARNING) << "Fail to capture consistent rowsets. version=" << end_version;
                 return Status::InternalError(
                         fmt::format("Fail to capture consistent rowsets. version: {}", end_version));

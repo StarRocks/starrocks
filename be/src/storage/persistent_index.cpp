@@ -2549,6 +2549,15 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     bool filter = _filter(shard_idx, keys_info, &check_keys_info);
     if (!filter) {
         check_keys_info.swap(keys_info);
+    } else {
+        if (stat != nullptr) {
+            stat->filtered_kv_cnt += (keys_info.size() - check_keys_info.size());
+        }
+    }
+
+    if (check_keys_info.empty()) {
+        // All keys have been filtered by bloom filter.
+        return Status::OK();
     }
 
     // an optimization for very small data import. In some real time scenario, user only import a very small batch data
@@ -2573,6 +2582,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
                                             shard_info.bytes));
     if (stat != nullptr) {
+        stat->get_in_shard_cnt++;
         stat->read_io_bytes += shard_info.bytes;
     }
     if (shard_info.key_size != 0) {
@@ -2783,7 +2793,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
                                           found_keys_info, stat));
         }
         if (stat != nullptr) {
-            stat->get_in_shard_cnt += nshard;
             stat->get_in_shard_cost += watch.elapsed_time();
         }
     } else {
@@ -2796,7 +2805,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
         }
         RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, infos.key_infos, values, found_keys_info, stat));
         if (stat != nullptr) {
-            stat->get_in_shard_cnt++;
             stat->get_in_shard_cost += watch.elapsed_time();
         }
     }
@@ -3448,7 +3456,6 @@ Status PersistentIndex::on_commited() {
     _dump_snapshot = false;
     _flushed = false;
     _need_bloom_filter = false;
-    _calc_write_amp_score();
 
     return Status::OK();
 }
@@ -4713,7 +4720,6 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
         }
     }
     RETURN_IF_ERROR(writer->finish());
-    _write_amp_score.store(0.0);
     std::stringstream debug_str;
     major_compaction_debug_str(l2_versions, l2_vec, new_l2_version, writer, debug_str);
     LOG(INFO) << "PersistentIndex background compact l2 : " << debug_str.str() << " cost: " << watch.elapsed_time();
@@ -4885,25 +4891,15 @@ Status PersistentIndex::test_flush_varlen_to_immutable_index(const std::string& 
     return writer.finish();
 }
 
-double PersistentIndex::major_compaction_score(size_t l1_count, size_t l2_count) {
+double PersistentIndex::major_compaction_score(const PersistentIndexMetaPB& index_meta) {
     // return 0.0, so scheduler can skip this index, if l2 less than 2.
+    const size_t l1_count = index_meta.has_l1_version() ? 1 : 0;
+    const size_t l2_count = index_meta.l2_versions_size();
     if (l2_count <= 1) return 0.0;
     double l1_l2_count = (double)(l1_count + l2_count);
     // write amplification
     // = 1 + 1 + (l1 and l2 file count + config::l0_l1_merge_ratio) / (l1 and l2 file count) / 0.85
     return 2.0 + (l1_l2_count + (double)config::l0_l1_merge_ratio) / l1_l2_count / 0.85;
-}
-
-void PersistentIndex::_calc_write_amp_score() {
-    _write_amp_score.store(major_compaction_score(_has_l1 ? 1 : 0, _l2_versions.size()));
-}
-
-double PersistentIndex::get_write_amp_score() const {
-    if (_major_compaction_running.load()) {
-        return 0.0;
-    } else {
-        return _write_amp_score.load();
-    }
 }
 
 Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {

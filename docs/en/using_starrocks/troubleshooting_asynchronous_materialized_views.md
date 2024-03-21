@@ -154,7 +154,7 @@ Among all the information returned, you can focus on the following metrics:
 - `QueryMemCost`: Total memory cost of the query.
 - Other metrics for individual operators, such as join operators and aggregate operators.
 
-For detailed information on how to check the query profile and understand other metrics, see [Analyze query profile](../administration/query_profile.md).
+For detailed information on how to check the query profile and understand other metrics, see [Analyze query profile](../administration/query_profile_overview.md).
 
 ### Verify whether queries are rewritten by an asynchronous materialized view
 
