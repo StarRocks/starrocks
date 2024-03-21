@@ -533,6 +533,9 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
+
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new UnionToValuesRule());
+        
         return tree.getInputs().get(0);
     }
 
