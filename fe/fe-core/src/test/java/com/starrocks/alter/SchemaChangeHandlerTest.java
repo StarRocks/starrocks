@@ -115,6 +115,13 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         createTable(createPKTblStmtStr);
 
+        String createDupTbl3StmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup3 (\n" + "timestamp DATETIME,\n"
+                + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
+                + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+
+        createTable(createDupTbl3StmtStr);
+
     }
 
     private void waitAlterJobDone(Map<Long, AlterJobV2> alterJobs) throws Exception {
@@ -435,6 +442,68 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         } catch (Exception e) {
             LOG.warn(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Property primary_index_cache_expire_sec must be integer"));
+        }
+    }
+
+    @Test
+    public void testModifyTableFastSchemaEvolution() throws Exception {
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("sc_dup3");
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            Assertions.assertNotNull(tbl);
+            System.out.println(tbl.getName());
+            Assertions.assertEquals("StarRocks", tbl.getEngine());
+            Assertions.assertEquals(6, tbl.getBaseSchema().size());
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+
+        Assertions.assertTrue(tbl.canUseFastSchemaEvolution());
+        Assertions.assertTrue(tbl.enableFastSchemaEvolution());
+        // process set property
+        String modifyStmtStr = "alter table test.sc_dup3 set ('fast_schema_evolution' = 'false');";
+        AlterTableStmt modifyStmt = (AlterTableStmt) parseAndAnalyzeStmt(modifyStmtStr);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(modifyStmt);
+        Assertions.assertTrue(tbl.canUseFastSchemaEvolution());
+        Assertions.assertFalse(tbl.enableFastSchemaEvolution());
+
+        int maxColUniqueId = tbl.getMaxColUniqueId();
+        tbl.setMaxColUniqueId(-1);
+
+        Assertions.assertFalse(tbl.canUseFastSchemaEvolution());
+        Assertions.assertFalse(tbl.enableFastSchemaEvolution());
+        try {
+            String modifyStmtStr2 = "alter table test.sc_dup3 set ('fast_schema_evolution' = 'true');";
+            AlterTableStmt modifyStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(modifyStmtStr2);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(modifyStmt);
+        } catch (Exception e) {
+            LOG.warn(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("not support modify meta: FAST_SCHEMA_EVOLUTION"));
+        }
+
+        tbl.setMaxColUniqueId(maxColUniqueId);
+
+        String addValColStmtStr = "alter table test.sc_dup3 add column new_v1 int default '0'";
+        AlterTableStmt addValColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addValColStmtStr);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(addValColStmt);
+        jobSize++;
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+
+        waitAlterJobDone(alterJobs);
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            Assertions.assertEquals(7, tbl.getBaseSchema().size());
+            String baseIndexName = tbl.getIndexNameById(tbl.getBaseIndexId());
+            Assertions.assertEquals(baseIndexName, tbl.getName());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
+            Assertions.assertNotNull(indexMeta);
+            Assertions.assertEquals(maxColUniqueId + 1, tbl.getMaxColUniqueId());
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 }

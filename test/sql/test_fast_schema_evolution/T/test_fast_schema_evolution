@@ -361,3 +361,35 @@ select * from tab1;
 
 drop table tab1;
 drop database test_alter_with_rollup;
+
+-- name: test_alter_fast_schema_evolution
+create database test_alter_fast_schema_evolution;
+use test_alter_fast_schema_evolution;
+
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+DUPLICATE KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+
+show create table tab1;
+
+alter table tab1 set ("fast_schema_evolution" = "false");
+show create table tab1;
+
+alter table tab1 set ("fast_schema_evolution" = "true");
+show create table tab1;
+
+drop table tab1;
+drop database test_alter_fast_schema_evolution;

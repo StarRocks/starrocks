@@ -866,7 +866,8 @@ public class JournalEntity implements Writable {
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
             case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
-            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+            case OperationType.OP_MODIFY_FAST_SCHEMA_EVOLUTION: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;

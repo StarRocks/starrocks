@@ -812,3 +812,105 @@ drop table tab1;
 drop database test_alter_with_rollup;
 -- result:
 -- !result
+-- name: test_alter_fast_schema_evolution
+create database test_alter_fast_schema_evolution;
+-- result:
+-- !result
+use test_alter_fast_schema_evolution;
+-- result:
+-- !result
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 INTEGER,
+      v3 INTEGER,
+      v4 varchar(50),
+      v5 varchar(50)
+)
+ENGINE=OLAP
+DUPLICATE KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+show create table tab1;
+-- result:
+tab1	CREATE TABLE `tab1` (
+  `k1` int(11) NULL COMMENT "",
+  `k2` varchar(50) NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` int(11) NULL COMMENT "",
+  `v4` varchar(50) NULL COMMENT "",
+  `v5` varchar(50) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table tab1 set ("fast_schema_evolution" = "false");
+-- result:
+-- !result
+show create table tab1;
+-- result:
+tab1	CREATE TABLE `tab1` (
+  `k1` int(11) NULL COMMENT "",
+  `k2` varchar(50) NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` int(11) NULL COMMENT "",
+  `v4` varchar(50) NULL COMMENT "",
+  `v5` varchar(50) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table tab1 set ("fast_schema_evolution" = "true");
+-- result:
+-- !result
+show create table tab1;
+-- result:
+tab1	CREATE TABLE `tab1` (
+  `k1` int(11) NULL COMMENT "",
+  `k2` varchar(50) NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` int(11) NULL COMMENT "",
+  `v4` varchar(50) NULL COMMENT "",
+  `v5` varchar(50) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_alter_fast_schema_evolution;
+-- result:
+-- !result
