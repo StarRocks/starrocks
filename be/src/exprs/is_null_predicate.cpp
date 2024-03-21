@@ -84,7 +84,7 @@ public:
             ColumnViewer<TYPE_JSON> viewer(column);
             ColumnBuilder<TYPE_BOOLEAN> builder(column->size());
             for (size_t i = 0; i < column->size(); i++) {
-                bool value = viewer.is_null(i) || viewer.value(i)->is_null_or_none();
+                bool value = !viewer.is_null(i) && !viewer.value(i)->is_null_or_none();
                 builder.append(value);
             }
             return builder.build(column->is_constant());
