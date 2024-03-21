@@ -65,7 +65,7 @@ import static com.google.common.base.Verify.verify;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
-    private static final Set<String> SUPPORTED_FORMATS;
+    public static final Set<String> SUPPORTED_FORMATS;
     static {
         SUPPORTED_FORMATS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         SUPPORTED_FORMATS.add("parquet");

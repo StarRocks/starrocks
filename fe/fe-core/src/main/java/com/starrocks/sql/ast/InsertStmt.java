@@ -348,8 +348,7 @@ public class InsertStmt extends DmlStmt {
                     "Use any of (parquet, orc, csv)");
         }
 
-        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc") &&
-                !format.equalsIgnoreCase("csv")) {
+        if (!TableFunctionTable.SUPPORTED_FORMATS.contains(format)) {
             throw new SemanticException(String.format("Unsupported format %s. " +
                     "Use any of (parquet, orc, csv)", format));
         }
