@@ -29,6 +29,7 @@ import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -40,7 +41,7 @@ import java.util.Properties;
 public class FrontendOptionsTest {
 
     @Mocked
-    InetAddress addr;
+    Inet4Address addr;
 
     private boolean useFqdn = true;
     private boolean useFqdnFile = true;
@@ -64,7 +65,7 @@ public class FrontendOptionsTest {
     }
 
     private void mockNet() {
-        new MockUp<InetAddress>() {
+        new MockUp<Inet4Address>() {
             @Mock
             public InetAddress getLocalHost() throws UnknownHostException {
                 return addr;

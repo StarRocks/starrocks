@@ -982,7 +982,7 @@ public class SystemInfoService implements GsonPostProcessable {
         try {
             hostInfo = NetUtils.resolveHostInfoFromHostPort(hostPort);
         } catch (AnalysisException e) {
-            throw new SemanticException("failed to resolve host and port", e);
+            throw new SemanticException("Invalid host port: " + hostPort, e);
         }
         String host = hostInfo[0];
         if (Strings.isNullOrEmpty(host)) {
