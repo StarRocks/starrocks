@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Recovers a database, table, or partition that was dropped by using the DROP command. The dropped database, table, or partition can be recovered within the period specified by the FE parameter `catalog_trash_expire_second` (1 day by default).
 
-Data deleted by using [TRUNCATE TABLE](./TRUNCATE_TABLE.md) cannot be recovered.
+Data deleted by using [TRUNCATE TABLE](../TRUNCATE_TABLE.md) cannot be recovered.
 
 ## Syntax
 

@@ -30,13 +30,13 @@ StarRocks 二进制包的名称格式为 **StarRocks-version.tar.gz**，其中 *
 
    二进制包中包含以下路径及文件：
 
-   | **路径/文件**          | **说明**                                                     |
-   | ---------------------- | ------------------------------------------------------------ |
-   | **apache_hdfs_broker** | Broker 节点的部署路径。自 StarRocks 2.5 起，您无需在一般场景中部署 Broker 节点。如果您确实需要在 StarRocks 集群中部署 Broker 节点，请参阅 [部署 Broker 节点](../deployment/deploy_broker.md) 了解详细说明。 |
-   | **fe**                 | FE 节点的部署路径。                                          |
-   | **be**                 | BE 节点的部署路径。                                          |
-   | **LICENSE.txt**        | StarRocks license 文件。                                     |
-   | **NOTICE.txt**         | StarRocks notice 文件。                                      |
+   | **路径/文件**          | **说明**                 |
+   | ---------------------- | ------------------------ |
+   | **apache_hdfs_broker** | Broker 节点的部署路径。  |
+   | **fe**                 | FE 节点的部署路径。      |
+   | **be**                 | BE 节点的部署路径。      |
+   | **LICENSE.txt**        | StarRocks license 文件。 |
+   | **NOTICE.txt**         | StarRocks notice 文件。  |
 
 3. 将路径 **fe** 分发至所有 FE 实例，将路径 **be** 分发至所有 BE 或 CN 实例以用于[手动部署](../deployment/deploy_manually.md)。
 

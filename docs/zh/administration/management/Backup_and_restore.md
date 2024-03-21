@@ -28,7 +28,7 @@ StarRocks 支持以数据库、表、或分区为粒度全量备份数据。
 
 ### 创建仓库
 
-仓库用于在远端存储系统中存储备份文件。备份数据前，您需要基于远端存储系统路径在 StarRocks 中创建仓库。您可以在同一集群中创建多个仓库。详细使用方法参阅 [CREATE REPOSITORY](../../sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md)。
+仓库用于在远端存储系统中存储备份文件。备份数据前，您需要基于远端存储系统路径在 StarRocks 中创建仓库。您可以在同一集群中创建多个仓库。详细使用方法参阅 [CREATE REPOSITORY](../../sql-reference/sql-statements/data-definition/backup_restore/CREATE_REPOSITORY.md)。
 
 - 在 HDFS 集群中创建仓库
 
@@ -139,11 +139,11 @@ PROPERTIES(
 );
 ```
 
-仓库创建完成后，您可以通过 [SHOW REPOSITORIES](../../sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES.md) 查看已创建的仓库。完成数据恢复后，您可以通过 [DROP REPOSITORY](../../sql-reference/sql-statements/data-definition/DROP_REPOSITORY.md) 语句删除 StarRocks 中的仓库。但备份在远端存储系统中的快照数据目前无法通过 StarRocks 直接删除，您需要手动删除备份在远端存储系统的快照路径。
+仓库创建完成后，您可以通过 [SHOW REPOSITORIES](../../sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES.md) 查看已创建的仓库。完成数据恢复后，您可以通过 [DROP REPOSITORY](../../sql-reference/sql-statements/data-definition/backup_restore/DROP_REPOSITORY.md) 语句删除 StarRocks 中的仓库。但备份在远端存储系统中的快照数据目前无法通过 StarRocks 直接删除，您需要手动删除备份在远端存储系统的快照路径。
 
 ### 备份数据快照
 
-创建数据仓库后，您可以通过 [BACKUP](../../sql-reference/sql-statements/data-definition/BACKUP.md) 命令创建数据快照并将其备份至远端仓库。
+创建数据仓库后，您可以通过 [BACKUP](../../sql-reference/sql-statements/data-definition/backup_restore/BACKUP.md) 命令创建数据快照并将其备份至远端仓库。
 
 以下示例在数据库 `sr_hub` 中为表 `sr_member` 创建数据快照 `sr_member_backup` 并备份至仓库 `test_repo` 中。
 
@@ -160,7 +160,7 @@ StarRocks 支持以下粒度的备份还原操作：
 - 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
 :::
 
-数据备份为异步操作。您可以通过 [SHOW BACKUP](../../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md) 语句取消备份作业。
+数据备份为异步操作。您可以通过 [SHOW BACKUP](../../sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../../sql-reference/sql-statements/data-definition/backup_restore/CANCEL_BACKUP.md) 语句取消备份作业。
 
 ## 恢复或迁移数据
 
@@ -172,7 +172,7 @@ StarRocks 支持以下粒度的备份还原操作：
 
 ### 查看数据库快照
 
-开始恢复或迁移前，您可以通过 [SHOW SNAPSHOT](../../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
+开始恢复或迁移前，您可以通过 [SHOW SNAPSHOT](../../sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
 
 以下示例查看仓库 `test_repo` 中的数据快照信息。
 
@@ -188,7 +188,7 @@ mysql> SHOW SNAPSHOT ON test_repo;
 
 ### 恢复数据快照
 
-通过 [RESTORE](../../sql-reference/sql-statements/data-definition/RESTORE.md) 语句将远端仓库中的数据快照恢复至当前或其他 StarRocks 集群以恢复或迁移数据。
+通过 [RESTORE](../../sql-reference/sql-statements/data-definition/backup_restore/RESTORE.md) 语句将远端仓库中的数据快照恢复至当前或其他 StarRocks 集群以恢复或迁移数据。
 
 以下示例将仓库 `test_repo` 中的数据快照 `sr_member_backup`恢复为表 `sr_member`，仅恢复一个数据副本。
 
@@ -209,7 +209,7 @@ StarRocks 支持以下粒度的备份还原操作：
 - 数据库级：您无需指定 ON 子句。此举将备份或还原整个数据库。
 :::
 
-数据恢复为异步操作。您可以通过 [SHOW RESTORE](../../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md) 语句取消恢复作业。
+数据恢复为异步操作。您可以通过 [SHOW RESTORE](../../sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_RESTORE.md) 语句查看恢复作业状态，或通过 [CANCEL RESTORE](../../sql-reference/sql-statements/data-definition/backup_restore/CANCEL_RESTORE.md) 语句取消恢复作业。
 
 ## 配置相关参数
 

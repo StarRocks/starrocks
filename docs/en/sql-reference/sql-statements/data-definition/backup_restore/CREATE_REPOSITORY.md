@@ -6,13 +6,13 @@ displayed_sidebar: "English"
 
 ## Description
 
-Creates a repository in a remote storage system that is used to store data snapshots for [backing up and restoring data](../../../administration/management/Backup_and_restore.md).
+Creates a repository in a remote storage system that is used to store data snapshots for backing up and restoring data.
 
 > **CAUTION**
 >
 > Only users with the ADMIN privilege can create a repository.
 
-For detailed instructions on deleting a repository, see [DROP REPOSITORY](../data-definition/DROP_REPOSITORY.md).
+For detailed instructions on deleting a repository, see [DROP REPOSITORY](../../data-definition/backup_restore/DROP_REPOSITORY.md).
 
 ## Syntax
 
@@ -28,7 +28,7 @@ PROPERTIES ("key"="value", ...)
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only repository for the new cluster and only grant it RESTORE permissions.|
-| repository_name     | Repository name. For the naming conventions, see [System limits](../../../reference/System_limit.md).                           |
+| repository_name     | Repository name. For the naming conventions, see [System limits](../../../../reference/System_limit.md).                           |
 | repository_location | Location of the repository in the remote storage system.     |
 | PROPERTIES          |The credential method for accessing the remote storage system. |
 
