@@ -609,6 +609,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
                     ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(), column, num_rows);
         }
         auto& array = arrays[i];
+        DCHECK(!column->is_constant() && !column->only_null());
         ColumnToArrowArrayConverter converter(column, pool, *slot_types[i], schema->field(i)->type(), array);
         auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
         if (!arrow_st.ok()) {
