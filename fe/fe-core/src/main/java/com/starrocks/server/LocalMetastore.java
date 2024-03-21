@@ -3959,7 +3959,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void renameColumn(Database db, Table table, ColumnRenameClause renameClause) throws DdlException {
+    public void renameColumn(Database db, Table table, ColumnRenameClause renameClause) {
         if (!(table instanceof OlapTable)) {
             ErrorReportException.report(ErrorCode.ERR_COLUMN_RENAME_NOT_SUPPORTED,
                     "Column rename now only supports olap table.");
