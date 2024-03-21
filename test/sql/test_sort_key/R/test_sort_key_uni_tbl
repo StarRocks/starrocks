@@ -254,7 +254,7 @@ E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected 
 -- !result
 alter table uni_test order by (k1,k2);
 -- result:
-E: (1064, 'A materialized view or rollup index is being created on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW or https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER')
+E: (1064, 'A materialized view or rollup index is being created on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW or https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER')
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -293,7 +293,7 @@ select * from uni_test;
 -- !result
 alter table uni_test order by (k2,k1,v2,v1,v3);
 -- result:
-E: (1064, 'A materialized view or rollup index is being created on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW or https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER')
+E: (1064, 'A materialized view or rollup index is being created on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW or https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER')
 -- !result
 function: wait_alter_table_finish()
 -- result:

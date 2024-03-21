@@ -191,7 +191,7 @@ public class KafkaUtil {
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
             // TODO: need to refactor after be split into cn + dn
             List<Long> nodeIds = new ArrayList<>();
-            if ((RunMode.isSharedDataMode())) {
+            if (RunMode.isSharedDataMode()) {
                 long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                 if (request.kafkaMetaRequest != null) {
                     warehouseId = request.kafkaMetaRequest.kafkaInfo.warehouseId;

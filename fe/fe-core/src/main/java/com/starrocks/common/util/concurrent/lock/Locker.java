@@ -253,7 +253,7 @@ public class Locker {
             lastSlowLockLogTime = endMs;
             lastSlowLockLogTimeMap.put(databaseId, lastSlowLockLogTime);
             LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
-                            "former {}, current stack trace: {}", type, databaseId, fullQualifiedName, endMs - startMs,
+                            "former: {}, current stack trace: {}", type, databaseId, fullQualifiedName, endMs - startMs,
                     threadDump, LogUtil.getCurrentStackTrace());
         }
     }
