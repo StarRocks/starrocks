@@ -150,6 +150,7 @@ private:
                 // all requests are sent on this connection and the throughput will be limited by this.
                 // we use `connection_group` to create multiple single connections to remove this bottleneck.
                 options.connection_group = std::to_string(_stubs.size());
+                options.connection_type = config::brpc_connection_type;
                 std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
                 if (channel->Init(endpoint, &options)) {
                     return nullptr;

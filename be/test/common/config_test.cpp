@@ -34,6 +34,7 @@ TEST_F(ConfigTest, DumpAllConfigs) {
     CONF_Bool(cfg_bool_false, "false");
     CONF_Bool(cfg_bool_true, "true");
     CONF_Double(cfg_double, "123.456");
+<<<<<<< HEAD
     CONF_Int16(cfg_int16_t, "2561");
     CONF_Int32(cfg_int32_t, "65536123");
     CONF_Int64(cfg_int64_t, "4294967296123");
@@ -44,12 +45,41 @@ TEST_F(ConfigTest, DumpAllConfigs) {
     CONF_Int32s(cfg_std_vector_int32_t, "65536123,65536234,65536345");
     CONF_Int64s(cfg_std_vector_int64_t, "4294967296123,4294967296234,4294967296345");
     CONF_Strings(cfg_std_vector_std_string, "starrocks,config,test,string");
+=======
+    CONF_mDouble(cfg_mdouble, "-123.456");
+    CONF_Int16(cfg_int16, "2561");
+    CONF_mInt16(cfg_mint16, "-2561");
+    CONF_Int32(cfg_int32, "65536123");
+    CONF_mInt32(cfg_mint32, "-65536123");
+    CONF_Int64(cfg_int64, "4294967296123");
+    CONF_mInt64(cfg_mint64, "-4294967296123");
+    CONF_String(cfg_string, "test_string");
+    CONF_mString(cfg_mstring, "test_mstring");
+    CONF_Bools(cfg_bools, "true,false,true");
+    CONF_Doubles(cfg_doubles, "0.1,0.2,0.3");
+    CONF_Int16s(cfg_int16s, "1,2,3");
+    CONF_Int32s(cfg_int32s, "10,20,30");
+    CONF_Int64s(cfg_int64s, "100,200,300");
+    CONF_Strings(cfg_strings, "s1,s2,s3");
+    CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
+    CONF_Bool(cfg_bool_env, "false");
+    CONF_String_enum(cfg_string_enum, "true", "true,false");
+    // Invalid config file name
+    { EXPECT_FALSE(config::init("/path/to/nonexist/file")); }
+    // Invalid bool value
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_bool = t
+           )DEL";
+>>>>>>> 75f45f8f5f ([Feature] add be config brpc_connection_type (#42824))
 
     config::init(nullptr, true);
     std::stringstream ss;
     for (const auto& it : *(config::full_conf_map)) {
         ss << it.first << "=" << it.second << std::endl;
     }
+<<<<<<< HEAD
     ASSERT_EQ(
             "cfg_bool_false=0\ncfg_bool_true=1\ncfg_double=123.456\ncfg_int16_t=2561\ncfg_int32_t="
             "65536123\ncfg_int64_t=4294967296123\ncfg_std_string=starrocks_config_test_string\ncfg_std_"
@@ -58,6 +88,87 @@ TEST_F(ConfigTest, DumpAllConfigs) {
             "65536234, 65536345\ncfg_std_vector_int64_t=4294967296123, 4294967296234, "
             "4294967296345\ncfg_std_vector_std_string=starrocks, config, test, string\n",
             ss.str());
+=======
+    // Invalid numeric value
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_int32 = 0xAB
+           )DEL";
+
+        EXPECT_FALSE(config::init(ss));
+    }
+
+    // Invalid env
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_string = ${xxxx}
+           )DEL";
+
+        EXPECT_FALSE(config::init(ss));
+    }
+    // Invalid enum value
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           cfg_string_enum = unknown
+           )DEL";
+        EXPECT_FALSE(config::init(ss));
+    }
+
+    // Valid input
+    {
+        std::stringstream ss;
+        ss << R"DEL(
+           #comment
+           cfg_bool = true
+           cfg_mbool = false
+           
+           cfg_double = 10.0
+
+           # cfg_int16 = 12
+           cfg_mint16 = 12
+
+           cfg_string = test string
+           
+           cfg_mstring = key =value 
+           
+           cfg_int32s = 123, 456, 789 
+      
+           cfg_strings = text1, hello world , StarRocks
+           
+           cfg_bool_env = ${ConfigTestEnv2}
+
+           cfg_string_enum = false
+           )DEL";
+
+        ASSERT_EQ(0, ::setenv("ConfigTestEnv1", "env1_value", 1));
+        ASSERT_EQ(0, ::setenv("ConfigTestEnv2", " true", 1));
+
+        EXPECT_TRUE(config::init(ss));
+    }
+
+    EXPECT_EQ(true, cfg_bool);
+    EXPECT_EQ(false, cfg_mbool);
+    EXPECT_EQ(10, cfg_double);
+    EXPECT_EQ(-123.456, cfg_mdouble);
+    EXPECT_EQ(2561, cfg_int16);
+    EXPECT_EQ(12, cfg_mint16);
+    EXPECT_EQ(4294967296123, cfg_int64);
+    EXPECT_EQ(-4294967296123, cfg_mint64);
+    EXPECT_EQ("test string", cfg_string);
+    EXPECT_EQ("key =value", cfg_mstring.value());
+    EXPECT_THAT(cfg_bools, ElementsAre(true, false, true));
+    EXPECT_THAT(cfg_doubles, ElementsAre(0.1, 0.2, 0.3));
+    EXPECT_THAT(cfg_int16s, ElementsAre(1, 2, 3));
+    EXPECT_THAT(cfg_int32s, ElementsAre(123, 456, 789));
+    EXPECT_THAT(cfg_int64s, ElementsAre(100, 200, 300));
+    EXPECT_THAT(cfg_strings, ElementsAre("text1", "hello world", "StarRocks"));
+    EXPECT_EQ("prefix/env1_value/suffix", cfg_string_env);
+    EXPECT_EQ(true, cfg_bool_env);
+    EXPECT_EQ("false", cfg_string_enum);
+>>>>>>> 75f45f8f5f ([Feature] add be config brpc_connection_type (#42824))
 }
 
 TEST_F(ConfigTest, UpdateConfigs) {
