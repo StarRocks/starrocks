@@ -23,6 +23,8 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -159,6 +161,9 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             return predicate;
         }
 
+        Type compatibleType =
+                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
+
         // we will try cast const operator to variable operator
         if ((rightChild.isVariable() && leftChild.isConstantRef()) ||
                 (leftChild.isVariable() && rightChild.isConstantRef())) {
@@ -169,9 +174,6 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 return optional.get();
             }
         }
-
-        Type compatibleType =
-                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);
@@ -189,10 +191,24 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         Type typeConstant = constant.getType();
         Type typeVariable = variable.getType();
 
+        boolean checkStringCastToNumber = false;
+        if (typeVariable.isNumericType() && typeConstant.isStringType()) {
+            if (predicate.getBinaryType().isNotRangeComparison()) {
+                String baseType = ConnectContext.get() != null ?
+                        ConnectContext.get().getSessionVariable().getCboEqBaseType() : SessionVariableConstants.VARCHAR;
+                checkStringCastToNumber = SessionVariableConstants.DECIMAL.equals(baseType) ||
+                        SessionVariableConstants.DOUBLE.equals(baseType);
+            } else {
+                // range compare, base type must be double
+                checkStringCastToNumber = true;
+            }
+        }
+
         // strict check, only support white check
         if ((typeVariable.isNumericType() && typeConstant.isNumericType()) ||
                 (typeVariable.isDateType() && typeConstant.isNumericType()) ||
-                (typeVariable.isDateType() && typeConstant.isStringType())) {
+                (typeVariable.isDateType() && typeConstant.isStringType())
+                || checkStringCastToNumber) {
 
             Optional<ScalarOperator> op = Utils.tryCastConstant(constant, variable.getType());
             if (op.isPresent()) {
