@@ -52,6 +52,7 @@ import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.storagevolume.StorageVolume;
@@ -635,6 +636,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION =
             "enable_partition_column_value_only_optimization";
+
+    public static final String WAREHOUSE_NAME = "warehouse";
 
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
@@ -1744,6 +1747,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+    @VariableMgr.VarAttr(name = WAREHOUSE_NAME)
+    private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionColumnValueOnlyOptimization = true;
 
@@ -2221,6 +2227,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getMaxParallelScanInstanceNum() {
         return maxParallelScanInstanceNum;
+    }
+
+    public String getWarehouseName() {
+        return warehouseName;
+    }
+
+    public void setWarehouseName(String warehouseName) {
+        this.warehouseName = warehouseName;
     }
 
     public String getHdfsBackendSelectorHashAlgorithm() {

@@ -51,6 +51,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -607,6 +608,11 @@ public class OlapTableFactory implements AbstractTableFactory {
             // if failed in any step, use this set to do clear things
             Set<Long> tabletIdSet = new HashSet<Long>();
 
+            long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+            if (ConnectContext.get() != null) {
+                warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            }
+
             // do not create partition for external table
             if (table.isOlapOrCloudNativeTable()) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
@@ -618,7 +624,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
                     Partition partition = metastore.createPartition(db, table, partitionId, tableName, version, tabletIdSet);
-                    metastore.buildPartitions(db, table, partition.getSubPartitions().stream().collect(Collectors.toList()));
+                    metastore.buildPartitions(db, table, partition.getSubPartitions().stream().collect(Collectors.toList()),
+                            warehouseId);
                     table.addPartition(partition);
                 } else if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                     try {
@@ -659,7 +666,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     }
                     // It's ok if partitions is empty.
                     metastore.buildPartitions(db, table, partitions.stream().map(Partition::getSubPartitions)
-                            .flatMap(p -> p.stream()).collect(Collectors.toList()));
+                            .flatMap(p -> p.stream()).collect(Collectors.toList()), warehouseId);
                     for (Partition partition : partitions) {
                         table.addPartition(partition);
                     }

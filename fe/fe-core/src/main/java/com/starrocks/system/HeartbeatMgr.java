@@ -62,7 +62,6 @@ import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -226,11 +225,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
-                                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().
-                                        getDefaultWarehouse();
-                                long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+                                long workerGroupId = computeNode.getWorkerGroupId();
                                 String workerAddr = computeNode.getHost() + ":" + starletPort;
-
                                 GlobalStateMgr.getCurrentState().getStarOSAgent().
                                         addWorker(computeNode.getId(), workerAddr, workerGroupId);
                             }

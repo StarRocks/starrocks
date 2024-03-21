@@ -49,7 +49,7 @@ public class CompactionSchedulerTest {
                 try {
                     dbTransactionMgr.beginTransaction(
                             (List<Long>) any, anyString, (TUniqueId) any, (TransactionState.TxnCoordinator) any,
-                            (TransactionState.LoadJobSourceType) any, anyLong, anyLong
+                            (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong
                     );
                 } catch (Exception e) {
                     // skip

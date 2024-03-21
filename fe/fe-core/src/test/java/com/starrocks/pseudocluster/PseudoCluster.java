@@ -195,7 +195,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public void removeWorker(String hostAndPort) throws DdlException {
+        public void removeWorker(String hostAndPort, long workergroupid) throws DdlException {
             workers.removeIf(w -> Objects.equals(w.hostAndPort, hostAndPort));
         }
 

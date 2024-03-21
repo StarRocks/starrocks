@@ -170,7 +170,10 @@ public class DatabaseTransactionMgr {
      */
     public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
                                  TransactionState.TxnCoordinator coordinator,
-                                 TransactionState.LoadJobSourceType sourceType, long listenerId, long timeoutSecond)
+                                 TransactionState.LoadJobSourceType sourceType,
+                                 long listenerId,
+                                 long timeoutSecond,
+                                 long warehouseId)
             throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
         Preconditions.checkNotNull(coordinator);
@@ -183,6 +186,7 @@ public class DatabaseTransactionMgr {
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
                 coordinator, listenerId, timeoutSecond * 1000);
         transactionState.setPrepareTime(System.currentTimeMillis());
+        transactionState.setWarehouseId(warehouseId);
 
         transactionState.writeLock();
         try {

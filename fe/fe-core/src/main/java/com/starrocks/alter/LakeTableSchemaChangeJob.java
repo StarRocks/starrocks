@@ -56,6 +56,7 @@ import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -69,6 +70,7 @@ import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.warehouse.DefaultWarehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -307,7 +309,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             List<Column> differences = originSchema.stream().filter(element ->
                                     !shadowSchema.contains(element)).collect(Collectors.toList());
                             // can just drop one column one time, so just one element in differences
-                            Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                            int dropIdx = originSchema.indexOf(differences.get(0));
                             for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
                                 Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
                                 if (dropIdx < sortKeyIdx) {
@@ -354,7 +356,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
-                        Long backendId = Utils.chooseNodeId(lakeTablet);
+                        DefaultWarehouse warehouse = (DefaultWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                        Long backendId = warehouse.getComputeNodeId(lakeTablet);
                         if (backendId == null) {
                             throw new AlterCancelException("No alive backend");
                         }
@@ -453,7 +457,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        Long backendId = Utils.chooseNodeId((LakeTablet) shadowTablet);
+                        DefaultWarehouse warehouse = (DefaultWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                        Long backendId = warehouse.getComputeNodeId((LakeTablet) shadowTablet);
                         if (backendId == null) {
                             throw new AlterCancelException("No alive backend");
                         }
@@ -631,7 +637,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion,
-                            finishedTimeMs / 1000);
+                            finishedTimeMs / 1000, warehouseId);
                 }
             }
             return true;
@@ -665,7 +671,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 List<Column> differences = originSchema.stream().filter(element ->
                         !shadowSchema.contains(element)).collect(Collectors.toList());
                 // can just drop one column one time, so just one element in differences
-                Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                int dropIdx = originSchema.indexOf(differences.get(0));
                 modifiedColumns.add(originSchema.get(dropIdx).getName());
             } else {
                 // add column should not affect old mv, just ignore.

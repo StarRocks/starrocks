@@ -29,6 +29,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Cluster implements Writable {
     private static final Logger LOG = LogManager.getLogger(Cluster.class);
@@ -37,6 +38,8 @@ public class Cluster implements Writable {
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
+
+    private final AtomicInteger nextComputeNodeIndex = new AtomicInteger(0);
 
     public Cluster(long id) {
         this.id = id;
@@ -49,6 +52,10 @@ public class Cluster implements Writable {
 
     public long getWorkerGroupId() {
         return workerGroupId;
+    }
+
+    public AtomicInteger getNextComputeNodeHostId() {
+        return nextComputeNodeIndex;
     }
 
     public List<Long> getComputeNodeIds() {

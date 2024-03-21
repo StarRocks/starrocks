@@ -58,6 +58,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
+        schemaChangeJob.setWarehouseId(warehouseId);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
             long originIndexId = entry.getKey();

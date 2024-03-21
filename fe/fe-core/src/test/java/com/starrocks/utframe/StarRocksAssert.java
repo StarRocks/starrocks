@@ -238,7 +238,7 @@ public class StarRocksAssert {
     public StarRocksAssert withRoutineLoad(String sql) throws Exception {
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
-        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getNodeTasksNum();
         beTasksNum.put(1L, 100);
         routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
         return this;

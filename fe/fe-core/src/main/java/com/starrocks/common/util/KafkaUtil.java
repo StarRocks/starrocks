@@ -51,6 +51,7 @@ import com.starrocks.proto.PStringPair;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
@@ -71,21 +72,24 @@ public class KafkaUtil {
     private static final ProxyAPI PROXY_API = new ProxyAPI();
 
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                      ImmutableMap<String, String> properties) throws UserException {
-        return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties);
+                                                      ImmutableMap<String, String> properties,
+                                                      long warehouseId) throws UserException {
+        return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties, warehouseId);
     }
 
     // latest offset is (the latest existing message offset + 1)
     public static Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
-                                                      List<Integer> partitions) throws UserException {
-        return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions);
+                                                      List<Integer> partitions,
+                                                      long warehouseId) throws UserException {
+        return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions, warehouseId);
     }
 
     public static Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                          ImmutableMap<String, String> properties,
-                                                         List<Integer> partitions) throws UserException {
-        return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions);
+                                                         List<Integer> partitions,
+                                                         long warehouseId) throws UserException {
+        return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions, warehouseId);
     }
 
     public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
@@ -94,10 +98,12 @@ public class KafkaUtil {
     }
 
     public static PKafkaLoadInfo genPKafkaLoadInfo(String brokerList, String topic,
-                                                   ImmutableMap<String, String> properties) {
+                                                   ImmutableMap<String, String> properties,
+                                                   long warehouseId) {
         PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
         kafkaLoadInfo.brokers = brokerList;
         kafkaLoadInfo.topic = topic;
+        kafkaLoadInfo.warehouseId = warehouseId;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             PStringPair pair = new PStringPair();
             pair.key = entry.getKey();
@@ -112,11 +118,12 @@ public class KafkaUtil {
 
     static class ProxyAPI {
         public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                   ImmutableMap<String, String> convertedCustomProperties)
+                                                   ImmutableMap<String, String> convertedCustomProperties,
+                                                   long warehouseId)
                 throws UserException {
             // create request
             PKafkaMetaProxyRequest metaRequest = new PKafkaMetaProxyRequest();
-            metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties);
+            metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties, warehouseId);
             PProxyRequest request = new PProxyRequest();
             request.kafkaMetaRequest = metaRequest;
 
@@ -126,22 +133,25 @@ public class KafkaUtil {
 
         public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                    ImmutableMap<String, String> properties,
-                                                   List<Integer> partitions) throws UserException {
-            return getOffsets(brokerList, topic, properties, partitions, true);
+                                                   List<Integer> partitions,
+                                                   long warehouseId) throws UserException {
+            return getOffsets(brokerList, topic, properties, partitions, true, warehouseId);
         }
 
         public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
-                                                      List<Integer> partitions) throws UserException {
-            return getOffsets(brokerList, topic, properties, partitions, false);
+                                                      List<Integer> partitions,
+                                                      long warehouseId) throws UserException {
+            return getOffsets(brokerList, topic, properties, partitions, false, warehouseId);
         }
 
         public Map<Integer, Long> getOffsets(String brokerList, String topic,
                                              ImmutableMap<String, String> properties,
-                                             List<Integer> partitions, boolean isLatest) throws UserException {
+                                             List<Integer> partitions, boolean isLatest,
+                                             long warehouseId) throws UserException {
             // create request
             PKafkaOffsetProxyRequest offsetRequest = new PKafkaOffsetProxyRequest();
-            offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties);
+            offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties, warehouseId);
             offsetRequest.partitionIds = partitions;
             PProxyRequest request = new PProxyRequest();
             request.kafkaOffsetRequest = offsetRequest;
@@ -182,8 +192,19 @@ public class KafkaUtil {
             try {
                 // TODO: need to refactor after be split into cn + dn
                 List<Long> nodeIds = new ArrayList<>();
-                if ((RunMode.isSharedDataMode())) {
-                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+                if (RunMode.isSharedDataMode()) {
+                    long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+                    if (request.kafkaMetaRequest != null) {
+                        warehouseId = request.kafkaMetaRequest.kafkaInfo.warehouseId;
+                    } else if (request.kafkaOffsetRequest != null) {
+                        warehouseId = request.kafkaOffsetRequest.kafkaInfo.warehouseId;
+                    } else if (request.kafkaOffsetBatchRequest != null) {
+                        // contain kafkaOffsetBatchRequest
+                        PKafkaOffsetProxyRequest req = request.kafkaOffsetBatchRequest.requests.get(0);
+                        warehouseId = req.kafkaInfo.warehouseId;
+                    }
+
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                     for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                         ComputeNode node =
                                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);

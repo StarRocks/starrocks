@@ -27,6 +27,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -125,7 +127,7 @@ public class DefaultWorkerProviderTest {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true,
-                            numUsedComputeNodes);
+                            numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -179,7 +181,13 @@ public class DefaultWorkerProviderTest {
 
             new MockUp<WarehouseManager>() {
                 @Mock
-                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
+                public Warehouse getWarehouse(long warehouseId) {
+                    return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                            WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+                }
+
+                @Mock
+                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
                     return id2ComputeNode;
                 }
             };
@@ -194,7 +202,7 @@ public class DefaultWorkerProviderTest {
                 workerProvider =
                         workerProviderFactory.captureAvailableWorkers(
                                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false,
-                                numUsedComputeNodes);
+                                numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
                 for (long id = 0; id < 15; id++) {
                     ComputeNode worker = workerProvider.getWorkerById(id);

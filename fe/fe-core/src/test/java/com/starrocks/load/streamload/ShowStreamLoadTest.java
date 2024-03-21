@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
@@ -75,9 +76,11 @@ public class ShowStreamLoadTest {
 
         String labelName = "label_stream_load";
         TransactionResult resp = new TransactionResult();
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, false,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         labelName = "label_routine_load";
-        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, true);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, resp, true,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         String sql = "show all stream load";
         ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

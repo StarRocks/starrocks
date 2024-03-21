@@ -332,7 +332,12 @@ public enum ErrorCode {
      * 5500 - 5599: DDL operation failure
      */
     ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5500, new byte[] {'4', '2', '0', '0', '0'},
-            "table '%s' has location property and cannot be colocated")
+            "table '%s' has location property and cannot be colocated"),
+
+    /**
+     * 10000 - 10099: warehouse
+     */
+    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' not exist.")
     ;
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {

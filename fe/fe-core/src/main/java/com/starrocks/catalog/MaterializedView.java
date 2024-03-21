@@ -64,6 +64,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -440,6 +441,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "queryOutputIndices")
     protected List<Integer> queryOutputIndices = Lists.newArrayList();
 
+    @SerializedName(value = "warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
     protected volatile ParseNode defineQueryParseNode = null;
 
     public MaterializedView() {
@@ -581,6 +585,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setRefreshScheme(MvRefreshScheme refreshScheme) {
         this.refreshScheme = refreshScheme;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     /**

@@ -129,7 +129,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
-                new ArrayList<>(partitionIdToOffset.keySet()));
+                new ArrayList<>(partitionIdToOffset.keySet()), warehouseId);
         for (Map.Entry<Integer, Long> entry : latestOffsets.entrySet()) {
             kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
         }

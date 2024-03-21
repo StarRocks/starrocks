@@ -62,6 +62,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
@@ -80,6 +81,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -93,8 +95,8 @@ import java.util.stream.Collectors;
 public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
 
-    // be => running tasks num
-    private Map<Long, Integer> beTasksNum = Maps.newHashMap();
+    // warehouse ==> {be : running tasks num}
+    private Map<Long, Map<Long, Integer>> warehouseNodeTasksNum = Maps.newHashMap();
     private ReentrantLock slotLock = new ReentrantLock();
 
     // routine load job meta
@@ -120,37 +122,44 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public RoutineLoadMgr() {
+        warehouseNodeTasksNum.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, Maps.newHashMap());
     }
 
     // returns -1 if there is no available be
-    public long takeBeTaskSlot() {
+    // find the node with the fewest tasks
+    public long takeBeTaskSlot(long warehouseId) {
         slotLock.lock();
         try {
-            long beId = -1L;
+            long nodeId = -1L;
             int minTasksNum = Integer.MAX_VALUE;
-            for (Map.Entry<Long, Integer> entry : beTasksNum.entrySet()) {
-                if (entry.getValue() < Config.max_routine_load_task_num_per_be
-                        && entry.getValue() < minTasksNum) {
-                    beId = entry.getKey();
-                    minTasksNum = entry.getValue();
+            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
+            if (nodeMap != null) {
+                for (Map.Entry<Long, Integer> entry : nodeMap.entrySet()) {
+                    if (entry.getValue() < Config.max_routine_load_task_num_per_be
+                            && entry.getValue() < minTasksNum) {
+                        nodeId = entry.getKey();
+                        minTasksNum = entry.getValue();
+                    }
+                }
+                if (nodeId != -1) {
+                    nodeMap.put(nodeId, minTasksNum + 1);
+                    warehouseNodeTasksNum.put(warehouseId, nodeMap);
                 }
             }
-            if (beId != -1) {
-                beTasksNum.put(beId, minTasksNum + 1);
-            }
-            return beId;
+            return nodeId;
         } finally {
             slotLock.unlock();
         }
     }
 
-    public long takeBeTaskSlot(long beId) {
+    public long takeNodeById(long warehouseId, long nodeId) {
         slotLock.lock();
         try {
-            Integer taskNum = beTasksNum.get(beId);
+            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
+            Integer taskNum = nodeMap.get(nodeId);
             if (taskNum != null && taskNum < Config.max_routine_load_task_num_per_be) {
-                beTasksNum.put(beId, taskNum + 1);
-                return beId;
+                nodeMap.put(nodeId, taskNum + 1);
+                return nodeId;
             } else {
                 return -1L;
             }
@@ -159,15 +168,16 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    public void releaseBeTaskSlot(long beId) {
+    public void releaseBeTaskSlot(long warehouseId, long nodeId) {
         slotLock.lock();
         try {
-            if (beTasksNum.containsKey(beId)) {
-                int tasksNum = beTasksNum.get(beId);
+            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
+            if (nodeMap.containsKey(nodeId)) {
+                int tasksNum = nodeMap.get(nodeId);
                 if (tasksNum > 0) {
-                    beTasksNum.put(beId, tasksNum - 1);
+                    nodeMap.put(nodeId, tasksNum - 1);
                 } else {
-                    beTasksNum.put(beId, 0);
+                    nodeMap.put(nodeId, 0);
                 }
             }
         } finally {
@@ -178,31 +188,49 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     public void updateBeTaskSlot() {
         slotLock.lock();
         try {
-            List<Long> aliveNodeIds = new ArrayList<>();
             // TODO: need to refactor after be split into cn + dn
+            List<Long> finalAliveNodeIds = new ArrayList<>();
+            // collect all nodes group by warehouse
             if (RunMode.isSharedDataMode()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-                for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                    ComputeNode node =
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
-                    if (node != null && node.isAlive()) {
-                        aliveNodeIds.add(nodeId);
+                for (Warehouse warehouse : GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses()) {
+                    List<Long> aliveNodeIds = new ArrayList<>();
+                    for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                        ComputeNode node =
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                        if (node != null && node.isAlive()) {
+                            aliveNodeIds.add(nodeId);
+                        }
+                    }
+
+                    finalAliveNodeIds.addAll(aliveNodeIds);
+
+                    // add new nodes
+                    Map<Long, Integer> nodesInfo = warehouseNodeTasksNum.get(warehouse.getId());
+                    if (nodesInfo == null) {
+                        nodesInfo = new HashMap<>();
+                        warehouseNodeTasksNum.put(warehouse.getId(), nodesInfo);
+                    }
+                    for (Long nodeId : aliveNodeIds) {
+                        if (!nodesInfo.containsKey(nodeId)) {
+                            nodesInfo.put(nodeId, 0);
+                        }
                     }
                 }
             } else {
-                aliveNodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true));
-            }
-
-            // add new nodes
-            for (Long nodeId : aliveNodeIds) {
-                if (!beTasksNum.containsKey(nodeId)) {
-                    beTasksNum.put(nodeId, 0);
+                finalAliveNodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true));
+                // add new nodes
+                for (Long nodeId : finalAliveNodeIds) {
+                    Map<Long, Integer> nodesInfo = warehouseNodeTasksNum.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    if (!nodesInfo.containsKey(nodeId)) {
+                        nodesInfo.put(nodeId, 0);
+                    }
                 }
             }
 
             // remove not alive be
-            List<Long> finalAliveNodeIds = aliveNodeIds;
-            beTasksNum.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
+            for (Map<Long, Integer> nodesInfo : warehouseNodeTasksNum.values()) {
+                nodesInfo.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
+            }
         } finally {
             slotLock.unlock();
         }
@@ -226,16 +254,23 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
     }
 
+    public Map<Long, Integer> getNodeTasksNum() {
+        return warehouseNodeTasksNum.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
     @VisibleForTesting
-    public Map<Long, Integer> getBeTasksNum() {
-        return beTasksNum;
+    public Map<Long, Integer> getNodeTasksNum(long warehouseId) {
+        return warehouseNodeTasksNum.get(warehouseId);
     }
 
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
-        int beNum = 0;
+        int nodeNum = 0;
         slotLock.lock();
         try {
-            beNum = getBeTasksNum().size();
+            Map<Long, Integer> nodeTasksNum = getNodeTasksNum(routineLoadJob.getWarehouseId());
+            if (nodeTasksNum != null) {
+                nodeNum = nodeTasksNum.size();
+            }
         } finally {
             slotLock.unlock();
         }
@@ -246,7 +281,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 throw new DdlException("Name " + routineLoadJob.getName() + " already used in db "
                         + dbName);
             }
-            long maxConcurrentTasks = beNum * Config.max_routine_load_task_num_per_be;
+            long maxConcurrentTasks = nodeNum * Config.max_routine_load_task_num_per_be;
             // When calculating the used slots, we only consider Jobs in the NEED_SCHEDULE and RUNNING states.
             List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
                     RoutineLoadJob.JobState.RUNNING));
@@ -258,7 +293,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             if (curTaskNum + newTaskNum > maxConcurrentTasks) {
                 throw new DdlException("Current routine load tasks is " + curTaskNum + ". "
                         + "The new job need " + newTaskNum + " tasks. "
-                        + "But we only support " + beNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
+                        + "But we only support " + nodeNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
                         + "Please modify FE config max_routine_load_task_num_per_be if you want more job");
             }
             unprotectedAddJob(routineLoadJob);
@@ -379,10 +414,14 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     public int getClusterIdleSlotNum() {
         slotLock.lock();
         try {
-            return beTasksNum.values()
-                    .stream()
-                    .reduce(0,
-                            (acc, num) -> acc + Config.max_routine_load_task_num_per_be - num);
+            int result = 0;
+            for (Map<Long, Integer> nodeMap : warehouseNodeTasksNum.values()) {
+                result += nodeMap.values()
+                        .stream()
+                        .reduce(0,
+                                (acc, num) -> acc + Config.max_routine_load_task_num_per_be - num);
+            }
+            return result;
         } finally {
             slotLock.unlock();
         }

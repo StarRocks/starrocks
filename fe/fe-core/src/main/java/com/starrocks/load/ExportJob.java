@@ -91,6 +91,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -142,7 +143,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
     private List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
-    // backend id => backend lastStartTime 
+    // backend id => backend lastStartTime
     private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
 
     @SerializedName("id")
@@ -186,6 +187,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private int progress;
     @SerializedName("fm")
     private ExportFailMsg failMsg;
+    @SerializedName("warehouseId")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
     private TupleDescriptor exportTupleDesc;
     private Table exportTable;
     // when set to true, means this job instance is created by replay thread(FE restarted or master changed)
@@ -219,6 +223,15 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.id = jobId;
         this.queryId = queryId;
         this.queryIdString = queryId.toString();
+    }
+
+    public ExportJob(long jobId, UUID queryId, long warehouseId) {
+        this(jobId, queryId);
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     public void setJob(ExportStmt stmt) throws UserException {
@@ -384,7 +397,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
-                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
+                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", warehouseId);
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
@@ -407,7 +420,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 new PlanNodeId(nextId.getAndIncrement()),
                 exportTupleDesc,
                 "OlapScanNodeForExport",
-                locations);
+                locations,
+                warehouseId);
     }
 
     private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws UserException {
@@ -473,7 +487,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = getCoordinatorFactory().createBrokerExportScheduler(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit());
+                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap(), getMemLimit(), warehouseId);
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, job query id: {}, task idx: {}, task query id: {}",
                     id, DebugUtil.printId(this.queryId), i, DebugUtil.printId(queryId));
@@ -517,7 +531,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         Coordinator newCoord = getCoordinatorFactory().createBrokerExportScheduler(
                 id, newQueryId, desc, Lists.newArrayList(newFragment), Lists.newArrayList(newTaskScanNode),
-                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit());
+                TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTimeMs(), Maps.newHashMap(), getMemLimit(), warehouseId);
         this.coordList.set(taskIndex, newCoord);
         LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;

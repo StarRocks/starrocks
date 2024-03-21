@@ -192,7 +192,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // because the file info can be changed anytime.
         convertCustomProperties(true);
 
-        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties);
+        ((KafkaProgress) progress).convertOffset(brokerList, topic, convertedCustomProperties, warehouseId);
     }
 
     public synchronized void convertCustomProperties(boolean rebuild) throws DdlException {
@@ -249,6 +249,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(), id,
                             taskSchedIntervalS * 1000,
                             timeToExecuteMs, taskKafkaProgress, taskTimeoutSecond * 1000);
+                    kafkaTaskInfo.setWarehouseId(warehouseId);
                     routineLoadTaskInfoList.add(kafkaTaskInfo);
                     result.add(kafkaTaskInfo);
                 }
@@ -272,9 +273,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+            Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             aliveNodeNum = 0;
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            for (long nodeId : currentWh.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
                     ++aliveNodeNum;
@@ -283,13 +284,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
         int partitionNum = currentKafkaPartitions.size();
         if (partitionNum == 0) {
-            // In non-stop states (NEED_SCHEDULE/RUNNING), having `partitionNum` as 0 is equivalent 
-            // to `currentKafkaPartitions` being uninitialized. When `currentKafkaPartitions` is 
-            // uninitialized, it indicates that the job has just been created and hasn't been scheduled yet. 
+            // In non-stop states (NEED_SCHEDULE/RUNNING), having `partitionNum` as 0 is equivalent
+            // to `currentKafkaPartitions` being uninitialized. When `currentKafkaPartitions` is
+            // uninitialized, it indicates that the job has just been created and hasn't been scheduled yet.
             // At this point, the user-specified number of partitions is used.
             partitionNum = customKafkaPartitions.size();
             if (partitionNum == 0) {
-                // If the user hasn't specified partition information, then we no longer take the `partition` 
+                // If the user hasn't specified partition information, then we no longer take the `partition`
                 // variable into account when calculating concurrency.
                 partitionNum = Integer.MAX_VALUE;
             }
@@ -360,6 +361,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(timeToExecuteMs, oldKafkaTaskInfo,
                 ((KafkaProgress) progress).getPartitionIdToOffset(oldKafkaTaskInfo.getPartitions()),
                 ((KafkaTaskInfo) routineLoadTaskInfo).getLatestOffset());
+        kafkaTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -458,7 +460,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private List<Integer> getAllKafkaPartitions() throws UserException {
         convertCustomProperties(false);
-        return KafkaUtil.getAllKafkaPartitions(brokerList, topic, ImmutableMap.copyOf(convertedCustomProperties));
+        return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
+                ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
     }
 
     public static KafkaRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {

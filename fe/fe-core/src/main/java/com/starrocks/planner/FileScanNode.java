@@ -71,7 +71,6 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -148,7 +147,7 @@ public class FileScanNode extends LoadScanNode {
     // file num
     private int filesAdded;
     private long totalBytes = 0;
-    
+
     private List<ComputeNode> nodes;
     private int nextBe = 0;
 
@@ -176,13 +175,14 @@ public class FileScanNode extends LoadScanNode {
     private List<ParamCreateContext> paramCreateContexts;
 
     public FileScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, long warehouseId) {
         super(id, desc, planNodeName);
         this.fileStatusesList = fileStatusesList;
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
         this.nullExprInAutoIncrement = true;
+        this.warehouseId = warehouseId;
     }
 
     @Override
@@ -289,7 +289,7 @@ public class FileScanNode extends LoadScanNode {
                 throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
             THdfsProperties hdfsProperties = new THdfsProperties();
-            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties); 
+            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties);
             params.setHdfs_properties(hdfsProperties);
         }
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
@@ -528,8 +528,9 @@ public class FileScanNode extends LoadScanNode {
 
         // TODO: need to refactor after be split into cn + dn
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-            for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+
+            for (long cnId : currentWh.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
                 if (cn != null && cn.isAvailable()) {
                     nodes.add(cn);

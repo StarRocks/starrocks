@@ -181,6 +181,11 @@ public class OlapScanNode extends ScanNode {
         olapTable = (OlapTable) desc.getTable();
     }
 
+    public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long warehouseId) {
+        this(id, desc, planNodeName);
+        this.warehouseId = warehouseId;
+    }
+
     public void setIsPreAggregation(boolean isPreAggregation, String reason) {
         this.isPreAggregation = isPreAggregation;
         this.reasonOfPreAggregation = reason;
@@ -427,7 +432,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setRow_count(selectedTablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {
-                    internalRange.setBucket_sequence((int)tabletId);
+                    internalRange.setBucket_sequence((int) tabletId);
                 } else {
                     internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
                 }
@@ -439,7 +444,8 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -495,7 +501,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {
-                    internalRange.setBucket_sequence((int)tabletId);
+                    internalRange.setBucket_sequence((int) tabletId);
                 } else {
                     internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
                 }
@@ -542,18 +548,19 @@ public class OlapScanNode extends ScanNode {
                     continue;
                 }
             }
-    
+
             // TODO: Implement a more robust strategy for tablet affinity.
             if (!enableQueryTabletAffinity) {
                 Collections.shuffle(replicas);
             }
-    
+
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -633,7 +640,8 @@ public class OlapScanNode extends ScanNode {
     private void computeTabletInfo() throws UserException {
         long localBeId = -1;
         if (Config.enable_local_replica_selection) {
-            localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+            localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
         }
         /**
          * The tablet info could be computed only once.
@@ -957,7 +965,8 @@ public class OlapScanNode extends ScanNode {
 
     // export some tablets
     public static OlapScanNode createOlapScanNodeByLocation(
-            PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList) {
+            PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList,
+            long warehouseId) {
         OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
         olapScanNode.numInstances = 1;
         olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
@@ -966,6 +975,7 @@ public class OlapScanNode extends ScanNode {
         olapScanNode.totalTabletsNum = 1;
         olapScanNode.isPreAggregation = false;
         olapScanNode.isFinalized = true;
+        olapScanNode.warehouseId = warehouseId;
         olapScanNode.result.addAll(locationsList);
 
         return olapScanNode;

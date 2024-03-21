@@ -25,6 +25,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -100,7 +101,8 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryComputeNodeId() throws UserException {
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
         return getPrimaryComputeNodeId(workerGroupId);
     }
@@ -117,7 +119,8 @@ public class LakeTablet extends Tablet {
             return Collections.emptySet();
         }
         try {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
         } catch (UserException e) {
@@ -181,7 +184,8 @@ public class LakeTablet extends Tablet {
         if (GlobalStateMgr.isCheckpointThread()) {
             throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
         return GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(getShardId(), workerGroupId);
     }

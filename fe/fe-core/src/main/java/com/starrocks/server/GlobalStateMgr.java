@@ -456,11 +456,11 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo() {
+    public TNodesInfo createNodesInfo(long warehouseId) {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
         // use default warehouse
-        Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
+        Warehouse warehouse = warehouseMgr.getWarehouse(warehouseId);
         // TODO: need to refactor after be split into cn + dn
         if (warehouse != null && RunMode.isSharedDataMode()) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();

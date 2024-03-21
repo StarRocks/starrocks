@@ -16,8 +16,11 @@ package com.starrocks.server;
 
 import com.google.common.collect.ImmutableMap;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -31,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -59,19 +63,27 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public Warehouse getDefaultWarehouse() {
-        return getWarehouse(DEFAULT_WAREHOUSE_NAME);
+    public List<Warehouse> getAllWarehouses() {
+        return new ArrayList<>(nameToWh.values());
     }
 
     public Warehouse getWarehouse(String warehouseName) {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return nameToWh.get(warehouseName);
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse warehouse = nameToWh.get(warehouseName);
+            if (warehouse == null) {
+                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+            }
+            return warehouse;
         }
     }
 
     public Warehouse getWarehouse(long warehouseId) {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return idToWh.get(warehouseId);
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse warehouse = idToWh.get(warehouseId);
+            if (warehouse == null) {
+                ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseId);
+            }
+            return warehouse;
         }
     }
 
@@ -87,13 +99,32 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
+    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        Warehouse warehouse = getDefaultWarehouse();
+        Warehouse warehouse = getWarehouse(warehouseId);
         warehouse.getAnyAvailableCluster().getComputeNodeIds().forEach(
                 nodeId -> builder.put(nodeId,
                         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
         return builder.build();
+    }
+
+    public ComputeNode getComputeNode(LakeTablet tablet) {
+        DefaultWarehouse warehouse = (DefaultWarehouse) nameToWh.get(DEFAULT_WAREHOUSE_NAME);
+        return warehouse.getComputeNode(tablet);
+    }
+
+    public ComputeNode getComputeNode(String warehouseName, LakeTablet tablet) {
+        DefaultWarehouse warehouse = (DefaultWarehouse) nameToWh.get(warehouseName);
+        return warehouse.getComputeNode(tablet);
+    }
+
+    public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+        DefaultWarehouse warehouse = (DefaultWarehouse) idToWh.get(warehouseId);
+        return warehouse.getComputeNode(tablet);
+    }
+
+    public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
+        return getWarehouse(warehouseId).getAnyAvailableCluster().getNextComputeNodeHostId();
     }
 
     @Override

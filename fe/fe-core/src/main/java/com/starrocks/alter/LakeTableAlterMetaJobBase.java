@@ -38,6 +38,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -247,7 +248,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
-                            finishedTimeMs / 1000);
+                            finishedTimeMs / 1000, WarehouseManager.DEFAULT_WAREHOUSE_ID);
                 }
             }
             return true;
@@ -276,12 +277,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                         "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
             }
 
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.VISIBLE)) {
                     addDirtyPartitionIndex(physicalPartition.getId(), index.getId(), index);
                     for (Tablet tablet : index.getTablets()) {
-                        Long backendId = Utils.chooseNodeId((LakeTablet) tablet);
+                        Long backendId = warehouseManager.getComputeNode((LakeTablet) tablet).getId();
                         Set<Long> set = beIdToTabletSet.computeIfAbsent(backendId, k -> Sets.newHashSet());
                         set.add(tablet.getId());
                     }

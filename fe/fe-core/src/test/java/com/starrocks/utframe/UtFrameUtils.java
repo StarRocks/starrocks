@@ -77,6 +77,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
@@ -130,7 +131,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.codec.binary.Hex;
@@ -352,10 +352,9 @@ public class UtFrameUtils {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             String workerAddress = backend.getHost() + ":" + starletPort;
-            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress,
+                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         }
         return be;
     }
@@ -371,10 +370,9 @@ public class UtFrameUtils {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             String workerAddress = backend.getHost() + ":" + starletPort;
-            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress, workerGroupId);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress,
+                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         }
         return cn;
     }
@@ -631,7 +629,7 @@ public class UtFrameUtils {
                     com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
                 } catch (Exception e) {
                     System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
-                            + "\nError msg:"  + e.getMessage());
+                            + "\nError msg:" + e.getMessage());
                     throw e;
                 }
             } catch (SemanticException | AnalysisException e) {
@@ -848,6 +846,7 @@ public class UtFrameUtils {
         }
         return optimizedPlan;
     }
+
     public static OptExpression getQueryOptExpression(ConnectContext connectContext,
                                                       ColumnRefFactory columnRefFactory,
                                                       LogicalPlan logicalPlan) {
@@ -1301,7 +1300,6 @@ public class UtFrameUtils {
         }
         context.getUserVariables().putAll(userVariablesFromHint);
     }
-
 
     private static void clearQueryScopeHintContext(ConnectContext context, SessionVariable sessionVariableBackup) {
         context.setSessionVariable(sessionVariableBackup);

@@ -420,6 +420,7 @@ message PKafkaLoadInfo {
     required string brokers = 1;
     required string topic = 2;
     repeated PStringPair properties = 3;
+    required int64 warehouseId = 11;
 };
 
 message PKafkaMetaProxyRequest {
@@ -469,6 +470,8 @@ message PPulsarLoadInfo {
     required string topic = 2;
     required string subscription = 3;
     repeated PStringPair properties = 4;
+
+    optional int64 warehouseId = 11;
 };
 
 message PPulsarMetaProxyRequest {

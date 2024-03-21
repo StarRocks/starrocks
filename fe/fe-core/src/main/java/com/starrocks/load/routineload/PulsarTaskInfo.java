@@ -81,7 +81,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         Map<String, Long> backlogNums = PulsarUtil.getBacklogNums(pulsarRoutineLoadJob.getServiceUrl(),
                 pulsarRoutineLoadJob.getTopic(), pulsarRoutineLoadJob.getSubscription(),
                 ImmutableMap.copyOf(pulsarRoutineLoadJob.getConvertedCustomProperties()),
-                partitions);
+                partitions, warehouseId);
         for (String partition : partitions) {
             Long backlogNum = backlogNums.get(partition);
             if (backlogNum != null && backlogNum > 0) {

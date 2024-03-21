@@ -203,6 +203,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                     PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUID.randomUUID(), id,
                             taskSchedIntervalS * 1000, timeToExecuteMs, partitions,
                             initialPositions, getTaskTimeoutSecond() * 1000);
+                    pulsarTaskInfo.setWarehouseId(warehouseId);
                     LOG.debug("pulsar routine load task created: " + pulsarTaskInfo);
                     routineLoadTaskInfoList.add(pulsarTaskInfo);
                     result.add(pulsarTaskInfo);
@@ -227,9 +228,9 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
+            Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             aliveNodeNum = 0;
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            for (long nodeId : currentWh.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
                     ++aliveNodeNum;
@@ -306,6 +307,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // add new task
         PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(timeToExecuteMs, oldPulsarTaskInfo,
                 ((PulsarProgress) progress).getPartitionToInitialPosition(oldPulsarTaskInfo.getPartitions()));
+        pulsarTaskInfo.setWarehouseId(routineLoadTaskInfo.getWarehouseId());
         // remove old task
         routineLoadTaskInfoList.remove(routineLoadTaskInfo);
         // add new task
@@ -405,7 +407,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // Get custom properties like tokens
         convertCustomProperties(false);
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
-                subscription, ImmutableMap.copyOf(convertedCustomProperties));
+                subscription, ImmutableMap.copyOf(convertedCustomProperties), warehouseId);
     }
 
     public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws UserException {

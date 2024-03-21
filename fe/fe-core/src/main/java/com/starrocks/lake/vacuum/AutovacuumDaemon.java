@@ -26,13 +26,13 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
@@ -145,7 +145,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
 
         for (Tablet tablet : tablets) {
-            ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            ComputeNode node = warehouseManager.getComputeNode((LakeTablet) tablet);
+
             if (node == null) {
                 return;
             }

@@ -105,6 +105,7 @@ import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -114,6 +115,7 @@ import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -162,7 +164,8 @@ public class SchemaChangeHandler extends AlterHandler {
         jobBuilder.withOptimizeClause(optimizeClause)
                 .withJobId(GlobalStateMgr.getCurrentState().getNextId())
                 .withDbId(db.getId())
-                .withTimeoutSeconds(timeoutSecond);
+                .withTimeoutSeconds(timeoutSecond)
+                .withWarehouse(ConnectContext.get().getCurrentWarehouseId());
 
         return jobBuilder.build();
     }
@@ -648,7 +651,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     // Because modifying the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
-    // And reordering table schema need to provide all columns, so we use the number of columns in the alterClause to determine 
+    // And reordering table schema need to provide all columns, so we use the number of columns in the alterClause to determine
     // whether it's modifying the sorting columns or reordering the table schema
     private boolean changeSortKeyColumn(ReorderColumnsClause alterClause, OlapTable table) throws DdlException {
         List<String> orderedColumns = alterClause.getColumnsByPos();
@@ -1174,13 +1177,28 @@ public class SchemaChangeHandler extends AlterHandler {
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
+        long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+        if (RunMode.isSharedNothingMode()) {
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (systemInfoService.backendAndComputeNodeStream().findAny().isEmpty()) {
+                throw new DdlException("no available compute nodes in warehouse");
+            }
+        } else {
+            // check warehouse
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse.getAnyAvailableCluster().getComputeNodeIds().isEmpty()) {
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+        }
+
         SchemaChangeData.Builder dataBuilder = SchemaChangeData.newBuilder();
         dataBuilder.withDatabase(db)
                 .withTable(olapTable)
                 .withTimeoutInSeconds(timeoutSecond)
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withBloomFilterColumns(bfColumns, bfFpp)
-                .withBloomFilterColumnsChanged(hasBfChange);
+                .withBloomFilterColumnsChanged(hasBfChange)
+                .withWarehouse(warehouseId);
 
         long baseIndexId = olapTable.getBaseIndexId();
         // begin checking each table
@@ -2561,6 +2579,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
                 .withNewIndexSchema(schemaChangeData.getNewIndexSchema())
+                .withWarehouse(schemaChangeData.getWarehouseId())
                 .build();
     }
 }

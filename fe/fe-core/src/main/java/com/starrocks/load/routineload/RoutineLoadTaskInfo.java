@@ -43,12 +43,15 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -101,6 +104,8 @@ public abstract class RoutineLoadTaskInfo {
     protected String label;
 
     protected StreamLoadTask streamLoadTask = null;
+
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
                                long timeToExecuteMs, long taskTimeoutMs) {
@@ -186,6 +191,14 @@ public abstract class RoutineLoadTaskInfo {
         this.msg = msg;
     }
 
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
     public boolean isRunningTimeout() {
         if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE) {
             // the corresponding txn is already finished, this task can not be treated as timeout.
@@ -215,11 +228,12 @@ public abstract class RoutineLoadTaskInfo {
 
         //  label = job_name+job_id+task_id
         label = Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
+
         txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, routineLoadJob.getId(),
-                timeoutMs / 1000);
+                timeoutMs / 1000, warehouseId);
     }
 
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
@@ -272,6 +286,17 @@ public abstract class RoutineLoadTaskInfo {
         } else {
             row.add(msg);
         }
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            // add warehouse in task info
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse == null) {
+                row.add("NULL");
+            } else {
+                row.add(warehouse.getName());
+            }
+        }
+
         return row;
     }
 

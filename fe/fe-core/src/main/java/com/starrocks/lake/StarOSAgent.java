@@ -344,13 +344,13 @@ public class StarOSAgent {
         workerToId.entrySet().removeIf(e -> e.getValue() == prevWorkerId);
     }
 
-    public void removeWorker(String workerIpPort) throws DdlException {
+    public void removeWorker(String workerIpPort, long workerGroupId) throws DdlException {
         prepare();
 
         long workerId = getWorker(workerIpPort);
 
         try {
-            client.removeWorker(serviceId, workerId);
+            client.removeWorker(serviceId, workerId, workerGroupId);
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception

@@ -21,9 +21,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections4.MapUtils;
@@ -85,10 +87,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
-                                                             int numUsedComputeNodes) {
+                                                             int numUsedComputeNodes,
+                                                             long warehouseId) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes);
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseId);
             ImmutableMap<Long, ComputeNode> idToBackend;
             if (RunMode.isSharedDataMode()) {
                 idToBackend = idToComputeNode;
@@ -220,6 +223,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
      * if usedComputeNode turns on or no backend, we add all compute nodes to the result.
      * if perferComputeNode turns on, we just return computeNode set
      * else add backend set and return
+     *
      * @return
      */
     @Override
@@ -260,8 +264,6 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return chooseComputeNode ? computeNodesToString() : backendsToString();
     }
 
-
-
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(
                 FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode));
@@ -285,6 +287,14 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @VisibleForTesting
     static int getNextComputeNodeIndex() {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            long currentWh = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+            if (ConnectContext.get() != null) {
+                currentWh = ConnectContext.get().getCurrentWarehouseId();
+            }
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr().
+                    getNextComputeNodeIndexFromWarehouse(currentWh).getAndIncrement();
+        }
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
@@ -294,9 +304,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
-                                                                        int numUsedComputeNodes) {
+                                                                        int numUsedComputeNodes,
+                                                                        long warehouseId) {
         if (RunMode.isSharedDataMode()) {
-            return GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodesFromWarehouse();
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodesFromWarehouse(warehouseId);
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode
