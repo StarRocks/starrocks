@@ -363,8 +363,7 @@ BE dynamic parameters are as follows.
 | default_num_rows_per_column_file_block | 1024 | N/A | The maximum number of rows that can be stored in each row block. |
 | pending_data_expire_time_sec | 1800 | Second | The expiration time of the pending data in the storage engine. |
 | inc_rowset_expired_sec | 1800 | Second | The expiration time of the incoming data. This configuration item is used in incremental clone. |
-| tablet_rowset_stale_sweep_time_sec | 1800 | Second | The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading.
-|
+| tablet_rowset_stale_sweep_time_sec | 1800 | Second | The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading. |
 | snapshot_expire_time_sec | 172800 | Second | The expiration time of snapshot files. |
 | trash_file_expire_time_sec | 86,400 | Second | The time interval at which to clean trash files.  The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6. |
 | base_compaction_check_interval_seconds | 60 | Second | The time interval of thread polling for a Base Compaction. |
@@ -851,6 +850,12 @@ BE static parameters are as follows.
 - **Default**: TRUE
 - **Unit**: N/A
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
+
+#### update_compaction_size_threshold
+
+- **Default**: 67108864
+- **Unit**: bytes
+- **Description**: The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand. Since v2.5.20, the default value of this parameter is changed from `268435456` (256 MB) to `67108864` (64 MB) to accelerate compaction.
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
