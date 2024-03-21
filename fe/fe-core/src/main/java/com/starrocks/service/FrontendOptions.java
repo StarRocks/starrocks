@@ -152,6 +152,7 @@ public class FrontendOptions {
     @VisibleForTesting
     static void initAddrUseFqdn(List<InetAddress> addrs) {
         useFqdn = true;
+        analyzePriorityCidrs();
         String fqdn = null;
 
         if (PRIORITY_CIDRS.isEmpty()) {
