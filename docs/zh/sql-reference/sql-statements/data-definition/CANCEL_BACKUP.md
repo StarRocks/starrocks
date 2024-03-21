@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-取消指定数据库中一个正在进行的备份任务。更多信息，请见 [备份和恢复](../../../administration/Backup_and_restore.md)。
+取消指定数据库中一个正在进行的备份任务。更多信息，请见 [备份和恢复](../../../administration/management/Backup_and_restore.md)。
 
 ## 语法
 

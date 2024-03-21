@@ -1766,23 +1766,23 @@ public class ExpressionAnalyzer {
                     valueColumn = column;
                 }
             }
-            // (table, keys..., value_column, strict_mode)
+            // (table, keys..., value_column, null_if_not_found)
             int valueColumnIdx;
-            int strictModeIdx;
+            int nullIfNotFoundIdx;
             if (params.size() == keyColumns.size() + 1) {
                 valueColumnIdx = -1;
-                strictModeIdx = -1;
+                nullIfNotFoundIdx = -1;
             } else if (params.size() == keyColumns.size() + 2) {
                 if (params.get(params.size() - 1).getType().getPrimitiveType().isStringType()) {
                     valueColumnIdx = params.size() - 1;
-                    strictModeIdx = -1;
+                    nullIfNotFoundIdx = -1;
                 } else {
-                    strictModeIdx = params.size() - 1;
+                    nullIfNotFoundIdx = params.size() - 1;
                     valueColumnIdx = -1;
                 }
             } else if (params.size() == keyColumns.size() + 3) {
                 valueColumnIdx = params.size() - 2;
-                strictModeIdx = params.size() - 1;
+                nullIfNotFoundIdx = params.size() - 1;
             } else {
                 throw new SemanticException(String.format("dict_mapping function param size should be %d - %d",
                     keyColumns.size() + 1, keyColumns.size() + 3));
@@ -1806,13 +1806,13 @@ public class ExpressionAnalyzer {
                 valueField = valueColumn.getName();
             }
 
-            boolean strictMode = false;
-            if (strictModeIdx >= 0) {
-                Expr strictModeExpr = params.get(strictModeIdx);
-                if (!(strictModeExpr instanceof BoolLiteral)) {
-                    throw new SemanticException("dict_mapping function strict_mode param should be bool constant");
+            boolean nullIfNotFound = false;
+            if (nullIfNotFoundIdx >= 0) {
+                Expr nullIfNotFoundExpr = params.get(nullIfNotFoundIdx);
+                if (!(nullIfNotFoundExpr instanceof BoolLiteral)) {
+                    throw new SemanticException("dict_mapping function null_if_not_found param should be bool constant");
                 }
-                strictMode = ((BoolLiteral) strictModeExpr).getValue();
+                nullIfNotFound = ((BoolLiteral) nullIfNotFoundExpr).getValue();
             }
 
             List<Type> expectTypes = new ArrayList<>();
@@ -1823,7 +1823,7 @@ public class ExpressionAnalyzer {
             if (valueColumnIdx >= 0) {
                 expectTypes.add(Type.VARCHAR);
             }
-            if (strictModeIdx >= 0) {
+            if (nullIfNotFoundIdx >= 0) {
                 expectTypes.add(Type.BOOLEAN);
             }
 
@@ -1838,8 +1838,8 @@ public class ExpressionAnalyzer {
                 if (valueColumnIdx >= 0) {
                     expectTypeNames.add("VARCHAR value_field_name");
                 }
-                if (strictModeIdx >= 0) {
-                    expectTypeNames.add("BOOLEAN strict_mode");
+                if (nullIfNotFoundIdx >= 0) {
+                    expectTypeNames.add("BOOLEAN null_if_not_found");
                 }
 
                 for (int i = 0; i < node.getChildren().size(); ++i) {
@@ -1870,7 +1870,8 @@ public class ExpressionAnalyzer {
             List<String> keyFields = keyColumns.stream().map(Column::getName).collect(Collectors.toList());
             dictQueryExpr.setKey_fields(keyFields);
             dictQueryExpr.setValue_field(valueField);
-            dictQueryExpr.setStrict_mode(strictMode);
+            // For compatibility reason, we do not change the "strict_mode" variable in TDictQueryExpr
+            dictQueryExpr.setStrict_mode(!nullIfNotFound);
             node.setType(valueType);
 
             Function fn = new Function(FunctionName.createFnName(FunctionSet.DICT_MAPPING), actualTypes, valueType, false);

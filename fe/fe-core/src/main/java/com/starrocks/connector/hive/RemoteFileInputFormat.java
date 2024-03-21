@@ -34,7 +34,7 @@ public enum RemoteFileInputFormat {
     RCTEXT,
     SEQUENCE,
     UNKNOWN;
-    private static final ImmutableMap<String, RemoteFileInputFormat> VALID_INPUT_FORMATS =
+    private static final ImmutableMap<String, RemoteFileInputFormat> CLASS_NAME_TO_INPUT_FORMAT =
             new ImmutableMap.Builder<String, RemoteFileInputFormat>()
                     .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, PARQUET)
                     .put(ORC_INPUT_FORMAT_CLASS, ORC)
@@ -43,7 +43,7 @@ public enum RemoteFileInputFormat {
                     .put(RCFILE_INPUT_FORMAT_CLASS, RCBINARY)
                     .put(SEQUENCE_INPUT_FORMAT_CLASS, SEQUENCE)
                     .build();
-    private static final ImmutableMap<String, Boolean> FILE_FORMAT_SPLITTABLE_INFOS =
+    private static final ImmutableMap<String, Boolean> INPUT_FORMAT_SPLITTABLE =
             new ImmutableMap.Builder<String, Boolean>()
                     .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, true)
                     .put(HUDI_PARQUET_INPUT_FORMAT, true)
@@ -54,12 +54,22 @@ public enum RemoteFileInputFormat {
                     .put(SEQUENCE_INPUT_FORMAT_CLASS, true)
                     .build();
 
+    private static final ImmutableMap<RemoteFileInputFormat, Boolean> INPUT_FORMAT_BACKEND_SPLITTABLE =
+            new ImmutableMap.Builder<RemoteFileInputFormat, Boolean>()
+                    .put(PARQUET, true)
+                    .put(ORC, true)
+                    .build();
+
     public static RemoteFileInputFormat fromHdfsInputFormatClass(String className) {
-        return VALID_INPUT_FORMATS.getOrDefault(className, UNKNOWN);
+        return CLASS_NAME_TO_INPUT_FORMAT.getOrDefault(className, UNKNOWN);
     }
 
     public static boolean isSplittable(String className) {
-        return FILE_FORMAT_SPLITTABLE_INFOS.containsKey(className) && FILE_FORMAT_SPLITTABLE_INFOS.get(className);
+        return INPUT_FORMAT_SPLITTABLE.getOrDefault(className, false);
+    }
+
+    public boolean isBackendSplittable() {
+        return INPUT_FORMAT_BACKEND_SPLITTABLE.getOrDefault(this, false);
     }
 
     public THdfsFileFormat toThrift() {

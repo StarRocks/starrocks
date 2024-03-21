@@ -96,6 +96,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -113,6 +114,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -160,6 +162,8 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PartitionVersionRecoveryInfo;
+import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
@@ -191,6 +195,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -250,6 +255,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.Warehouse;
@@ -2025,80 +2031,64 @@ public class LocalMetastore implements ConnectorMetadata {
                                                             MaterializedIndex index) throws DdlException {
         LOG.info("build create replica tasks for index {} db {} table {} partition {}",
                 index, dbId, table.getId(), partition);
+        boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
         boolean createSchemaFile = true;
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
+        TTabletType tabletType = isCloudNativeTable ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
+        TStorageMedium storageMedium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                .setId(indexMeta.getSchemaId())
+                .setVersion(indexMeta.getSchemaVersion())
+                .setKeysType(indexMeta.getKeysType())
+                .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                .setSchemaHash(indexMeta.getSchemaHash())
+                .setStorageType(indexMeta.getStorageType())
+                .setIndexes(table.getIndexes())
+                .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                .setBloomFilterColumnNames(table.getBfColumns())
+                .setBloomFilterFpp(table.getBfFpp())
+                .addColumns(indexMeta.getSchema())
+                .build().toTabletSchema();
+
         for (Tablet tablet : index.getTablets()) {
-            if (table.isCloudNativeTableOrMaterializedView()) {
-                long primaryComputeNodeId = -1;
+            List<Long> nodeIdsOfReplicas = new ArrayList<>();
+            if (isCloudNativeTable) {
                 try {
                     Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-                    primaryComputeNodeId = ((LakeTablet) tablet).
+                    long nodeId = ((LakeTablet) tablet).
                             getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    nodeIdsOfReplicas.add(nodeId);
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
-
-                CreateReplicaTask task = new CreateReplicaTask(
-                        primaryComputeNodeId,
-                        dbId,
-                        table.getId(),
-                        partition.getId(),
-                        index.getId(),
-                        tablet.getId(),
-                        indexMeta.getShortKeyColumnCount(),
-                        indexMeta.getSchemaHash(),
-                        partition.getVisibleVersion(),
-                        indexMeta.getKeysType(),
-                        indexMeta.getStorageType(),
-                        table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium(),
-                        indexMeta.getSchema(),
-                        table.getBfColumns(),
-                        table.getBfFpp(),
-                        null,
-                        table.getIndexes(),
-                        table.getPartitionInfo().getIsInMemory(partition.getParentId()),
-                        table.enablePersistentIndex(),
-                        table.primaryIndexCacheExpireSec(),
-                        table.getPersistentIndexType(),
-                        TTabletType.TABLET_TYPE_LAKE,
-                        table.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                        indexMeta.getSortKeyUniqueIds(),
-                        createSchemaFile);
-                // For each partition, the schema file is created only when the first Tablet is created
-                createSchemaFile = false;
-                task.setSchemaVersion(indexMeta.getSchemaVersion());
-                tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                    CreateReplicaTask task = new CreateReplicaTask(
-                            replica.getBackendId(),
-                            dbId,
-                            table.getId(),
-                            partition.getId(),
-                            index.getId(),
-                            tablet.getId(),
-                            indexMeta.getShortKeyColumnCount(),
-                            indexMeta.getSchemaHash(),
-                            partition.getVisibleVersion(),
-                            indexMeta.getKeysType(),
-                            indexMeta.getStorageType(),
-                            table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium(),
-                            indexMeta.getSchema(),
-                            table.getBfColumns(),
-                            table.getBfFpp(),
-                            null,
-                            table.getIndexes(),
-                            table.getPartitionInfo().getIsInMemory(partition.getParentId()),
-                            table.enablePersistentIndex(),
-                            table.primaryIndexCacheExpireSec(),
-                            table.getCurBinlogConfig(),
-                            table.getPartitionInfo().getTabletType(partition.getParentId()),
-                            table.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                            indexMeta.getSortKeyUniqueIds());
-                    task.setSchemaVersion(indexMeta.getSchemaVersion());
-                    tasks.add(task);
+                    nodeIdsOfReplicas.add(replica.getBackendId());
                 }
+            }
+
+            for (Long nodeId : nodeIdsOfReplicas) {
+                CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                        .setNodeId(nodeId)
+                        .setDbId(dbId)
+                        .setTableId(table.getId())
+                        .setPartitionId(partition.getId())
+                        .setIndexId(index.getId())
+                        .setTabletId(tablet.getId())
+                        .setVersion(partition.getVisibleVersion())
+                        .setStorageMedium(storageMedium)
+                        .setEnablePersistentIndex(table.enablePersistentIndex())
+                        .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                        .setBinlogConfig(table.getCurBinlogConfig())
+                        .setTabletType(tabletType)
+                        .setCompressionType(table.getCompressionType())
+                        .setTabletSchema(tabletSchema)
+                        .setCreateSchemaFile(createSchemaFile)
+                        .build();
+                tasks.add(task);
+                createSchemaFile = false;
             }
         }
         return tasks;
@@ -5169,6 +5159,72 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
+        }
+    }
+
+    public void setPartitionVersion(AdminSetPartitionVersionStmt stmt) {
+        Database database = getDb(stmt.getTableName().getDb());
+        if (database == null) {
+            ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(database, LockType.WRITE);
+        try {
+            Table table = database.getTable(stmt.getTableName().getTbl());
+            if (table == null) {
+                ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
+            }
+            if (!table.isOlapTableOrMaterializedView()) {
+                ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
+            }
+
+            PhysicalPartition physicalPartition;
+            OlapTable olapTable = (OlapTable) table;
+            if (stmt.getPartitionId() != -1) {
+                physicalPartition = olapTable.getPhysicalPartition(stmt.getPartitionId());
+                if (physicalPartition == null) {
+                    ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
+                }
+            } else {
+                Partition partition = olapTable.getPartition(stmt.getPartitionName());
+                if (partition == null) {
+                    ErrorReportException.report(ErrorCode.ERR_NO_SUCH_PARTITION, stmt.getPartitionName());
+                }
+                if (partition.getSubPartitions().size() >= 2) {
+                    ErrorReportException.report(ErrorCode.ERR_MULTI_SUB_PARTITION, stmt.getPartitionName());
+                }
+                physicalPartition = partition;
+            }
+
+            long visibleVersionTime = System.currentTimeMillis();
+            physicalPartition.setVisibleVersion(stmt.getVersion(), visibleVersionTime);
+            physicalPartition.setNextVersion(stmt.getVersion() + 1);
+
+            PartitionVersion partitionVersion = new PartitionVersion(database.getId(), table.getId(),
+                    physicalPartition.getId(), stmt.getVersion());
+            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (Tablet tablet : index.getTablets()) {
+                    if (!(tablet instanceof LocalTablet)) {
+                        continue;
+                    }
+
+                    LocalTablet localTablet = (LocalTablet) tablet;
+                    for (Replica replica : localTablet.getAllReplicas()) {
+                        if (replica.getVersion() > stmt.getVersion() && localTablet.getAllReplicas().size() > 1) {
+                            replica.setBad(true);
+                            LOG.warn("set tablet: {} on backend: {} to bad, " +
+                                            "because its version: {} is higher than partition visible version: {}",
+                                    tablet.getId(), replica.getBackendId(), replica.getVersion(), stmt.getVersion());
+                        }
+                    }
+                }
+            }
+            GlobalStateMgr.getCurrentState().getEditLog().logRecoverPartitionVersion(
+                    new PartitionVersionRecoveryInfo(Lists.newArrayList(partitionVersion), visibleVersionTime));
+            LOG.info("Successfully set partition: {} version to {}, table: {}, db: {}",
+                    stmt.getPartitionName(), stmt.getVersion(), table.getName(), database.getFullName());
+        } finally {
+            locker.unLockDatabase(database, LockType.WRITE);
         }
     }
 

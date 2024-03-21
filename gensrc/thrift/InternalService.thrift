@@ -279,8 +279,11 @@ struct TQueryOptions {
 
   119: optional bool enable_result_sink_accumulate;
   120: optional bool enable_connector_split_io_tasks = false;
+  121: optional i64 connector_max_split_size = 0;
 
   130: optional bool enable_wait_dependent_event = false;
+
+  131: optional bool orc_use_column_names = false;
 }
 
 
