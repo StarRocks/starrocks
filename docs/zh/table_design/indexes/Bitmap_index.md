@@ -103,73 +103,53 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 ## 使用案例
 
-例如，有表 `employee`，其包含了某公司的员工信息。如下展示了表 `employee` 的部分数据。
+以 SSB Flat Table 性能测试的宽表 `lineorder_flat` 为例。
 
-| **ID** | **Gender** | **Position** | **Income_level** |
-| ------ | ---------- | ------------ | ---------------- |
-| 01     | female     | Developer    | level_1          |
-| 02     | female     | Analyst      | level_2          |
-| 03     | female     | Salesman     | level_1          |
-| 04     | male       | Accountant   | level_3          |
+### 单列查询
 
-### **单列查询**
-
-例如，要提高 `Gender` 列的查询效率，即可为该列创建 Bitmap 索引。
+例如，要提高 `s_address` 列的查询效率，该列的基数较高，约为 200000，则为该列创建 Bitmap 索引，基于该列查询时性能可以明显提升。
 
 ```SQL
-CREATE INDEX index1 ON employee (Gender) USING BITMAP COMMENT 'index1';
+CREATE INDEX bitmap_s_address ON lineorder_flat (s_address) USING BITMAP COMMENT 'bitmap_s_address';
 ```
 
-如上语句执行后，bitmap 索引生成的过程如下：
+如上语句执行后，Bitmap 生成的过程如下：
 
-![figure](../../assets/3.6.1-2.png)
+1. 构建字典：字典的 key 列为 `s_address` 列中每个不同的值， value 列为 INT 类型的编码值。
+2. 生成 Bitmap 索引：Bitmap 索引的 key 列为字典中 INT 类型的编码值。value 列是位图，表示该值在各个数据行中是否存在。一个位图的长度等于数据表的行数，位图中每一位表示一个数据行，1表示该行具有该值，0表示该行不具有该值。
 
-1. 构建字典：StarRocks 根据 `Gender` 列的取值构建一个字典，将 `female` 和 `male` 分别映射为 INT 类型的编码值：`0` 和 `1`。
-2. 生成 bitmap：StarRocks 根据字典的编码值生成 bitmap。因为 `female` 出现在前三行，所以 `female` 的 bitmap 是 `1110`；`male` 出现在第 4 行，所以 `male` 的 bitmap 是 `0001`。
-
-如果想要查找该公司的男性员工，可执行如下语句。
+如果想要统计 `lineorder_flat` 表中 列`s_address` 的值为 `1JJiCepSFCVX0UEAXYD` 的数量，可执行如下语句。
 
 ```SQL
-SELECT * FROM employee WHERE Gender = male;
+select count(*) from lineorder_flat where s_address = '1JJiCepSFCVX0UEAXYD';
 ```
 
-语句执行后，StarRocks 会先查找字典，得到 `male` 的编码值是 `1`，然后再去查找 bitmap，得到 `male`对应的 bitmap 是 `0001`，也就是说只有第 4 行数据符合查询条件。那么 StarRocks 就会跳过前 3 行，只读取第 4 行数据。
+语句执行后，StarRocks 会查找字典，找到 `1JJiCepSFCVX0UEAXYD` 对应 INT 类型的编码值。然后再去查找 Bitmap 索引，查找其对应的位图，来确定符合条件的数据行。
 
-### **多列查询**
+### 多列查询
 
-例如，要提高 `Gender` 和 `Income_level` 列的查询效率，即可为这两列分别创建 Bitmap 索引。
+例如，要提高 `p_brand` 和 `c_city` 多列组合的查询效率，该多列组合的基数较高，约为 250*1000，则可为这两列分别创建 Bitmap 索引。
 
-- `Gender`
+- `p_brand`
 
     ```SQL
-    CREATE INDEX index1 ON employee (Gender) USING BITMAP COMMENT 'index1';
+    CREATE INDEX bitmap_p_brand ON lineorder_flat (p_brand) USING BITMAP COMMENT 'bitmap_p_brand';
     ```
 
-- `Income_level`
+- `c_city`
 
     ```SQL
-    CREATE INDEX index2 ON employee (Income_level) USING BITMAP COMMENT 'index2';
+    CREATE INDEX bitmap_c_city ON lineorder_flat (c_city) USING BITMAP COMMENT 'bitmap_c_city';
     ```
 
-如上两个语句执行后，Bitmap 索引生成的过程如下：
+如上两个语句执行后，StarRocks 会为 `p_brand` 和 `c_city` 列分别构建字典，然后再根据字典生成 Bitmap 索引。
 
-![figure](../../assets/3.6.1-3.png)
-
-StarRocks 会为 `Gender` 和 `Income_level` 列分别构建一个字典，然后再根据字典生成 bitmap。
-
-- `Gender` 列：`female` 的 bitmap 为 `1110`；`male` 的 bitmap 为 `0001`。
-- `Income_level` 列：`level_1` 的 bitmap 为 `1010`；`level_2` 的 bitmap 为 `0100`；`level_3` 的 bitmap 为 `0001`。
-
-如果想要查找工资范围在 `level_1` 的女性员工，可执行如下语句。
+如果想要统计`lineorder_flat` 表中满足 `p_brand = 'MFGR#2239'` 和 `c_city = 'CHINA 8'`条件的数量，可执行如下语句。
 
 ```SQL
- SELECT * FROM employee 
- WHERE Gender = female AND Income_level = level_1;
+select count(*) from lineorder_flat where p_brand = 'MFGR#2239' and c_city = 'CHINA    8';
 ```
 
-语句执行后，StarRocks 会同时查找 `Gender` 和 `Income_level` 列的字典，得到以下信息：
+语句执行后，StarRocks 会同时查找分别基于 `p_brand` 和 `c_city` 列构建的字典， `MFGR#2239` 和 `CHINA    8` 对应 INT 类型的编码值。然后再去查找 Bitmap 索引，查找其对应的位图。
 
-- `female`的编码值为`0`，对应的 bitmap 为`1110`；
-- `level_1`的编码值为`0`，对应的 bitmap 为`1010`。
-
-因为查询语句中 `Gender = female` 和 `Income_level = Level_1` 这两个条件是 `AND` 关系，所以 StarRocks 会对两个 bitmap 进行位运算 `1110 & 1010`，得到最终结果 `1010`。根据最终结果，StarRocks 只读取第 1 行和第 3 行数据，不会读取所有数据。
+因为查询语句中 `p_brand = 'MFGR#2239'` 和 `c_city = 'CHINA    8'` 这两个条件是 `AND` 关系，所以 StarRocks 会对两个位图进行位运算 ，得到最终结果。根据最终结果，确定符合条件的数据行。
