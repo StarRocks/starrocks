@@ -503,6 +503,24 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 >
 > 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
 
+自 3.3 版本起，非主键表也支持了排序键， 排序键通过 `ORDER BY` 指定，对不同类型的表有如下限制：
+- DUPLICATE表的排序键可以为任意列的排列组合
+- AGGREDATE和UNIQUE表的排序键需要和维度列相同，但可以和建表时维度列的顺序不一致，例如
+  ```
+  CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
+    site_id LARGEINT NOT NULL COMMENT "id of site",
+    date DATE NOT NULL COMMENT "time of event",
+    city_code VARCHAR(20) COMMENT "city_code of user",
+    pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
+  )
+  AGGREGATE KEY(site_id, date, city_code)
+  DISTRIBUTED BY HASH(site_id)
+  ORDER BY (date, city_code, site_id)
+  PROPERTIES (
+    "replication_num" = "3"
+  );
+  ```
+
 ### **PROPERTIES**
 
 #### 设置数据的初始存储介质、自动降冷时间和副本数
