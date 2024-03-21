@@ -20,14 +20,18 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.server.RunMode;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class FeNameFormat {
     private FeNameFormat() {
     }
 
+    private static final char[] SPECIAL_CHARACTERS_IN_DB_NAME = new char[] {'-', '~', '!', '@', '#', '$',
+            '%', '^', '&', '<', '>', '='};
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
 
@@ -39,7 +43,11 @@ public class FeNameFormat {
     // Now we can not accept all characters because current design of delete save delete cond contains column name,
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
-    private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,1024}$";
+    private static final String SHARED_NOTHING_COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,1024}$";
+
+    private static final String SHARED_DATE_COLUMN_NAME_REGEX = "^[^\0]{1,1024}$";
+
+
 
     // The username by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
@@ -54,8 +62,20 @@ public class FeNameFormat {
         FORBIDDEN_COLUMN_NAMES.add("__row");
     }
 
+    // The length of db name is 256.
     public static void checkDbName(String dbName) {
-        if (Strings.isNullOrEmpty(dbName) || !dbName.matches(DB_NAME_REGEX)) {
+        if (Strings.isNullOrEmpty(dbName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
+        }
+
+        String allowedSpecialCharacters = "";
+        for (Character c : SPECIAL_CHARACTERS_IN_DB_NAME) {
+            allowedSpecialCharacters += c;
+        }
+        
+        String pattern = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
+                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
+        if (!dbName.matches(pattern)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
     }
@@ -77,9 +97,21 @@ public class FeNameFormat {
     }
 
     public static void checkColumnName(String columnName) {
-        if (Strings.isNullOrEmpty(columnName) || !columnName.matches(COLUMN_NAME_REGEX)) {
+        if (Strings.isNullOrEmpty(columnName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
+        String pattern = "";
+        if (RunMode.isSharedNothingMode()) {
+            pattern = SHARED_NOTHING_COLUMN_NAME_REGEX;
+        } else {
+            pattern = SHARED_DATE_COLUMN_NAME_REGEX;
+        }
+
+        if (!columnName.matches(pattern)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        }
+
+
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
