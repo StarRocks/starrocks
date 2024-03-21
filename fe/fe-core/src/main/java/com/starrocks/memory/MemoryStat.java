@@ -24,6 +24,7 @@ public class MemoryStat {
 
     private String counterInfo;
 
+    // objectName -> objectCount, Count the number of objects of a type.
     private Map<String, Long> counterMap;
 
     public long getCurrentConsumption() {
