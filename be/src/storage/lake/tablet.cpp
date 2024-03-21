@@ -92,7 +92,6 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int6
     }
 }
 
-
 const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
     auto tablet_schema_or = _mgr->get_tablet_schema(_id, nullptr);
     if (!tablet_schema_or.ok()) {

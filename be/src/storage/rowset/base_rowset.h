@@ -21,7 +21,9 @@
 
 namespace starrocks {
 class Segment;
+class BaseRowset;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 
 class BaseRowset {
 public:
@@ -31,6 +33,10 @@ public:
     //virtual StatusOr<std::vector<SegmentSharedPtr>> get_segments() = 0;
     virtual std::vector<SegmentSharedPtr> get_segments() = 0;
     virtual Status load() { return Status::OK(); };
+    virtual bool has_data_files() const = 0;
+
+    virtual int64_t start_version() const = 0;
+    virtual int64_t end_version() const = 0;
 };
 
 } // namespace starrocks

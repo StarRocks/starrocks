@@ -799,7 +799,8 @@ void Tablet::list_versions(vector<Version>* versions) const {
     }
 }
 
-Status Tablet::capture_consistent_rowsets(const Version& spec_version, std::vector<RowsetSharedPtr>* rowsets) const {
+Status Tablet::capture_consistent_rowsets(const Version& spec_version,
+                                          std::vector<RowsetSharedPtr>* rowsets) const {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     if (_updates != nullptr && spec_version.first == 0 && spec_version.second >= spec_version.first) {
         return _updates->get_applied_rowsets(spec_version.second, rowsets);
@@ -851,7 +852,7 @@ bool Tablet::version_for_delete_predicate_unlocked(const Version& version) {
     return _tablet_meta->version_for_delete_predicate(version);
 }
 
-bool Tablet::has_delete_predicates(const Version& version) {
+StatusOr<bool> Tablet::has_delete_predicates(const Version& version) {
     std::shared_lock rlock(get_header_lock());
     const auto& preds = _tablet_meta->delete_predicates();
     return std::any_of(preds.begin(), preds.end(), [&version](const auto& pred) {
