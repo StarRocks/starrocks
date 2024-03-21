@@ -26,7 +26,6 @@ namespace starrocks::lake {
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
         : PersistentIndex(""),
           _memtable(std::make_unique<PersistentIndexMemtable>()),
-          _cache(new_lru_cache(config::lake_pk_index_sst_cache_limit)),
           _tablet_mgr(tablet_mgr),
           _tablet_id(tablet_id) {}
 
@@ -42,7 +41,7 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
             ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
                                               opts, _tablet_mgr->sst_location(_tablet_id, sstable_meta.filename())));
             auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
-            RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_meta.filesz(), _cache.get()));
+            RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_meta.filesz(), nullptr));
             _sstables.emplace_back(std::move(sstable));
         }
     }
@@ -66,9 +65,10 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     }
     size_t sstables_size = _sstables.size();
     std::sort(key_indexes_info->key_index_infos.begin(), key_indexes_info->key_index_infos.end());
-    for (size_t i = sstables_size - 1; i >= 0; --i) {
+    for (size_t i = sstables_size; i > 0; --i) {
         KeyIndexesInfo found_key_indexes_info;
-        RETURN_IF_ERROR(_sstables[i]->multi_get(n, keys, *key_indexes_info, version, values, &found_key_indexes_info));
+        RETURN_IF_ERROR(
+                _sstables[i - 1]->multi_get(n, keys, *key_indexes_info, version, values, &found_key_indexes_info));
         if (found_key_indexes_info.size() != 0) {
             std::sort(found_key_indexes_info.key_index_infos.begin(), found_key_indexes_info.key_index_infos.end());
             // modify key_indexess_info
@@ -112,12 +112,12 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     KeyIndexesInfo not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number()));
+    RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, old_values, &not_founds, -1));
+    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
     if (is_memtable_full()) {
         RETURN_IF_ERROR(minor_compact());
         flush_to_immutable_memtable();
     }
-    RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, old_values, &not_founds, -1));
-    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
     return Status::OK();
 }
 
@@ -136,6 +136,10 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number()));
     RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, old_values, &not_founds, -1));
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
+    if (is_memtable_full()) {
+        RETURN_IF_ERROR(minor_compact());
+        flush_to_immutable_memtable();
+    }
     return Status::OK();
 }
 
@@ -154,6 +158,10 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
         }
     }
     RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _version.major_number()));
+    if (is_memtable_full()) {
+        RETURN_IF_ERROR(minor_compact());
+        flush_to_immutable_memtable();
+    }
     return Status::OK();
 }
 
@@ -169,7 +177,8 @@ Status LakePersistentIndex::minor_compact() {
     auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), filesz, _cache.get()));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), filesz, nullptr));
+    _sstables.emplace_back(std::move(sstable));
     _immutable_memtable = nullptr;
     return Status::OK();
 }

@@ -18,7 +18,6 @@
 #include "storage/sstable/persistent_index_sstable.h"
 
 namespace starrocks {
-class Cache;
 struct KeyIndexesInfo;
 class PersistentIndexSstableMetaPB;
 class PersistentIndexSstablePB;
@@ -96,7 +95,6 @@ private:
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
     std::unique_ptr<PersistentIndexMemtable> _immutable_memtable;
-    std::unique_ptr<Cache> _cache;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     std::vector<std::unique_ptr<sstable::PersistentIndexSstable>> _sstables;
