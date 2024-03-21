@@ -150,69 +150,87 @@ public class FrontendOptions {
     }
 
     @VisibleForTesting
-    static void initAddrUseFqdn(List<InetAddress> hosts) {
+    static void initAddrUseFqdn(List<InetAddress> addrs) {
         useFqdn = true;
+        String fqdn = null;
 
-        // Try to get FQDN from host
-        String fqdnString = null;
-        try {
-            fqdnString = NetUtils.removeScope(InetAddress.getLocalHost().getCanonicalHostName());
-            String ip = NetUtils.removeScope(InetAddress.getLocalHost().getHostAddress());
-            LOG.info("ip is {}", ip);
-        } catch (UnknownHostException e) {
-            LOG.error("Got a UnknownHostException when try to get FQDN");
-            System.exit(-1);
-        }
-        
-        if (null == fqdnString) {
-            LOG.error("Got a null when try to read FQDN");
-            System.exit(-1);
-        }
-
-        // Try to parse FQDN to get InetAddress
-        InetAddress uncheckedInetAddress = null;
-        try {
-            uncheckedInetAddress = InetAddress.getByName(fqdnString);
-        } catch (UnknownHostException e) {
-            LOG.error("Got a UnknownHostException when try to parse FQDN, "
-                    + "FQDN: {}, message: {}", fqdnString, e.getMessage());
-            System.exit(-1);
-        }
-
-        if (null == uncheckedInetAddress) {
-            LOG.error("uncheckedInetAddress is null");
-            System.exit(-1);
-        }
-
-        if (!NetUtils.removeScope(uncheckedInetAddress.getCanonicalHostName()).equals(fqdnString)) {
-            LOG.error("The FQDN of the parsed address [{}] is not the same as " + 
-                    "the FQDN obtained from the host [{}]",
-                    NetUtils.removeScope(uncheckedInetAddress.getCanonicalHostName()), fqdnString);
-            System.exit(-1);
-        }
-        
-        // Check the InetAddress obtained via FQDN 
-        boolean hasInetAddr = false;
-        LOG.debug("fqdnString is {}", fqdnString);
-        for (InetAddress addr : hosts) {
-            LOG.debug("Try to match addr, ip: {}, FQDN: {}", 
-                    NetUtils.removeScope(addr.getHostAddress()), NetUtils.removeScope(addr.getCanonicalHostName()));
-            if (NetUtils.removeScope(addr.getCanonicalHostName())
-                    .equals(NetUtils.removeScope(uncheckedInetAddress.getCanonicalHostName()))) {
-                hasInetAddr = true;
-                break;
+        if (PRIORITY_CIDRS.isEmpty()) {
+            // Get FQDN from local host by default.
+            try {
+                InetAddress localHost = InetAddress.getLocalHost();
+                fqdn = NetUtils.removeScope(localHost.getCanonicalHostName());
+                String ip = NetUtils.removeScope(localHost.getHostAddress());
+                LOG.info("Get FQDN from local host by default, FQDN: {}, ip: {}, v6: {}", fqdn, ip,
+                        localHost instanceof Inet6Address);
+            } catch (UnknownHostException e) {
+                LOG.error("failed to get FQDN from local host, will exit", e);
+                System.exit(-1);
+            }
+            if (fqdn == null) {
+                LOG.error("priority_networks is not set and we cannot get FQDN from local host");
+                System.exit(-1);
+            }
+            // Try to resolve addr from FQDN
+            InetAddress uncheckedInetAddress = null;
+            try {
+                uncheckedInetAddress = InetAddress.getByName(fqdn);
+            } catch (UnknownHostException e) {
+                LOG.error("failed to parse FQDN: {}, message: {}", fqdn, e.getMessage(), e);
+                System.exit(-1);
+            }
+            if (null == uncheckedInetAddress) {
+                LOG.error("failed to parse FQDN: {}", fqdn);
+                System.exit(-1);
+            }
+            // Check whether the InetAddress obtained via FQDN is bound to some network interface
+            boolean hasInetAddr = false;
+            for (InetAddress addr : addrs) {
+                LOG.info("Try to match addr in fqdn mode, ip: {}, FQDN: {}",
+                        NetUtils.removeScope(addr.getHostAddress()), NetUtils.removeScope(addr.getCanonicalHostName()));
+                if (NetUtils.removeScope(addr.getCanonicalHostName())
+                        .equals(NetUtils.removeScope(uncheckedInetAddress.getCanonicalHostName()))) {
+                    hasInetAddr = true;
+                    break;
+                }
+            }
+            if (hasInetAddr) {
+                localAddr = uncheckedInetAddress;
+                LOG.info("Using FQDN from local host by default, FQDN: {}, ip: {}, v6: {}",
+                        NetUtils.removeScope(localAddr.getCanonicalHostName()),
+                        NetUtils.removeScope(localAddr.getHostAddress()),
+                        localAddr instanceof Inet6Address);
+            } else {
+                LOG.error("Cannot find a network interface matching FQDN: {}", fqdn);
+                System.exit(-1);
+            }
+        } else {
+            LOG.info("using priority_networks in fqdn mode to decide whether ipv6 or ipv4 is preferred");
+            for (InetAddress addr : addrs) {
+                String hostAddr = NetUtils.removeScope(addr.getHostAddress());
+                String canonicalHostName = NetUtils.removeScope(addr.getCanonicalHostName());
+                LOG.info("Try to match addr in fqdn mode, ip: {}, FQDN: {}", hostAddr, canonicalHostName);
+                if (isInPriorNetwork(hostAddr)) {
+                    localAddr = addr;
+                    fqdn = canonicalHostName;
+                    LOG.info("Using FQDN from matched addr, FQDN: {}, ip: {}, v6: {}",
+                            fqdn, hostAddr, addr instanceof Inet6Address);
+                    break;
+                }
+                LOG.info("skip addr {} not belonged to priority networks in FQDN mode", addr);
+            }
+            if (fqdn == null) {
+                LOG.error("priority_networks has been set and we cannot find matched addr, will exit");
+                System.exit(-1);
             }
         }
 
-        if (hasInetAddr) {
-            localAddr = uncheckedInetAddress;
-        } else {
-            LOG.error("Fail to find right address to start fe by using fqdn");
+        // double-check the reverse resolve
+        String canonicalHostName = NetUtils.removeScope(localAddr.getCanonicalHostName());
+        if (!canonicalHostName.equals(fqdn)) {
+            LOG.error("The FQDN of the parsed address [{}] is not the same as " + 
+                    "the FQDN obtained from the host [{}]", canonicalHostName, fqdn);
             System.exit(-1);
         }
-        LOG.info("Use FQDN init local addr, FQDN: {}, IP: {}",
-                NetUtils.removeScope(localAddr.getCanonicalHostName()),
-                NetUtils.removeScope(localAddr.getHostAddress()));
     }
 
     @VisibleForTesting
