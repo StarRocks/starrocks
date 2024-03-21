@@ -113,7 +113,7 @@ DROP INDEX index_name ON [db_name.]table_name;
 CREATE INDEX bitmap_s_address ON lineorder_flat (s_address) USING BITMAP COMMENT 'bitmap_s_address';
 ```
 
-如上语句执行后，Bitmap 生成的过程如下：
+如上语句执行后，Bitmap 生成的过程如下： 
 
 1. 构建字典：字典的 key 列为 `s_address` 列中每个不同的值， value 列为 INT 类型的编码值。
 2. 生成 Bitmap 索引：Bitmap 索引的 key 列为字典中 INT 类型的编码值。value 列是位图，表示该值在各个数据行中是否存在。一个位图的长度等于数据表的行数，位图中每一位表示一个数据行，1表示该行具有该值，0表示该行不具有该值。
