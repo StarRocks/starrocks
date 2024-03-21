@@ -59,7 +59,7 @@
           "type": "category",
           "label": "Table types",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
-          "items": ["table_design/table_types/table_capabilities","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
+          "items": ["table_design/table_types/table_capabilities", "table_design/table_types/primary_key_table","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table" ]
         },
         {
           "type": "category",
@@ -966,7 +966,7 @@
           "type": "category",
           "label": "数据模型",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
-          "items": ["table_design/table_types/table_capabilities","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
+          "items": ["table_design/table_types/table_capabilities","table_design/table_types/primary_key_table","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table"]
         },
         {
           "type": "category",
