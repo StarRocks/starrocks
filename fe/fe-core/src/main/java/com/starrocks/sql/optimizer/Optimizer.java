@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaSca
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
@@ -535,7 +536,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new UnionToValuesRule());
-        
+
         return tree.getInputs().get(0);
     }
 
