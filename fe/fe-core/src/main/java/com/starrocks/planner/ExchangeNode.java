@@ -263,10 +263,20 @@ public class ExchangeNode extends PlanNode {
         // we enable this only when:
         // - session variable enabled &
         // - this rf has been accepted by children nodes(global rf).
+<<<<<<< HEAD
         if (probeExpr.isBoundByTupleIds(getTupleIds()) && description.canAcceptFilter(this)) {
+=======
+        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
+        // local runtime filter won't use partition by expr to evaluate runtime filters
+        if (!description.inLocalFragmentInstance()) {
+            isBound = isBound && partitionByExprs.stream().allMatch(expr -> expr.isBoundByTupleIds(getTupleIds()));
+        }
+        if (isBound && description.canAcceptFilter(this, context)) {
+>>>>>>> 76ee018924 ([BugFix] Fix miss check partition expr when build runtime filter (#42808))
             if (onExchangeNode || (description.isLocalApplicable() && description.inLocalFragmentInstance())) {
                 description.addProbeExpr(id.asInt(), probeExpr);
-                description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
+                description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr,
+                        description.inLocalFragmentInstance() ? Lists.newArrayList() : partitionByExprs);
                 probeRuntimeFilters.add(description);
                 accept = true;
             }
