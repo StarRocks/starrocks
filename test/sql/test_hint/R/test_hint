@@ -249,9 +249,6 @@ set @test = (select array_agg(c2) from (select t2.c2 from t2 join t2 tt join t2 
 select array_length(@test);
 -- result:
 1296
-<<<<<<< HEAD
->>>>>>> 18c453eafd ([Enhancement] user variable support array type (#42613))
-=======
 -- !result
 set @test= (select cast(50 as boolean));
 -- result:
@@ -263,5 +260,4 @@ select @test;
 set @test= (select cast(50 as time));
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Can't set variable with type TIME.")
->>>>>>> 94dd1884ee ([BugFix] fix not support boolean type in user variable (#42735))
 -- !result
