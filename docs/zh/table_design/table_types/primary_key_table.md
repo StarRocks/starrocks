@@ -35,10 +35,10 @@ import TabItem from '@theme/TabItem';
 
 主键表中写入和读取数据的整体流程如下：
 
-- 数据写入是通过 StarRocks 内部的 Loadjob 实现，包含一批数据变更操作（包括 Insert、Update、Delete）。StarRocks 会加载导入数据对应 Tablet 的主键索引至内存中。对于 Delete 操作，StarRocks 先通过主键索引找到数据行原来所在的数据文件以及行号，在 DelVector（用于存储和管理数据导入时生成数据行对应的删除标记）中把该条数据标记为删除。对于 Update 操作，StarRocks 除了在 DelVector 中将原先数据行标记为删除，还会把最新数据写入新的数据文件，相当于把 Update 改写为 Delete+Insert（图一）。并且会更新主键索引中变更的数据行现在所在的数据文件和行号。
+- 数据写入是通过 StarRocks 内部的 Loadjob 实现，包含一批数据变更操作（包括 Insert、Update、Delete）。StarRocks 会加载导入数据对应 Tablet 的主键索引至内存中。对于 Delete 操作，StarRocks 先通过主键索引找到数据行原来所在的数据文件以及行号，在 DelVector（用于存储和管理数据导入时生成数据行对应的删除标记）中把该条数据标记为删除。对于 Update 操作，StarRocks 除了在 DelVector 中将原先数据行标记为删除，还会把最新数据写入新的数据文件，相当于把 Update 改写为 Delete+Insert（如下图所示）。并且会更新主键索引中变更的数据行现在所在的数据文件和行号。
 
    ![pk1](../../assets/table_design/pk1.png)
-- 读取数据时，由于写入数据时各个数据文件中历史重复数据已经标记为删除，同一个主键值下仅需要读取最新的一条数据，无需在线 Merge 多个版本的数据文件来去重以找到最新的数据。扫描底层数据文件时借助过滤算子和各类索引，可以减少扫描开销（图二），所以查询性能的提升空间更大。并且相对于 Merge-On-Read 策略的更新表，主键表的查询性能能够提升 3~10 倍。
+- 读取数据时，由于写入数据时各个数据文件中历史重复数据已经标记为删除，同一个主键值下仅需要读取最新的一条数据，无需在线 Merge 多个版本的数据文件来去重以找到最新的数据。扫描底层数据文件时借助过滤算子和各类索引，可以减少扫描开销（如下图所示），所以查询性能的提升空间更大。并且相对于 Merge-On-Read 策略的更新表，主键表的查询性能能够提升 3~10 倍。
 
    ![pk2](../../assets/table_design/pk2.png)
 
@@ -84,7 +84,7 @@ CREATE TABLE orders1 (
     user_id INT NOT NULL,
     good_id INT NOT NULL,
     cnt int NOT NULL,
-    revenue int NOT NULL,
+    revenue int NOT NULL
 )
 PRIMARY KEY (order_id)
 DISTRIBUTED BY HASH(order_id)
@@ -108,7 +108,7 @@ DISTRIBUTED BY HASH(order_id)
 综上所述，该订单表的建表语句可以为：
 
 ```SQL
-create table orders2 (
+CREATE TABLE orders2 (
     order_id bigint NOT NULL,
     dt date NOT NULL,
     merchant_id int NOT NULL,
@@ -122,27 +122,8 @@ create table orders2 (
 )
 PRIMARY KEY (order_id,dt,merchant_id)
 PARTITION BY date_trunc('day', dt)
-distributed by hash(merchant_id)
-order by (`dt`,`merchant_id`)
-PROPERTIES (
-    "enable_persistent_index" = "true"
-);
-```
-
-假设记录用户信息的表，则可以使用 user_id 作为主键，用于唯一标识数据行。如果经常按地域、最近活跃时间实时分析用户情况，则可以将地域的 `address` 列和最近活跃时间的 `last_active` 列作为排序键。建表语句如下：
-
-```SQL
-create table users (
-    user_id bigint NOT NULL,
-    name string NOT NULL,
-    email string NULL,
-    address string NULL,
-    age tinyint NULL,
-    sex tinyint NULL,
-    last_active datetime
-) PRIMARY KEY (user_id)
-DISTRIBUTED BY HASH(user_id)
-ORDER BY(`address`,`last_active`)
+DISTRIBUTED BY HASH(merchant_id)
+ORDER BY (`dt`,`merchant_id`)
 PROPERTIES (
     "enable_persistent_index" = "true"
 );

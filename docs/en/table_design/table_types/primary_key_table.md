@@ -33,10 +33,10 @@ However, to balance the performance of real-time updates and query, the metadata
 
 The overall process of writing and reading data within the Primary Key table is as follows:
 
-- The data writing is achieved through StarRocks's internal Loadjob that includes a batch of data change operations (Insert, Update, and Delete). StarRocks loads the primary key indexes of the corresponding tablets into memory. For Delete operations, StarRocks first uses the primary key index to find the original location (data file and row number) of each data row, marking the data row as deleted in the DelVector (which stores and manages delete markers generated during data loading). For Update operations, in addition to marking the original data row as deleted in the DelVector, StarRocks also writes the latest data row to a new data file, essentially transforming the Update into a Delete+Insert (as shown in figure one). The primary key index is also updated to record the new location (data file and row number) of the changed data row.
+- The data writing is achieved through StarRocks's internal Loadjob that includes a batch of data change operations (Insert, Update, and Delete). StarRocks loads the primary key indexes of the corresponding tablets into memory. For Delete operations, StarRocks first uses the primary key index to find the original location (data file and row number) of each data row, marking the data row as deleted in the DelVector (which stores and manages delete markers generated during data loading). For Update operations, in addition to marking the original data row as deleted in the DelVector, StarRocks also writes the latest data row to a new data file, essentially transforming the Update into a Delete+Insert (as shown in the following figure). The primary key index is also updated to record the new location (data file and row number) of the changed data row.
 
    ![pk1](../../assets/table_design/pk1.png)
-- During data reading, because historical duplicate records in various data files have already been marked as deleted during data writing, only the latest data row with the the same primary key value needs to be read. Multiple versions of data files no longer need to be read online to deduplicate data and find the latest data. When the underlying data files are scanned, filter operators and various indexes help reduce scanning overhead (as shown in figure two). Therefore, query performance can be significantly improved. Compared to the Merge-On-Read strategy of the Unique Key table, the Delete+Insert strategy of the Primary Key table can help improve query performance by 3 to 10 times.
+- During data reading, because historical duplicate records in various data files have already been marked as deleted during data writing, only the latest data row with the the same primary key value needs to be read. Multiple versions of data files no longer need to be read online to deduplicate data and find the latest data. When the underlying data files are scanned, filter operators and various indexes help reduce scanning overhead (as shown in the following figure). Therefore, query performance can be significantly improved. Compared to the Merge-On-Read strategy of the Unique Key table, the Delete+Insert strategy of the Primary Key table can help improve query performance by 3 to 10 times.
 
    ![pk2](../../assets/table_design/pk2.png)
 
@@ -82,7 +82,7 @@ CREATE TABLE orders1 (
     user_id INT NOT NULL,
     good_id INT NOT NULL,
     cnt int NOT NULL,
-    revenue int NOT NULL,
+    revenue int NOT NULL
 )
 PRIMARY KEY (order_id)
 DISTRIBUTED BY HASH(order_id)
@@ -120,8 +120,8 @@ CREATE TABLE orders2 (
 )
 PRIMARY KEY (order_id,dt,merchant_id)
 PARTITION BY date_trunc('day', dt)
-distributed by hash(merchant_id)
-order by (`dt`,`merchant_id`)
+DISTRIBUTED BY HASH(merchant_id)
+ORDER BY (`dt`,`merchant_id`)
 PROPERTIES (
     "enable_persistent_index" = "true"
 );
