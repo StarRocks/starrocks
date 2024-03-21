@@ -3,9 +3,15 @@ displayed_sidebar: "Chinese"
 keywords: ['Canshu']
 ---
 
+import BEConfigMethod from '../../assets/commonMarkdown/BE_config_method.md'
+
+import PostBEConfig from '../../assets/commonMarkdown/BE_dynamic_note.md'
+
+import StaticBEConfigNote from '../../assets/commonMarkdown/StaticBE_config_note.md'
+
 # BE 配置项
 
-部分 BE 节点配置项为动态参数，您可以通过命令在线修改。其他配置项为静态参数，需要通过修改 **be.conf** 文件后重启 BE 服务使相关修改生效。
+<BEConfigMethod />
 
 ## 查看 BE 配置项
 
@@ -17,17 +23,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ## 配置 BE 参数
 
-### 配置 BE 动态参数
+<PostBEConfig />
 
-您可以通过 `curl` 命令在线修改 BE 节点动态参数。
-
-```shell
-curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
-```
-
-### 配置 BE 静态参数
-
-BE 静态参数不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
+<StaticBEConfigNote />
 
 ## BE 参数描述
 
