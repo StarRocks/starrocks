@@ -38,7 +38,7 @@ public class TabletMetadataUpdateAgentTaskFactory {
             return createIsInMemoryUpdateTask(backendId, tablets, value);
         }
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
-            return createIsInMemoryUpdateTask(backendId, tablets, value);
+            return createEnablePersistentIndexUpdateTask(backendId, tablets, value);
         }
         return null;
     }
