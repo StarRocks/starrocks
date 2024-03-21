@@ -22,7 +22,10 @@ import java.util.Map;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_STS_FILE_PATH;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_USE_DEFAULT_CREDENTIAL;
 
 public class AliyunCloudConfigurationProvider implements CloudConfigurationProvider {
 
@@ -33,7 +36,10 @@ public class AliyunCloudConfigurationProvider implements CloudConfigurationProvi
         AliyunCloudCredential aliyunCloudCredential = new AliyunCloudCredential(
                 properties.getOrDefault(ALIYUN_OSS_ACCESS_KEY, ""),
                 properties.getOrDefault(ALIYUN_OSS_SECRET_KEY, ""),
-                properties.getOrDefault(ALIYUN_OSS_ENDPOINT, "")
+                properties.getOrDefault(ALIYUN_OSS_ENDPOINT, ""),
+                properties.getOrDefault(ALIYUN_OSS_REGION, ""),
+                properties.getOrDefault(ALIYUN_OSS_STS_FILE_PATH, ""),
+                Boolean.parseBoolean(properties.getOrDefault(ALIYUN_OSS_USE_DEFAULT_CREDENTIAL, "false"))
         );
         if (!aliyunCloudCredential.validate()) {
             return null;

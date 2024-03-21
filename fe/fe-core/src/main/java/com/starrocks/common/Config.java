@@ -2747,7 +2747,7 @@ public class Config extends ConfigBase {
     public static boolean enable_load_volume_from_conf = true;
     // remote storage related configuration
     @ConfField(comment = "storage type for cloud native table. Available options: " +
-            "\"S3\", \"HDFS\", \"AZBLOB\", \"ADLS2\", \"GS\". case-insensitive")
+            "\"S3\", \"HDFS\", \"AZBLOB\", \"ADLS2\", \"GS\", \"OSS\". case-insensitive")
     public static String cloud_native_storage_type = "S3";
 
     // HDFS storage configuration
@@ -2756,6 +2756,22 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String cloud_native_hdfs_url = "";
+
+    //Oss storage configuration
+    @ConfField
+    public static String aliyun_oss_sts_file_path = "";
+    @ConfField
+    public static boolean aliyun_oss_use_default_credential = false;
+    @ConfField
+    public static String aliyun_oss_path = "";
+    @ConfField
+    public static String aliyun_oss_region = "";
+    @ConfField
+    public static String aliyun_oss_endpoint = "";
+    @ConfField
+    public static String aliyun_oss_access_key = "";
+    @ConfField
+    public static String aliyun_oss_secret_key = "";
 
     // AWS S3 storage configuration
     @ConfField

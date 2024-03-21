@@ -15,6 +15,8 @@
 package com.starrocks.storagevolume;
 
 import com.staros.proto.ADLS2FileStoreInfo;
+import com.staros.proto.AliyunCredentialInfo;
+import com.staros.proto.AliyunSimpleCredentialInfo;
 import com.staros.proto.AwsAssumeIamRoleCredentialInfo;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AwsDefaultCredentialInfo;
@@ -24,6 +26,7 @@ import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.HDFSFileStoreInfo;
+import com.staros.proto.OSSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -34,6 +37,7 @@ import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudCredential;
@@ -57,6 +61,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.ALIYUN_OSS_STS_FILE_PATH;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
@@ -208,6 +217,52 @@ public class StorageVolumeTest {
         Assertions.assertThrows(SemanticException.class, () ->
                 new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"), storageParams, true, "")
         );
+    }
+
+    @Test
+    public void testAliyunStsFileCredential() throws AnalysisException, DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(ALIYUN_OSS_REGION, "region");
+        storageParams.put(ALIYUN_OSS_ENDPOINT, "endpoint");
+        storageParams.put(ALIYUN_OSS_STS_FILE_PATH, "sts_file_path");
+        StorageVolume sv = new StorageVolume("1", "test", "oss", Arrays.asList("oss://abc"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        Assertions.assertEquals(CloudType.ALIYUN, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assertions.assertEquals(FileStoreType.OSS, fileStore.getFsType());
+        Assertions.assertTrue(fileStore.hasOssFsInfo());
+        OSSFileStoreInfo ossFileStoreInfo = fileStore.getOssFsInfo();
+        Assertions.assertTrue(ossFileStoreInfo.getCredential().hasStsFileCredential());
+        Assertions.assertEquals("region", ((AliyunCloudConfiguration) cloudConfiguration).getAliyunCloudCredential()
+                .getRegion());
+        Assertions.assertEquals("endpoint", ((AliyunCloudConfiguration) cloudConfiguration).getAliyunCloudCredential()
+                .getEndpoint());
+    }
+
+    @Test
+    public void testAliyunSimpleCredential() throws AnalysisException, DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(ALIYUN_OSS_REGION, "region");
+        storageParams.put(ALIYUN_OSS_ENDPOINT, "endpoint");
+        storageParams.put(ALIYUN_OSS_ACCESS_KEY, "access_key");
+        storageParams.put(ALIYUN_OSS_SECRET_KEY, "secret_key");
+        StorageVolume sv = new StorageVolume("1", "test", "oss", Arrays.asList("oss://abc"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        Assertions.assertEquals(CloudType.ALIYUN, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assertions.assertEquals(FileStoreType.OSS, fileStore.getFsType());
+        Assertions.assertTrue(fileStore.hasOssFsInfo());
+        OSSFileStoreInfo ossFileStoreInfo = fileStore.getOssFsInfo();
+        Assertions.assertTrue(ossFileStoreInfo.getCredential().hasSimpleCredential());
+        AliyunSimpleCredentialInfo simpleCredentialInfo = ossFileStoreInfo.getCredential().getSimpleCredential();
+        Assertions.assertEquals("access_key", simpleCredentialInfo.getAccessKey());
+        Assertions.assertEquals("secret_key", simpleCredentialInfo.getAccessKeySecret());
+        Assertions.assertEquals("region", ((AliyunCloudConfiguration) cloudConfiguration).getAliyunCloudCredential()
+                .getRegion());
+        Assertions.assertEquals("endpoint", ((AliyunCloudConfiguration) cloudConfiguration).getAliyunCloudCredential()
+                .getEndpoint());
     }
 
     @Test
@@ -581,7 +636,7 @@ public class StorageVolumeTest {
     }
 
     @Test
-    public void testGetParamsFromFileStoreInfo() {
+    public void testGetParamsFromFileStoreInfo() throws DdlException {
         AwsCredentialInfo.Builder awsCredBuilder = AwsCredentialInfo.newBuilder();
         awsCredBuilder.getSimpleCredentialBuilder()
                 .setAccessKey("ak")
@@ -766,6 +821,15 @@ public class StorageVolumeTest {
             Assertions.assertEquals("final_private_key",
                     params.get(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY));
         }
+        AliyunSimpleCredentialInfo aliyunSimpleCredentialInfo = AliyunSimpleCredentialInfo.newBuilder()
+                .setAccessKey("ak").setAccessKeySecret("sk").build();
+        AliyunCredentialInfo aliyunCredentialInfo =
+                AliyunCredentialInfo.newBuilder().setSimpleCredential(aliyunSimpleCredentialInfo).build();
+        OSSFileStoreInfo ossfs = OSSFileStoreInfo.newBuilder().setBucket("/bucket")
+                .setEndpoint("endpoint").setRegion("region").setCredential(aliyunCredentialInfo).build();
+        FileStoreInfo fs1 = FileStoreInfo.newBuilder().setOssFsInfo(ossfs).setFsKey("0").setFsType(FileStoreType.OSS).build();
+        StorageVolume sv1 = StorageVolume.fromFileStoreInfo(fs1);
+        Assertions.assertEquals(CloudType.ALIYUN, sv1.getCloudConfiguration().getCloudType());
     }
 
     @Test
