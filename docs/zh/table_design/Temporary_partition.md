@@ -288,9 +288,9 @@ ALTER TABLE site_access DROP TEMPORARY PARTITION tp1;
 
 注意事项
 
-- 使用 `DROP` 命令直接删除数据库或表后，您可以在限定时间内通过 [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) 命令恢复该数据库或表，但临时分区无法被恢复。
-- 使用 `ALTER` 命令删除正式分区后，您可以在限定时间内通过 [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) 命令恢复。正式分区与临时分区不相关联，操作正式分区不会对临时分区产生影响。
-- 使用 `ALTER` 命令删除临时分区后，您无法通过 [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) 命令恢复。
+- 使用 `DROP` 命令直接删除数据库或表后，您可以在限定时间内通过 [RECOVER](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) 命令恢复该数据库或表，但临时分区无法被恢复。
+- 使用 `ALTER` 命令删除正式分区后，您可以在限定时间内通过 [RECOVER](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) 命令恢复。正式分区与临时分区不相关联，操作正式分区不会对临时分区产生影响。
+- 使用 `ALTER` 命令删除临时分区后，您无法通过 [RECOVER](../sql-reference/sql-statements/data-definition/backup_restore/RECOVER.md) 命令恢复。
 - 使用 `TRUNCATE` 命令清空表后，表的临时分区会被删除，且不可恢复。
 - 使用 `TRUNCATE` 命令清空正式分区时，临时分区不受影响。
 - 不可使用 `TRUNCATE` 命令清空临时分区。
