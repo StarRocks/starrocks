@@ -1359,11 +1359,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
     // Only need to check the mv partition existence.
     public boolean getPartitionNamesToRefreshForMvInLooseMode(Set<String> toRefreshPartitions) {
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            List<Partition> partitions = Lists.newArrayList(getPartitions());
+            if (partitions.size() > 0 && partitions.get(0).getVisibleVersion() <= 1) {
+                // the mv is newly created, can not use it to rewrite query.
+                toRefreshPartitions.addAll(getVisiblePartitionNames());
+            }
+            return true;
+        }
         Expr partitionExpr = getFirstPartitionRefTableExpr();
         Map<Table, Column> partitionTableAndColumn = getRelatedPartitionTableAndColumn();
-        if (partitionExpr == null || partitionTableAndColumn.isEmpty()) {
-            return this.getPartitions().size() > 0;
-        }
         Map<String, Range<PartitionKey>> mvRangePartitionMap = getRangePartitionMap();
         Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
         RangePartitionDiff rangePartitionDiff = null;

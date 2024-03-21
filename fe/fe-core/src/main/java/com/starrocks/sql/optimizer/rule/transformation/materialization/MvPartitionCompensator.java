@@ -587,6 +587,7 @@ public class MvPartitionCompensator {
 
         List<Range<PartitionKey>> refBaseTableRanges = Lists.newArrayList();
         try {
+            // todo: support list partition mv
             refBaseTableRanges = Lists.newArrayList(PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn,
                     MaterializedView.getPartitionExpr(mv)).values());
         } catch (UserException e) {
