@@ -84,6 +84,11 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Thirdparty Update Image
     if: github.event.pull_request.merged == true
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [ Release, ASAN ]
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
@@ -102,11 +107,11 @@ jobs:
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
-      - name: update image
+      - name: update image (${{ matrix.build_type }})
         if: steps.changes.outputs.thirdparty == 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER ${{ matrix.build_type }}
 
       - name: Clean ENV
         if: always()
