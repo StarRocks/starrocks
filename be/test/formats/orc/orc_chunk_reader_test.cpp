@@ -210,7 +210,8 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
 }
 
 void check_schema(const std::string& path, const std::vector<std::pair<std::string, TypeDescriptor>>& expected_schema) {
-    OrcChunkReader reader;
+    OrcChunkReader reader{4096, {}};
+    reader.set_broker_load_mode(true);
     auto input_stream = orc::readLocalFile(path);
     reader.init(std::move(input_stream));
     std::vector<SlotDescriptor> schema;
@@ -2658,6 +2659,270 @@ TEST_F(OrcChunkReaderTest, TestSearchArgumentWithMatchedColumnName) {
         ASSERT_TRUE(st.ok()) << st.message();
         uint64_t records = get_hit_rows(&reader);
         EXPECT_EQ(records, 384);
+    }
+}
+
+/**
+ * struct<col1:int col2: struct<col3: int, col4: int>>
+ * {"col1":1, "col2": struct<"col3": 10001, "col4": 10002>}
+ * {"col1":2, "col2": struct<"col3": 10002, "col4": 10003>}
+ * {"col1":3, "col2": struct<"col3": 10003, "col4": 10004>}
+ * {"col1":4, "col2": struct<"col3": 10004, "col4": 10005>}
+ * .....
+ */
+TEST_F(OrcChunkReaderTest, TestColumnMismatched) {
+    MemoryOutputStream buffer(1024000);
+
+    {
+        // prepare data
+        orc::WriterOptions writerOptions;
+        // force to make stripe every time.
+        writerOptions.setStripeSize(128);
+        writerOptions.setRowIndexStride(128);
+        ORC_UNIQUE_PTR<orc::Type> schema(
+                orc::Type::buildTypeFromString("struct<col1:int,col2:struct<col3:int,col4:int>>"));
+        ORC_UNIQUE_PTR<orc::Writer> writer = createWriter(*schema, &buffer, writerOptions);
+
+        size_t batch_size = 128;
+        size_t batch_num = 3;
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(batch_size);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* col1 = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        auto* col2 = dynamic_cast<orc::StructVectorBatch*>(root->fields[1]);
+        auto* col3 = dynamic_cast<orc::LongVectorBatch*>(col2->fields[0]);
+        auto* col4 = dynamic_cast<orc::LongVectorBatch*>(col2->fields[1]);
+
+        size_t index = 1;
+        for (size_t k = 0; k < batch_num; k++) {
+            for (size_t i = 0; i < batch_size; i++) {
+                col1->data[i] = index;
+                col3->data[i] = 10000 + index;
+                col4->data[i] = 10000 + index + 1;
+                index += 1;
+            }
+            col1->numElements = batch_size;
+            col2->numElements = batch_size;
+            root->numElements = batch_size;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+
+    // test with struct subfield not matched
+    {
+        SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+        TypeDescriptor col2_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        col2_type.field_names.emplace_back("none-existed");
+        col2_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        SlotDesc col2{"col2", col2_type};
+
+        SlotDesc slot_descs[] = {col1, col2, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_use_orc_column_names(true);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), nullptr);
+        ASSERT_FALSE(st.ok()) << st.message();
+    }
+
+    // test with struct subfield not matched, enable invalid_as_null
+    {
+        SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+        TypeDescriptor col2_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        col2_type.field_names.emplace_back("none-existed");
+        col2_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        SlotDesc col2{"col2", col2_type};
+
+        SlotDesc slot_descs[] = {col1, col2, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_invalid_as_null(true);
+        reader.set_use_orc_column_names(true);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), nullptr);
+        ASSERT_FALSE(st.ok()) << st.message();
+    }
+
+    // test with column not found
+    {
+        SlotDesc col1{"col11", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+
+        SlotDesc slot_descs[] = {col1, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_use_orc_column_names(true);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), nullptr);
+        ASSERT_FALSE(st.ok()) << st.message();
+    }
+
+    // test with col2 not matched, enable invalid_as_null
+    {
+        SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+        TypeDescriptor col2_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        col2_type.field_names.emplace_back("none-existed");
+        col2_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        SlotDesc col2{"none-existed", col2_type};
+
+        SlotDesc slot_descs[] = {col1, col2, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_invalid_as_null(true);
+        reader.set_use_orc_column_names(true);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), nullptr);
+        ASSERT_TRUE(st.ok()) << st.message();
+
+        st = reader.read_next();
+        ChunkPtr ckptr = reader.create_chunk();
+        st = reader.fill_chunk(&ckptr);
+        ASSERT_TRUE(st.ok());
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        ASSERT_EQ("[1, NULL]", result->debug_row(0));
+        ASSERT_EQ("[2, NULL]", result->debug_row(1));
+    }
+
+    // test with col2 not matched, enable invalid_as_null, and test with search argument
+    {
+        SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+        TypeDescriptor col2_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        col2_type.field_names.emplace_back("none-existed");
+        col2_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        SlotDesc col2{"none-existed", col2_type};
+
+        SlotDesc slot_descs[] = {col1, col2, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        TExprNode expr_node;
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        expr_node.node_type = TExprNodeType::FUNCTION_CALL;
+        expr_node.fn.name.function_name = "is_null_pred";
+        expr_node.__isset.fn = true;
+        std::unique_ptr<Expr> expr(VectorizedIsNullPredicateFactory::from_thrift(expr_node));
+
+        TExprNode slot_ref;
+        slot_ref.node_type = TExprNodeType::SLOT_REF;
+        slot_ref.__set_type(create_primitive_type_desc(TPrimitiveType::TINYINT));
+        slot_ref.num_children = 0;
+        slot_ref.__isset.slot_ref = true;
+        slot_ref.slot_ref.slot_id = 2;
+        slot_ref.slot_ref.tuple_id = 0;
+        slot_ref.__set_is_nullable(true);
+        std::unique_ptr<ColumnRef> column_ref = std::make_unique<ColumnRef>(slot_ref);
+        expr->add_child(column_ref.get());
+        std::vector<Expr*> conjuncts = {expr.get()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_invalid_as_null(true);
+        reader.set_use_orc_column_names(true);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 384);
+    }
+
+    // test with col2 not matched, enable invalid_as_null, and test with search argument
+    {
+        SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+        TypeDescriptor col2_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        col2_type.field_names.emplace_back("none-existed");
+        col2_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        SlotDesc col2{"none-existed", col2_type};
+
+        SlotDesc slot_descs[] = {col1, col2, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        TExprNode expr_node;
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        expr_node.node_type = TExprNodeType::FUNCTION_CALL;
+        expr_node.fn.name.function_name = "is_not_null_pred";
+        expr_node.__isset.fn = true;
+        std::unique_ptr<Expr> expr(VectorizedIsNullPredicateFactory::from_thrift(expr_node));
+
+        TExprNode slot_ref;
+        slot_ref.node_type = TExprNodeType::SLOT_REF;
+        slot_ref.__set_type(create_primitive_type_desc(TPrimitiveType::TINYINT));
+        slot_ref.num_children = 0;
+        slot_ref.__isset.slot_ref = true;
+        slot_ref.slot_ref.slot_id = 2;
+        slot_ref.slot_ref.tuple_id = 0;
+        slot_ref.__set_is_nullable(true);
+        std::unique_ptr<ColumnRef> column_ref = std::make_unique<ColumnRef>(slot_ref);
+        expr->add_child(column_ref.get());
+        std::vector<Expr*> conjuncts = {expr.get()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_invalid_as_null(true);
+        reader.set_use_orc_column_names(true);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 384);
+        EXPECT_EQ("expr = YES_NO_NULL", reader.get_search_argument_string());
+    }
+
+    // test with col2, col1 reorderd, enable invalid_as_null, and test with search argument
+    {
+        TypeDescriptor col2_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
+        col2_type.field_names.emplace_back("col3");
+        col2_type.field_names.emplace_back("col4");
+        col2_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        col2_type.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        SlotDesc col2{"col2", col2_type};
+        SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+
+        SlotDesc slot_descs[] = {col2, col1, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 50);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::type::EQ, src_slot_descriptors[1], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::vector<Expr*> conjuncts = {ctx->root()};
+        OrcPredicates predicates{&conjuncts, nullptr};
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        reader.set_invalid_as_null(true);
+        reader.set_use_orc_column_names(true);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), &predicates);
+        ASSERT_TRUE(st.ok()) << st.message();
+
+        uint64_t records = get_hit_rows(&reader);
+        EXPECT_EQ(records, 128);
+        EXPECT_EQ("leaf-0 = (column(id=1) = 50), expr = leaf-0", reader.get_search_argument_string());
     }
 }
 
