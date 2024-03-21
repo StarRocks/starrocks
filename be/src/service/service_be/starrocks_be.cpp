@@ -143,11 +143,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
 #ifdef USE_STAROS
     init_staros_worker();
-<<<<<<< HEAD
-    LOG(INFO) << "BE start step" << start_step++ << ": staros worker init successfully";
-=======
-    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
->>>>>>> 20637c7349 ([BugFix] Fix wrong document url and some logs (#42878))
+    LOG(INFO) << "BE start step " << start_step++ << ": staros worker init successfully";
 #endif
 
     init_block_cache();
