@@ -76,7 +76,7 @@ struct FileChunkSinkContext : public ConnectorChunkSinkContext {
     std::map<std::string, std::string> options;
     PriorityThreadPool* executor = nullptr;
     TCloudConfiguration cloud_conf;
-    pipeline::FragmentContext* fragment_context = nulltpr;
+    pipeline::FragmentContext* fragment_context = nullptr;
 };
 
 class FileChunkSinkProvider : public ConnectorChunkSinkProvider {
