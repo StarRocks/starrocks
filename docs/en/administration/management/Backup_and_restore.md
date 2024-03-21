@@ -142,7 +142,7 @@ To migrate data to another StarRocks cluster, you need to create a repository wi
 
 ### Check the snapshot
 
-Before restoring data, you can check the snapshots in a specified repository using [SHOW SNAPSHOT](../../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md).
+Before restoring data, you can check the snapshots in a specified repository using [SHOW SNAPSHOT](../../sql-reference/sql-statements/data-definition/backup_restore/SHOW_SNAPSHOT.md).
 
 The following example checks the snapshot information in `test_repo`.
 

@@ -172,7 +172,7 @@ StarRocks 支持以下粒度的备份还原操作：
 
 ### 查看数据库快照
 
-开始恢复或迁移前，您可以通过 [SHOW SNAPSHOT](../../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
+开始恢复或迁移前，您可以通过 [SHOW SNAPSHOT](../../sql-reference/sql-statements/data-definition/backup_restore/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
 
 以下示例查看仓库 `test_repo` 中的数据快照信息。
 

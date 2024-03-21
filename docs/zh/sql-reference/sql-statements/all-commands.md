@@ -279,7 +279,7 @@ displayed_sidebar: "Chinese"
 - [SHOW BACKUP](./data-manipulation/backup_restore/SHOW_BACKUP.md)
 - [SHOW REPOSITORIES](./data-manipulation/backup_restore/SHOW_REPOSITORIES.md)
 - [SHOW RESTORE](./data-manipulation/backup_restore/SHOW_RESTORE.md)
-- [SHOW SNAPSHOT](./data-manipulation/SHOW_SNAPSHOT.md)
+- [SHOW SNAPSHOT](./data-definition/backup_restore/SHOW_SNAPSHOT.md)
 
 ## 工具辅助语句
 

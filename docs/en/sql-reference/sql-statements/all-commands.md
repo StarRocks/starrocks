@@ -279,7 +279,7 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [SHOW BACKUP](./data-manipulation/backup_restore/SHOW_BACKUP.md)
 - [SHOW REPOSITORIES](./data-manipulation/backup_restore/SHOW_REPOSITORIES.md)
 - [SHOW RESTORE](./data-manipulation/backup_restore/SHOW_RESTORE.md)
-- [SHOW SNAPSHOT](./data-manipulation/SHOW_SNAPSHOT.md)
+- [SHOW SNAPSHOT](./data-definition/backup_restore/SHOW_SNAPSHOT.md)
 
 ## Utility commands
 
