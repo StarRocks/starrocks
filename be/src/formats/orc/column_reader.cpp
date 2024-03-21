@@ -126,6 +126,17 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
     }
 }
 
+StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(const TypeDescriptor& type,
+                                                                                         bool nullable,
+                                                                                         OrcChunkReader* reader) {
+    return std::make_unique<DefaultColumnReader>(type, nullable, reader);
+}
+
+Status DefaultColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) {
+    col->append_default(size);
+    return Status::OK();
+}
+
 Status BooleanColumnReader::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& column, size_t from, size_t size) {
     auto* data = down_cast<orc::LongVectorBatch*>(cvb);
     size_t column_start = column->size();
