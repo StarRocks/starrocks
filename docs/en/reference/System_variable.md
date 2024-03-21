@@ -212,11 +212,19 @@ Used to control whether the Colocation Join is enabled. The default value is `fa
 
 ### disable_streaming_preaggregations
 
-Used to enable the streaming pre-aggregations. The default value is `false`, meaning  it is enabled.
+Used to enable the streaming pre-aggregations. The default value is `false`, meaning it is enabled.
 
 ### div_precision_increment
 
 Used for MySQL client compatibility. No practical usage.
+
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+This variable is introduced to solve compatibility issues.
+
+Default value: `true`.
+-->
 
 ### enable_connector_adaptive_io_tasks (2.5 and later)
 
