@@ -2,17 +2,21 @@
 displayed_sidebar: "English"
 ---
 
-# FE configuration
+import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
 
-FE parameters are classified into dynamic parameters and static parameters.
+import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
 
-- Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid if you restart your FE. Therefore, we recommend that you also modify the configuration items in the **fe.conf** file to prevent the loss of modifications.
+import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
 
-- Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
+# FE Configuration
 
+<<<<<<< HEAD:docs/en/administration/FE_configuration.md
 Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md). `TRUE` indicates a dynamic parameter.
 
 Note that both dynamic and static FE parameters can be configured in the **fe.conf** file.
+=======
+<FEConfigMethod />
+>>>>>>> ae2fb40f1f ([Doc] deployment-specific stuff moved (#42881)):docs/en/administration/management/FE_configuration.md
 
 ## View FE configuration items
 
@@ -24,9 +28,9 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 
 For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
 
-> **NOTE**
->
-> You must have administrator's privilege to run cluster administration-related commands.
+:::note
+You must have administrator privileges to run cluster administration-related commands.
+:::
 
 ## Configure FE parameters
 
@@ -38,13 +42,11 @@ You can configure or modify the settings of FE dynamic parameters using [ADMIN S
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
 
-> **NOTE**
->
-> The configurations will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` to prevent the loss of modifications.
+<AdminSetFrontendNote />
 
 ### Configure FE static parameters
 
-You can only set the static parameters of a FE by changing them in the corresponding configuration file **fe.conf**, and restart the FE to allow the changes to take effect.
+<StaticFEConfigNote />
 
 ## Understand FE parameters
 
