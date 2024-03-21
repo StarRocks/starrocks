@@ -41,5 +41,6 @@ public class PulsarTaskInfoTest {
         Assert.assertEquals(task1.getJobId(), task2.getJobId());
         Assert.assertEquals(task1.getPartitions(), task2.getPartitions());
         Assert.assertEquals(task1.getTimeoutMs(), task2.getTimeoutMs());
+        Assert.assertEquals("pulsar", task1.dataSourceType());
     }
 }

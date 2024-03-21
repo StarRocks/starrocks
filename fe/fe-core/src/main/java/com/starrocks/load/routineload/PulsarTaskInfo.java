@@ -167,6 +167,11 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+    String dataSourceType() {
+        return "pulsar";
+    }
+
+    @Override
     public String toString() {
         return "Task id: " + getId() + ", partitions: " + partitions + ", initial positions: " + initialPositions;
     }
