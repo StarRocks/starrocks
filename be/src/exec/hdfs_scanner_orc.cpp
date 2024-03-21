@@ -116,7 +116,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
     ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
-        const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(slot->col_name());
+        const orc::Type* orc_type = _reader->get_orc_type_by_slot_id(slot->id());
         int32_t column_index = -1;
         if (orc_type != nullptr) {
             column_index = orc_type->getColumnId();
@@ -173,6 +173,9 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
         // TODO: add a warning log here
         auto min_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), min_chunk.get());
         auto max_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), max_chunk.get());
+        if (min_col->get(0).is_null() || max_col->get(0).is_null()) {
+            continue;
+        }
         auto min = min_col->get(0).get_int8();
         auto max = max_col->get(0).get_int8();
         if (min == 0 && max == 0) {
@@ -201,29 +204,26 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
     if (sdicts.empty()) return false;
 
     if (!_init_use_dict_filter_slots) {
-        for (auto& col : _scanner_ctx.materialized_columns) {
+        for (const auto& col : _scanner_ctx.materialized_columns) {
             SlotDescriptor* slot = col.slot_desc;
             if (!_scanner_ctx.can_use_dict_filter_on_slot(slot)) {
                 continue;
             }
-            int32_t column_index = -1;
-            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.name());
-            if (orc_type != nullptr) {
-                column_index = orc_type->getColumnId();
-            }
-            if (column_index < 0) {
+            const orc::Type* orc_type = _reader->get_orc_type_by_slot_id(slot->id());
+            if (orc_type == nullptr) {
                 continue;
             }
-            _use_dict_filter_slots.emplace_back(slot, column_index);
+            uint64_t column_id = orc_type->getColumnId();
+            _use_dict_filter_slots.emplace_back(slot, column_id);
         }
         _init_use_dict_filter_slots = true;
     }
 
-    for (auto& p : _use_dict_filter_slots) {
+    for (const auto& p : _use_dict_filter_slots) {
         SlotDescriptor* slot_desc = p.first;
         SlotId slot_id = slot_desc->id();
-        uint64_t column_index = p.second;
-        const auto& it = sdicts.find(column_index);
+        uint64_t column_id = p.second;
+        const auto& it = sdicts.find(column_id);
         if (it == sdicts.end()) {
             continue;
         }
@@ -386,7 +386,7 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
 Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
-                                          _scanner_ctx.case_sensitive);
+                                          _scanner_ctx.case_sensitive, _scanner_ctx.orc_use_column_names);
     _scanner_ctx.update_materialized_columns(known_column_names);
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
@@ -499,6 +499,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     _orc_reader->set_hive_column_names(_scanner_ctx.hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_ctx.case_sensitive);
+    _orc_reader->set_use_orc_column_names(_scanner_ctx.orc_use_column_names);
+    // for hive table, we set this flag
+    _orc_reader->set_invalid_as_null(true);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
         _lazy_load_ctx.active_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);

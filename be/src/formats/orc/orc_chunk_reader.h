@@ -56,8 +56,7 @@ public:
 
     // src slot descriptors should exactly matches columns in row readers.
     explicit OrcChunkReader(int chunk_size, std::vector<SlotDescriptor*> src_slot_descriptors);
-    OrcChunkReader();
-    ~OrcChunkReader();
+    ~OrcChunkReader() = default;
     Status init(std::unique_ptr<orc::InputStream> input_stream, const OrcPredicates* orc_predicates = nullptr);
     Status init(std::unique_ptr<orc::Reader> reader, const OrcPredicates* orc_predicates = nullptr);
     Status read_next(orc::RowReader::ReadPosition* pos = nullptr);
@@ -104,13 +103,11 @@ public:
         }
     }
     void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
+    void set_invalid_as_null(bool invalid_as_null) { _invalid_as_null = invalid_as_null; }
 
-    static void build_column_name_to_orc_type_mapping(std::unordered_map<std::string, const orc::Type*>* mapping,
-                                                      const std::vector<std::string>* hive_column_names,
-                                                      const orc::Type& root_type, bool case_sensitive);
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
                                       const std::vector<std::string>* hive_column_names, const orc::Type& root_type,
-                                      bool case_sensitive);
+                                      bool case_sensitive, bool use_orc_column_names);
     static std::string format_column_name(const std::string& col_name, bool case_sensitive) {
         return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
     }
@@ -121,7 +118,7 @@ public:
     SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
     void report_error_message(const std::string& error_msg);
-    const orc::Type* get_orc_type_by_slot_name(const std::string& name) const;
+    const orc::Type* get_orc_type_by_slot_id(const SlotId& slot_id) const;
 
     void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
     bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
@@ -167,8 +164,6 @@ private:
     orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
     std::vector<SlotDescriptor*> _src_slot_descriptors;
-    // slot id to position in orc type.
-    std::unordered_map<SlotId, int> _slot_id_to_position;
 
     // Access ORC columns by name. By default,
     // columns in ORC files are accessed by their ordinal position in the Hive table definition.
@@ -185,7 +180,7 @@ private:
     std::vector<Expr*> _cast_exprs;
     std::vector<std::unique_ptr<ORCColumnReader>> _column_readers;
     Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
-    Status _init_position_in_orc();
+    Status _init_position_in_orc() const;
     Status _init_src_types(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_cast_exprs();
     Status _init_column_readers();
@@ -206,15 +201,20 @@ private:
     bool _strict_mode;
     std::shared_ptr<Filter> _broker_load_filter;
     size_t _num_rows_filtered;
+    SlotDescriptor* _current_slot = nullptr;
+    int _error_message_counter;
+
+    // fields related to hive table
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
+    bool _invalid_as_null = false;
     // Key is slot name formatted with case sensitive
     std::unordered_map<std::string, const orc::Type*> _formatted_slot_name_to_orc_type;
+    std::unordered_map<SlotId, size_t> _slot_id_to_pos_in_src_slot_descs;
     RuntimeState* _state = nullptr;
-    SlotDescriptor* _current_slot = nullptr;
-    std::string _current_file_name;
-    int _error_message_counter;
     LazyLoadContext* _lazy_load_ctx;
+
+    std::string _current_file_name;
 };
 
 } // namespace starrocks

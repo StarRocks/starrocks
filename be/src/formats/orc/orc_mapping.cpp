@@ -26,6 +26,11 @@ const OrcMappingOrcType& OrcMapping::get_orc_type_child_mapping(size_t original_
     return it->second;
 }
 
+// check target column is existed in orc file
+bool OrcMapping::contains(size_t original_pos_in_table_definition) const {
+    return _mapping.find(original_pos_in_table_definition) != _mapping.end();
+}
+
 void OrcMapping::clear() {
     _mapping.clear();
 }
@@ -171,9 +176,14 @@ Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_pt
         std::string col_name = Utils::format_name(slot_desc->col_name(), options.case_sensitive);
         auto it = orc_fieldname_2_pos.find(col_name);
         if (it == orc_fieldname_2_pos.end()) {
-            auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0, file = $1",
-                                         col_name, options.filename);
-            return Status::NotFound(s);
+            if (options.invalid_as_null) {
+                // don't need to add mapping for none-existed column
+                continue;
+            } else {
+                auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0, file = $1",
+                                             col_name, options.filename);
+                return Status::NotFound(s);
+            }
         }
 
         const orc::Type* orc_sub_type = orc_root_type->getSubtype(it->second);
@@ -263,9 +273,8 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
             auto it = tmp_orc_fieldname_2_pos.find(field_name);
             if (it == tmp_orc_fieldname_2_pos.end()) {
                 auto s = strings::Substitute(
-                        "OrcChunkReader::_set_child_mapping "
-                        "not found struct subfield $0, file = $1",
-                        field_name, options.filename);
+                        "OrcChunkReader::_set_child_mapping not found struct subfield $0, file = $1", field_name,
+                        options.filename);
                 return Status::NotFound(s);
             }
             const orc::Type* orc_child_type = orc_type->getSubtype(it->second);

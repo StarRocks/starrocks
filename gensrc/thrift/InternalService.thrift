@@ -283,6 +283,7 @@ struct TQueryOptions {
 
   130: optional bool enable_wait_dependent_event = false;
 
+  131: optional bool orc_use_column_names = false;
 }
 
 
