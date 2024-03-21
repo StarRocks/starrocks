@@ -103,7 +103,7 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 ## 使用案例
 
-以 SSB Flat Table 性能测试的宽表 `lineorder_flat` 为例。
+以 SSB Flat Table 性能测试的宽表 [`lineorder_flat`](../../benchmarking/SSB_Benchmarking.md#lineorder_flat-默认建表)  为例。
 
 ### 单列查询
 
