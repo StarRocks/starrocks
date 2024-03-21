@@ -17,18 +17,19 @@ package com.starrocks.sql.common;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.RangeMap;
+import com.google.common.collect.TreeRangeMap;
 import com.starrocks.catalog.PartitionKey;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class RangePartitionDiff {
 
-    Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
-
-    Map<String, Set<String>> rollupToBasePartitionMap = Maps.newHashMap();
-
-    Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
+    private Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
+    private Map<String, Set<String>> rollupToBasePartitionMap = Maps.newHashMap();
+    private Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
 
     public RangePartitionDiff() {
     }
@@ -60,5 +61,27 @@ public class RangePartitionDiff {
 
     public void setDeletes(Map<String, Range<PartitionKey>> deletes) {
         this.deletes = deletes;
+    }
+
+    public static RangePartitionDiff merge(List<RangePartitionDiff> diffList) {
+        RangePartitionDiff result = new RangePartitionDiff();
+        RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
+        for (RangePartitionDiff diff : diffList) {
+            for (Map.Entry<String, Range<PartitionKey>> add : diff.getAdds().entrySet()) {
+                Map.Entry<Range<PartitionKey>, String> existedRange =
+                        addRanges.getEntry(add.getValue().lowerEndpoint());
+                if (existedRange != null &&
+                        !existedRange.getKey().upperEndpoint().equals(add.getValue().upperEndpoint())) {
+                    throw new IllegalArgumentException(String.format("intersected partition must be same: (%s) != (%s)",
+                            existedRange.getKey(), add.getValue()));
+                }
+                addRanges.put(add.getValue(), add.getKey());
+            }
+            result.getAdds().putAll(diff.getAdds());
+            result.getDeletes().putAll(diff.getDeletes());
+            result.getRollupToBasePartitionMap().putAll(diff.getRollupToBasePartitionMap());
+        }
+        result.getDeletes().keySet().removeAll(result.getAdds().keySet());
+        return result;
     }
 }

@@ -45,7 +45,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -944,7 +943,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
         Map<Table, Column> partitionTableAndColumn = materializedView.getRelatedPartitionTableAndColumn();
         Preconditions.checkArgument(!partitionTableAndColumn.isEmpty());
-        RangePartitionDiff rangePartitionDiff = null;
+        List<RangePartitionDiff> rangePartitionDiffList = Lists.newArrayList();
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
@@ -966,13 +965,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
                                     refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable)));
                 }
+
+                Column partitionColumn =
+                        (materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+                PartitionDiffer differ = PartitionDiffer.build(materializedView, context);
+                rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
+                        refBaseTablePartitionMap.get(refBaseTable), mvRangePartitionMap, differ));
             }
-            Table partitionTable = materializedView.getDirectTableAndPartitionColumn().first;
-            Column partitionColumn =
-                    ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-            PartitionDiffer differ = PartitionDiffer.build(materializedView, context);
-            rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
-                    refBaseTablePartitionMap.get(partitionTable), mvRangePartitionMap, differ);
+
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;
@@ -980,6 +980,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             locker.unLockDatabase(db, LockType.READ);
         }
 
+        // UnionALL MV may generate multiple PartitionDiff, needs to be merged into one PartitionDiff
+        RangePartitionDiff rangePartitionDiff = RangePartitionDiff.merge(rangePartitionDiffList);
         Map<String, Range<PartitionKey>> deletes = rangePartitionDiff.getDeletes();
 
         // Delete old partitions and then add new partitions because the old and new partitions may overlap
