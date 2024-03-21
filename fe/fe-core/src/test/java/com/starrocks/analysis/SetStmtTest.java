@@ -86,7 +86,7 @@ public class SetStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Assert.assertEquals("times", ((UserVariable) stmt.getSetListItems().get(0)).getVariable());
-        Assert.assertEquals("100", ((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression().getStringValue());
+        Assert.assertEquals("100", ((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression().toSqlImpl());
         Assert.assertTrue(stmt.getSetListItems().get(1) instanceof SetNamesVar);
         Assert.assertEquals("utf8", ((SetNamesVar) stmt.getSetListItems().get(1)).getCharset());
     }

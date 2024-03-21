@@ -21,8 +21,8 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.SetVarHint;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.UserVariable;
 import org.antlr.v4.runtime.Token;
@@ -167,8 +167,8 @@ public class HintFactory {
                     return null;
                 }
 
-                if (binaryPredicate.getChild(0) instanceof VariableExpr) {
-                    VariableExpr variableExpr = (VariableExpr) binaryPredicate.getChild(0);
+                if (binaryPredicate.getChild(0) instanceof UserVariableExpr) {
+                    UserVariableExpr variableExpr = (UserVariableExpr) binaryPredicate.getChild(0);
                     userVariables.put(variableExpr.getName(),
                             new UserVariable(variableExpr.getName(), binaryPredicate.getChild(1),
                                     true, binaryPredicate.getPos()));

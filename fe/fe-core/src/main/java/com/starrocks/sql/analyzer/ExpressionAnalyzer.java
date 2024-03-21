@@ -58,6 +58,7 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
@@ -96,7 +97,6 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
-import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
@@ -1676,33 +1676,27 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
-                if (node.getSetType() != null && node.getSetType().equals(SetType.USER)) {
-                    UserVariable userVariable = session.getUserVariable(node.getName());
-                    // If referring to an uninitialized variable, its value is NULL and a string type.
-                    if (userVariable == null) {
-                        node.setType(Type.STRING);
-                        node.setIsNull();
-                        return null;
-                    }
-
-                    Type variableType = userVariable.getEvaluatedExpression().getType();
-                    node.setType(variableType);
-
-                    if (userVariable.getEvaluatedExpression() instanceof NullLiteral) {
-                        node.setIsNull();
-                    } else {
-                        node.setValue(userVariable.getEvaluatedExpression().getRealObjectValue());
-                    }
-                } else {
-                    VariableMgr.fillValue(session.getSessionVariable(), node);
-                    if (!Strings.isNullOrEmpty(node.getName()) &&
-                            node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
-                        node.setType(Type.VARCHAR);
-                        node.setValue(SqlModeHelper.decode((long) node.getValue()));
-                    }
+                VariableMgr.fillValue(session.getSessionVariable(), node);
+                if (!Strings.isNullOrEmpty(node.getName()) &&
+                        node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
+                    node.setType(Type.VARCHAR);
+                    node.setValue(SqlModeHelper.decode((long) node.getValue()));
                 }
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
+            UserVariable userVariable = session.getUserVariable(node.getName());
+            if (userVariable == null) {
+                node.setValue(NullLiteral.create(Type.STRING));
+                node.setType(Type.STRING);
+            } else {
+                node.setType(userVariable.getEvaluatedExpression().getType());
+                node.setValue(userVariable.getEvaluatedExpression());
             }
             return null;
         }
