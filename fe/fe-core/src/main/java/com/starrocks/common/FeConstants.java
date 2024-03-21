@@ -91,14 +91,13 @@ public class FeConstants {
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 
     public static final String DOCUMENT_SHOW_ALTER =
-            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER";
     public static final String DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW =
-            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation" +
-                    "/SHOW%20ALTER%20MATERIALIZED%20VIEW";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW";
     public static final String DOCUMENT_SHOW_BACKUP =
-            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_BACKUP";
     public static final String DOCUMENT_SHOW_RESTORE =
-            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20RESTORE";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_RESTORE";
     public static final String DOCUMENT_ALTER_ROUTINE_LOAD =
             "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD";
 
