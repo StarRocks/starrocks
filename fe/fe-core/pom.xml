@@ -793,6 +793,13 @@ under the License.
             <artifactId>postgresql</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.clickhouse/clickhouse-jdbc -->
+        <!-- we need clickhouse driver for jdbc connector -->
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
         <dependency>
             <groupId>com.mockrunner</groupId>

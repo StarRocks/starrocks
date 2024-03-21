@@ -280,6 +280,8 @@ public class JDBCTable extends Table {
         MYSQL,
         POSTGRES,
         ORACLE,
-        MARIADB
+        MARIADB,
+
+        CLICKHOUSE
     }
 }
