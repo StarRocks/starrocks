@@ -277,7 +277,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
 }
 
 void ScrollParser::set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context,
-                              std::string& timezone) {
+                              const std::string& timezone) {
     _tuple_desc = descs;
     _doc_value_context = docvalue_context;
     _timezone = timezone;
