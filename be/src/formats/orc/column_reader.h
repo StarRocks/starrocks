@@ -75,6 +75,9 @@ public:
     static StatusOr<std::unique_ptr<ORCColumnReader>> create(const TypeDescriptor& type, const orc::Type* orc_type,
                                                              bool nullable, const OrcMappingPtr& orc_mapping,
                                                              OrcChunkReader* reader);
+    static StatusOr<std::unique_ptr<ORCColumnReader>> create_default_column_reader(const TypeDescriptor& type,
+                                                                                   bool nullable,
+                                                                                   OrcChunkReader* reader);
     const orc::Type* get_orc_type() { return _orc_type; }
 
 protected:
@@ -102,6 +105,14 @@ protected:
     const orc::Type* _orc_type;
     bool _nullable;
     OrcChunkReader* _reader;
+};
+
+class DefaultColumnReader final : public ORCColumnReader {
+public:
+    DefaultColumnReader(const TypeDescriptor& type, bool nullable, OrcChunkReader* reader)
+            : ORCColumnReader(type, nullptr, nullable, reader) {}
+    ~DefaultColumnReader() override = default;
+    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
 };
 
 class PrimitiveColumnReader : public ORCColumnReader {

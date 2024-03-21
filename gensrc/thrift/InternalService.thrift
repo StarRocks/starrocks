@@ -246,6 +246,7 @@ struct TQueryOptions {
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
 
   119: optional bool enable_result_sink_accumulate;
+  131: optional bool orc_use_column_names = false;
 }
 
 
