@@ -202,7 +202,9 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
                                 "one of boolean, tinyint,smallint,int,bigint",
                                 slot_desc->col_name()));
         }
-        // What if it's boolean?
+        if(type == TYPE_BOOLEAN){
+            return TYPE_BOOLEAN;
+        }
         return TYPE_TINYINT;
     } else if (java_class == "com.clickhouse.data.value.UnsignedByte") {
         if (type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
@@ -327,7 +329,7 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
                       "Type mismatches on column[{}], JDBC result type is LocalDate, please set the type to date",
                       slot_desc->col_name()));
           }
-          return TYPE_VARCHAR;
+          return TYPE_DATE;
     } else if (java_class == "java.math.BigDecimal") {
         if (type != TYPE_DECIMAL32 && type != TYPE_DECIMAL64 && type != TYPE_DECIMAL128 && type != TYPE_VARCHAR) {
             return Status::NotSupported(
