@@ -85,13 +85,13 @@ CREATE TABLE orders1 (
     revenue int NOT NULL
 )
 PRIMARY KEY (order_id)
-DISTRIBUTED BY HASH(order_id)
+DISTRIBUTED BY HASH (order_id)
 ;
 ```
 
 :::info
 
-Because the Primary Key table only supports hash bucketing as the bucketing strategy, you also need to define the hash bucketing key by using `DISTRIBUTED BY HASH()`.
+Because the Primary Key table only supports hash bucketing as the bucketing strategy, you also need to define the hash bucketing key by using `DISTRIBUTED BY HASH ()`.
 
 :::
 
@@ -120,7 +120,7 @@ CREATE TABLE orders2 (
 )
 PRIMARY KEY (order_id,dt,merchant_id)
 PARTITION BY date_trunc('day', dt)
-DISTRIBUTED BY HASH(merchant_id)
+DISTRIBUTED BY HASH (merchant_id)
 ORDER BY (dt,merchant_id)
 PROPERTIES (
     "enable_persistent_index" = "true"

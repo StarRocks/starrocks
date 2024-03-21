@@ -87,13 +87,13 @@ CREATE TABLE orders1 (
     revenue int NOT NULL
 )
 PRIMARY KEY (order_id)
-DISTRIBUTED BY HASH(order_id)
+DISTRIBUTED BY HASH (order_id)
 ;
 ```
 
 :::info
 
-由于主键表仅支持分桶策略为哈希分桶，因此您还需要通过 `DISTRIBUTED BY HASH()` 定义哈希分桶键。
+由于主键表仅支持分桶策略为哈希分桶，因此您还需要通过 `DISTRIBUTED BY HASH ()` 定义哈希分桶键。
 
 :::
 
@@ -122,7 +122,7 @@ CREATE TABLE orders2 (
 )
 PRIMARY KEY (order_id,dt,merchant_id)
 PARTITION BY date_trunc('day', dt)
-DISTRIBUTED BY HASH(merchant_id)
+DISTRIBUTED BY HASH (merchant_id)
 ORDER BY (dt,merchant_id)
 PROPERTIES (
     "enable_persistent_index" = "true"
