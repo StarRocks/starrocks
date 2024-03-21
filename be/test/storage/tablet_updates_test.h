@@ -676,6 +676,7 @@ public:
     void SetUp() override {
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         config::enable_pk_size_tiered_compaction_strategy = false;
+        config::enable_pindex_read_by_page = true;
     }
 
     void TearDown() override {

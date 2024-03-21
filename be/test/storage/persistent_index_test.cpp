@@ -44,7 +44,10 @@ struct PersistentIndexTestParam {
 class PersistentIndexTest : public testing::TestWithParam<PersistentIndexTestParam> {
 public:
     virtual ~PersistentIndexTest() {}
-    void SetUp() override { config::enable_pindex_compression = GetParam().enable_pindex_compression; }
+    void SetUp() override { 
+        config::enable_pindex_compression = GetParam().enable_pindex_compression;
+        config::enable_pindex_read_by_page = true;
+    }
 };
 
 TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
