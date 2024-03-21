@@ -23,27 +23,27 @@ SELECT c1 IS NULL FROM t0;
 -- !result
 SELECT c1->'a' IS NULL, c1->'a' IS NOT NULL FROM t0;
 -- result:
-0	0
+0	1
 -- !result
 SELECT c1->'b' IS NULL, c1->'b' IS NOT NULL FROM t0;
 -- result:
-1	1
+1	0
 -- !result
 SELECT c1->'c' IS NULL, c1->'c' IS NOT NULL FROM t0;
 -- result:
-1	1
+1	0
 -- !result
 SELECT 
     parse_json('{"a": 0, "b": null}')->'a' IS NULL,
     parse_json('{"a": 0, "b": null}')->'a' IS NOT NULL;
 -- result:
-0	0
+0	1
 -- !result
 SELECT 
     parse_json('{"a": 0, "b": null}')->'b' IS NULL,
     parse_json('{"a": 0, "b": null}')->'b' IS NOT NULL;
 -- result:
-1	1
+1	0
 -- !result
 SELECT 
     parse_json('{"a": 0, "b": null}')->'c' IS NULL,
