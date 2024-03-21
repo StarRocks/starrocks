@@ -1201,15 +1201,11 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-<<<<<<< HEAD
     public R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
-=======
-    default R visitUserVariableExpr(UserVariableExpr node, C context) {
         return visitExpression(node, context);
     }
 
-    default R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
->>>>>>> 18c453eafd ([Enhancement] user variable support array type (#42613))
+    public R visitUserVariableExpr(UserVariableExpr node, C context) {
         return visitExpression(node, context);
     }
 
