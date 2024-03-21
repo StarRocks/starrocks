@@ -186,6 +186,7 @@ struct HdfsScannerParams {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
+    bool orc_use_column_names = false;
     MORParams mor_params;
 };
 
@@ -230,6 +231,8 @@ struct HdfsScannerContext {
     std::vector<std::string>* hive_column_names = nullptr;
 
     bool case_sensitive = false;
+
+    bool orc_use_column_names = false;
 
     bool can_use_any_column = false;
 

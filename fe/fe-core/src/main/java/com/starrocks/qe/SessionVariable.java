@@ -442,6 +442,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private static final String ENABLE_RESULT_SINK_ACCUMULATE = "enable_result_sink_accumulate";
 
+    // Access ORC columns by name. By default, columns in ORC files are accessed by
+    // their ordinal position in the Hive table definition.
+    public static final String ORC_USE_COLUMN_NAMES = "orc_use_column_names";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1570,6 +1574,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enablePipelineLevelShuffle = true;
+
+    @VarAttr(name = ORC_USE_COLUMN_NAMES)
+    private boolean orcUseColumnNames = false;
 
     @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
     private String followerForwardMode = "";
@@ -3056,6 +3063,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
+        tResult.setOrc_use_column_names(orcUseColumnNames);
         return tResult;
     }
 
