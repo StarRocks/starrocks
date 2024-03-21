@@ -50,7 +50,7 @@ Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_met
 
 bool LakePersistentIndex::is_memtable_full() {
     const auto memtable_mem_size = _memtable->memory_usage();
-    return memtable_mem_size >= config::lake_memtable_max_mem_usage;
+    return memtable_mem_size >= config::lake_persistent_index_memtable_size;
 }
 
 void LakePersistentIndex::flush_to_immutable_memtable() {
@@ -127,6 +127,7 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
         RETURN_IF_ERROR(minor_compact());
         flush_to_immutable_memtable();
     }
+    // TODO: check whether keys exist in immutable_memtable and ssts
     return Status::OK();
 }
 
@@ -172,7 +173,7 @@ Status LakePersistentIndex::minor_compact() {
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(location));
-    uint64_t filesz;
+    uint64_t filesz = 0;
     RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesz));
     auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};

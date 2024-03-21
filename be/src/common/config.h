@@ -978,7 +978,7 @@ CONF_mInt64(lake_pk_compaction_max_input_rowsets, "1000");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
-CONF_mInt64(lake_memtable_max_mem_usage, /*100MB=*/"104857600");
+CONF_mInt64(lake_persistent_index_memtable_size, /*50MB=*/"52428800");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
