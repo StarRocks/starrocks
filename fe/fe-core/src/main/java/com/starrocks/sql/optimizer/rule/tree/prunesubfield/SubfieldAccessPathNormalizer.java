@@ -51,7 +51,7 @@ public class SubfieldAccessPathNormalizer {
 
     /*
     get_json_bool,   BOOL,      111111 00
-    get_json_int,    INT,       111110 00
+    get_json_int,    BIGINT,    111110 00
     get_json_double, DOUBLE,    111100 00
     get_json_string, VARCHAR,   111000 00
     json_exists,     VARCHAR,   111000 00
@@ -61,7 +61,7 @@ public class SubfieldAccessPathNormalizer {
     private static final Map<PrimitiveType, Byte> JSON_COMPATIBLE_TYPE =
             ImmutableMap.<PrimitiveType, Byte>builder()
                     .put(PrimitiveType.BOOLEAN, (byte) 0xFC)
-                    .put(PrimitiveType.INT, (byte) (0xFC << 1))
+                    .put(PrimitiveType.BIGINT, (byte) (0xFC << 1))
                     .put(PrimitiveType.DOUBLE, (byte) (0xFC << 2))
                     .put(PrimitiveType.VARCHAR, (byte) (0xFC << 3))
                     .put(PrimitiveType.JSON, (byte) 0)

@@ -148,7 +148,7 @@ public class PruneSubfieldRule extends TransformationRule {
 
             SUPPORT_GET_TYPE = ImmutableMap.<PrimitiveType, Function>builder()
                     .put(PrimitiveType.BOOLEAN, jsonBool)
-                    .put(PrimitiveType.INT, jsonInt)
+                    .put(PrimitiveType.BIGINT, jsonInt)
                     .put(PrimitiveType.DOUBLE, jsonDouble)
                     .put(PrimitiveType.VARCHAR, jsonString)
                     .put(PrimitiveType.CHAR, jsonString).build();
@@ -157,7 +157,7 @@ public class PruneSubfieldRule extends TransformationRule {
                     .put(PrimitiveType.NULL_TYPE, jsonInt)
                     .put(PrimitiveType.TINYINT, jsonInt)
                     .put(PrimitiveType.SMALLINT, jsonInt)
-                    .put(PrimitiveType.BIGINT, jsonDouble)
+                    .put(PrimitiveType.INT, jsonInt)
                     .put(PrimitiveType.FLOAT, jsonDouble)
                     .put(PrimitiveType.DECIMAL32, jsonDouble)
                     .put(PrimitiveType.DECIMAL64, jsonDouble)
