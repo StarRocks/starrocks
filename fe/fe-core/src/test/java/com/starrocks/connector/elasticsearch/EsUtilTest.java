@@ -17,8 +17,14 @@
 
 package com.starrocks.connector.elasticsearch;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.common.AnalysisException;
+import mockit.Expectations;
+import mockit.Injectable;
 import org.json.JSONObject;
 import org.junit.Test;
+
+import java.util.List;
 
 import static com.starrocks.connector.elasticsearch.EsUtil.getFromJSONArray;
 import static org.junit.Assert.assertEquals;
@@ -95,5 +101,4 @@ public class EsUtilTest {
         EsRestClient.EsIndex[] esIndices = getFromJSONArray(jsonArray, EsRestClient.EsIndex[].class);
         System.out.println(JSONObject.valueToString(esIndices));
     }
-
 }

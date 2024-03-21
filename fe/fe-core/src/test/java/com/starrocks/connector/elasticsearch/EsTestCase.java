@@ -92,6 +92,7 @@ public class EsTestCase {
         props.put(EsTable.KEY_TYPE, type);
         props.put(EsTable.KEY_VERSION, "6.5.3");
         return new EsTable(new Random().nextLong(), table, columns, props, null);
-
     }
+
+
 }
