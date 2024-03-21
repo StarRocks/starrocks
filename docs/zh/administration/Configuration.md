@@ -485,4 +485,4 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | jdbc_connection_idle_timeout_ms  | 600000 | JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。 |
 | query_cache_capacity  | 536870912 | 指定 Query Cache 的大小。单位：Byte。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。<br />每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。 |
 | enable_event_based_compaction_framework  | TRUE | 是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。 |
-| update_compaction_size_threshold  | 268435456 | 主键表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使主键表的 Compaction Score 与其他类型表的相近，便于用户理解。在 v2.5.20 版本，为了更快执行 compaction，该参数默认值从 `268435456` (256 MB) 改为 `67108864` (64 MB)。|
+| update_compaction_size_threshold  | 67108864 | 主键表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使主键表的 Compaction Score 与其他类型表的相近，便于用户理解。从 v2.5.20 版本起，为了更快执行 compaction，该参数默认值从 `268435456` (256 MB) 改为 `67108864` (64 MB)。|

@@ -853,9 +853,9 @@ BE static parameters are as follows.
 
 #### update_compaction_size_threshold
 
-- **Default**: 268435456
+- **Default**: 67108864
 - **Unit**: bytes
-- **Description**: The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand. In v2.5.20, the default value of this parameter is changed from `268435456` (256 MB) to `67108864` (64 MB) to accelerate compaction.
+- **Description**: The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand. Since v2.5.20, the default value of this parameter is changed from `268435456` (256 MB) to `67108864` (64 MB) to accelerate compaction.
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
