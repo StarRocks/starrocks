@@ -384,7 +384,7 @@ Release date: July 29, 2022
 
 - The Primary Key table supports complete DELETE WHERE syntax. For more information, see [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE#delete-data-by-primary-key).
 - The Primary Key table supports persistent primary key indexes. You can choose to persist the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key table](https://docs.starrocks.io/docs/table_design/table_types/primary_key_table/).
-- Global dictionary can be updated during real-time data ingestion，optimizing query performance and delivering 2X query performance for string data.
+- Global dictionary can be updated during real-time data ingestion, optimizing query performance and delivering 2X query performance for string data.
 - The CREATE TABLE AS SELECT statement can be executed asynchronously. For more information, see [CREATE TABLE AS SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT/).
 - Support the following resource group-related features:
   - Monitor resource groups: You can view the resource group of the query in the audit log and obtain the metrics of the resource group by calling APIs. For more information, see [Monitor and Alerting](https://docs.starrocks.io/docs/administration/Monitor_and_Alert#monitor-and-alerting).

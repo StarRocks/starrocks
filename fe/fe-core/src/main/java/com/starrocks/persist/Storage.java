@@ -91,13 +91,6 @@ public class Storage {
         this.metaDir = metaDir;
     }
 
-    public Storage(int clusterID, String token, long imageJournalId, String metaDir) {
-        this.clusterID = clusterID;
-        this.token = token;
-        this.imageJournalId = imageJournalId;
-        this.metaDir = metaDir;
-    }
-
     public Storage(String metaDir) throws IOException {
         this.metaDir = metaDir;
 
@@ -153,10 +146,6 @@ public class Storage {
 
     public int getClusterID() {
         return clusterID;
-    }
-
-    public void setClusterID(int clusterID) {
-        this.clusterID = clusterID;
     }
 
     public String getToken() {

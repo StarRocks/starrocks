@@ -70,6 +70,8 @@ public:
 
     bool is_initialized() { return _initialized.load(std::memory_order_relaxed); }
 
+    DataCacheEngineType engine_type();
+
     static const size_t MAX_BLOCK_SIZE;
 
 private:

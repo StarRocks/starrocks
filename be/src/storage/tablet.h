@@ -159,6 +159,7 @@ public:
 
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
+    [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
     [[nodiscard]] bool has_delete_predicates(const Version& version);
 
     // meta lock
@@ -322,6 +323,9 @@ public:
     void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
 
     void set_will_be_force_replaced() { _will_be_force_replaced = true; }
+
+    void remove_all_delta_column_group_cache() const;
+    void remove_all_delta_column_group_cache_unlocked() const;
 
 protected:
     void on_shutdown() override;

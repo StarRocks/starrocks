@@ -563,7 +563,7 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         _cur_value_size = kIndexValueSize;
     } else {
         if (new_key_length) {
-            CHECK(key_size > _cur_key_size) << "key size is smaller than before";
+            RETURN_ERROR_IF_FALSE(key_size > _cur_key_size, "key size is smaller than before");
         }
         _cur_key_size = key_size;
     }
@@ -2399,7 +2399,7 @@ Status ImmutableIndex::_get_in_fixlen_shard_by_page(size_t shard_idx, size_t n, 
             auto pageid = h.page() % shard_info.npage;
             auto bucketid = h.bucket() % shard_info.nbucket;
             auto iter = pages.find(pageid);
-            CHECK(iter != pages.end());
+            RETURN_ERROR_IF_FALSE(iter != pages.end());
             auto& bucket_info = iter->second.header().buckets[bucketid];
             uint8_t* bucket_pos;
             if (pageid == bucket_info.pageid) {
@@ -2448,7 +2448,7 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
             auto pageid = h.page() % shard_info.npage;
             auto bucketid = h.bucket() % shard_info.nbucket;
             auto iter = pages.find(pageid);
-            CHECK(iter != pages.end());
+            RETURN_ERROR_IF_FALSE(iter != pages.end());
             auto& bucket_info = iter->second.header().buckets[bucketid];
             uint8_t* bucket_pos;
             if (pageid == bucket_info.pageid) {
@@ -2549,6 +2549,15 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     bool filter = _filter(shard_idx, keys_info, &check_keys_info);
     if (!filter) {
         check_keys_info.swap(keys_info);
+    } else {
+        if (stat != nullptr) {
+            stat->filtered_kv_cnt += (keys_info.size() - check_keys_info.size());
+        }
+    }
+
+    if (check_keys_info.empty()) {
+        // All keys have been filtered by bloom filter.
+        return Status::OK();
     }
 
     // an optimization for very small data import. In some real time scenario, user only import a very small batch data
@@ -2565,14 +2574,15 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
 
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     if (shard_info.uncompressed_size == 0) {
-        CHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
+        RETURN_ERROR_IF_FALSE(shard->pages.size() * kPageSize == shard_info.bytes, "illegal shard size");
     } else {
-        CHECK(shard->pages.size() * kPageSize == shard_info.uncompressed_size) << "illegal shard size";
+        RETURN_ERROR_IF_FALSE(shard->pages.size() * kPageSize == shard_info.uncompressed_size, "illegal shard size");
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
                                             shard_info.bytes));
     if (stat != nullptr) {
+        stat->get_in_shard_cnt++;
         stat->read_io_bytes += shard_info.bytes;
     }
     if (shard_info.key_size != 0) {
@@ -2648,9 +2658,9 @@ Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, con
     }
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     if (shard_info.uncompressed_size == 0) {
-        CHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
+        RETURN_ERROR_IF_FALSE(shard->pages.size() * kPageSize == shard_info.bytes, "illegal shard size");
     } else {
-        CHECK(shard->pages.size() * kPageSize == shard_info.uncompressed_size) << "illegal shard size";
+        RETURN_ERROR_IF_FALSE(shard->pages.size() * kPageSize == shard_info.uncompressed_size, "illegal shard size");
     }
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
@@ -2783,7 +2793,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
                                           found_keys_info, stat));
         }
         if (stat != nullptr) {
-            stat->get_in_shard_cnt += nshard;
             stat->get_in_shard_cost += watch.elapsed_time();
         }
     } else {
@@ -2796,7 +2805,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
         }
         RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, infos.key_infos, values, found_keys_info, stat));
         if (stat != nullptr) {
-            stat->get_in_shard_cnt++;
             stat->get_in_shard_cost += watch.elapsed_time();
         }
     }
@@ -2891,8 +2899,9 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         dest.nbucket = src.nbucket();
         dest.uncompressed_size = src.uncompressed_size();
         if (idx->_compression_type == CompressionTypePB::NO_COMPRESSION) {
-            CHECK(dest.uncompressed_size == 0) << "compression type: " << idx->_compression_type
-                                               << " uncompressed_size: " << dest.uncompressed_size;
+            RETURN_ERROR_IF_FALSE(dest.uncompressed_size == 0,
+                                  "compression type: " + std::to_string(idx->_compression_type) +
+                                          " uncompressed_size: " + std::to_string(dest.uncompressed_size));
         }
         // This is for compatibility, we don't add data_size in shard_info in the rc version
         // And data_size is added to reslove some bug(https://github.com/StarRocks/starrocks/issues/11868)
@@ -3447,7 +3456,6 @@ Status PersistentIndex::on_commited() {
     _dump_snapshot = false;
     _flushed = false;
     _need_bloom_filter = false;
-    _calc_write_amp_score();
 
     return Status::OK();
 }
@@ -4712,7 +4720,6 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
         }
     }
     RETURN_IF_ERROR(writer->finish());
-    _write_amp_score.store(0.0);
     std::stringstream debug_str;
     major_compaction_debug_str(l2_versions, l2_vec, new_l2_version, writer, debug_str);
     LOG(INFO) << "PersistentIndex background compact l2 : " << debug_str.str() << " cost: " << watch.elapsed_time();
@@ -4784,7 +4791,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
 // 1. load current l2 vec
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
-Status PersistentIndex::major_compaction(Tablet* tablet) {
+Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
     if (_cancel_major_compaction) {
         return Status::InternalError("cancel major compaction");
     }
@@ -4804,8 +4811,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     _latest_compaction_time = UnixSeconds();
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
-    RETURN_IF_ERROR(
-            TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &prev_index_meta));
+    RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &prev_index_meta));
     if (prev_index_meta.l2_versions_size() <= 1) {
         return Status::OK();
     }
@@ -4826,16 +4832,14 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
     // 3. modify PersistentIndexMetaPB and reload index, protected by index lock
     {
-        std::lock_guard lg(*tablet->updates()->get_index_lock());
+        std::lock_guard lg(*mutex);
         if (_cancel_major_compaction) {
             return Status::OK();
         }
         PersistentIndexMetaPB index_meta;
-        RETURN_IF_ERROR(
-                TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
+        RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
         modify_l2_versions(l2_versions, new_l2_version, index_meta);
-        RETURN_IF_ERROR(
-                TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), index_meta));
+        RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet_id, index_meta));
         // reload new l2 versions
         RETURN_IF_ERROR(_reload(index_meta));
         // delete useless files
@@ -4887,25 +4891,15 @@ Status PersistentIndex::test_flush_varlen_to_immutable_index(const std::string& 
     return writer.finish();
 }
 
-double PersistentIndex::major_compaction_score(size_t l1_count, size_t l2_count) {
+double PersistentIndex::major_compaction_score(const PersistentIndexMetaPB& index_meta) {
     // return 0.0, so scheduler can skip this index, if l2 less than 2.
+    const size_t l1_count = index_meta.has_l1_version() ? 1 : 0;
+    const size_t l2_count = index_meta.l2_versions_size();
     if (l2_count <= 1) return 0.0;
     double l1_l2_count = (double)(l1_count + l2_count);
     // write amplification
     // = 1 + 1 + (l1 and l2 file count + config::l0_l1_merge_ratio) / (l1 and l2 file count) / 0.85
     return 2.0 + (l1_l2_count + (double)config::l0_l1_merge_ratio) / l1_l2_count / 0.85;
-}
-
-void PersistentIndex::_calc_write_amp_score() {
-    _write_amp_score.store(major_compaction_score(_has_l1 ? 1 : 0, _l2_versions.size()));
-}
-
-double PersistentIndex::get_write_amp_score() const {
-    if (_major_compaction_running.load()) {
-        return 0.0;
-    } else {
-        return _write_amp_score.load();
-    }
 }
 
 Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
@@ -5113,9 +5107,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
 
     std::unique_ptr<Column> pk_column;
     if (pkey_schema.num_fields() > 1) {
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     }
     RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
     RETURN_IF_ERROR(_build_commit(loader, index_meta));
@@ -5145,25 +5137,6 @@ Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* 
         RETURN_IF_ERROR(_l0->pk_dump(dump, level));
     }
     return Status::OK();
-}
-
-Status PersistentIndex::delete_pindex_files() {
-    std::string dir = _path;
-    auto cb = [&](std::string_view name) -> bool {
-        std::string prefix = "index.";
-        std::string full(name);
-        if (full.length() >= prefix.length() && full.compare(0, prefix.length(), prefix) == 0) {
-            std::string path = dir + "/" + full;
-            VLOG(1) << "delete index file " << path;
-            Status st = FileSystem::Default()->delete_file(path);
-            if (!st.ok()) {
-                LOG(WARNING) << "delete index file: " << path << ", failed, status: " << st.to_string();
-                return false;
-            }
-        }
-        return true;
-    };
-    return FileSystem::Default()->iterate_dir(_path, cb);
 }
 
 } // namespace starrocks

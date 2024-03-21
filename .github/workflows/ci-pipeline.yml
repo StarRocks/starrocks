@@ -320,7 +320,7 @@ jobs:
 
       - name: Run java checkstyle
         if: needs.fe-checker.outputs.java_filter == 'true'
-        uses: dbelyaev/action-checkstyle@v0.7.5
+        uses: dbelyaev/action-checkstyle@v1.5.6
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
@@ -648,7 +648,7 @@ jobs:
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
-      BASE_VERSION: ${{needs.build.outputs.base_version}}
+      BASE_VERSION: ${{ needs.build.outputs.base_version }}
     outputs:
       MYSQL_ECI_ID: ${{ steps.run_case.outputs.MYSQL_ECI_ID }}
     steps:
@@ -768,7 +768,7 @@ jobs:
     runs-on: [ self-hosted, normal ]
     name: ADMIT TEST
     needs: [ deploy, restart-fe, restart-be ]
-    if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success'
+    if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ github.event.number }}

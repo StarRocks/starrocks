@@ -35,6 +35,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
+#include "storage/delete_handler.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -273,10 +274,10 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             return status;
         }
 
-        CHECK(((src_snapshot_info.incremental_snapshot &&
-                snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
-               (!src_snapshot_info.incremental_snapshot &&
-                snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+        DCHECK(((src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
+                (!src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
                 << ", incremental_snapshot: " << src_snapshot_info.incremental_snapshot
                 << ", snapshot_type: " << SnapshotTypePB_Name(snapshot_meta.snapshot_type());
 
@@ -390,7 +391,9 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
     rowset_metadata->set_data_size(rowset_meta.data_disk_size());
     rowset_metadata->set_num_dels(rowset_meta.get_num_delete_files());
     if (rowset_meta.has_delete_predicate()) {
-        rowset_metadata->mutable_delete_predicate()->CopyFrom(rowset_meta.delete_predicate());
+        auto* delete_predicate_pb = rowset_metadata->mutable_delete_predicate();
+        delete_predicate_pb->CopyFrom(rowset_meta.delete_predicate());
+        RETURN_IF_ERROR(convert_delete_predicate_pb(delete_predicate_pb));
     }
 
     std::string rowset_id = rowset_meta.rowset_id().to_string();
@@ -423,6 +426,40 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
         }
     }
 
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* delete_predicate) {
+    for (const auto& sub_predicate : delete_predicate->sub_predicates()) {
+        TCondition condition;
+        if (!DeleteHandler::parse_condition(sub_predicate, &condition)) {
+            LOG(WARNING) << "Invalid delete condition: " << sub_predicate;
+            return Status::InternalError("Invalid delete condition: " + sub_predicate);
+        }
+        if (condition.condition_op == "IS") {
+            auto* is_null_predicate = delete_predicate->add_is_null_predicates();
+            is_null_predicate->set_column_name(condition.column_name);
+            is_null_predicate->set_is_not_null(condition.condition_values[0].starts_with("NOT"));
+        } else if (condition.condition_op == "*=" || condition.condition_op == "!*=") {
+            auto* in_predicate = delete_predicate->add_in_predicates();
+            in_predicate->set_column_name(condition.column_name);
+            in_predicate->set_is_not_in(condition.condition_op.starts_with('!'));
+            for (const auto& value : condition.condition_values) {
+                in_predicate->add_values()->assign(value);
+            }
+        } else {
+            auto* binary_predicate = delete_predicate->add_binary_predicates();
+            binary_predicate->set_column_name(condition.column_name);
+            if (condition.condition_op == "<<") {
+                binary_predicate->set_op("<");
+            } else if (condition.condition_op == ">>") {
+                binary_predicate->set_op(">");
+            } else {
+                binary_predicate->set_op(condition.condition_op);
+            }
+            binary_predicate->set_value(condition.condition_values[0]);
+        }
+    }
     return Status::OK();
 }
 

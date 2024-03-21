@@ -48,7 +48,7 @@ public:
         int64_t ref_count;
         std::vector<uint8_t> buffer;
         void align(int64_t align_size, int64_t file_size);
-        std::string debug() const;
+        std::string debug_string() const;
     };
 
     SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename, size_t file_size);

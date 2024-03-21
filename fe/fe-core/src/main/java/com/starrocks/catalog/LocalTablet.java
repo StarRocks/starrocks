@@ -57,8 +57,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -198,7 +201,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     @Override
     public List<Replica> getAllReplicas() {
-        return replicas;
+        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+            return new ArrayList<>(replicas);
+        }
     }
 
     /**
@@ -261,10 +266,10 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap() {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
-            SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);
+            SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
@@ -635,5 +640,37 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public void setLastFullCloneFinishedTimeMs(long lastFullCloneFinishedTimeMs) {
         this.lastFullCloneFinishedTimeMs = lastFullCloneFinishedTimeMs;
+    }
+
+    public long getQuorumVersion(int quorum) {
+        Map<Long, Integer> versionCnt = new HashMap<>();
+        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+            for (Replica replica : replicas) {
+                if (replica.getState() == ReplicaState.NORMAL && !replica.isBad()) {
+                    versionCnt.put(replica.getVersion(), 1 + versionCnt.getOrDefault(replica.getVersion(), 0));
+                }
+            }
+        }
+        for (Map.Entry<Long, Integer> entry : versionCnt.entrySet()) {
+            if (entry.getValue() >= quorum) {
+                return entry.getKey();
+            }
+        }
+
+        return -1L;
+    }
+
+    public Set<Long> getAllReplicaVersions() {
+        HashSet<Long> versions = new HashSet<>();
+
+        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+            for (Replica replica : replicas) {
+                if (replica.getState() == ReplicaState.NORMAL && !replica.isBad()) {
+                    versions.add(replica.getVersion());
+                }
+            }
+        }
+
+        return versions;
     }
 }

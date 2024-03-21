@@ -43,6 +43,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
@@ -1168,6 +1169,8 @@ public class SchemaChangeHandler extends AlterHandler {
             bfFpp = 0;
         }
 
+        BloomFilterIndexUtil.analyseBfWithNgramBf(newSet, bfColumns);
+
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
@@ -1179,6 +1182,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withBloomFilterColumns(bfColumns, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange);
 
+        long baseIndexId = olapTable.getBaseIndexId();
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop
         for (Long alterIndexId : indexSchemaMap.keySet()) {
@@ -1293,7 +1297,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // to determine which columns are sort key columns
             boolean useSortKeyUniqueId = (index.getSortKeyUniqueIds() != null) &&
                     (!index.getSortKeyUniqueIds().isEmpty());
-            if (index.getSortKeyIdxes() != null) {
+            if (index.getSortKeyIdxes() != null && baseIndexId == alterIndexId) {
                 List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
                 for (Integer colIdx : originSortKeyIdxes) {
                     String columnName = index.getSchema().get(colIdx).getName();
@@ -1352,21 +1356,19 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withSortKeyUniqueIds(sortKeyUniqueIds);
 
         long tableId = olapTable.getId();
-        for (Long alterIndexId : indexSchemaMap.keySet()) {
-            List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
+        Long alterIndexId = olapTable.getBaseIndexId();
+        List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
+        short newShortKeyCount = 0;
+        if (sortKeyIdxes != null) {
+            newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null, sortKeyIdxes);
+        } else {
+            newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null);
+        }
 
-            short newShortKeyCount = 0;
-            if (sortKeyIdxes != null) {
-                newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null, sortKeyIdxes);
-            } else {
-                newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(originSchema, null);
-            }
+        LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
+        jobBuilder.withNewIndexShortKeyCount(alterIndexId, newShortKeyCount).withNewIndexSchema(alterIndexId, originSchema);
 
-            LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
-            jobBuilder.withNewIndexShortKeyCount(alterIndexId, newShortKeyCount).withNewIndexSchema(alterIndexId, originSchema);
-
-            LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
-        } // end for indices
+        LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
 
         return jobBuilder.build();
     }
@@ -2258,6 +2260,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
     @Override
     public void cancel(CancelStmt stmt) throws DdlException {
+        cancel(stmt, "user cancelled");
+    }
+
+    public void cancel(CancelStmt stmt, String reason) throws DdlException {
         CancelAlterTableStmt cancelAlterTableStmt = (CancelAlterTableStmt) stmt;
 
         String dbName = cancelAlterTableStmt.getDbName();
@@ -2301,7 +2307,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // alter job v2's cancel must be called outside the database lock
-        if (!schemaChangeJobV2.cancel("user cancelled")) {
+        if (!schemaChangeJobV2.cancel(reason)) {
             throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState());
         }
     }
@@ -2323,7 +2329,7 @@ public class SchemaChangeHandler extends AlterHandler {
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {
             // check the index id only if the index is CompatibleIndex(GIN)
-            // Bitmap index's id is always be -1
+            // Bitmap index/Ngram Bloom filter index's id is always be -1
             if (IndexDef.IndexType.isCompatibleIndex(existedIdx.getIndexType()) &&
                     IndexDef.IndexType.isCompatibleIndex(newIndex.getIndexType()) &&
                     existedIdx.getIndexId() >= newIndex.getIndexId()) {
@@ -2352,7 +2358,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException(e.getMessage());
                 }
             } else {
-                throw new DdlException("BITMAP column does not exist in table. invalid column: " + col);
+                throw new DdlException(indexDef.getIndexName() + " column does not exist in table. invalid column: " + col);
             }
         }
         Preconditions.checkArgument(newIndex.isValidIndex(),

@@ -61,10 +61,10 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
     for (int idx : _group_reader->_active_column_indices) {
         const auto& column = _group_reader->_param.read_cols[idx];
         // complex type will be supported later
-        if (column.col_type_in_chunk.is_complex_type()) {
+        if (column.slot_type().is_complex_type()) {
             continue;
         }
-        SlotId slotId = column.slot_id;
+        SlotId slotId = column.slot_id();
         // no min_max conjunct
         if (slot_id_to_ctx_map.find(slotId) == slot_id_to_ctx_map.end()) {
             continue;
@@ -89,21 +89,21 @@ StatusOr<bool> PageIndexReader::generate_read_range(SparseRange<uint64_t>& spars
         RETURN_IF_ERROR(deserialize_thrift_msg(page_index_data.data(), &column_index_length, TProtocolType::COMPACT,
                                                &column_index));
         auto min_chunk = std::make_unique<Chunk>();
-        ColumnPtr min_column = ColumnHelper::create_column(column.col_type_in_chunk, true);
+        ColumnPtr min_column = ColumnHelper::create_column(column.slot_type(), true);
         min_chunk->append_column(min_column, slotId);
         auto max_chunk = std::make_unique<Chunk>();
-        ColumnPtr max_column = ColumnHelper::create_column(column.col_type_in_chunk, true);
+        ColumnPtr max_column = ColumnHelper::create_column(column.slot_type(), true);
         max_chunk->append_column(max_column, slotId);
         // deal with min_values
         Status st;
-        st = _decode_value_into_column(min_column, column_index.min_values, column.col_type_in_chunk,
+        st = _decode_value_into_column(min_column, column_index.min_values, column.slot_type(),
                                        _column_readers.at(slotId)->get_column_parquet_field(),
                                        _group_reader->_param.timezone);
         if (!st.ok()) {
             continue;
         }
         // deal with max_values
-        st = _decode_value_into_column(max_column, column_index.max_values, column.col_type_in_chunk,
+        st = _decode_value_into_column(max_column, column_index.max_values, column.slot_type(),
                                        _column_readers.at(slotId)->get_column_parquet_field(),
                                        _group_reader->_param.timezone);
         if (!st.ok()) {

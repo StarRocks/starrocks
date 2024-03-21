@@ -52,6 +52,7 @@ public class ErrorReport {
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             ctx.getState().setError(errMsg);
+            ctx.getState().setErrorCode(errorCode);
         }
         // TODO(zc): think about LOG to file
         return errMsg;
@@ -82,11 +83,6 @@ public class ErrorReport {
     public static void reportAnalysisException(String pattern, ErrorCode errorCode, Object... objs)
             throws AnalysisException {
         throw new AnalysisException(reportCommon(pattern, errorCode, objs));
-    }
-
-    public static void reportDdlException(String pattern, Object... objs)
-            throws DdlException {
-        reportDdlException(pattern, ErrorCode.ERR_UNKNOWN_ERROR, objs);
     }
 
     public static void reportDdlException(ErrorCode errorCode, Object... objs)

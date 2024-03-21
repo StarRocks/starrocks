@@ -26,6 +26,10 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockComputeNode(10004);
+
         starRocksAssert.withTable("CREATE TABLE `lineorder_new_l` (\n" +
                 "  `LO_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `LO_ORDERDATE` date NOT NULL COMMENT \"\",\n" +
@@ -100,6 +104,9 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+        starRocksAssert.withTable("create table `skew_table` (id int, name varchar(20)) ENGINE=OLAP  " +
+                "DUPLICATE KEY(id)" +
+                "distributed by hash(id) buckets 10 properties('replication_num' = '1')");
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         int scale = 100;
@@ -140,6 +147,10 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
 
         OlapTable datesN = (OlapTable) globalStateMgr.getDb("test").getTable("dates_n");
         setTableStatistics(datesN, 2556);
+
+        OlapTable skewTable =
+                (OlapTable) globalStateMgr.getDb("test").getTable("skew_table");
+        setTableStatistics(skewTable, 10000000);
 
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);

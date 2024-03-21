@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['zhujian']
 ---
 
 # 通过导入实现数据变更
@@ -647,7 +648,7 @@ SELECT * FROM table4;
 
 ### 导入数据
 
-通过导入，把 `example5.csv` 文件中 `id` 为 `101`、`102` 的数据更新到 `table5` 表中，指定 `merge_condition` 为 `version` 列，表示只有当导入的数据中 `verion` 大于等于 `table5` 中对应行的`version` 值时，更新才会生效。
+通过导入，把 `example5.csv` 文件中 `id` 为 `101`、`102` 的数据更新到 `table5` 表中，指定 `merge_condition` 为 `version` 列，表示只有当导入的数据中 `version` 大于等于 `table5` 中对应行的`version` 值时，更新才会生效。
 
 - 通过 Stream Load 导入：
 

@@ -35,7 +35,7 @@ public class DictionaryAnalyzer {
         new DictionaryAnalyzer.DictionaryAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class DictionaryAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class DictionaryAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         @Override
         public Void visitCreateDictionaryStatement(CreateDictionaryStmt statement, ConnectContext context) {
             String dictionaryName = statement.getDictionaryName();

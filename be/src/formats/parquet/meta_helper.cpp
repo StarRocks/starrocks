@@ -49,13 +49,12 @@ void ParquetMetaHelper::build_column_name_2_pos_in_meta(
 void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                              std::vector<GroupReaderParam::Column>& read_cols) const {
     for (auto& materialized_column : materialized_columns) {
-        int32_t field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.col_name);
+        int32_t field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.name());
         if (field_idx < 0) continue;
 
         auto parquet_type = _file_metadata->schema().get_stored_column_by_field_idx(field_idx)->physical_type;
-        GroupReaderParam::Column column =
-                _build_column(field_idx, materialized_column.col_idx, parquet_type, materialized_column.col_type,
-                              materialized_column.slot_id, materialized_column.decode_needed);
+        GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
+                                                        materialized_column.decode_needed);
         read_cols.emplace_back(column);
     }
 }
@@ -106,10 +105,8 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
 void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                              std::vector<GroupReaderParam::Column>& read_cols) const {
     for (auto& materialized_column : materialized_columns) {
-        const std::string& format_col_name = _case_sensitive
-                                                     ? materialized_column.col_name
-                                                     : boost::algorithm::to_lower_copy(materialized_column.col_name);
-        auto iceberg_it = _field_name_2_iceberg_field.find(format_col_name);
+        const std::string& name = materialized_column.formatted_name(_case_sensitive);
+        auto iceberg_it = _field_name_2_iceberg_field.find(name);
         if (iceberg_it == _field_name_2_iceberg_field.end()) {
             continue;
         }
@@ -121,9 +118,8 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 
         auto parquet_type = _file_metadata->schema().get_stored_column_by_field_id(field_id)->physical_type;
 
-        GroupReaderParam::Column column =
-                _build_column(field_idx, materialized_column.col_idx, parquet_type, materialized_column.col_type,
-                              materialized_column.slot_id, materialized_column.decode_needed, iceberg_it->second);
+        GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
+                                                        materialized_column.decode_needed, iceberg_it->second);
         read_cols.emplace_back(column);
     }
 }

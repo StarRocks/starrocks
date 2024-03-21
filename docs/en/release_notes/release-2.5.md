@@ -147,7 +147,7 @@ Release date: November 29, 2023
 - Errors may be thrown if large amounts of data are loaded into a Primary Key table with persistent index enabled. [#34566](https://github.com/StarRocks/starrocks/pull/34566)
 - After StarRocks is upgraded from v2.4 or earlier to a later version, compaction scores may rise unexpectedly. [#34618](https://github.com/StarRocks/starrocks/pull/34618)
 - If `INFORMATION_SCHEMA` is queried by using the database driver MariaDB ODBC, the `CATALOG_NAME` column returned in the `schemata` view holds only `null` values. [#34627](https://github.com/StarRocks/starrocks/pull/34627)
-- If schema changes are being executed while a Stream Load job is in the **PREPARD** state, a portion of the source data to be loaded by the job is lost. [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- If schema changes are being executed while a Stream Load job is in the **PREPARED** state, a portion of the source data to be loaded by the job is lost. [#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - Including two or more slashes (`/`) at the end of the HDFS storage path causes the backup and restore of the data from HDFS to fail. [#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - Running a loading task or a query may cause the FEs to hang. [#34569](https://github.com/StarRocks/starrocks/pull/34569)
 
@@ -181,7 +181,7 @@ Fixed the following issues:
 - Long-time, frequent data loading into a Primary Key table with persistent index enabled may cause BEs to crash. [#33220](https://github.com/StarRocks/starrocks/pull/33220)
 - The query result is incorrect when Query Cache is enabled. [#32778](https://github.com/StarRocks/starrocks/pull/32778)
 - Specifying a nullable Sort Key when creating a Primary Key table causes compaction to fail. [#29225](https://github.com/StarRocks/starrocks/pull/29225)
-- The error "StarRocks planner use long time 10000 ms in logical phase" occassionally occurs for complex Join queries. [#34177](https://github.com/StarRocks/starrocks/pull/34177)
+- The error "StarRocks planner use long time 10000 ms in logical phase" occasionally occurs for complex Join queries. [#34177](https://github.com/StarRocks/starrocks/pull/34177)
 
 ## 2.5.13
 

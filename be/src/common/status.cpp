@@ -255,14 +255,6 @@ std::string Status::code_as_string() const {
         return "Transaction in processing";
     case TStatusCode::YIELD:
         return "Task yield";
-    case TStatusCode::INVERTED_INDEX_CLUCENE_ERROR:
-        return "CLucene index error";
-    case TStatusCode::INVERTED_INDEX_FILE_NOT_FOUND:
-        return "GIN index file not found";
-    case TStatusCode::INVERTED_INDEX_INVALID_PARAMETERS:
-        return "GIN Invalid index parameters";
-    case TStatusCode::INVERTED_INDEX_NOT_SUPPORTED:
-        return "GIN index not supported";
     case TStatusCode::JIT_COMPILE_ERROR:
         return "JIT compile error";
     case TStatusCode::CAPACITY_LIMIT_EXCEED:

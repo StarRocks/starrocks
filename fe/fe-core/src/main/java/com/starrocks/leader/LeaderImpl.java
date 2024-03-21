@@ -397,6 +397,8 @@ public class LeaderImpl {
                                     tabletId, task.getBackendId(), replica.getId());
                         }
                     }
+                } else if (!RunMode.isSharedDataMode()) { // finish_tablet_infos will not be set in shared data mode
+                    LOG.warn("tablet_info is not set in finishTaskRequest");
                 }
 
                 // this should be called before 'countDownLatch()'
@@ -404,8 +406,8 @@ public class LeaderImpl {
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
-                LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}",
-                        tabletId, task.getBackendId(), request.getReport_version());
+                LOG.info("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
+                        tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
             }
 
             if (createReplicaTask.getRecoverySource() == RecoverySource.SCHEDULER) {
@@ -918,7 +920,6 @@ public class LeaderImpl {
             tableMeta.setTable_type(TableType.serialize(table.getType()));
             tableMeta.setDb_id(db.getId());
             tableMeta.setDb_name(dbName);
-            tableMeta.setCluster_id(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId());
             tableMeta.setState(olapTable.getState().name());
             tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
             if (olapTable.getCopiedBfColumns() != null) {

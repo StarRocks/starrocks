@@ -22,7 +22,6 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,7 +59,7 @@ public class SystemHandlerTest {
         systemHandler = new SystemHandler();
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = RuntimeException.class)
     public void testModifyBackendAddressLogic() throws UserException {
         ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
@@ -82,7 +81,7 @@ public class SystemHandlerTest {
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
-        expectedException.expect(DdlException.class);
+        expectedException.expect(RuntimeException.class);
         expectedException.expectMessage("Backend does not exist");
         systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
     }
@@ -93,7 +92,7 @@ public class SystemHandlerTest {
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
 
-        expectedException.expect(DdlException.class);
+        expectedException.expect(RuntimeException.class);
         expectedException.expectMessage("It will cause insufficient BE number");
         systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
     }
@@ -115,7 +114,7 @@ public class SystemHandlerTest {
             backend.setDisks(ImmutableMap.copyOf(diskInfoMap));
         }
 
-        expectedException.expect(DdlException.class);
+        expectedException.expect(RuntimeException.class);
         expectedException.expectMessage("It will cause insufficient disk space");
         systemHandler.process(Lists.newArrayList(decommissionBackendClause), null, null);
     }

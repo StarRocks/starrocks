@@ -580,6 +580,45 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     return io_tasks;
 }
 
+void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
+    std::lock_guard<std::mutex> L(_buffered_morsels_mutex);
+    _buffered_morsels.insert(_buffered_morsels.end(), std::make_move_iterator(morsels.begin()),
+                             std::make_move_iterator(morsels.end()));
+    _buffered_morsels_size += morsels.size();
+}
+
+void ConnectorScanOperator::begin_pickup_morsels() {
+    if (_buffered_morsels_size.load(std::memory_order_relaxed) == 0) {
+        return;
+    }
+
+    std::vector<MorselPtr> morsels;
+    {
+        std::lock_guard<std::mutex> L(_buffered_morsels_mutex);
+        morsels.swap(_buffered_morsels);
+        _buffered_morsels_size = 0;
+    }
+
+    if (morsels.size() == 0) {
+        return;
+    }
+
+    query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
+    if (ticket_checker != nullptr) {
+        int64_t cached_owner_id = -1;
+        for (const MorselPtr& morsel : morsels) {
+            if (!morsel->has_owner_id()) continue;
+            int64_t owner_id = morsel->owner_id();
+            if (owner_id != cached_owner_id) {
+                cached_owner_id = owner_id;
+                ticket_checker->more_tickets(cached_owner_id);
+            }
+        }
+    }
+
+    _morsel_queue->append_morsels(std::move(morsels));
+}
+
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                            ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
@@ -592,11 +631,13 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     auto* scan_morsel = (ScanMorsel*)_morsel.get();
     TScanRange* scan_range = scan_morsel->get_scan_range();
+    ScanSplitContext* split_context = scan_morsel->get_split_context();
 
     if (scan_range->__isset.broker_scan_range) {
         scan_range->broker_scan_range.params.__set_non_blocking_read(true);
     }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
+    _data_source->set_split_context(split_context);
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
@@ -630,7 +671,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
-    if (scan_op->_enable_adaptive_io_tasks) {
+    if (scan_op->enable_adaptive_io_tasks()) {
         MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
         mem_tracker->release(_request_mem_tracker_bytes);
 
@@ -685,7 +726,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
     }
 
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
-    if (scan_op->_enable_adaptive_io_tasks) {
+    if (scan_op->enable_adaptive_io_tasks()) {
         [[maybe_unused]] auto build_debug_string = [&](const std::string action) {
             std::stringstream ss;
             ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
@@ -741,8 +782,8 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 }
 
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
-    ConnectorScanOperatorAdaptiveProcessor& P = *(op->_adaptive_processor);
+    ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
+    ConnectorScanOperatorAdaptiveProcessor& P = *(scan_op->adaptive_processor());
 
     DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
 
@@ -812,6 +853,32 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         return Status::OK();
     }
     _ck_acc.reset();
+
+    // before returning eof, we can check if this chunk source generates splits.
+    {
+        std::vector<ScanSplitContextPtr> split_tasks;
+        _data_source->get_split_tasks(&split_tasks);
+        VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
+                      << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
+                      << ", split_tasks = " << split_tasks.size();
+        if (split_tasks.size() != 0) {
+            std::vector<MorselPtr> split_morsels;
+            ScanMorsel* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
+
+            if (current_morsel->is_last_split()) {
+                split_tasks.back()->set_last_split(true);
+            }
+
+            for (auto& t : split_tasks) {
+                std::unique_ptr<ScanMorsel> m = std::make_unique<ScanMorsel>(current_morsel->get_plan_node_id(),
+                                                                             *current_morsel->get_scan_range());
+                m->set_split_context(std::move(t));
+                split_morsels.emplace_back(std::move(m));
+            }
+
+            scan_op->append_morsels(std::move(split_morsels));
+        }
+    }
     return Status::EndOfFile("");
 }
 

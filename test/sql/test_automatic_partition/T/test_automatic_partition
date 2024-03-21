@@ -179,3 +179,24 @@ insert into ss values('2002-01-07', 2);
 insert into ss values('2002-01-08', 2);
 insert into ss values('2002-01-09', 2);
 select * from ss;
+
+
+-- name: test_schema_change
+CREATE TABLE ss( event_day DATE, pv BIGINT, cc int) DUPLICATE KEY(event_day) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into ss values('2002-01-01', 1, 2);
+insert into ss values('2002-01-02', 1, 2);
+alter table ss modify column cc INT AFTER event_day;
+insert into ss values('2002-01-03', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-04', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-05', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-06', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-07', 1, 2);
+select sleep(3);
+insert into ss values('2002-01-08', 1, 2);
+select sleep(3);
+function: wait_alter_table_not_pending()
+select * from ss;

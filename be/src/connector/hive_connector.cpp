@@ -102,6 +102,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_file_metacache) {
         _use_file_metacache = state->query_options().enable_file_metacache;
     }
+    if (state->query_options().__isset.enable_connector_split_io_tasks) {
+        _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
+    }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
@@ -250,11 +253,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
 
         int32_t delete_column_index = slots.size();
-        auto* delete_column_tuple_desc =
-                state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
+        _delete_column_tuple_desc = state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
 
-        std::vector<SlotDescriptor*> equality_delete_slots;
-        for (SlotDescriptor* d_slot_desc : delete_column_tuple_desc->slots()) {
+        for (SlotDescriptor* d_slot_desc : _delete_column_tuple_desc->slots()) {
             _equality_delete_slots.emplace_back(d_slot_desc);
             if (!id_to_slots.contains(d_slot_desc->id())) {
                 _materialize_slots.push_back(d_slot_desc);
@@ -771,11 +772,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
+    scanner_params.split_context = _split_context;
+    scanner_params.enable_split_tasks = _enable_split_tasks;
 
     if (!_equality_delete_slots.empty()) {
         MORParams& mor_params = scanner_params.mor_params;
         mor_params.tuple_desc = _tuple_desc;
         mor_params.equality_slots = _equality_delete_slots;
+        mor_params.delete_column_tuple_desc = _delete_column_tuple_desc;
         mor_params.mor_tuple_id = _provider->_hdfs_scan_node.mor_tuple_id;
         mor_params.runtime_profile = _runtime_profile;
     }
@@ -787,6 +791,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
+        scanner_params.iceberg_equal_delete_schema = tbl->get_iceberg_equal_delete_schema();
     }
     scanner_params.use_datacache = _use_datacache;
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
@@ -884,6 +889,25 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
+void HiveDataSource::_init_chunk(ChunkPtr* chunk, size_t n) {
+    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+
+    if (!_equality_delete_slots.empty()) {
+        std::map<SlotId, SlotDescriptor*> id_to_slots;
+        for (const auto& slot : _tuple_desc->slots()) {
+            id_to_slots.emplace(slot->id(), slot);
+        }
+
+        for (const auto& slot : _equality_delete_slots) {
+            if (!id_to_slots.contains(slot->id())) {
+                const auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+                column->reserve(n);
+                (*chunk)->append_column(column, slot->id());
+            }
+        }
+    }
+}
+
 const std::string HiveDataSource::get_custom_coredump_msg() const {
     const std::string path = !_scan_range.relative_path.empty() ? _scan_range.relative_path : _scan_range.full_path;
     return strings::Substitute("Hive file path: $0, partition id: $1, length: $2, offset: $3", path,
@@ -931,6 +955,11 @@ void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, i
     // here we compute as default mem bytes = max(MIN_SIZE, min(max_file_length, MAX_SIZE))
     int64_t size = std::max(*min_value, std::min(_max_file_length * 3 / 2, *max_value));
     *min_value = *max_value = size;
+}
+
+void HiveDataSource::get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+    if (_scanner == nullptr) return;
+    _scanner->get_split_tasks(split_tasks);
 }
 
 } // namespace starrocks::connector

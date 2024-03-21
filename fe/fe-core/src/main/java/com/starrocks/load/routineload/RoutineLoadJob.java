@@ -494,8 +494,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     }
 
     public void setOtherMsg(String otherMsg) {
-        this.otherMsg = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                + ": " + Strings.nullToEmpty(otherMsg);
+        this.otherMsg = String.format("[%s] %s", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                Strings.nullToEmpty(otherMsg));
     }
 
     public String getDbFullName() throws MetaNotFoundException {
@@ -960,6 +960,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
         long taskBeId = -1L;
         try {
+            // Update the job state is the job is too slow.
+            updateSubstate();
+
             if (txnOperated) {
                 // find task in job
                 Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
@@ -1087,6 +1090,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             throws UserException {
         long taskBeId = -1L;
         try {
+            // Update the job state is the job is too slow.
+            updateSubstate();
+
             if (txnOperated) {
                 // step0: find task in job
                 Optional<RoutineLoadTaskInfo> routineLoadTaskInfoOptional = routineLoadTaskInfoList.stream().filter(
@@ -1963,6 +1969,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected void updateSubstate(JobSubstate substate, ErrorReason reason) throws UserException {
         writeLock();
+        if (this.substate == substate && reason == null) {
+            return;
+        }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_substate", this.substate)
                 .add("desire_job_substate", substate)

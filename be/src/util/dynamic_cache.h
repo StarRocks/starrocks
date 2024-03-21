@@ -303,7 +303,8 @@ public:
 
     std::vector<std::pair<Key, size_t>> get_entry_sizes() const {
         std::lock_guard<std::mutex> lg(_lock);
-        std::vector<std::pair<Key, size_t>> ret(_map.size());
+        std::vector<std::pair<Key, size_t>> ret;
+        ret.reserve(_map.size());
         auto itr = _list.begin();
         while (itr != _list.end()) {
             Entry* entry = (*itr);

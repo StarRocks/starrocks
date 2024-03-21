@@ -62,10 +62,10 @@ public:
             if constexpr (is_string_type(field_type)) {
                 return init_fulltext_index();
             }
-            return Status::InvertedIndexFileNotFound("Field type not supported");
+            return Status::NotFound("Field type not supported");
         } catch (CLuceneError e) {
             LOG(WARNING) << "Inverted index writer init error occurred: " << e.what();
-            return Status::InvertedIndexCluceneError("Inverted index writer init error occurred");
+            return Status::InternalError("Inverted index writer init error occurred");
         }
     }
 
@@ -119,9 +119,6 @@ public:
 
     void add_values(const void* values, size_t count) override {
         if constexpr (is_string_type(field_type)) {
-            if (_field == nullptr || _index_writer == nullptr) {
-                LOG(ERROR) << "field or index writer is null in inverted index writer.";
-            }
             auto* _val = (Slice*)values;
             for (int i = 0; i < count; ++i) {
                 new_fulltext_field(_val->data, _val->size);
@@ -159,10 +156,6 @@ public:
         _null_bitmap.addRange(_rid, _rid + count);
         _rid += count;
         if constexpr (is_string_type(field_type)) {
-            if (_field == nullptr || _index_writer == nullptr) {
-                LOG(ERROR) << "field or index writer is null in inverted index writer.";
-            }
-
             for (int i = 0; i < count; ++i) {
                 new_fulltext_field(empty_value.c_str(), 0);
                 _index_writer->addDocument(_doc.get());
@@ -210,7 +203,7 @@ public:
             FINALLY_FINALIZE_OUTPUT(index_out)
             FINALLY_FINALIZE_OUTPUT(dir)
             LOG(WARNING) << "Inverted index writer finish error occurred: " << e.what();
-            return Status::InvertedIndexCluceneError("Inverted index writer finish error occurred");
+            return Status::InternalError("Inverted index writer finish error occurred");
         }
 
         return Status::OK();

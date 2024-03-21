@@ -158,7 +158,7 @@ PROPERTIES
 
 `resource-name` is the name of the Apache Spark™ resource configured in StarRocks.
 
-`PROPERTIES` inclueds parameters relating to the Apache Spark™ resource, as follows:
+`PROPERTIES` includes parameters relating to the Apache Spark™ resource, as follows:
 > **Note**
 >
 > For detailed description of Apache Spark™ resource PROPERTIES, please see [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE_RESOURCE.md)
@@ -259,7 +259,7 @@ In addition to the spark dependencies (named `spark-2x.zip` by default), the FE 
 
 ### Configuring YARN Client
 
-Configure the yarn client for FE so that the FE can execute      yarn commands to get the status of the running application or      kill it.It is recommended to use the official version of H     adoop2 2.5.2 or above ([hadoop download address](https://archive.apache.org/dist/hadoop/common/)). After downloading, please use the following steps to complete the configuration:
+Configure the yarn client for FE so that the FE can execute yarn commands to get the status of the running application or kill it.It is recommended to use the official version of Hadoop2 2.5.2 or above ([hadoop download address](https://archive.apache.org/dist/hadoop/common/)). After downloading, please use the following steps to complete the configuration:
 
 - **Configure the YARN executable path**
   
@@ -464,7 +464,7 @@ ETL: Spark ETL is committed.
 LOADING: The FE schedule an BE to execute push operation.
 FINISHED: The push is completed and the version is effective.
 
-There are two final stages of the import job –      `CANCELLED` and `FINISHED`, both indicating the load job is completed. `CANCELLED` indicates import failure and `FINISHED` indicates import success.
+There are two final stages of the import job – `CANCELLED` and `FINISHED`, both indicating the load job is completed. `CANCELLED` indicates import failure and `FINISHED` indicates import success.
 
 - **Progress**
   
@@ -500,7 +500,7 @@ You can copy the input to your browser to access  the web interface of the corre
 
 ### View Apache Spark™ Launcher commit logs
 
-Sometimes users need to view the detailed logs generated during a Apache Spark™ job commit. By  default, the logs are saved in the path `log/spark_launcher_log` in the FE root directory      named as `spark-launcher-{load-job-id}-{label}.log`. The logs are      saved in this directory for a period of time and will be erased when the import information in FE metadata is cleaned up. The default retention time is 3 days.
+Sometimes users need to view the detailed logs generated during a Apache Spark™ job commit. By  default, the logs are saved in the path `log/spark_launcher_log` in the FE root directory named as `spark-launcher-{load-job-id}-{label}.log`. The logs are saved in this directory for a period of time and will be erased when the import information in FE metadata is cleaned up. The default retention time is 3 days.
 
 ### Cancel Import
 

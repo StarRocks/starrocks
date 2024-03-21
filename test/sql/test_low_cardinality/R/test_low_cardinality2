@@ -309,11 +309,11 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-test_db_d0be16369d5011eeb01500163e04d4c2.s1	analyze	status	OK
+test_db_72538010da2a11eebf99c1cb78b81852.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_d0be16369d5011eeb01500163e04d4c2.s2	analyze	status	OK
+test_db_72538010da2a11eebf99c1cb78b81852.s2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('v3', 's1')
 -- result:
@@ -331,12 +331,12 @@ function: wait_global_dict_ready('v4', 's2')
 -- result:
 
 -- !result
-select concat(upper(v2), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v2);
+select concat(upper(v2), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v2) order by 1, 2;
 -- result:
-8351	Chongqing
 3681	Jiangxi
+8351	Chongqing
 -- !result
-select concat(upper(v4), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v4);
+select concat(upper(v4), "1"), max(v3) from s2 where v4 = "BJ" group by upper(v4) order by 1, 2;
 -- result:
 BJ1	Jiangxi
 -- !result
@@ -458,6 +458,55 @@ where x2 = "anhui"
 GROUP BY x1
 HAVING MAX(y2) = "JX";
 -- result:
-ixgnauG	anhui	QH1	JX
 nauhciS	anhui	SH1	JX
+ixgnauG	anhui	QH1	JX
+-- !result
+CREATE TABLE `supplier` (
+  `s_suppkey` int(11) NOT NULL COMMENT "",
+  `s_name` varchar(26) NOT NULL COMMENT "",
+  `s_region` varchar(13) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`s_suppkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12 
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into
+    supplier
+SELECT
+    generate_series,
+    generate_series,
+    generate_series % 16
+FROM
+    TABLE(generate_series(1, 4096));
+-- result:
+-- !result
+[UC] analyze full table supplier;
+-- result:
+test_db_72538010da2a11eebf99c1cb78b81852.supplier	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('s_region', 'supplier')
+-- result:
+
+-- !result
+with agged_supplier as ( select S_NAME, max(s_region) as mx_addr from supplier group by S_NAME ), 
+agged_supplier_1 as ( select l.S_NAME, l.mx_addr mx_addr from agged_supplier l join [shuffle] supplier r on l.S_NAME=r.S_NAME ), 
+agged_supplier_2 as ( select S_NAME, if(mx_addr = 'key', 'key2', S_NAME) mx_addr from agged_supplier_1 l ), agged_supplier_4 
+as ( select S_NAME, mx_addr from agged_supplier_2 l group by S_NAME,mx_addr ), 
+agged_supplier_5 as ( select l.S_NAME, l.mx_addr from agged_supplier_4 l join supplier r where r.s_suppkey=10 ) 
+select l.S_NAME,l.mx_addr from agged_supplier_5 l right join [shuffle] supplier z on l.S_NAME = z.S_NAME and l.mx_addr = z.s_region order by 2 nulls last,1 limit 10;
+-- result:
+1	1
+10	10
+11	11
+12	12
+13	13
+14	14
+15	15
+2	2
+3	3
+4	4
 -- !result

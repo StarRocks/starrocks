@@ -171,29 +171,15 @@ fi
 
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
-    if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
+    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
         USE_AVX2=OFF
     fi
     if [[ -z $(grep -o 'avx512' /proc/cpuinfo) ]]; then
         USE_AVX512=OFF
     fi
-    if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
+    if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
         USE_SSE4_2=OFF
     fi
-fi
-
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
-# This option will soon be deprecated.
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    # force turn off cachelib on arm platform
-    WITH_CACHELIB=OFF
-elif [[ -z ${WITH_CACHELIB} ]]; then
-    WITH_CACHELIB=OFF
-fi
-
-if [[ "${WITH_CACHELIB}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
-    echo "WITH_CACHELIB=ON but missing depdency libraries(cachelib)"
-    exit 1
 fi
 
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
@@ -278,10 +264,10 @@ echo "Get params:
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
+    USE_SSE4_2          -- $USE_SSE4_2
     JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    WITH_CACHELIB       -- $WITH_CACHELIB
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
@@ -376,7 +362,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
-                  -DWITH_CACHELIB=${WITH_CACHELIB}                      \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
@@ -449,6 +434,8 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/fe.conf ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/udf_security.policy ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
+
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
@@ -484,6 +471,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/conf/cn.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j2.properties ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/core-site.xml ${STARROCKS_OUTPUT}/be/conf/
+
     if [ "${BUILD_TYPE}" == "ASAN" ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
@@ -540,11 +529,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
-
-    if [ "${WITH_CACHELIB}" == "ON"  ]; then
-        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
-        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
-    fi
 
     MSG="${MSG} √ ${MSG_BE}"
 fi

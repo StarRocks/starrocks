@@ -147,6 +147,7 @@ public class FileScanNode extends LoadScanNode {
     private List<List<TBrokerFileStatus>> fileStatusesList;
     // file num
     private int filesAdded;
+    private long totalBytes = 0;
     
     private List<ComputeNode> nodes;
     private int nextBe = 0;
@@ -505,7 +506,6 @@ public class FileScanNode extends LoadScanNode {
             throw new UserException("No source file in this table(" + targetTable.getName() + ").");
         }
 
-        long totalBytes = 0;
         for (List<TBrokerFileStatus> fileStatuses : fileStatusesList) {
             Collections.sort(fileStatuses, T_BROKER_FILE_STATUS_COMPARATOR);
             for (TBrokerFileStatus fileStatus : fileStatuses) {
@@ -762,5 +762,12 @@ public class FileScanNode extends LoadScanNode {
         return true;
     }
 
+    public long getFileTotalSize() {
+        return totalBytes;
+    }
+
+    public int getFileNum() {
+        return filesAdded;
+    }
 
 }

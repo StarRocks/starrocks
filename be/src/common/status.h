@@ -145,19 +145,6 @@ public:
 
     static Status RemoteFileNotFound(std::string_view msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
-    static Status InvertedIndexNotSupport(std::string_view msg) {
-        return Status(TStatusCode::INVERTED_INDEX_NOT_SUPPORTED, msg);
-    }
-    static Status InvertedIndexFileNotFound(std::string_view msg) {
-        return Status(TStatusCode::INVERTED_INDEX_FILE_NOT_FOUND, msg);
-    }
-    static Status InvertedIndexInvalidParams(std::string_view msg) {
-        return Status(TStatusCode::INVERTED_INDEX_INVALID_PARAMETERS, msg);
-    }
-    static Status InvertedIndexCluceneError(std::string_view msg) {
-        return Status(TStatusCode::INVERTED_INDEX_CLUCENE_ERROR, msg);
-    }
-
     static Status Yield() { return {TStatusCode::YIELD, ""}; }
 
     static Status JitCompileError(std::string_view msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
@@ -425,6 +412,17 @@ struct StatusInstance {
             exit(1);                          \
         }                                     \
     } while (false)
+
+#define VA_ARGS_HELPER(fmt, ...) fmt " " #__VA_ARGS__
+
+#define RETURN_ERROR_IF_FALSE(condition, ...)                                       \
+    if (GOOGLE_PREDICT_BRANCH_NOT_TAKEN(!(condition))) {                            \
+        std::ostringstream oss;                                                     \
+        oss << "Check failed: " #condition ". " << VA_ARGS_HELPER("", __VA_ARGS__); \
+        std::string error_msg = oss.str();                                          \
+        LOG(ERROR) << error_msg;                                                    \
+        return Status::InternalError(error_msg);                                    \
+    }
 
 /// @brief Emit a warning if @c to_call returns a bad status.
 #define WARN_IF_ERROR(to_call, warning_prefix)                \

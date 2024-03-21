@@ -25,6 +25,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
@@ -134,6 +135,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -293,9 +295,42 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         builder.setOutputRowCount(tableRowCount);
+        if (isRewrittenMvGE(node, table, context)) {
+            adjustNestedMvStatistics(context.getGroupExpression().getGroup(), (MaterializedView) olapTable, builder);
+            if (node.getProjection() != null) {
+                builder.setShadowColumns(node.getProjection().getOutputColumns());
+            }
+        }
         // 4. estimate cardinality
         context.setStatistics(builder.build());
+
         return visitOperator(node, context);
+    }
+
+    private void adjustNestedMvStatistics(Group group, MaterializedView mv, Statistics.Builder builder) {
+        for (Map.Entry<Long, List<Long>> entry : group.getRelatedMvs().entrySet()) {
+            if (entry.getValue().contains(mv.getId())) {
+                // mv is a nested mv based on entry.getKey
+                Optional<Statistics> baseStatistics = group.getMvStatistics(entry.getKey());
+                // for single table mv, nested mv's statistics will be more accurate
+                if (baseStatistics.isPresent()
+                        && mv.getBaseTableInfos() != null
+                        && mv.getBaseTableInfos().size() == 1
+                        && !builder.getTableRowCountMayInaccurate()) {
+                    // update based mv output row count to nested mv
+                    Statistics.Builder baseBuilder = Statistics.buildFrom(baseStatistics.get());
+                    baseBuilder.setOutputRowCount(builder.getOutputRowCount());
+                    group.setMvStatistics(entry.getKey(), baseBuilder.build());
+                }
+            }
+        }
+    }
+
+    private boolean isRewrittenMvGE(Operator node, Table table, ExpressionContext context) {
+        return table.isMaterializedView()
+                && node instanceof LogicalOlapScanOperator
+                && context.getGroupExpression() != null
+                && context.getGroupExpression().hasAppliedMVRules();
     }
 
     @Override
@@ -564,6 +599,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      * return new partition column statistics or else null
      */
     private ColumnStatistic adjustPartitionStatistic(Collection<Long> selectedPartitionId, OlapTable olapTable) {
+        if (CollectionUtils.isEmpty(selectedPartitionId)) {
+            return null;
+        }
         int selectedPartitionsSize = selectedPartitionId.size();
         int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
         if (selectedPartitionsSize != allNoEmptyPartitionsSize) {

@@ -38,7 +38,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -139,8 +138,6 @@ public class ConnectContext {
     protected MysqlCapability capability;
     // Indicate if this client is killed.
     protected volatile boolean isKilled;
-    // catalog
-    protected volatile String currentCatalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // Db
     protected String currentDb = "";
     // warehouse
@@ -217,6 +214,7 @@ public class ConnectContext {
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
+    protected volatile boolean isForward = false;
 
     protected SSLContext sslContext;
 
@@ -672,11 +670,11 @@ public class ConnectContext {
     }
 
     public String getCurrentCatalog() {
-        return currentCatalog;
+        return this.sessionVariable.getCatalog();
     }
 
     public void setCurrentCatalog(String currentCatalog) {
-        this.currentCatalog = currentCatalog;
+        this.sessionVariable.setCatalog(currentCatalog);
     }
 
     public String getCurrentWarehouse() {
@@ -838,6 +836,14 @@ public class ConnectContext {
 
     public boolean isPending() {
         return isPending;
+    }
+
+    public void setIsForward(boolean forward) {
+        isForward = forward;
+    }
+
+    public boolean isForward() {
+        return isForward;
     }
 
     public boolean supportSSL() {
@@ -1016,7 +1022,13 @@ public class ConnectContext {
                 }
             }
             row.add(stmt);
-            row.add(Boolean.toString(isPending));
+            if (isForward) {
+                // if query is forward to leader, we can't know its accurate status in query queue,
+                // so isPending should not be displayed
+                row.add("");
+            } else {
+                row.add(Boolean.toString(isPending));
+            }
             return row;
         }
     }

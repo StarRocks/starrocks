@@ -157,6 +157,11 @@ public class StatisticExecutor {
         return executeStatisticDQL(statsConnectCtx, sql);
     }
 
+    public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildQueryConnectorHistogramStatisticsSQL(tableUUID, columnNames);
+        return executeStatisticDQL(statsConnectCtx, sql);
+    }
+
     public List<TStatisticData> queryMCV(ConnectContext statsConnectCtx, String sql) {
         return executeStatisticDQL(statsConnectCtx, sql);
     }
@@ -166,6 +171,14 @@ public class StatisticExecutor {
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
             LOG.warn("Execute statistic table expire fail.");
+        }
+    }
+
+    public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(tableUUID, columnNames);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute external histogram statistic table expire fail.");
         }
     }
 
@@ -237,7 +250,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_TABLE_VERSION
                 || version == StatsConstants.STATISTIC_BATCH_VERSION
                 || version == StatsConstants.STATISTIC_EXTERNAL_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION) {
+                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -289,14 +303,27 @@ public class StatisticExecutor {
         // update StatisticsCache
         statsConnectCtx.setStatisticsConnection(false);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
-            for (String columnName : statsJob.getColumns()) {
-                HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
-                        table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
-                        statsJob.getProperties());
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshHistogramStatisticsCache(
-                        histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
-                        Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
+            if (table.isNativeTableOrMaterializedView()) {
+                for (String columnName : statsJob.getColumns()) {
+                    HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
+                            table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
+                            statsJob.getProperties());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshHistogramStatisticsCache(
+                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
+                }
+            } else {
+                for (String columnName : statsJob.getColumns()) {
+                    ExternalHistogramStatsMeta histogramStatsMeta = new ExternalHistogramStatsMeta(
+                            statsJob.getCatalogName(), db.getFullName(), table.getName(), columnName,
+                            statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
+
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(histogramStatsMeta);
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
+                            statsJob.getCatalogName(), db.getFullName(), table.getName(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
+                }
             }
         } else {
             if (table.isNativeTableOrMaterializedView()) {

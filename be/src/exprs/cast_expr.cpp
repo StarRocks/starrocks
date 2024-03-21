@@ -904,43 +904,76 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
-    ColumnViewer<TYPE_VARCHAR> viewer(column);
-    ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
+    const int num_rows = column->size();
 
-    if (!column->has_null()) {
-        for (int row = 0; row < viewer.size(); ++row) {
-            auto value = viewer.value(row);
-            TimestampValue v;
-
-            bool right = v.from_string(value.data, value.size);
-            if constexpr (AllowThrowException) {
-                if (!right) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATETIME, value.to_string());
-                }
-            }
-            builder.append(v, !right);
-        }
-    } else {
-        for (int row = 0; row < viewer.size(); ++row) {
-            if (viewer.is_null(row)) {
-                builder.append_null();
-                continue;
-            }
-
-            auto value = viewer.value(row);
-            TimestampValue v;
-
-            bool right = v.from_string(value.data, value.size);
-            if constexpr (AllowThrowException) {
-                if (!right) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATETIME, value.to_string());
-                }
-            }
-            builder.append(v, !right);
-        }
+    if (column->only_null()) {
+        return ColumnHelper::create_const_null_column(num_rows);
     }
 
-    return builder.build(column->is_constant());
+    if (column->is_constant()) {
+        const auto* input_column = ColumnHelper::get_binary_column(column.get());
+        const auto slice_value = input_column->get_slice(0);
+
+        TimestampValue datetime_value;
+        const bool success = datetime_value.from_string(slice_value.data, slice_value.size);
+
+        if (!success) {
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice_value.to_string());
+            }
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
+        return ColumnHelper::create_const_column<ToType>(datetime_value, num_rows);
+    }
+
+    auto res_data_column = RunTimeColumnType<ToType>::create();
+    res_data_column->resize(num_rows);
+    auto& res_data = res_data_column->get_data();
+
+    if (column->is_nullable()) {
+        const auto* input_column = down_cast<NullableColumn*>(column.get());
+        const auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+
+        NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
+        auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
+
+        for (int i = 0; i < num_rows; ++i) {
+            if (!null_data[i]) {
+                auto slice_value = data_column->get_slice(i);
+                const bool success = res_data[i].from_string(slice_value.data, slice_value.size);
+
+                if constexpr (AllowThrowException) {
+                    if (!success) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice_value.to_string());
+                    }
+                }
+                null_data[i] = !success;
+            }
+        }
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+    } else {
+        auto* data_column = down_cast<BinaryColumn*>(column.get());
+        NullColumnPtr null_column = NullColumn::create(num_rows);
+        auto& null_data = null_column->get_data();
+
+        bool has_null = false;
+        for (int i = 0; i < num_rows; ++i) {
+            auto slice_value = data_column->get_slice(i);
+            const bool success = res_data[i].from_string(slice_value.data, slice_value.size);
+
+            if constexpr (AllowThrowException) {
+                if (!success) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice_value.to_string());
+                }
+            }
+            null_data[i] = !success;
+            has_null |= !success;
+        }
+        if (!has_null) {
+            return res_data_column;
+        }
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+    }
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DATETIME, cast_from_string_to_datetime_fn);
 
@@ -1138,13 +1171,13 @@ public:
         return result_column;
     };
 
-    bool is_compilable() const override {
-        return !AllowThrowException && FromType != TYPE_LARGEINT && ToType != TYPE_LARGEINT &&
-               IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::CAST) && !AllowThrowException && FromType != TYPE_LARGEINT &&
+               ToType != TYPE_LARGEINT && IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
-    std::string jit_func_name_impl() const override {
-        return "{cast(" + _children[0]->jit_func_name() + ")}" + (is_constant() ? "c:" : "") +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{cast(" + _children[0]->jit_func_name(state) + ")}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
 

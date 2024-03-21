@@ -247,7 +247,7 @@ Status StorageEngine::start_bg_threads() {
 
     _clear_expired_replcation_snapshots_thread =
             std::thread([this]() { _clear_expired_replication_snapshots_callback(nullptr); });
-    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expiired_replication_snapshots");
+    Thread::set_thread_name(_clear_expired_replcation_snapshots_thread, "clear_expired_replication_snapshots");
 
     if (!config::disable_storage_page_cache) {
         _adjust_cache_thread = std::thread([this] { _adjust_pagecache_callback(nullptr); });
@@ -437,9 +437,6 @@ void* StorageEngine::_pk_dump_thread_callback(void* arg) {
 
 #ifdef USE_STAROS
 void* StorageEngine::_local_pk_index_shared_data_gc_evict_thread_callback(void* arg) {
-    if (is_as_cn()) {
-        return nullptr;
-    }
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
@@ -873,9 +870,9 @@ void* StorageEngine::_clear_expired_replication_snapshots_callback(void* arg) {
         LOG(INFO) << "try to clear expired replication snapshots!";
         replication_txn_manager()->clear_expired_snapshots();
 
-        int32_t interval = config::clear_expired_replcation_snapshots_interval_seconds;
+        int32_t interval = config::clear_expired_replication_snapshots_interval_seconds;
         if (interval <= 0) {
-            LOG(WARNING) << "clear expired replcation snapshots interval seconds config is illegal:" << interval
+            LOG(WARNING) << "clear expired replication snapshots interval seconds config is illegal:" << interval
                          << "will be forced set to one hour";
             interval = 3600; // 1 hour
         }

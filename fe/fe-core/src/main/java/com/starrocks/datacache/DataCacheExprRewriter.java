@@ -38,7 +38,7 @@ public class DataCacheExprRewriter {
         return visitor.visit(expr);
     }
 
-    private static class Visitor extends AstVisitor<Expr, Void> {
+    private static class Visitor implements AstVisitor<Expr, Void> {
         private final Map<String, Expr> mapping;
 
         public Visitor(Map<String, Expr> mapping) {

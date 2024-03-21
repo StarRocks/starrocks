@@ -36,7 +36,11 @@ ChunkChanger::ChunkChanger(const TabletSchemaCSPtr& base_schema, const TabletSch
         : _base_schema(std::move(base_schema)),
           _base_table_column_names(base_table_column_names),
           _alter_job_type(alter_job_type) {
-    _schema_mapping.resize(new_schema->num_columns());
+    size_t num_columns = new_schema->num_columns();
+    if (num_columns > 0 && new_schema->column(num_columns - 1).name() == Schema::FULL_ROW_COLUMN) {
+        num_columns--;
+    }
+    _schema_mapping.resize(num_columns);
 }
 
 ChunkChanger::~ChunkChanger() {
@@ -563,6 +567,11 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     for (int i = 0; i < new_schema->num_columns(); ++i) {
         const TabletColumn& new_column = new_schema->column(i);
         std::string column_name(new_column.name());
+        if (column_name == Schema::FULL_ROW_COLUMN) {
+            // need to regenerate full_row column
+            *sc_directly = true;
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (materialized_view_param_map.find(column_name) != materialized_view_param_map.end()) {
@@ -637,6 +646,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     int num_default_value = 0;
 
     for (int i = 0; i < new_schema->num_key_columns(); ++i) {
+        if (new_schema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (column_mapping->ref_column < 0) {
@@ -680,6 +692,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     }
 
     for (size_t i = 0; i < new_schema->num_columns(); ++i) {
+        if (new_schema->column(i).name() == Schema::FULL_ROW_COLUMN) {
+            continue;
+        }
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_mapping->ref_column < 0) {
             continue;
@@ -704,6 +719,10 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 return Status::OK();
             } else if (new_schema->has_index(new_column.unique_id(), GIN) !=
                        base_schema->has_index(ref_column.unique_id(), GIN)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), NGRAMBF) !=
+                       base_schema->has_index(ref_column.unique_id(), NGRAMBF)) {
                 *sc_directly = true;
                 return Status::OK();
             }

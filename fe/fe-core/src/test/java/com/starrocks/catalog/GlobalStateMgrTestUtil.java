@@ -62,6 +62,7 @@ public class GlobalStateMgrTestUtil {
     public static String testDb1 = "testDb1";
     public static long testDbId1 = 1;
     public static String testTable1 = "testTable1";
+    public static String testTable7 = "testTable7";
     public static long testTableId1 = 2;
     public static String testPartition1 = "testPartition1";
     public static long testPartitionId1 = 3;
@@ -98,7 +99,6 @@ public class GlobalStateMgrTestUtil {
         globalStateMgr.setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().clear();
-        globalStateMgr.initDefaultCluster();
 
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);

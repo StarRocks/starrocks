@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Catalogs, databases, and tables
 
-StarRocks uses internal catalogs to manage internal data and uses external catalogs to access external data in data lake. The data stored in StarRocks is maintained inside an internal catalog which consists of one or more databases. A database manages various objects, including tables, materialized views, and views, to store, manage, and manipulate data. StarRocks adopts a privilege system that controls users' privileges to perform operations on objects, thereby enhancing data security. 
+StarRocks uses internal catalogs to manage internal data and uses external catalogs to access external data in data lake. The data stored in StarRocks is maintained inside an internal catalog which consists of one or more databases. A database manages various objects, including tables, materialized views, and views, to store, manage, and manipulate data. StarRocks adopts a privilege system that controls users' privileges to perform operations on objects, thereby enhancing data security.
 
 ![img](../assets/table_design/Catalog_db_tbl.png)
 
@@ -28,7 +28,7 @@ Internal tables are maintained in internal catalogs. The data of internal tables
 
 :::note
 
-The rows and columns of internal tables here are logical concepts. StarRocks uses columnar storage for tables. Physically, the data in a column is segregated into data blocks, encoded, compressed, and then persistently stored on disk. 
+The rows and columns of internal tables here are logical concepts. StarRocks uses columnar storage for tables. Physically, the data in a column is segregated into data blocks, encoded, compressed, and then persistently stored on disk.
 
 :::
 
@@ -48,7 +48,7 @@ Materialized views are special physical tables that hold precomputed query resul
 
 Views, or logical views, are virtual tables that do not hold any data. Views only display data that is the results of queries against other existing physical tables. The query that defines a view is run every time the view is referenced in a query.
 
-## [Privileges](../administration/privilege_overview.md)
+## [Privileges](../administration/user_privs/privilege_overview.md)
 
 Privileges determine which users can perform which operations on which objects. StarRocks adopts two types of privilege models: identity-based access control and role-based access control. You can first assign privileges to roles, and then assign roles to users. In this case, privileges are passed to users through roles. Or, you can directly assign privileges to user identities.
 

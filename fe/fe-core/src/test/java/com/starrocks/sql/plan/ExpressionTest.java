@@ -1719,4 +1719,32 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(plan, "PREDICATES: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
                 "OR (bitmap_contains(5: b1, CAST(2: v2 AS BIGINT)))");
     }
+
+    @Test
+    public void testCastStringDouble() throws Exception {
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+            String sql = "select t1a = 1 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "11 <-> [1: t1a, VARCHAR, true] = '1'");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("DECIMAL");
+            String sql = "select t1a = 1 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([1: t1a, VARCHAR, true] as DECIMAL128(38,9)) = 1");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+    }
+
+    @Test
+    public void testCastConstantFn() throws Exception {
+        String sql = "select 2011-12-01 = id_date from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " CAST(9: id_date AS DOUBLE) = 1998.0");
+    }
 }

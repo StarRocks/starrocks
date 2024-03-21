@@ -10,7 +10,7 @@ A Paimon catalog is a kind of external catalog that enables you to query data fr
 
 Also, you can directly transform and load data from Paimon by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Paimon catalogs.
 
-To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluster must be able to access the storage system and metastore of your Paimon cluster. StarRocks supports the following storage systems and metastores:
 
 - Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or or other S3-compatible storage system (for example, MinIO)
 - Metastore like your file system or Hive metastore
@@ -35,7 +35,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
 
 ### HDFS
 

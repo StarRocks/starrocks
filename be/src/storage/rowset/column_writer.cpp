@@ -399,7 +399,31 @@ Status ScalarColumnWriter::init() {
     }
     if (_opts.need_bloom_filter) {
         _has_index_builder = true;
-        RETURN_IF_ERROR(BloomFilterIndexWriter::create(BloomFilterOptions(), _type_info, &_bloom_filter_index_builder));
+        BloomFilterOptions bf_options;
+        if (_opts.tablet_index.contains(NGRAMBF)) {
+            bf_options.use_ngram = true;
+            const TabletIndex& ngram_bf_index = _opts.tablet_index[NGRAMBF];
+            const std::map<std::string, std::string>& index_properties = ngram_bf_index.index_properties();
+            auto it = index_properties.find(GRAM_NUM_KEY);
+            if (it != index_properties.end()) {
+                // Found the key "gram_num"
+                const std::string& gram_num = it->second; // The value corresponding to the key "gram_num"
+                bf_options.gram_num = std::stoi(gram_num);
+            }
+            it = index_properties.find(FPP_KEY);
+            if (it != index_properties.end()) {
+                // Found the key "bloom_filter_fpp"
+                const std::string& fpp = it->second; // The value corresponding to the key "bloom_filter_fpp"
+                bf_options.fpp = std::stod(fpp);
+            }
+            it = index_properties.find(CASE_SENSITIVE_KEY);
+            if (it != index_properties.end()) {
+                // Found the key "case_sensitive"
+                const std::string& case_sensitive = it->second; // The value corresponding to the key "case_sensitive"
+                bf_options.case_sensitive = (case_sensitive == "true");
+            }
+        }
+        RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_options, _type_info, &_bloom_filter_index_builder));
     }
     if (_opts.need_inverted_index) {
         _has_index_builder = true;

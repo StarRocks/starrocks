@@ -124,7 +124,7 @@ public:
             RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &value, query_type, &index));
             indices |= index;
         }
-        *row_bitmap -= indices;
+        *row_bitmap &= indices;
         return Status::OK();
     }
 

@@ -292,11 +292,14 @@ vectorized_functions = [
     [30250, 'concat', 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::concat', 'StringFunctions::concat_prepare', 'StringFunctions::concat_close'],
 
     [30260, 'concat_ws', 'VARCHAR', ['VARCHAR', 'VARCHAR', '...'], 'StringFunctions::concat_ws'],
+    [30261, 'concat_ws', 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR'], 'ArrayFunctions::array_concat_ws'],
     [30270, 'find_in_set', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::find_in_set'],
     [30310, 'split_part', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::split_part'],
     [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
     [30312, 'substring_index', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::substring_index'],
-    [30316, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map'],
+    # v1 is deprecated
+    [30316, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map_v1'],
+    [30317, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map'],
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
@@ -330,8 +333,8 @@ vectorized_functions = [
      'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
     [30431, 'crc32', 'BIGINT', ['VARCHAR'], 'StringFunctions::crc32'],
 
-    [30440, 'ngram_search', 'FLOAT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ngram_search','StringFunctions::ngram_search_prepare','StringFunctions::ngram_search_close'],
-    [30441, 'ngram_search_case_insensitive', 'FLOAT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ngram_search_case_insensitive','StringFunctions::ngram_search_case_insensitive_prepare','StringFunctions::ngram_search_close'],
+    [30440, 'ngram_search', 'DOUBLE', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::ngram_search','StringFunctions::ngram_search_prepare','StringFunctions::ngram_search_close'],
+    [30441, 'ngram_search_case_insensitive', 'DOUBLE', ['VARCHAR', 'VARCHAR','INT'], 'StringFunctions::ngram_search_case_insensitive','StringFunctions::ngram_search_case_insensitive_prepare','StringFunctions::ngram_search_close'],
 
     # Binary Functions
     # to_binary

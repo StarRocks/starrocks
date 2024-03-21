@@ -22,7 +22,7 @@ ARG predownload_thirdparty=false
 ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230720.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v3.2-rc7
+ARG starlet_tag=v3.2-rc8
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 
@@ -54,6 +54,14 @@ FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet-ubuntu
 FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
+# remove unnecessary and big starlet dependencies
+COPY --from=builder /root/starrocks/docker/dockerfiles/dev-env/starlet_exclude.txt .
+RUN while read line; do \
+        if [[ "$line" == \#* ]] ; then \
+            continue ; \
+        fi ; \
+        rm -rvf /release/$line ; \
+    done < starlet_exclude.txt
 
 FROM base as dev-env
 ARG commit_id

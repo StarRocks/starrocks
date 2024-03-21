@@ -25,6 +25,7 @@
 #include "exprs/binary_function.h"
 #include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
+#include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -131,8 +132,24 @@ public:
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
 
-    // disable it temporarily as no perf benefit, and have to handle pushing down to storage
-    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
+    }
+
+    JitScore compute_jit_score(RuntimeState* state) const override {
+        JitScore jit_score = {0, 0};
+        if (!is_compilable(state)) {
+            return jit_score;
+        }
+        for (auto child : _children) {
+            auto tmp = child->compute_jit_score(state);
+            jit_score.score += tmp.score;
+            jit_score.num += tmp.num;
+        }
+        jit_score.num++;
+        jit_score.score += 0; // no benefit
+        return jit_score;
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         if constexpr (lt_is_decimal<Type>) {
@@ -193,9 +210,10 @@ public:
         }
     }
 
-    std::string jit_func_name_impl() const override {
-        return "{" + _children[0]->jit_func_name() + get_cmp_op_name<Type, OP>() + _children[1]->jit_func_name() + "}" +
-               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + get_cmp_op_name<Type, OP>() +
+               _children[1]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
+               type().debug_string();
     }
 
     std::string debug_string() const override {
@@ -409,8 +427,9 @@ public:
         return builder.build(ColumnHelper::is_all_const(list));
     }
 
-    // disable it temporarily as no perf benefit, and have to handle pushing down to storage
-    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
@@ -426,25 +445,23 @@ public:
             auto* r = datums[1].value;
             auto* l_null = datums[0].null_flag;
             auto* r_null = datums[1].null_flag;
-            auto* if_value = b.CreateAnd(IRHelper::bool_to_cond(b, l_null), IRHelper::bool_to_cond(b, r_null));
-            auto* elseif_value = b.CreateXor(IRHelper::bool_to_cond(b, l_null), IRHelper::bool_to_cond(b, r_null));
-            auto* llvm_true = llvm::ConstantInt::get(b.getInt1Ty(), 1);
-            auto* llvm_false = llvm::ConstantInt::get(b.getInt1Ty(), 0);
+            auto* if_value = IRHelper::bool_to_cond(b, b.CreateAnd(l_null, r_null));
+            auto* elseif_value = IRHelper::bool_to_cond(b, b.CreateXor(l_null, r_null));
+            llvm::Value* cmp;
             if constexpr (lt_is_float<Type>) {
-                auto* cmp = b.CreateFCmpOEQ(l, r);
-                result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
+                cmp = b.CreateFCmpOEQ(l, r);
             } else {
-                auto* cmp = b.CreateICmpEQ(l, r);
-                result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
+                cmp = b.CreateICmpEQ(l, r);
             }
-            result.value = b.CreateIntCast(result.value, b.getInt8Ty(), false);
+            cmp = b.CreateIntCast(cmp, b.getInt8Ty(), false);
+            result.value = b.CreateSelect(if_value, b.getInt8(1), b.CreateSelect(elseif_value, b.getInt8(0), cmp));
             // always not null
             return result;
         }
     }
 
-    std::string jit_func_name_impl() const override {
-        return "{" + _children[0]->jit_func_name() + "<=>" + _children[1]->jit_func_name() + "}" +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + "<=>" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 

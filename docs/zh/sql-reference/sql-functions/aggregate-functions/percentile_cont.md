@@ -18,7 +18,7 @@ PERCENTILE_CONT (expr, percentile)
 
 ## 参数说明
 
-- `expr`: 要计算百分位数的列，列值必须为数值类型、DATE或 DATETIME类型。如果要计算物理（physics）得分的中位数，则`expr`设置为包含physics分数的列。
+- `expr`: 要计算百分位数的列，列值必须为数值类型、DATE或 DATETIME类型。如果要计算物理（physics）得分的中位数，则 `expr` 设置为包含 physics 分数的列。
 
 - `percentile`: 指定的百分位，介于 0 和 1 之间的浮点常量。如果要计算中位数，则设置为 0.5。
 
@@ -34,7 +34,7 @@ PERCENTILE_CONT (expr, percentile)
 
 ## 示例
 
-假设有表`exam`，数据如下。
+假设有表 `exam`，数据如下。
 
 ```Plain
 select * from exam order by Subject;

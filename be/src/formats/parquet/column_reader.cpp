@@ -94,29 +94,6 @@ public:
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
-    Status prepare_batch(size_t* num_records, Column* dst) override {
-        DCHECK(_field->is_nullable ? dst->is_nullable() : true);
-        ColumnContentType content_type =
-                _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
-        if (!converter->need_convert) {
-            return _reader->read_records(num_records, content_type, dst);
-        } else {
-            auto column = converter->create_src_column();
-
-            Status status = _reader->read_records(num_records, content_type, column.get());
-            if (!status.ok() && !status.is_end_of_file()) {
-                return status;
-            }
-
-            {
-                SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-                RETURN_IF_ERROR(converter->convert(column, dst));
-            }
-
-            return Status::OK();
-        }
-    }
-
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
         ColumnContentType content_type =
@@ -134,8 +111,6 @@ public:
             return converter->convert(column, dst);
         }
     }
-
-    Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _reader->get_levels(def_levels, rep_levels, num_levels);
@@ -521,46 +496,6 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, Column* dst) override {
-        NullableColumn* nullable_column = nullptr;
-        ArrayColumn* array_column = nullptr;
-        if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
-            DCHECK(nullable_column->mutable_data_column()->is_array());
-            array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
-        } else {
-            DCHECK(dst->is_array());
-            DCHECK(!_field->is_nullable);
-            array_column = down_cast<ArrayColumn*>(dst);
-        }
-        auto* child_column = array_column->elements_column().get();
-        auto st = _element_reader->prepare_batch(num_records, child_column);
-
-        level_t* def_levels = nullptr;
-        level_t* rep_levels = nullptr;
-        size_t num_levels = 0;
-        _element_reader->get_levels(&def_levels, &rep_levels, &num_levels);
-
-        auto& offsets = array_column->offsets_column()->get_data();
-        offsets.resize(num_levels + 1);
-        NullColumn null_column(num_levels);
-        auto& is_nulls = null_column.get_data();
-        size_t num_offsets = 0;
-        bool has_null = false;
-        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
-                          &num_offsets, &has_null);
-        offsets.resize(num_offsets + 1);
-        is_nulls.resize(num_offsets);
-
-        if (dst->is_nullable()) {
-            DCHECK(nullable_column != nullptr);
-            nullable_column->mutable_null_column()->swap_column(null_column);
-            nullable_column->set_has_null(has_null);
-        }
-
-        return st;
-    }
-
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         ArrayColumn* array_column = nullptr;
@@ -601,8 +536,6 @@ public:
         return Status::OK();
     }
 
-    Status finish_batch() override { return Status::OK(); }
-
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
     }
@@ -627,7 +560,7 @@ private:
 
 class MapColumnReader : public ColumnReader {
 public:
-    explicit MapColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit MapColumnReader() = default;
     ~MapColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> key_reader,
@@ -642,90 +575,6 @@ public:
         }
 
         return Status::OK();
-    }
-
-    Status prepare_batch(size_t* num_records, Column* dst) override {
-        NullableColumn* nullable_column = nullptr;
-        MapColumn* map_column = nullptr;
-        if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
-            DCHECK(nullable_column->mutable_data_column()->is_map());
-            map_column = down_cast<MapColumn*>(nullable_column->mutable_data_column());
-        } else {
-            DCHECK(dst->is_map());
-            DCHECK(!_field->is_nullable);
-            map_column = down_cast<MapColumn*>(dst);
-        }
-        auto* key_column = map_column->keys_column().get();
-        auto* value_column = map_column->values_column().get();
-        Status st;
-
-        // TODO(SmithCruise) Ugly code, it's a temporary solution,
-        //  to reset late materialization's rows_to_skip before read each subfield column
-        size_t origin_next_row = _opts.context->next_row;
-        size_t origin_rows_to_skip = _opts.context->rows_to_skip;
-
-        if (_key_reader != nullptr) {
-            st = _key_reader->prepare_batch(num_records, key_column);
-            if (!st.ok() && !st.is_end_of_file()) {
-                return st;
-            }
-        }
-
-        if (_value_reader != nullptr) {
-            // do reset
-            _opts.context->next_row = origin_next_row;
-            _opts.context->rows_to_skip = origin_rows_to_skip;
-
-            st = _value_reader->prepare_batch(num_records, value_column);
-            if (!st.ok() && !st.is_end_of_file()) {
-                return st;
-            }
-        }
-
-        // if neither key_reader not value_reader is nullptr , check the value_column size is the same with key_column
-        DCHECK((_key_reader == nullptr) || (_value_reader == nullptr) || (value_column->size() == key_column->size()));
-
-        level_t* def_levels = nullptr;
-        level_t* rep_levels = nullptr;
-        size_t num_levels = 0;
-
-        if (_key_reader != nullptr) {
-            _key_reader->get_levels(&def_levels, &rep_levels, &num_levels);
-        } else if (_value_reader != nullptr) {
-            _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
-        } else {
-            DCHECK(false) << "Unreachable!";
-        }
-
-        auto& offsets = map_column->offsets_column()->get_data();
-        offsets.resize(num_levels + 1);
-        NullColumn null_column(num_levels);
-        auto& is_nulls = null_column.get_data();
-        size_t num_offsets = 0;
-        bool has_null = false;
-
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
-                          &num_offsets, &has_null);
-        offsets.resize(num_offsets + 1);
-        is_nulls.resize(num_offsets);
-
-        // fill with default
-        if (_key_reader == nullptr) {
-            key_column->append_default(offsets.back());
-        }
-        if (_value_reader == nullptr) {
-            value_column->append_default(offsets.back());
-        }
-
-        if (dst->is_nullable()) {
-            DCHECK(nullable_column != nullptr);
-            nullable_column->mutable_null_column()->swap_column(null_column);
-            nullable_column->set_has_null(has_null);
-        }
-
-        return st;
     }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
@@ -795,8 +644,6 @@ public:
         return Status::OK();
     }
 
-    Status finish_batch() override { return Status::OK(); }
-
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         // check _value_reader
         if (_key_reader != nullptr) {
@@ -841,12 +688,11 @@ private:
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _key_reader;
     std::unique_ptr<ColumnReader> _value_reader;
-    const ColumnReaderOptions& _opts;
 };
 
 class StructColumnReader : public ColumnReader {
 public:
-    explicit StructColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit StructColumnReader() = default;
     ~StructColumnReader() override = default;
 
     Status init(const ParquetField* field, std::map<std::string, std::unique_ptr<ColumnReader>>&& child_readers) {
@@ -865,79 +711,6 @@ public:
         }
 
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
-    }
-
-    Status prepare_batch(size_t* num_records, Column* dst) override {
-        NullableColumn* nullable_column = nullptr;
-        StructColumn* struct_column = nullptr;
-        if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
-            DCHECK(nullable_column->mutable_data_column()->is_struct());
-            struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
-        } else {
-            DCHECK(dst->is_struct());
-            DCHECK(!_field->is_nullable);
-            struct_column = down_cast<StructColumn*>(dst);
-        }
-
-        const auto& field_names = struct_column->field_names();
-
-        DCHECK_EQ(field_names.size(), _child_readers.size());
-
-        // TODO(SmithCruise) Ugly code, it's a temporary solution,
-        //  to reset late materialization's rows_to_skip before read each subfield column
-        size_t origin_next_row = _opts.context->next_row;
-        size_t origin_rows_to_skip = _opts.context->rows_to_skip;
-
-        // Fill data for subfield column reader
-        bool first_read = true;
-        size_t real_read = 0;
-        for (size_t i = 0; i < field_names.size(); i++) {
-            const auto& field_name = field_names[i];
-            if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
-                if (_child_readers[field_name] != nullptr) {
-                    Column* child_column = struct_column->field_column(field_name).get();
-                    _opts.context->next_row = origin_next_row;
-                    _opts.context->rows_to_skip = origin_rows_to_skip;
-                    RETURN_IF_ERROR(_child_readers[field_name]->prepare_batch(num_records, child_column));
-                    size_t current_real_read = child_column->size();
-                    real_read = first_read ? current_real_read : real_read;
-                    first_read = false;
-                    if (UNLIKELY(real_read != current_real_read)) {
-                        return Status::InternalError(strings::Substitute("Unmatched row count, $0", field_name));
-                    }
-                }
-            } else {
-                return Status::InternalError(
-                        strings::Substitute("there is no match subfield reader for $1", field_name));
-            }
-        }
-
-        if (UNLIKELY(first_read)) {
-            return Status::InternalError(
-                    strings::Substitute("All used subfield of struct type $1 is not exist", _field->name));
-        }
-
-        for (size_t i = 0; i < field_names.size(); i++) {
-            const auto& field_name = field_names[i];
-            if (_child_readers[field_name] == nullptr) {
-                Column* child_column = struct_column->field_column(field_name).get();
-                child_column->append_default(real_read);
-            }
-        }
-
-        if (dst->is_nullable()) {
-            DCHECK(nullable_column != nullptr);
-            size_t row_nums = struct_column->fields_column()[0]->size();
-            NullColumn null_column(row_nums, 0);
-            auto& is_nulls = null_column.get_data();
-            bool has_null = false;
-            _handle_null_rows(is_nulls.data(), &has_null, row_nums);
-
-            nullable_column->mutable_null_column()->swap_column(null_column);
-            nullable_column->set_has_null(has_null);
-        }
-        return Status::OK();
     }
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
@@ -1001,8 +774,6 @@ public:
         }
         return Status::OK();
     }
-
-    Status finish_batch() override { return Status::OK(); }
 
     // get_levels functions only called by complex type
     // If parent is a struct type, only def_levels has value.
@@ -1196,7 +967,6 @@ private:
     std::map<std::string, std::unique_ptr<ColumnReader>> _child_readers;
     // First non-nullptr child ColumnReader, used to get def & rep levels
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
-    const ColumnReaderOptions& _opts;
 };
 
 void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
@@ -1297,7 +1067,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1], &value_reader));
         }
 
-        std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
+        std::unique_ptr<MapColumnReader> reader(new MapColumnReader());
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
@@ -1317,7 +1087,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
-        std::unique_ptr<StructColumnReader> reader(new StructColumnReader(opts));
+        std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
         RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
         *output = std::move(reader);
         return Status::OK();
@@ -1361,7 +1131,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
                                                  value_iceberg_schema, &value_reader));
         }
 
-        std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
+        std::unique_ptr<MapColumnReader> reader(new MapColumnReader());
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
@@ -1384,7 +1154,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
-        std::unique_ptr<StructColumnReader> reader(new StructColumnReader(opts));
+        std::unique_ptr<StructColumnReader> reader(new StructColumnReader());
         RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
         *output = std::move(reader);
         return Status::OK();

@@ -10,7 +10,7 @@ Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Un
 - 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据进行加工建模，并导入至 StarRocks。
 - 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
-为保证正常访问融合数据源内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问融合数据源内的数据，StarRocks 集群必须能够访问融合数据源的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 
@@ -853,7 +853,7 @@ INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
 
 ## 在 Unified Catalog 内创建数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Unified Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Unified Catalog 内创建数据库。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Unified Catalog 的 [CREATE DATABASE](../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Unified Catalog 内创建数据库。
 
 > **说明**
 >
@@ -885,11 +885,11 @@ CREATE DATABASE <database_name>
 | 阿里云 OSS                             | `oss`                                                        |
 | 腾讯云 COS                             | `cosn`                                                       |
 | 华为云 OBS                             | `obs`                                                        |
-| AWS S3 及其他兼容 S3 的存储（如 MinIO)   | `s3`                                                         |
+| AWS S3 及其他兼容 S3 的存储（如 MinIO）  | `s3`                                                         |
 
 ## 从 Unified Catalog 内删除数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该数据库。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [DROP](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该数据库。仅支持删除空数据库。
 
 > **说明**
 >
@@ -907,7 +907,7 @@ DROP DATABASE <database_name>
 
 ## 在 Unified Catalog 内创建表
 
-同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该数据库下创建表。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该数据库下创建表。
 
 > **说明**
 >
@@ -941,7 +941,7 @@ PARTITION BY (id,dt);
 
 ## 向 Unified Catalog 内的表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
 
 > **说明**
 >
@@ -976,7 +976,7 @@ VALUES
 
 ## 从 Unified Catalog 内删除表
 
-同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该表。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [DROP](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该表。
 
 > **说明**
 >
