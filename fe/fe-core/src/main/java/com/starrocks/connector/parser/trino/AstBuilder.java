@@ -545,7 +545,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitOffset(Offset node, ParseTreeContext context) {
         long offset = ((LiteralExpr) visit(node.getRowCount(), context)).getLongValue();
-        return new LimitElement(offset, 0);
+        return new LimitElement(offset, LimitElement.NO_LIMIT.getLimit());
     }
 
     @Override
