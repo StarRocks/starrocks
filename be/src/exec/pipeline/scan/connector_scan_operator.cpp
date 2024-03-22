@@ -637,6 +637,9 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
         scan_range->broker_scan_range.params.__set_non_blocking_read(true);
     }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
+    if (!morsel->rowsets().empty()) {
+        _data_source->set_rowsets(&(morsel->rowsets()));
+    }
     _data_source->set_split_context(split_context);
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
