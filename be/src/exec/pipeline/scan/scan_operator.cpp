@@ -535,6 +535,8 @@ ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
         : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
+    TEST_SUCC_POINT("ScanOperatorFactory::prepare");
+
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(do_prepare(state));
 
