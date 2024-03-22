@@ -95,7 +95,11 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
         params->grouping_exprs = tnode.agg_node.grouping_exprs;
         params->aggregate_functions = tnode.agg_node.aggregate_functions;
         params->intermediate_aggr_exprs = tnode.agg_node.intermediate_aggr_exprs;
-        params->enable_runtime_limit = tnode.agg_node.enable_runtime_limit;
+        params->enable_runtime_limit =
+                tnode.agg_node.__isset.enable_runtime_limit ? tnode.agg_node.enable_runtime_limit : false;
+        params->streaming_agg_low_memory_mode = tnode.agg_node.__isset.streaming_agg_low_memory_mode
+                                                        ? tnode.agg_node.streaming_agg_low_memory_mode
+                                                        : TStreamingPreaggregationMode::LIMITED_MEM;
         break;
     }
     default:

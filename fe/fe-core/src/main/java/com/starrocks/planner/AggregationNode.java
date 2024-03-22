@@ -271,6 +271,12 @@ public class AggregationNode extends PlanNode {
         msg.agg_node.setInterpolate_passthrough(
                 useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
         msg.agg_node.setEnable_runtime_limit(ConnectContext.get().getSessionVariable().getEnableAggregationRuntimeLimit());
+        String low_memory_mode = ConnectContext.get().getSessionVariable().getStreamingAggLowMemoryMode();
+        if (low_memory_mode.equalsIgnoreCase(FORCE_STREAMING)) {
+            msg.agg_node.setStreaming_agg_low_memory_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
+        } else {
+            msg.agg_node.setStreaming_agg_low_memory_mode(TStreamingPreaggregationMode.LIMITED_MEM);
+        }
     }
 
     protected String getDisplayLabelDetail() {
