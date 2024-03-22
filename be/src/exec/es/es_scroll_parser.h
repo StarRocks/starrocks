@@ -41,7 +41,7 @@ public:
     bool current_eos() { return _cur_line == _size; }
 
     void set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context,
-                    std::string& timezone);
+                    const std::string& timezone);
 
 private:
     static bool _is_pure_doc_value(const rapidjson::Value& obj);

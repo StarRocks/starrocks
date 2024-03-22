@@ -164,11 +164,12 @@ public class EsUtil {
             //TODO
             case "date":
                 return Type.DATETIME;
+            case "nested":
+            case "object":
+                return Type.JSON;
             case "keyword":
             case "text":
             case "ip":
-            case "nested":
-            case "object":
             default:
                 return ScalarType.createDefaultCatalogString();
         }
