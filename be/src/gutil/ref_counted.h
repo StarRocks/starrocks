@@ -267,14 +267,10 @@ public:
 #if SCOPED_REFPTR_ALLOW_IMPLICIT_CONVERSION_TO_PTR
     // Allow scoped_refptr<C> to be used in boolean expression
     // and comparison operations.
-    operator T*() const {
-        return ptr_;
-    }
+    operator T*() const { return ptr_; }
 #else
     typedef T* scoped_refptr::*Testable;
-    operator Testable() const {
-        return ptr_ ? &scoped_refptr::ptr_ : nullptr;
-    }
+    operator Testable() const { return ptr_ ? &scoped_refptr::ptr_ : nullptr; }
 #endif
 
     T* operator->() const {
@@ -291,9 +287,7 @@ public:
         return *this;
     }
 
-    scoped_refptr<T>& operator=(const scoped_refptr<T>& r) {
-        return *this = r.ptr_;
-    }
+    scoped_refptr<T>& operator=(const scoped_refptr<T>& r) { return *this = r.ptr_; }
 
     template <typename U>
     scoped_refptr<T>& operator=(const scoped_refptr<U>& r) {
@@ -317,15 +311,11 @@ public:
         *pp = p;
     }
 
-    void swap(scoped_refptr<T>& r) {
-        swap(&r.ptr_);
-    }
+    void swap(scoped_refptr<T>& r) { swap(&r.ptr_); }
 
     // Like gscoped_ptr::reset(), drops a reference on the currently held object
     // (if any), and adds a reference to the passed-in object (if not NULL).
-    void reset(T* p = nullptr) {
-        *this = p;
-    }
+    void reset(T* p = nullptr) { *this = p; }
 
 protected:
     T* ptr_;

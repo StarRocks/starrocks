@@ -64,12 +64,8 @@ struct AlphaNum {
     AlphaNum(StringPiece pc) : piece(pc) {}       // NOLINT(runtime/explicit)
     AlphaNum(const string& s) : piece(s) {}       // NOLINT(runtime/explicit)
 
-    StringPiece::size_type size() const {
-        return piece.size();
-    }
-    const char* data() const {
-        return piece.data();
-    }
+    StringPiece::size_type size() const { return piece.size(); }
+    const char* data() const { return piece.data(); }
 
 private:
     // Use ":" not ':'

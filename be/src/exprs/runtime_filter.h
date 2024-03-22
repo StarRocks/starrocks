@@ -172,9 +172,7 @@ public:
     size_t deserialize(const uint8_t* data);
     void merge(const SimdBlockFilter& bf);
     bool check_equal(const SimdBlockFilter& bf) const;
-    uint32_t directory_mask() const {
-        return _directory_mask;
-    }
+    uint32_t directory_mask() const { return _directory_mask; }
 
     void clear();
     // whether this bloom filter can be used
@@ -182,9 +180,7 @@ public:
     // we still send this rf but ignore bloom filter and only keep min/max filter,
     // in this case, we will use clear() to release the memory of bloom filter,
     // we can use can_use() to check if this bloom filter can be used
-    bool can_use() const {
-        return _directory != nullptr;
-    }
+    bool can_use() const { return _directory != nullptr; }
 
 private:
     // The number of bits to set in a tiny Bloom filter block

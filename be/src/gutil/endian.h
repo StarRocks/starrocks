@@ -130,87 +130,45 @@ public:
     // Conversion functions.
 #ifdef IS_LITTLE_ENDIAN
 
-    static uint16 FromHost16(uint16 x) {
-        return x;
-    }
-    static uint16 ToHost16(uint16 x) {
-        return x;
-    }
+    static uint16 FromHost16(uint16 x) { return x; }
+    static uint16 ToHost16(uint16 x) { return x; }
 
-    static uint32 FromHost32(uint32 x) {
-        return x;
-    }
-    static uint32 ToHost32(uint32 x) {
-        return x;
-    }
+    static uint32 FromHost32(uint32 x) { return x; }
+    static uint32 ToHost32(uint32 x) { return x; }
 
-    static uint64 FromHost64(uint64 x) {
-        return x;
-    }
-    static uint64 ToHost64(uint64 x) {
-        return x;
-    }
+    static uint64 FromHost64(uint64 x) { return x; }
+    static uint64 ToHost64(uint64 x) { return x; }
 
-    static unsigned __int128 FromHost128(unsigned __int128 x) {
-        return x;
-    }
-    static unsigned __int128 ToHost128(unsigned __int128 x) {
-        return x;
-    }
+    static unsigned __int128 FromHost128(unsigned __int128 x) { return x; }
+    static unsigned __int128 ToHost128(unsigned __int128 x) { return x; }
 
-    static bool IsLittleEndian() {
-        return true;
-    }
+    static bool IsLittleEndian() { return true; }
 
 #elif defined IS_BIG_ENDIAN
 
-    static uint16 FromHost16(uint16 x) {
-        return bswap_16(x);
-    }
-    static uint16 ToHost16(uint16 x) {
-        return bswap_16(x);
-    }
+    static uint16 FromHost16(uint16 x) { return bswap_16(x); }
+    static uint16 ToHost16(uint16 x) { return bswap_16(x); }
 
-    static uint32 FromHost32(uint32 x) {
-        return bswap_32(x);
-    }
-    static uint32 ToHost32(uint32 x) {
-        return bswap_32(x);
-    }
+    static uint32 FromHost32(uint32 x) { return bswap_32(x); }
+    static uint32 ToHost32(uint32 x) { return bswap_32(x); }
 
-    static uint64 FromHost64(uint64 x) {
-        return gbswap_64(x);
-    }
-    static uint64 ToHost64(uint64 x) {
-        return gbswap_64(x);
-    }
+    static uint64 FromHost64(uint64 x) { return gbswap_64(x); }
+    static uint64 ToHost64(uint64 x) { return gbswap_64(x); }
 
-    static bool IsLittleEndian() {
-        return false;
-    }
+    static bool IsLittleEndian() { return false; }
 
 #endif /* ENDIAN */
 
     // Functions to do unaligned loads and stores in little-endian order.
-    static uint16 Load16(const void* p) {
-        return ToHost16(UNALIGNED_LOAD16(p));
-    }
+    static uint16 Load16(const void* p) { return ToHost16(UNALIGNED_LOAD16(p)); }
 
-    static void Store16(void* p, uint16 v) {
-        UNALIGNED_STORE16(p, FromHost16(v));
-    }
+    static void Store16(void* p, uint16 v) { UNALIGNED_STORE16(p, FromHost16(v)); }
 
-    static uint32 Load32(const void* p) {
-        return ToHost32(UNALIGNED_LOAD32(p));
-    }
+    static uint32 Load32(const void* p) { return ToHost32(UNALIGNED_LOAD32(p)); }
 
-    static void Store32(void* p, uint32 v) {
-        UNALIGNED_STORE32(p, FromHost32(v));
-    }
+    static void Store32(void* p, uint32 v) { UNALIGNED_STORE32(p, FromHost32(v)); }
 
-    static uint64 Load64(const void* p) {
-        return ToHost64(UNALIGNED_LOAD64(p));
-    }
+    static uint64 Load64(const void* p) { return ToHost64(UNALIGNED_LOAD64(p)); }
 
     // Build a uint64 from 1-8 bytes.
     // 8 * len least significant bits are loaded from the memory with
@@ -242,9 +200,7 @@ public:
         return val;
     }
 
-    static void Store64(void* p, uint64 v) {
-        UNALIGNED_STORE64(p, FromHost64(v));
-    }
+    static void Store64(void* p, uint64 v) { UNALIGNED_STORE64(p, FromHost64(v)); }
 
     static uint128 Load128(const void* p) {
         return uint128(ToHost64(UNALIGNED_LOAD64(reinterpret_cast<const uint64*>(p) + 1)),
@@ -292,107 +248,53 @@ class BigEndian {
 public:
 #ifdef IS_LITTLE_ENDIAN
 
-    static uint16 FromHost16(uint16 x) {
-        return bswap_16(x);
-    }
-    static uint16 ToHost16(uint16 x) {
-        return bswap_16(x);
-    }
+    static uint16 FromHost16(uint16 x) { return bswap_16(x); }
+    static uint16 ToHost16(uint16 x) { return bswap_16(x); }
 
-    static uint32 FromHost24(uint32 x) {
-        return bswap_24(x);
-    }
-    static uint32 ToHost24(uint32 x) {
-        return bswap_24(x);
-    }
+    static uint32 FromHost24(uint32 x) { return bswap_24(x); }
+    static uint32 ToHost24(uint32 x) { return bswap_24(x); }
 
-    static uint32 FromHost32(uint32 x) {
-        return bswap_32(x);
-    }
-    static uint32 ToHost32(uint32 x) {
-        return bswap_32(x);
-    }
+    static uint32 FromHost32(uint32 x) { return bswap_32(x); }
+    static uint32 ToHost32(uint32 x) { return bswap_32(x); }
 
-    static uint64 FromHost64(uint64 x) {
-        return gbswap_64(x);
-    }
-    static uint64 ToHost64(uint64 x) {
-        return gbswap_64(x);
-    }
+    static uint64 FromHost64(uint64 x) { return gbswap_64(x); }
+    static uint64 ToHost64(uint64 x) { return gbswap_64(x); }
 
-    static unsigned __int128 FromHost128(unsigned __int128 x) {
-        return gbswap_128(x);
-    }
-    static unsigned __int128 ToHost128(unsigned __int128 x) {
-        return gbswap_128(x);
-    }
+    static unsigned __int128 FromHost128(unsigned __int128 x) { return gbswap_128(x); }
+    static unsigned __int128 ToHost128(unsigned __int128 x) { return gbswap_128(x); }
 
-    static bool IsLittleEndian() {
-        return true;
-    }
+    static bool IsLittleEndian() { return true; }
 
 #elif defined IS_BIG_ENDIAN
 
-    static uint16 FromHost16(uint16 x) {
-        return x;
-    }
-    static uint16 ToHost16(uint16 x) {
-        return x;
-    }
+    static uint16 FromHost16(uint16 x) { return x; }
+    static uint16 ToHost16(uint16 x) { return x; }
 
-    static uint32 FromHost24(uint32 x) {
-        return x;
-    }
-    static uint32 ToHost24(uint32 x) {
-        return x;
-    }
+    static uint32 FromHost24(uint32 x) { return x; }
+    static uint32 ToHost24(uint32 x) { return x; }
 
-    static uint32 FromHost32(uint32 x) {
-        return x;
-    }
-    static uint32 ToHost32(uint32 x) {
-        return x;
-    }
+    static uint32 FromHost32(uint32 x) { return x; }
+    static uint32 ToHost32(uint32 x) { return x; }
 
-    static uint64 FromHost64(uint64 x) {
-        return x;
-    }
-    static uint64 ToHost64(uint64 x) {
-        return x;
-    }
+    static uint64 FromHost64(uint64 x) { return x; }
+    static uint64 ToHost64(uint64 x) { return x; }
 
-    static uint128 FromHost128(uint128 x) {
-        return x;
-    }
-    static uint128 ToHost128(uint128 x) {
-        return x;
-    }
+    static uint128 FromHost128(uint128 x) { return x; }
+    static uint128 ToHost128(uint128 x) { return x; }
 
-    static bool IsLittleEndian() {
-        return false;
-    }
+    static bool IsLittleEndian() { return false; }
 
 #endif /* ENDIAN */
     // Functions to do unaligned loads and stores in little-endian order.
-    static uint16 Load16(const void* p) {
-        return ToHost16(UNALIGNED_LOAD16(p));
-    }
+    static uint16 Load16(const void* p) { return ToHost16(UNALIGNED_LOAD16(p)); }
 
-    static void Store16(void* p, uint16 v) {
-        UNALIGNED_STORE16(p, FromHost16(v));
-    }
+    static void Store16(void* p, uint16 v) { UNALIGNED_STORE16(p, FromHost16(v)); }
 
-    static uint32 Load32(const void* p) {
-        return ToHost32(UNALIGNED_LOAD32(p));
-    }
+    static uint32 Load32(const void* p) { return ToHost32(UNALIGNED_LOAD32(p)); }
 
-    static void Store32(void* p, uint32 v) {
-        UNALIGNED_STORE32(p, FromHost32(v));
-    }
+    static void Store32(void* p, uint32 v) { UNALIGNED_STORE32(p, FromHost32(v)); }
 
-    static uint64 Load64(const void* p) {
-        return ToHost64(UNALIGNED_LOAD64(p));
-    }
+    static uint64 Load64(const void* p) { return ToHost64(UNALIGNED_LOAD64(p)); }
 
     // Build a uint64 from 1-8 bytes.
     // 8 * len least significant bits are loaded from the memory with
@@ -422,9 +324,7 @@ public:
         return val & mask;
     }
 
-    static void Store64(void* p, uint64 v) {
-        UNALIGNED_STORE64(p, FromHost64(v));
-    }
+    static void Store64(void* p, uint64 v) { UNALIGNED_STORE64(p, FromHost64(v)); }
 
     static uint128 Load128(const void* p) {
         return uint128(ToHost64(UNALIGNED_LOAD64(p)),

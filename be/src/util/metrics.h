@@ -410,36 +410,22 @@ using DoubleGauge = LockGauge<double>;
 
 // Convenience macros to metric
 #define METRIC_DEFINE_INT_COUNTER(metric_name, unit) \
-    starrocks::IntCounter metric_name {              \
-        unit                                         \
-    }
+    starrocks::IntCounter metric_name { unit }
 
 #define METRIC_DEFINE_INT_ATOMIC_COUNTER(metric_name, unit) \
-    starrocks::IntAtomicCounter metric_name {               \
-        unit                                                \
-    }
+    starrocks::IntAtomicCounter metric_name { unit }
 
 #define METRIC_DEFINE_UINT_COUNTER(metric_name, unit) \
-    starrocks::UIntCounter metric_name {              \
-        unit                                          \
-    }
+    starrocks::UIntCounter metric_name { unit }
 
 #define METRIC_DEFINE_DOUBLE_COUNTER(metric_name, unit) \
-    starrocks::DoubleCounter metric_name {              \
-        unit                                            \
-    }
+    starrocks::DoubleCounter metric_name { unit }
 
 #define METRIC_DEFINE_INT_GAUGE(metric_name, unit) \
-    starrocks::IntGauge metric_name {              \
-        unit                                       \
-    }
+    starrocks::IntGauge metric_name { unit }
 
 #define METRIC_DEFINE_UINT_GAUGE(metric_name, unit) \
-    starrocks::UIntGauge metric_name {              \
-        unit                                        \
-    }
+    starrocks::UIntGauge metric_name { unit }
 
 #define METRIC_DEFINE_DOUBLE_GAUGE(metric_name, unit) \
-    starrocks::DoubleGauge metric_name {              \
-        unit                                          \
-    }
+    starrocks::DoubleGauge metric_name { unit }

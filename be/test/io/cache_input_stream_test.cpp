@@ -65,9 +65,7 @@ public:
         ASSERT_OK(cache->init(options));
     }
 
-    static void TearDownTestCase() {
-        BlockCache::instance()->shutdown();
-    }
+    static void TearDownTestCase() { BlockCache::instance()->shutdown(); }
 
     void SetUp() override {}
     void TearDown() override {}

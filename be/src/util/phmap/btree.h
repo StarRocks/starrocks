@@ -1500,12 +1500,8 @@ public:
 
 private:
     // For use in copy_or_move_values_in_order.
-    const value_type& maybe_move_from_iterator(const_iterator x) {
-        return *x;
-    }
-    value_type&& maybe_move_from_iterator(iterator x) {
-        return std::move(*x);
-    }
+    const value_type& maybe_move_from_iterator(const_iterator x) { return *x; }
+    value_type&& maybe_move_from_iterator(iterator x) { return std::move(*x); }
 
     // Copies or moves (depending on the template parameter) the values in
     // x into this btree in their order in x. This btree must be empty before this
@@ -1539,30 +1535,14 @@ public:
     btree& operator=(const btree& x);
     btree& operator=(btree&& x) noexcept;
 
-    iterator begin() {
-        return iterator(leftmost(), 0);
-    }
-    const_iterator begin() const {
-        return const_iterator(leftmost(), 0);
-    }
-    iterator end() {
-        return iterator(rightmost_, rightmost_->count());
-    }
-    const_iterator end() const {
-        return const_iterator(rightmost_, rightmost_->count());
-    }
-    reverse_iterator rbegin() {
-        return reverse_iterator(end());
-    }
-    const_reverse_iterator rbegin() const {
-        return const_reverse_iterator(end());
-    }
-    reverse_iterator rend() {
-        return reverse_iterator(begin());
-    }
-    const_reverse_iterator rend() const {
-        return const_reverse_iterator(begin());
-    }
+    iterator begin() { return iterator(leftmost(), 0); }
+    const_iterator begin() const { return const_iterator(leftmost(), 0); }
+    iterator end() { return iterator(rightmost_, rightmost_->count()); }
+    const_iterator end() const { return const_iterator(rightmost_, rightmost_->count()); }
+    reverse_iterator rbegin() { return reverse_iterator(end()); }
+    const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
+    reverse_iterator rend() { return reverse_iterator(begin()); }
+    const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
 
     // Finds the first element whose key is not less than key.
     template <typename K>
@@ -1691,31 +1671,21 @@ public:
     // Swap the contents of *this and x.
     void swap(btree& x);
 
-    const key_compare& key_comp() const noexcept {
-        return root_.template get<0>();
-    }
+    const key_compare& key_comp() const noexcept { return root_.template get<0>(); }
     template <typename K, typename LK>
     bool compare_keys(const K& x, const LK& y) const {
         return compare_internal::compare_result_as_less_than(key_comp()(x, y));
     }
 
-    value_compare value_comp() const {
-        return value_compare(key_comp());
-    }
+    value_compare value_comp() const { return value_compare(key_comp()); }
 
     // Verifies the structure of the btree.
     void verify() const;
 
     // Size routines.
-    size_type size() const {
-        return size_;
-    }
-    size_type max_size() const {
-        return (std::numeric_limits<size_type>::max)();
-    }
-    bool empty() const {
-        return size_ == 0;
-    }
+    size_type size() const { return size_; }
+    size_type max_size() const { return (std::numeric_limits<size_type>::max)(); }
+    bool empty() const { return size_ == 0; }
 
     // The height of the btree. An empty tree will have height 0.
     size_type height() const {
@@ -1735,12 +1705,8 @@ public:
     }
 
     // The number of internal, leaf and total nodes used by the btree.
-    size_type leaf_nodes() const {
-        return internal_stats(root()).leaf_nodes;
-    }
-    size_type internal_nodes() const {
-        return internal_stats(root()).internal_nodes;
-    }
+    size_type leaf_nodes() const { return internal_stats(root()).leaf_nodes; }
+    size_type internal_nodes() const { return internal_stats(root()).internal_nodes; }
     size_type nodes() const {
         node_stats stats = internal_stats(root());
         return stats.leaf_nodes + stats.internal_nodes;
@@ -1784,40 +1750,22 @@ public:
     }
 
     // The allocator used by the btree.
-    allocator_type get_allocator() const {
-        return allocator();
-    }
+    allocator_type get_allocator() const { return allocator(); }
 
 private:
     // Internal accessor routines.
-    node_type* root() {
-        return root_.template get<2>();
-    }
-    const node_type* root() const {
-        return root_.template get<2>();
-    }
-    node_type*& mutable_root() noexcept {
-        return root_.template get<2>();
-    }
-    key_compare* mutable_key_comp() noexcept {
-        return &root_.template get<0>();
-    }
+    node_type* root() { return root_.template get<2>(); }
+    const node_type* root() const { return root_.template get<2>(); }
+    node_type*& mutable_root() noexcept { return root_.template get<2>(); }
+    key_compare* mutable_key_comp() noexcept { return &root_.template get<0>(); }
 
     // The leftmost node is stored as the parent of the root node.
-    node_type* leftmost() {
-        return root()->parent();
-    }
-    const node_type* leftmost() const {
-        return root()->parent();
-    }
+    node_type* leftmost() { return root()->parent(); }
+    const node_type* leftmost() const { return root()->parent(); }
 
     // Allocator routines.
-    allocator_type* mutable_allocator() noexcept {
-        return &root_.template get<1>();
-    }
-    const allocator_type& allocator() const noexcept {
-        return root_.template get<1>();
-    }
+    allocator_type* mutable_allocator() noexcept { return &root_.template get<1>(); }
+    const allocator_type& allocator() const noexcept { return root_.template get<1>(); }
 
     // Allocates a correctly aligned node of at least size bytes using the
     // allocator.
@@ -1875,12 +1823,8 @@ private:
     // Tries to shrink the height of the tree by 1.
     void try_shrink();
 
-    iterator internal_end(iterator iter) {
-        return iter.node != nullptr ? iter : end();
-    }
-    const_iterator internal_end(const_iterator iter) const {
-        return iter.node != nullptr ? iter : end();
-    }
+    iterator internal_end(iterator iter) { return iter.node != nullptr ? iter : end(); }
+    const_iterator internal_end(const_iterator iter) const { return iter.node != nullptr ? iter : end(); }
 
     // Emplaces a value into the btree immediately before iter. Requires that
     // key(v) <= iter.key() and (--iter).key() <= key(v).
@@ -1947,9 +1891,7 @@ private:
 
 public:
     // Exposed only for tests.
-    static bool testonly_uses_linear_node_search() {
-        return node_type::testonly_uses_linear_node_search();
-    }
+    static bool testonly_uses_linear_node_search() { return node_type::testonly_uses_linear_node_search(); }
 
 private:
     // We use compressed tuple in order to save space because key_compare and

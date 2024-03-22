@@ -87,12 +87,8 @@ public:
     // Log2FloorNonZero().
     static int FindLSBSetNonZero(uint32 n);
     static int FindLSBSetNonZero64(uint64 n);
-    static int FindMSBSetNonZero(uint32 n) {
-        return Log2FloorNonZero(n);
-    }
-    static int FindMSBSetNonZero64(uint64 n) {
-        return Log2FloorNonZero64(n);
-    }
+    static int FindMSBSetNonZero(uint32 n) { return Log2FloorNonZero(n); }
+    static int FindMSBSetNonZero64(uint64 n) { return Log2FloorNonZero64(n); }
 
     // Portable implementations
     static int Log2Floor_Portable(uint32 n);

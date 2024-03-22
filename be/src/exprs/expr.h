@@ -258,9 +258,7 @@ public:
     // Return true if this expr or any of its children is index only filter, otherwise return false
     bool is_index_only_filter() const;
 #if BE_TEST
-    void set_type(TypeDescriptor t) {
-        _type = t;
-    }
+    void set_type(TypeDescriptor t) { _type = t; }
 #endif
 
 protected:
@@ -304,9 +302,7 @@ protected:
     /// If scope if FRAGMENT_LOCAL, both fragment- and thread-local state should be torn
     /// down. Otherwise, if scope is THREAD_LOCAL, only thread-local state should be torn
     /// down.
-    void close(RuntimeState* state, ExprContext* context) {
-        close(state, context, FunctionContext::FRAGMENT_LOCAL);
-    }
+    void close(RuntimeState* state, ExprContext* context) { close(state, context, FunctionContext::FRAGMENT_LOCAL); }
 
     virtual void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope);
 

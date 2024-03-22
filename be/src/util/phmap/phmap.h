@@ -894,12 +894,8 @@ public:
         }
 #endif
 
-        friend bool operator==(const iterator& a, const iterator& b) {
-            return a.ctrl_ == b.ctrl_;
-        }
-        friend bool operator!=(const iterator& a, const iterator& b) {
-            return !(a == b);
-        }
+        friend bool operator==(const iterator& a, const iterator& b) { return a.ctrl_ == b.ctrl_; }
+        friend bool operator!=(const iterator& a, const iterator& b) { return !(a == b); }
 
     private:
         iterator(ctrl_t* ctrl) : ctrl_(ctrl) {} // for end()
@@ -1124,9 +1120,7 @@ public:
         return move_assign(std::move(that), typename AllocTraits::propagate_on_container_move_assignment());
     }
 
-    ~raw_hash_set() {
-        destroy_slots();
-    }
+    ~raw_hash_set() { destroy_slots(); }
 
     iterator begin() {
         auto it = iterator_at(0);
@@ -1141,31 +1135,15 @@ public:
 #endif
     }
 
-    const_iterator begin() const {
-        return const_cast<raw_hash_set*>(this)->begin();
-    }
-    const_iterator end() const {
-        return const_cast<raw_hash_set*>(this)->end();
-    }
-    const_iterator cbegin() const {
-        return begin();
-    }
-    const_iterator cend() const {
-        return end();
-    }
+    const_iterator begin() const { return const_cast<raw_hash_set*>(this)->begin(); }
+    const_iterator end() const { return const_cast<raw_hash_set*>(this)->end(); }
+    const_iterator cbegin() const { return begin(); }
+    const_iterator cend() const { return end(); }
 
-    bool empty() const {
-        return !size();
-    }
-    size_t size() const {
-        return size_;
-    }
-    size_t capacity() const {
-        return capacity_;
-    }
-    size_t max_size() const {
-        return (std::numeric_limits<size_t>::max)();
-    }
+    bool empty() const { return !size(); }
+    size_t size() const { return size_; }
+    size_t capacity() const { return capacity_; }
+    size_t max_size() const { return (std::numeric_limits<size_t>::max)(); }
 
     PHMAP_ATTRIBUTE_REINITIALIZES void clear() {
         // Iterating over this container is O(bucket_count()). When bucket_count()
@@ -1228,9 +1206,7 @@ public:
     //
     //   flat_hash_set<std::string, int> s;
     //   s.insert({"abc", 42});
-    std::pair<iterator, bool> insert(init_type&& value) {
-        return emplace(std::move(value));
-    }
+    std::pair<iterator, bool> insert(init_type&& value) { return emplace(std::move(value)); }
 
     template <class T, RequiresInsertable<T> = 0, typename std::enable_if<IsDecomposable<T>::value, int>::type = 0,
               T* = nullptr>
@@ -1247,9 +1223,7 @@ public:
         return insert(value).first;
     }
 
-    iterator insert(const_iterator, init_type&& value) {
-        return insert(std::move(value)).first;
-    }
+    iterator insert(const_iterator, init_type&& value) { return insert(std::move(value)).first; }
 
     template <typename It>
     using IsRandomAccess =
@@ -1286,9 +1260,7 @@ public:
         insert(ilist.begin(), ilist.end());
     }
 
-    void insert(std::initializer_list<init_type> ilist) {
-        insert(ilist.begin(), ilist.end());
-    }
+    void insert(std::initializer_list<init_type> ilist) { insert(ilist.begin(), ilist.end()); }
 
     insert_return_type insert(node_type&& node) {
         if (!node) return {end(), false, node_type()};
@@ -1315,9 +1287,7 @@ public:
         }
     }
 
-    iterator insert(const_iterator, node_type&& node) {
-        return insert(std::move(node)).first;
-    }
+    iterator insert(const_iterator, node_type&& node) { return insert(std::move(node)).first; }
 
     // This overload kicks in if we can deduce the key from args. This enables us
     // to avoid constructing value_type if an entry with the same key already
@@ -1473,9 +1443,7 @@ public:
         return 1;
     }
 
-    iterator erase(const_iterator cit) {
-        return erase(cit.inner_);
-    }
+    iterator erase(const_iterator cit) { return erase(cit.inner_); }
 
     // Erases the element pointed to by `it`.  Unlike `std::unordered_set::erase`,
     // this method returns void to reduce algorithmic complexity to O(1).  In
@@ -1494,9 +1462,7 @@ public:
         PolicyTraits::destroy(&alloc_ref(), it.slot_);
         erase_meta_only(it);
     }
-    void _erase(const_iterator cit) {
-        _erase(cit.inner_);
-    }
+    void _erase(const_iterator cit) { _erase(cit.inner_); }
 
     // This overload is necessary because otherwise erase<K>(const K&) would be
     // a better match if non-const iterator is passed as an argument.
@@ -1590,9 +1556,7 @@ public:
         }
     }
 
-    void reserve(size_t n) {
-        rehash(GrowthToLowerboundCapacity(n));
-    }
+    void reserve(size_t n) { rehash(GrowthToLowerboundCapacity(n)); }
 
     // Extension API: support for heterogeneous keys.
     //
@@ -1693,15 +1657,9 @@ public:
         return {it, it};
     }
 
-    size_t bucket_count() const {
-        return capacity_;
-    }
-    float load_factor() const {
-        return capacity_ ? static_cast<double>(size()) / capacity_ : 0.0;
-    }
-    float max_load_factor() const {
-        return 1.0f;
-    }
+    size_t bucket_count() const { return capacity_; }
+    float load_factor() const { return capacity_ ? static_cast<double>(size()) / capacity_ : 0.0; }
+    float max_load_factor() const { return 1.0f; }
     void max_load_factor(float) {
         // Does nothing.
     }
@@ -1709,12 +1667,8 @@ public:
     hasher hash_function() const {
         return hash_ref();
     } // warning: doesn't match internal hash - use hash() member function
-    key_equal key_eq() const {
-        return eq_ref();
-    }
-    allocator_type get_allocator() const {
-        return alloc_ref();
-    }
+    key_equal key_eq() const { return eq_ref(); }
+    allocator_type get_allocator() const { return alloc_ref(); }
 
     friend bool operator==(const raw_hash_set& a, const raw_hash_set& b) {
         if (a.size() != b.size()) return false;
@@ -1726,13 +1680,9 @@ public:
         return true;
     }
 
-    friend bool operator!=(const raw_hash_set& a, const raw_hash_set& b) {
-        return !(a == b);
-    }
+    friend bool operator!=(const raw_hash_set& a, const raw_hash_set& b) { return !(a == b); }
 
-    friend void swap(raw_hash_set& a, raw_hash_set& b) noexcept(noexcept(a.swap(b))) {
-        a.swap(b);
-    }
+    friend void swap(raw_hash_set& a, raw_hash_set& b) noexcept(noexcept(a.swap(b))) { a.swap(b); }
 
     template <class K>
     size_t hash(const K& key) const {
@@ -2117,17 +2067,11 @@ protected:
                "constructed value does not match the lookup key");
     }
 
-    iterator iterator_at(size_t i) {
-        return {ctrl_ + i, slots_ + i};
-    }
-    const_iterator iterator_at(size_t i) const {
-        return {ctrl_ + i, slots_ + i};
-    }
+    iterator iterator_at(size_t i) { return {ctrl_ + i, slots_ + i}; }
+    const_iterator iterator_at(size_t i) const { return {ctrl_ + i, slots_ + i}; }
 
 public:
-    const HashtablezInfoHandle& infoz() const {
-        return infoz_;
-    }
+    const HashtablezInfoHandle& infoz() const { return infoz_; }
 
 private:
     friend struct RawHashSetTestOnlyAccess;
@@ -2143,9 +2087,7 @@ private:
         SanitizerPoisonMemoryRegion(slots_, sizeof(slot_type) * capacity_);
     }
 
-    void reset_growth_left() {
-        growth_left() = CapacityToGrowth(capacity()) - size_;
-    }
+    void reset_growth_left() { growth_left() = CapacityToGrowth(capacity()) - size_; }
 
     // Sets the control byte, and if `i < Group::kWidth`, set the cloned byte at
     // the end too.
@@ -2162,9 +2104,7 @@ private:
         ctrl_[((i - Group::kWidth) & capacity_) + 1 + ((Group::kWidth - 1) & capacity_)] = h;
     }
 
-    size_t& growth_left() {
-        return settings_.template get<0>();
-    }
+    size_t& growth_left() { return settings_.template get<0>(); }
 
     template <size_t N, template <class, class, class, class> class RefSet, class M, class P, class H, class E, class A,
               bool balance>
@@ -2188,28 +2128,14 @@ private:
     //  represent a real slot. This is important to take into account on
     //  find_first_non_full(), where we never try ShouldInsertBackwards() for
     //  small tables.
-    bool is_small() const {
-        return capacity_ < Group::kWidth - 1;
-    }
+    bool is_small() const { return capacity_ < Group::kWidth - 1; }
 
-    hasher& hash_ref() {
-        return settings_.template get<1>();
-    }
-    const hasher& hash_ref() const {
-        return settings_.template get<1>();
-    }
-    key_equal& eq_ref() {
-        return settings_.template get<2>();
-    }
-    const key_equal& eq_ref() const {
-        return settings_.template get<2>();
-    }
-    allocator_type& alloc_ref() {
-        return settings_.template get<3>();
-    }
-    const allocator_type& alloc_ref() const {
-        return settings_.template get<3>();
-    }
+    hasher& hash_ref() { return settings_.template get<1>(); }
+    const hasher& hash_ref() const { return settings_.template get<1>(); }
+    key_equal& eq_ref() { return settings_.template get<2>(); }
+    const key_equal& eq_ref() const { return settings_.template get<2>(); }
+    allocator_type& alloc_ref() { return settings_.template get<3>(); }
+    const allocator_type& alloc_ref() const { return settings_.template get<3>(); }
 
     // TODO(alkis): Investigate removing some of these fields:
     // - ctrl/slots can be derived from each other
@@ -3384,9 +3310,7 @@ protected:
         return find_or_prepare_insert_with_hash<K>(this->hash(key), key, mutexlock);
     }
 
-    iterator iterator_at(Inner* inner, const EmbeddedIterator& it) {
-        return {inner, &sets_[0] + num_tables, it};
-    }
+    iterator iterator_at(Inner* inner, const EmbeddedIterator& it) { return {inner, &sets_[0] + num_tables, it}; }
     const_iterator iterator_at(Inner* inner, const EmbeddedIterator& it) const {
         return {inner, &sets_[0] + num_tables, it};
     }
@@ -3412,9 +3336,7 @@ protected:
         }
     }
 
-    static size_t subcnt() {
-        return num_tables;
-    }
+    static size_t subcnt() { return num_tables; }
 
 private:
     friend struct RawHashSetTestOnlyAccess;
@@ -3425,24 +3347,12 @@ private:
         return sz;
     }
 
-    hasher& hash_ref() {
-        return sets_[0].set_.hash_ref();
-    }
-    const hasher& hash_ref() const {
-        return sets_[0].set_.hash_ref();
-    }
-    key_equal& eq_ref() {
-        return sets_[0].set_.eq_ref();
-    }
-    const key_equal& eq_ref() const {
-        return sets_[0].set_.eq_ref();
-    }
-    allocator_type& alloc_ref() {
-        return sets_[0].set_.alloc_ref();
-    }
-    const allocator_type& alloc_ref() const {
-        return sets_[0].set_.alloc_ref();
-    }
+    hasher& hash_ref() { return sets_[0].set_.hash_ref(); }
+    const hasher& hash_ref() const { return sets_[0].set_.hash_ref(); }
+    key_equal& eq_ref() { return sets_[0].set_.eq_ref(); }
+    const key_equal& eq_ref() const { return sets_[0].set_.eq_ref(); }
+    allocator_type& alloc_ref() { return sets_[0].set_.alloc_ref(); }
+    const allocator_type& alloc_ref() const { return sets_[0].set_.alloc_ref(); }
 
 protected: // protected in case users want to derive fromm this
     std::array<Inner, num_tables> sets_;
@@ -4259,12 +4169,8 @@ public:
     using Base::hash_function;
     using Base::hash;
     using Base::key_eq;
-    typename Base::hasher hash_funct() {
-        return this->hash_function();
-    }
-    void resize(typename Base::size_type hint) {
-        this->rehash(hint);
-    }
+    typename Base::hasher hash_funct() { return this->hash_function(); }
+    void resize(typename Base::size_type hint) { this->rehash(hint); }
 };
 
 // -----------------------------------------------------------------------------
@@ -4328,12 +4234,8 @@ public:
     using Base::hash_function;
     using Base::hash;
     using Base::key_eq;
-    typename Base::hasher hash_funct() {
-        return this->hash_function();
-    }
-    void resize(typename Base::size_type hint) {
-        this->rehash(hint);
-    }
+    typename Base::hasher hash_funct() { return this->hash_function(); }
+    void resize(typename Base::size_type hint) { this->rehash(hint); }
 };
 
 // -----------------------------------------------------------------------------
@@ -4494,12 +4396,8 @@ public:
     using Base::get_allocator;
     using Base::hash_function;
     using Base::key_eq;
-    typename Base::hasher hash_funct() {
-        return this->hash_function();
-    }
-    void resize(typename Base::size_type hint) {
-        this->rehash(hint);
-    }
+    typename Base::hasher hash_funct() { return this->hash_function(); }
+    void resize(typename Base::size_type hint) { this->rehash(hint); }
 };
 
 // -----------------------------------------------------------------------------
@@ -4556,12 +4454,8 @@ public:
     using Base::get_allocator;
     using Base::hash_function;
     using Base::key_eq;
-    typename Base::hasher hash_funct() {
-        return this->hash_function();
-    }
-    void resize(typename Base::size_type hint) {
-        this->rehash(hint);
-    }
+    typename Base::hasher hash_funct() { return this->hash_function(); }
+    void resize(typename Base::size_type hint) { this->rehash(hint); }
 };
 
 } // namespace phmap

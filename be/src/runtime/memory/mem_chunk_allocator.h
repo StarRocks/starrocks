@@ -72,9 +72,7 @@ public:
 #ifdef BE_TEST
     static MemChunkAllocator* instance();
 #else
-    static MemChunkAllocator* instance() {
-        return _s_instance;
-    }
+    static MemChunkAllocator* instance() { return _s_instance; }
 #endif
 
     MemChunkAllocator(MemTracker* mem_tracker, size_t reserve_limit);
@@ -87,9 +85,7 @@ public:
     // Free chunk allocated from this allocator
     void free(const MemChunk& chunk);
 
-    void set_mem_tracker(MemTracker* mem_tracker) {
-        _mem_tracker = mem_tracker;
-    }
+    void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
 
 private:
     static MemChunkAllocator* _s_instance;

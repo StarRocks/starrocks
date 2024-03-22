@@ -101,12 +101,8 @@ public:
         }
     }
 
-    bool is_binary() const override {
-        return std::is_same_v<T, uint32_t> != 0;
-    }
-    bool is_large_binary() const override {
-        return std::is_same_v<T, uint64_t> != 0;
-    }
+    bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
+    bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
 
     const uint8_t* raw_data() const override {
         if (!_slices_cache) {
@@ -122,30 +118,20 @@ public:
         return reinterpret_cast<uint8_t*>(_slices.data());
     }
 
-    size_t size() const override {
-        return _offsets.size() - 1;
-    }
+    size_t size() const override { return _offsets.size() - 1; }
 
-    size_t capacity() const override {
-        return _offsets.capacity() - 1;
-    }
+    size_t capacity() const override { return _offsets.capacity() - 1; }
 
-    size_t type_size() const override {
-        return sizeof(Slice);
-    }
+    size_t type_size() const override { return sizeof(Slice); }
 
-    size_t byte_size() const override {
-        return _bytes.size() * sizeof(uint8_t) + _offsets.size() * sizeof(Offset);
-    }
+    size_t byte_size() const override { return _bytes.size() * sizeof(uint8_t) + _offsets.size() * sizeof(Offset); }
 
     size_t byte_size(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
         return (_offsets[from + size] - _offsets[from]) + size * sizeof(Offset);
     }
 
-    size_t byte_size(size_t idx) const override {
-        return _offsets[idx + 1] - _offsets[idx] + sizeof(uint32_t);
-    }
+    size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + sizeof(uint32_t); }
 
     Slice get_slice(size_t idx) const {
         return Slice(_bytes.data() + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
@@ -204,9 +190,7 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
-    bool append_nulls(size_t count) override {
-        return false;
-    }
+    bool append_nulls(size_t count) override { return false; }
 
     void append_string(const std::string& str) {
         _bytes.insert(_bytes.end(), str.data(), str.data() + str.size());
@@ -222,9 +206,7 @@ public:
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
-    size_t append_numbers(const void* buff, size_t length) override {
-        return -1;
-    }
+    size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
     void append_value_multiple_times(const void* value, size_t count) override;
 
@@ -262,9 +244,7 @@ public:
         return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
-    MutableColumnPtr clone_empty() const override {
-        return BinaryColumnBase<T>::create_mutable();
-    }
+    MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create_mutable(); }
 
     ColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;
@@ -301,40 +281,24 @@ public:
         return _slices;
     }
 
-    const BinaryDataProxyContainer& get_proxy_data() const {
-        return _immuable_container;
-    }
+    const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
 
-    Bytes& get_bytes() {
-        return _bytes;
-    }
+    Bytes& get_bytes() { return _bytes; }
 
-    const Bytes& get_bytes() const {
-        return _bytes;
-    }
+    const Bytes& get_bytes() const { return _bytes; }
 
-    const uint8_t* continuous_data() const override {
-        return reinterpret_cast<const uint8_t*>(_bytes.data());
-    }
+    const uint8_t* continuous_data() const override { return reinterpret_cast<const uint8_t*>(_bytes.data()); }
 
-    Offsets& get_offset() {
-        return _offsets;
-    }
-    const Offsets& get_offset() const {
-        return _offsets;
-    }
+    Offsets& get_offset() { return _offsets; }
+    const Offsets& get_offset() const { return _offsets; }
 
-    Datum get(size_t n) const override {
-        return Datum(get_slice(n));
-    }
+    Datum get(size_t n) const override { return Datum(get_slice(n)); }
 
     size_t container_memory_usage() const override {
         return _bytes.capacity() + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
     }
 
-    size_t reference_memory_usage(size_t from, size_t size) const override {
-        return 0;
-    }
+    size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<BinaryColumnBase<T>&>(rhs);
@@ -355,9 +319,7 @@ public:
         _slices_cache = false;
     }
 
-    void invalidate_slice_cache() {
-        _slices_cache = false;
-    }
+    void invalidate_slice_cache() { _slices_cache = false; }
 
     std::string debug_item(size_t idx) const override;
 

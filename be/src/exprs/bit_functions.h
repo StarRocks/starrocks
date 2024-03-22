@@ -21,10 +21,8 @@
 
 namespace starrocks {
 
-#define VECTORIZED_BIT_BINARY_IMPL(NAME, OP)             \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(NAME##Impl, l, r) { \
-        return l OP r;                                   \
-    }
+#define VECTORIZED_BIT_BINARY_IMPL(NAME, OP) \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(NAME##Impl, l, r) { return l OP r; }
 
 VECTORIZED_BIT_BINARY_IMPL(bitAnd, &);
 VECTORIZED_BIT_BINARY_IMPL(bitOr, |);

@@ -143,15 +143,11 @@ public:
 #endif
     }
 
-    ~MergeIterator() override {
-        close();
-    }
+    ~MergeIterator() override { close(); }
 
     void close() override;
 
-    size_t merged_rows() const override {
-        return _merged_rows;
-    }
+    size_t merged_rows() const override { return _merged_rows; }
 
     [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));

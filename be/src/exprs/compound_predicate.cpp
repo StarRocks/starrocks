@@ -23,12 +23,10 @@
 
 namespace starrocks {
 
-#define DEFINE_COMPOUND_CONSTRUCT(CLASS)                   \
-    CLASS(const TExprNode& node) : Predicate(node) {}      \
-    virtual ~CLASS() {}                                    \
-    virtual Expr* clone(ObjectPool* pool) const override { \
-        return pool->add(new CLASS(*this));                \
-    }
+#define DEFINE_COMPOUND_CONSTRUCT(CLASS)              \
+    CLASS(const TExprNode& node) : Predicate(node) {} \
+    virtual ~CLASS() {}                               \
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
 
 /**
  * IS NULL AND IS NULL = IS NULL

@@ -54,9 +54,7 @@ public:
     bool always_shared_scan() const override;
 
 #ifdef BE_TEST
-    bool use_stream_load_thread_pool() {
-        return _use_stream_load_thread_pool;
-    };
+    bool use_stream_load_thread_pool() { return _use_stream_load_thread_pool; };
 #endif
 
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(

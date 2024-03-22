@@ -128,9 +128,7 @@ public:
         }
     }
 
-    Expr* clone(ObjectPool* pool) const override {
-        return pool->add(new MapElementExpr(*this));
-    }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new MapElementExpr(*this)); }
 
 private:
     bool _check_is_out_of_bounds = false;

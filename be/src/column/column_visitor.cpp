@@ -16,10 +16,8 @@
 
 namespace starrocks {
 
-#define VISIT_IMPL(ClassName)                              \
-    Status ColumnVisitor::visit(const ClassName& column) { \
-        return Status::NotSupported(#ClassName);           \
-    }
+#define VISIT_IMPL(ClassName) \
+    Status ColumnVisitor::visit(const ClassName& column) { return Status::NotSupported(#ClassName); }
 
 VISIT_IMPL(NullableColumn)
 VISIT_IMPL(ConstColumn)

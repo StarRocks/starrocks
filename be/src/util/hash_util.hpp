@@ -133,9 +133,7 @@ public:
     static const uint32_t MURMUR3_32_SEED = 104729;
     static const uint64_t XXHASH3_64_SEED = 0;
 
-    ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) {
-        return (x << r) | (x >> (32 - r));
-    }
+    ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) { return (x << r) | (x >> (32 - r)); }
 
     ALWAYS_INLINE static uint32_t fmix32(uint32_t h) {
         h ^= h >> 16;

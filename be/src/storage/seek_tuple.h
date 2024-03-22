@@ -41,22 +41,14 @@ public:
 #endif
     }
 
-    bool empty() const {
-        return _values.empty();
-    }
+    bool empty() const { return _values.empty(); }
 
-    const Schema& schema() const {
-        return _schema;
-    }
+    const Schema& schema() const { return _schema; }
 
-    size_t columns() const {
-        return _values.size();
-    }
+    size_t columns() const { return _values.size(); }
 
     // Return the value of i-th column.
-    const Datum& get(int i) const {
-        return _values[i];
-    }
+    const Datum& get(int i) const { return _values[i]; }
 
     // Encode the first Min(|num_short_keys|, |columns|) values for short key index lookup.
     // if |num_short_keys| is greater than |columns|, one additional char |padding| will be

@@ -165,21 +165,13 @@ public:
 
 #ifdef BE_TEST
     // for ut
-    void set_is_stream_test(bool is_stream_test) {
-        _is_stream_test = is_stream_test;
-    }
-    bool is_stream_test() const {
-        return _is_stream_test;
-    }
+    void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
+    bool is_stream_test() const { return _is_stream_test; }
 #endif
 
-    size_t expired_log_count() {
-        return _expired_log_count;
-    }
+    size_t expired_log_count() { return _expired_log_count; }
 
-    void set_expired_log_count(size_t val) {
-        _expired_log_count = val;
-    }
+    void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
     void init_jit_profile();
 

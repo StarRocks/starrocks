@@ -22,14 +22,12 @@
 
 namespace starrocks {
 
-#define DEFINE_CLASS_CONSTRUCT_FN(NAME)                    \
-    NAME(const TExprNode& node) : Predicate(node) {}       \
-                                                           \
-    ~NAME() {}                                             \
-                                                           \
-    virtual Expr* clone(ObjectPool* pool) const override { \
-        return pool->add(new NAME(*this));                 \
-    }
+#define DEFINE_CLASS_CONSTRUCT_FN(NAME)              \
+    NAME(const TExprNode& node) : Predicate(node) {} \
+                                                     \
+    ~NAME() {}                                       \
+                                                     \
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new NAME(*this)); }
 
 DEFINE_UNARY_FN_WITH_IMPL(isNullImpl, v) {
     return v;

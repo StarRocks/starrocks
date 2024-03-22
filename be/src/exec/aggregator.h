@@ -265,73 +265,29 @@ public:
     [[nodiscard]] Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     void close(RuntimeState* state) override;
 
-    const MemPool* mem_pool() const {
-        return _mem_pool.get();
-    }
-    bool is_none_group_by_exprs() {
-        return _group_by_expr_ctxs.empty();
-    }
-    bool only_group_by_exprs() {
-        return _is_only_group_by_columns;
-    }
-    const std::vector<ExprContext*>& conjunct_ctxs() {
-        return _conjunct_ctxs;
-    }
-    const std::vector<ExprContext*>& group_by_expr_ctxs() {
-        return _group_by_expr_ctxs;
-    }
-    const std::vector<FunctionContext*>& agg_fn_ctxs() {
-        return _agg_fn_ctxs;
-    }
-    const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() {
-        return _agg_expr_ctxs;
-    }
-    int64_t limit() {
-        return _limit;
-    }
-    bool needs_finalize() {
-        return _needs_finalize;
-    }
-    bool is_ht_eos() {
-        return _is_ht_eos;
-    }
-    void set_ht_eos() {
-        _is_ht_eos = true;
-    }
-    bool is_sink_complete() {
-        return _is_sink_complete.load(std::memory_order_acquire);
-    }
-    int64_t num_input_rows() {
-        return _num_input_rows;
-    }
-    int64_t num_rows_returned() {
-        return _num_rows_returned;
-    }
-    void update_num_rows_returned(int64_t increment) {
-        _num_rows_returned += increment;
-    };
-    void update_num_input_rows(int64_t increment) {
-        _num_input_rows += increment;
-    }
-    int64_t num_pass_through_rows() {
-        return _num_pass_through_rows;
-    }
-    void set_aggr_phase(AggrPhase aggr_phase) {
-        _aggr_phase = aggr_phase;
-    }
-    AggrPhase get_aggr_phase() {
-        return _aggr_phase;
-    }
+    const MemPool* mem_pool() const { return _mem_pool.get(); }
+    bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
+    bool only_group_by_exprs() { return _is_only_group_by_columns; }
+    const std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
+    const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
+    const std::vector<FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
+    const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
+    int64_t limit() { return _limit; }
+    bool needs_finalize() { return _needs_finalize; }
+    bool is_ht_eos() { return _is_ht_eos; }
+    void set_ht_eos() { _is_ht_eos = true; }
+    bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
+    int64_t num_input_rows() { return _num_input_rows; }
+    int64_t num_rows_returned() { return _num_rows_returned; }
+    void update_num_rows_returned(int64_t increment) { _num_rows_returned += increment; };
+    void update_num_input_rows(int64_t increment) { _num_input_rows += increment; }
+    int64_t num_pass_through_rows() { return _num_pass_through_rows; }
+    void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
+    AggrPhase get_aggr_phase() { return _aggr_phase; }
 
-    bool is_hash_set() const {
-        return _is_only_group_by_columns;
-    }
-    const int64_t hash_map_memory_usage() const {
-        return _hash_map_variant.reserved_memory_usage(mem_pool());
-    }
-    const int64_t hash_set_memory_usage() const {
-        return _hash_set_variant.reserved_memory_usage(mem_pool());
-    }
+    bool is_hash_set() const { return _is_only_group_by_columns; }
+    const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
+    const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
 
     const int64_t memory_usage() const {
         if (is_hash_set()) {
@@ -343,49 +299,21 @@ public:
         }
     }
 
-    TStreamingPreaggregationMode::type& streaming_preaggregation_mode() {
-        return _streaming_preaggregation_mode;
-    }
-    TStreamingPreaggregationMode::type streaming_preaggregation_mode() const {
-        return _streaming_preaggregation_mode;
-    }
-    const AggHashMapVariant& hash_map_variant() {
-        return _hash_map_variant;
-    }
-    const AggHashSetVariant& hash_set_variant() {
-        return _hash_set_variant;
-    }
-    std::any& it_hash() {
-        return _it_hash;
-    }
-    const std::vector<uint8_t>& streaming_selection() {
-        return _streaming_selection;
-    }
-    RuntimeProfile::Counter* agg_compute_timer() {
-        return _agg_stat->agg_compute_timer;
-    }
-    RuntimeProfile::Counter* agg_expr_timer() {
-        return _agg_stat->agg_function_compute_timer;
-    }
-    RuntimeProfile::Counter* streaming_timer() {
-        return _agg_stat->streaming_timer;
-    }
-    RuntimeProfile::Counter* input_row_count() {
-        return _agg_stat->input_row_count;
-    }
-    RuntimeProfile::Counter* rows_returned_counter() {
-        return _agg_stat->rows_returned_counter;
-    }
-    RuntimeProfile::Counter* hash_table_size() {
-        return _agg_stat->hash_table_size;
-    }
-    RuntimeProfile::Counter* pass_through_row_count() {
-        return _agg_stat->pass_through_row_count;
-    }
+    TStreamingPreaggregationMode::type& streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
+    TStreamingPreaggregationMode::type streaming_preaggregation_mode() const { return _streaming_preaggregation_mode; }
+    const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
+    const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
+    std::any& it_hash() { return _it_hash; }
+    const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
+    RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
+    RuntimeProfile::Counter* agg_expr_timer() { return _agg_stat->agg_function_compute_timer; }
+    RuntimeProfile::Counter* streaming_timer() { return _agg_stat->streaming_timer; }
+    RuntimeProfile::Counter* input_row_count() { return _agg_stat->input_row_count; }
+    RuntimeProfile::Counter* rows_returned_counter() { return _agg_stat->rows_returned_counter; }
+    RuntimeProfile::Counter* hash_table_size() { return _agg_stat->hash_table_size; }
+    RuntimeProfile::Counter* pass_through_row_count() { return _agg_stat->pass_through_row_count; }
 
-    void sink_complete() {
-        _is_sink_complete.store(true, std::memory_order_release);
-    }
+    void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
 
     bool is_chunk_buffer_empty();
     ChunkPtr poll_chunk_buffer();
@@ -431,9 +359,7 @@ public:
 
     [[nodiscard]] Status check_has_error();
 
-    void set_aggr_mode(AggrMode aggr_mode) {
-        _aggr_mode = aggr_mode;
-    }
+    void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
     // reset_state is used to clear the internal state of the Aggregator, then it can process new tablet, in
     // multi-version cache, we should refill the chunks (i.e.partial-hit result) from the stale cache back to
     // the pre-cache agg, after that, the incremental rowsets are read out and merged with these partial state
@@ -444,47 +370,27 @@ public:
     [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks,
                                      pipeline::Operator* refill_op, bool reset_sink_complete = true);
 
-    const AggregatorParamsPtr& params() const {
-        return _params;
-    }
+    const AggregatorParamsPtr& params() const { return _params; }
 
-    bool is_full() {
-        return _spiller != nullptr && _spiller->is_full();
-    }
+    bool is_full() { return _spiller != nullptr && _spiller->is_full(); }
 
-    const std::shared_ptr<spill::Spiller>& spiller() const {
-        return _spiller;
-    }
-    void set_spiller(std::shared_ptr<spill::Spiller> spiller) {
-        _spiller = std::move(spiller);
-    }
+    const std::shared_ptr<spill::Spiller>& spiller() const { return _spiller; }
+    void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
 
-    const SpillProcessChannelPtr spill_channel() const {
-        return _spill_channel;
-    }
-    void set_spill_channel(SpillProcessChannelPtr channel) {
-        _spill_channel = std::move(channel);
-    }
+    const SpillProcessChannelPtr spill_channel() const { return _spill_channel; }
+    void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
 
     Status spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider);
 
-    bool has_pending_data() const {
-        return _spiller != nullptr && _spiller->has_pending_data();
-    }
-    bool has_pending_restore() const {
-        return _spiller != nullptr && !_spiller->restore_finished();
-    }
+    bool has_pending_data() const { return _spiller != nullptr && _spiller->has_pending_data(); }
+    bool has_pending_restore() const { return _spiller != nullptr && !_spiller->restore_finished(); }
     bool is_spilled_eos() const {
         return _spiller == nullptr || _spiller->spilled_append_rows() == _spiller->restore_read_rows();
     }
 
-    void set_streaming_all_states(bool streaming_all_states) {
-        _streaming_all_states = streaming_all_states;
-    }
+    void set_streaming_all_states(bool streaming_all_states) { _streaming_all_states = streaming_all_states; }
 
-    bool is_streaming_all_states() const {
-        return _streaming_all_states;
-    }
+    bool is_streaming_all_states() const { return _streaming_all_states; }
 
     HashTableKeyAllocator _state_allocator;
 
@@ -604,9 +510,7 @@ public:
     void convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
 
 protected:
-    bool _reached_limit() {
-        return _limit != -1 && _num_rows_returned >= _limit;
-    }
+    bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     bool _use_intermediate_as_input() {
         if (is_pending_reset_state()) {
@@ -638,22 +542,12 @@ protected:
     ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,
                                  bool use_intermediate);
 
-    void _set_passthrough(bool flag) {
-        _is_passthrough = flag;
-    }
-    bool is_passthrough() const {
-        return _is_passthrough;
-    }
+    void _set_passthrough(bool flag) { _is_passthrough = flag; }
+    bool is_passthrough() const { return _is_passthrough; }
 
-    void begin_pending_reset_state() {
-        _is_pending_reset_state = true;
-    }
-    void end_pending_reset_state() {
-        _is_pending_reset_state = false;
-    }
-    bool is_pending_reset_state() {
-        return _is_pending_reset_state;
-    }
+    void begin_pending_reset_state() { _is_pending_reset_state = true; }
+    void end_pending_reset_state() { _is_pending_reset_state = false; }
+    bool is_pending_reset_state() { return _is_pending_reset_state; }
 
     void _reset_exprs();
     [[nodiscard]] Status _evaluate_group_by_exprs(Chunk* chunk);

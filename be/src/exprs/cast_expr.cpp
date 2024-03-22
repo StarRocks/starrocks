@@ -1100,12 +1100,10 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 
-#define DEFINE_CAST_CONSTRUCT(CLASS)                       \
-    CLASS(const TExprNode& node) : Expr(node) {}           \
-    virtual ~CLASS(){};                                    \
-    virtual Expr* clone(ObjectPool* pool) const override { \
-        return pool->add(new CLASS(*this));                \
-    }
+#define DEFINE_CAST_CONSTRUCT(CLASS)             \
+    CLASS(const TExprNode& node) : Expr(node) {} \
+    virtual ~CLASS(){};                          \
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 class VectorizedCastExpr final : public Expr {

@@ -279,18 +279,10 @@ public:
         return false;
     }
 
-    query_cache::owner_info& owner_info() {
-        return _owner_info;
-    }
-    const ChunkExtraDataPtr& get_extra_data() const {
-        return _extra_data;
-    }
-    void set_extra_data(ChunkExtraDataPtr data) {
-        this->_extra_data = std::move(data);
-    }
-    bool has_extra_data() const {
-        return this->_extra_data != nullptr;
-    }
+    query_cache::owner_info& owner_info() { return _owner_info; }
+    const ChunkExtraDataPtr& get_extra_data() const { return _extra_data; }
+    void set_extra_data(ChunkExtraDataPtr data) { this->_extra_data = std::move(data); }
+    bool has_extra_data() const { return this->_extra_data != nullptr; }
 
 private:
     void rebuild_cid_index();

@@ -12,12 +12,13 @@ namespace starrocks::subtle {
 
 RefCountedBase::RefCountedBase()
 #ifndef NDEBUG
-        : in_dtor_(false){}
+        : in_dtor_(false) {
+}
 #else
         = default;
 #endif
 
-          RefCountedBase::~RefCountedBase() { // NOLINT
+RefCountedBase::~RefCountedBase() { // NOLINT
 #ifndef NDEBUG
     DCHECK(in_dtor_) << "RefCounted object deleted without calling Release()";
 #endif

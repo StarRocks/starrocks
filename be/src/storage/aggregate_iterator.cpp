@@ -56,9 +56,7 @@ public:
 
     void close() override;
 
-    size_t merged_rows() const override {
-        return _aggregator->merged_rows();
-    }
+    size_t merged_rows() const override { return _aggregator->merged_rows(); }
 
     [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
@@ -79,9 +77,7 @@ public:
     }
 
 protected:
-    Status do_get_next(Chunk* chunk) override {
-        return do_get_next(chunk, nullptr);
-    }
+    Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
 
 private:

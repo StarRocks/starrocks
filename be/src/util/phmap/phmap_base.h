@@ -1523,9 +1523,7 @@ namespace memory_internal {
 template <typename Allocator, typename Iterator, typename... Args>
 void ConstructRange(Allocator& alloc, Iterator first, Iterator last, const Args&... args) {
     for (Iterator cur = first; cur != last; ++cur) {
-        PHMAP_INTERNAL_TRY {
-            std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur), args...);
-        }
+        PHMAP_INTERNAL_TRY { std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur), args...); }
         PHMAP_INTERNAL_CATCH_ANY {
             while (cur != first) {
                 --cur;
@@ -1539,9 +1537,7 @@ void ConstructRange(Allocator& alloc, Iterator first, Iterator last, const Args&
 template <typename Allocator, typename Iterator, typename InputIterator>
 void CopyRange(Allocator& alloc, Iterator destination, InputIterator first, InputIterator last) {
     for (Iterator cur = destination; first != last; static_cast<void>(++cur), static_cast<void>(++first)) {
-        PHMAP_INTERNAL_TRY {
-            std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur), *first);
-        }
+        PHMAP_INTERNAL_TRY { std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur), *first); }
         PHMAP_INTERNAL_CATCH_ANY {
             while (cur != destination) {
                 --cur;
@@ -2274,12 +2270,8 @@ public:
 
 private:
     // Private accessors for internal storage viewed as reference to T.
-    constexpr const T& reference() const {
-        return this->data_;
-    }
-    T& reference() {
-        return this->data_;
-    }
+    constexpr const T& reference() const { return this->data_; }
+    T& reference() { return this->data_; }
 
     // T constraint checks.  You can't have an optional of nullopt_t, in_place_t
     // or a reference.

@@ -465,12 +465,10 @@ private:
         return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));                                       \
     }
 
-#define TRY_CATCH_BAD_ALLOC(stmt)       \
-    do {                                \
-        TRY_CATCH_ALLOC_SCOPE_START() { \
-            stmt;                       \
-        }                               \
-        TRY_CATCH_ALLOC_SCOPE_END()     \
+#define TRY_CATCH_BAD_ALLOC(stmt)               \
+    do {                                        \
+        TRY_CATCH_ALLOC_SCOPE_START() { stmt; } \
+        TRY_CATCH_ALLOC_SCOPE_END()             \
     } while (0)
 
 // TRY_CATCH_ALL will not set catched=true, only used for catch unexpected crash,

@@ -78,19 +78,13 @@ public:
     // connnect to mysql server
     Status open(const MysqlConnInfo& conn_info, const std::string& tbl);
 
-    Status begin_trans() {
-        return Status::OK();
-    }
+    Status begin_trans() { return Status::OK(); }
 
     Status append(Chunk* chunk);
 
-    Status abort_tarns() {
-        return Status::OK();
-    }
+    Status abort_tarns() { return Status::OK(); }
 
-    Status finish_tarns() {
-        return Status::OK();
-    }
+    Status finish_tarns() { return Status::OK(); }
 
 private:
     Status _build_viewers(Columns& columns);

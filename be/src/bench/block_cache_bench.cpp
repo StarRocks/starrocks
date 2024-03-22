@@ -136,17 +136,11 @@ public:
         delete _cache;
     }
 
-    static void Setup(const benchmark::State& state) {
-        brpc::StartDummyServerAt(8080);
-    }
+    static void Setup(const benchmark::State& state) { brpc::StartDummyServerAt(8080); }
 
-    static void Teardown(const benchmark::State& state) {
-        delete_dir_content(DISK_CACHE_PATH);
-    }
+    static void Teardown(const benchmark::State& state) { delete_dir_content(DISK_CACHE_PATH); }
 
-    static char index2ch(size_t index) {
-        return 'a' + index % 26;
-    }
+    static char index2ch(size_t index) { return 'a' + index % 26; }
 
     static std::string gen_obj_key(size_t obj_index, size_t key_size, BenchContext* ctx) {
         const int range = 26;
@@ -257,13 +251,9 @@ public:
         }
     }
 
-    BenchParams* params() {
-        return _params;
-    }
+    BenchParams* params() { return _params; }
 
-    BenchContext* ctx() {
-        return _ctx;
-    }
+    BenchContext* ctx() { return _ctx; }
 
 private:
     BenchParams* _params = nullptr;

@@ -210,12 +210,8 @@ private:                                                       \
     void operator=(type&);                                     \
                                                                \
 public:                                                        \
-    operator rvalue_type() {                                   \
-        return rvalue_type(this);                              \
-    }                                                          \
-    type Pass() {                                              \
-        return type(rvalue_type(this));                        \
-    }                                                          \
+    operator rvalue_type() { return rvalue_type(this); }       \
+    type Pass() { return type(rvalue_type(this)); }            \
     typedef void MoveOnlyTypeForCPP03;                         \
                                                                \
 private:

@@ -35,13 +35,11 @@
 
 namespace starrocks {
 
-#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)               \
-    CLASS_NAME(const TExprNode& node) : Expr(node) {}      \
-    virtual ~CLASS_NAME() {}                               \
-                                                           \
-    virtual Expr* clone(ObjectPool* pool) const override { \
-        return pool->add(new CLASS_NAME(*this));           \
-    }
+#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
+    CLASS_NAME(const TExprNode& node) : Expr(node) {} \
+    virtual ~CLASS_NAME() {}                          \
+                                                      \
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
 
 static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
     DIAGNOSTIC_PUSH

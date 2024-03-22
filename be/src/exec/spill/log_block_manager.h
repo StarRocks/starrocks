@@ -55,9 +55,7 @@ public:
     Status release_block(const BlockPtr& block) override;
 
 #ifdef BE_TEST
-    void set_dir_manager(DirManager* dir_mgr) {
-        _dir_mgr = dir_mgr;
-    }
+    void set_dir_manager(DirManager* dir_mgr) { _dir_mgr = dir_mgr; }
 #endif
 
 private:
