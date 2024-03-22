@@ -115,12 +115,6 @@ public:
         _reader->def_level_decoder().get_levels(def_levels, num_levels);
     }
 
-    void append_default_levels(size_t row_nums) override {
-        if (_need_parse_levels) {
-            _reader->def_level_decoder().append_default_levels(row_nums);
-        }
-    }
-
 private:
     Status _decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels);
 
@@ -128,6 +122,12 @@ private:
     Status _lazy_skip_values(uint64_t begin) override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
                                   starrocks::Column* dst, bool append_default) override;
+
+    void _append_default_levels(size_t row_nums) override {
+        if (_need_parse_levels) {
+            _reader->def_level_decoder().append_default_levels(row_nums);
+        }
+    }
 
     const ParquetField* _field = nullptr;
 
@@ -415,7 +415,7 @@ Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
                                                           starrocks::Column* dst, bool append_default) {
     if (append_default) {
-        append_default_levels(num_values);
+        _append_default_levels(num_values);
         dst->append_default(num_values);
         return Status::OK();
     } else {
