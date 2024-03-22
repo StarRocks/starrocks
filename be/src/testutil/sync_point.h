@@ -72,6 +72,7 @@ public:
 #define TEST_SYNC_POINT_CALLBACK(x, y)
 #define INIT_SYNC_POINT_SINGLETONS()
 #define TEST_ERROR_POINT(x)
+#define TEST_SUCC_POINT(x)
 #define TEST_ENABLE_ERROR_POINT(x, y)
 #define TEST_DISABLE_ERROR_POINT(x)
 #else
@@ -174,6 +175,12 @@ private:
         Status st;                                            \
         starrocks::SyncPoint::GetInstance()->Process(x, &st); \
         if (!st.ok()) return st;                              \
+    } while (0)
+#define TEST_SUCC_POINT(x)                                    \
+    do {                                                      \
+        Status st;                                            \
+        starrocks::SyncPoint::GetInstance()->Process(x, &st); \
+        if (st.ok()) return st;                               \
     } while (0)
 #define TEST_ENABLE_ERROR_POINT(x, y) \
     starrocks::SyncPoint::GetInstance()->SetCallBack(x, [&](void* arg) { *(Status*)arg = y; })
