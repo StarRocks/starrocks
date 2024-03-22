@@ -250,7 +250,7 @@ public class GlobalStateMgrTestUtil {
 
         RangePartitionInfo partitionInfo = new RangePartitionInfo(partitionColumns);
         Map<String, String> properties = Maps.newHashMap();
-        properties.put(EsTable.KEY_HOSTS, "xxx");
+        properties.put(EsTable.KEY_HOSTS, "http://xxx");
         properties.put(EsTable.KEY_INDEX, "doe");
         properties.put(EsTable.KEY_TYPE, "doc");
         properties.put(EsTable.KEY_PASSWORD, "");
