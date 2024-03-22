@@ -58,9 +58,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -90,7 +90,8 @@ public class AuthorizationMgr {
             CacheBuilder.newBuilder()
                     .maximumSize(MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION)
                     .expireAfterAccess(CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN, TimeUnit.MINUTES)
-                    .build(new CacheLoader<Pair<UserIdentity, Set<Long>>, PrivilegeCollectionV2>() {
+                    .build(new CacheLoader<>() {
+                        @NotNull
                         @Override
                         public PrivilegeCollectionV2 load(@NotNull Pair<UserIdentity, Set<Long>> userIdentitySetPair)
                                 throws Exception {
@@ -941,9 +942,7 @@ public class AuthorizationMgr {
     public Set<UserIdentity> getAllUserIdentities() {
         userReadLock();
         try {
-            List<String> users = Lists.newArrayList();
-            Set<UserIdentity> userIdentities = userToPrivilegeCollection.keySet();
-            return userIdentities;
+            return userToPrivilegeCollection.keySet();
         } finally {
             userReadUnlock();
         }
@@ -1398,6 +1397,32 @@ public class AuthorizationMgr {
         }
     }
 
+    public List<String> getRoleNamesByRoleIds(Set<Long> roleIds) {
+        List<String> roleNames = new ArrayList<>();
+        if (roleIds != null) {
+            for (Long roleId : roleIds) {
+                RolePrivilegeCollectionV2 roleCollection = getRolePrivilegeCollection(roleId);
+                if (roleCollection != null) {
+                    roleNames.add(roleCollection.getName());
+                }
+            }
+        }
+
+        return roleNames;
+    }
+
+    public List<String> getInactivatedRoleNamesByUser(UserIdentity userIdentity, List<String> activatedRoleNames) {
+        List<String> inactivatedRoleNames = new ArrayList<>();
+        try {
+            inactivatedRoleNames = getRoleNamesByUser(userIdentity);
+        } catch (PrivilegeException e) {
+            // ignore exception
+        }
+        inactivatedRoleNames.removeAll(activatedRoleNames);
+
+        return inactivatedRoleNames;
+    }
+
     // used in executing `set role` statement
     public Long getRoleIdByNameAllowNull(String name) {
         roleReadLock();
@@ -1436,7 +1461,7 @@ public class AuthorizationMgr {
      * remove invalid object periodically
      * <p>
      * lock order should always be:
-     * AuthenticationManager.lock -> AuthorizationManager.userLock -> AuthorizationManager.roleLock
+     * `AuthenticationManager.lock` -> `AuthorizationManager.userLock` -> `AuthorizationManager.roleLock`
      */
     public void removeInvalidObject() {
         userWriteLock();
@@ -1860,11 +1885,7 @@ public class AuthorizationMgr {
             // 1 json for myself
             AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
             ret.globalStateMgr = globalStateMgr;
-            if (provider == null) {
-                ret.provider = new DefaultAuthorizationProvider();
-            } else {
-                ret.provider = provider;
-            }
+            ret.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
             ret.initBuiltinRolesAndUsers();
 
             // 1 json for num user
@@ -1904,7 +1925,6 @@ public class AuthorizationMgr {
                 ret.roleIdToPrivilegeCollection.put(roleId, collection);
             }
 
-            assert ret != null; // can't be NULL
             LOG.info("loaded {} users, {} roles",
                     ret.userToPrivilegeCollection.size(), ret.roleIdToPrivilegeCollection.size());
 
@@ -1935,19 +1955,31 @@ public class AuthorizationMgr {
             writer.writeJson(this);
             // 1 json for num user
             writer.writeJson(userToPrivilegeCollection.size());
-            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollectionV2>> iterator =
-                    userToPrivilegeCollection.entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry = iterator.next();
+            for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry : userToPrivilegeCollection.entrySet()) {
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }
             // 1 json for num roles
             writer.writeJson(roleIdToPrivilegeCollection.size());
+<<<<<<< HEAD
             Iterator<Map.Entry<Long, RolePrivilegeCollectionV2>> roleIter =
                     roleIdToPrivilegeCollection.entrySet().iterator();
             while (roleIter.hasNext()) {
                 Map.Entry<Long, RolePrivilegeCollectionV2> entry = roleIter.next();
+=======
+            for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : roleIdToPrivilegeCollection.entrySet()) {
+                RolePrivilegeCollectionV2 value = entry.getValue();
+                // Avoid newly added PEntryObject type corrupt forward compatibility,
+                // since built-in roles are always initialized on startup, we don't need to persist them.
+                // But to keep the correct relationship with roles inherited from them, we still need to persist
+                // an empty role for them, just for the role id.
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(entry.getKey())) {
+                    // clone to avoid race condition
+                    RolePrivilegeCollectionV2 clone = value.cloneSelf();
+                    clone.typeToPrivilegeEntryList = new HashMap<>();
+                    value = clone;
+                }
+>>>>>>> 1b790dff8b ([Enhancement] Refine unauthorized error message when calling http api (#42856))
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }

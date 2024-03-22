@@ -15,15 +15,53 @@
 package com.starrocks.privilege;
 
 import com.starrocks.common.ErrorCode;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
+
+import java.util.List;
+import java.util.Set;
+
+public class AccessDeniedException extends Exception {
+
+    public AccessDeniedException() {
+    }
+>>>>>>> 1b790dff8b ([Enhancement] Refine unauthorized error message when calling http api (#42856))
 
 public class AccessDeniedException extends RuntimeException {
     public AccessDeniedException(String message) {
         super(message);
     }
 
+<<<<<<< HEAD
     public static void reportAccessDenied(String privilegeMessage, ObjectType objectType, String object) {
         String errMsg = ErrorCode.ERR_ACCESS_DENIED.formatErrorMsg(
                 privilegeMessage, objectType.name(), object == null ? "" : " " + object);
         throw new AccessDeniedException(errMsg);
+=======
+    public static void reportAccessDenied(String catalog, UserIdentity userIdentity, Set<Long> roleIds, String privilegeType,
+                                          String objectType, String object) {
+        if (catalog == null) {
+            catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        }
+
+        if (Authorizer.getInstance().getAccessControlOrDefault(catalog) instanceof
+                ExternalAccessController) {
+            ErrorReportException.report(ErrorCode.ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER,
+                    privilegeType, objectType, object == null ? "" : " " + object);
+        } else {
+            AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+            List<String> activatedRoles = authorizationMgr.getRoleNamesByRoleIds(roleIds);
+            List<String> inactivatedRoles =
+                    authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
+
+            ErrorReportException.report(ErrorCode.ERR_ACCESS_DENIED, privilegeType, objectType,
+                    object == null ? "" : " " + object,
+                    activatedRoles.isEmpty() ? "NONE" : activatedRoles, inactivatedRoles.isEmpty() ? "NONE" : inactivatedRoles);
+        }
+>>>>>>> 1b790dff8b ([Enhancement] Refine unauthorized error message when calling http api (#42856))
     }
 }
