@@ -205,22 +205,10 @@ public class SetTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
-        Assert.assertTrue(plan.contains("  3:Project\n" +
-                "  |  <slot 2> : 499\n" +
-                "  |  \n" +
-                "  2:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL"));
-        Assert.assertTrue(plan.contains("  6:Project\n" +
-                "  |  <slot 4> : 670\n" +
-                "  |  \n" +
-                "  5:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL"));
-        Assert.assertTrue(plan.contains("13:Project\n" +
+        Assert.assertTrue(plan.contains("  9:Project\n" +
                 "  |  <slot 7> : 499\n" +
                 "  |  \n" +
-                "  12:UNION\n" +
+                "  8:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
         Assert.assertTrue(plan.contains("0:EXCEPT"));
@@ -285,40 +273,32 @@ public class SetTest extends PlanTestBase {
         String sql = "select count(*) from (select null as c1 union all select null as c1) t group by t.c1";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [5, BOOLEAN, true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [2: expr, BOOLEAN, true]\n" +
-                "  |      [4: expr, BOOLEAN, true]");
+                "     constant exprs: \n" +
+                "         NULL\n" +
+                "         NULL\n");
 
         sql = "select count(*) from (select 1 as c1 union all select null as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [6, TINYINT, true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [2: expr, TINYINT, false]\n" +
-                "  |      [5: cast, TINYINT, true]");
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         NULL\n");
 
         sql = "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [7, DECIMAL64(12,2), true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [3: cast, DECIMAL64(12,2), false]\n" +
-                "  |      [6: cast, DECIMAL64(12,2), false]\n");
+                "     constant exprs: \n" +
+                "         1.20\n" +
+                "         1\n");
 
         sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all " +
                 "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [7, DECIMAL64(12,2), true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [3: cast, DECIMAL64(12,2), false]\n" +
-                "  |      [6: cast, DECIMAL64(12,2), false]");
+                "     constant exprs: \n" +
+                "         1.20\n" +
+                "         1\n");
     }
 
     @Test

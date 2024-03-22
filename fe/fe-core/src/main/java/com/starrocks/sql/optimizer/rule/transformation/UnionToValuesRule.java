@@ -32,39 +32,6 @@ import java.util.stream.Collectors;
 
 public class UnionToValuesRule extends TransformationRule {
 
-    private static boolean isMergeable(OptExpression input) {
-        if (input.getOp().getOpType() != OperatorType.LOGICAL_VALUES) {
-            return false;
-        }
-
-        if (input.getOp().hasLimit() || input.getOp().getPredicate() != null) {
-            return false;
-        }
-
-        LogicalValuesOperator values = (LogicalValuesOperator) input.getOp();
-        return isConstantValues(values) || isConstantUnion(values);
-    }
-
-    private static boolean isConstantUnion(LogicalValuesOperator valuesOp) {
-        if (valuesOp.getProjection() == null ||
-                !valuesOp.getProjection().getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
-            return false;
-        }
-
-        List<List<ScalarOperator>> rows = valuesOp.getRows();
-        if (!(rows.size() == 1 && rows.get(0).size() == 1)) {
-            return false;
-        }
-
-        ScalarOperator value = rows.get(0).get(0);
-        return value.equals(ConstantOperator.createNull(value.getType()));
-    }
-
-    private static boolean isConstantValues(LogicalValuesOperator valuesOp) {
-        return valuesOp.getProjection() == null &&
-                valuesOp.getRows().stream().flatMap(List::stream).allMatch(ScalarOperator::isConstant);
-    }
-
     public UnionToValuesRule() {
         super(RuleType.TF_MERGE_CONSTANT_UNION, Pattern.create(OperatorType.LOGICAL_UNION)
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)));
@@ -115,7 +82,7 @@ public class UnionToValuesRule extends TransformationRule {
                     new LogicalValuesOperator.Builder().setColumnRefSet(unionOp.getOutputColumnRefOp()).setRows(newRows)
                             .setLimit(unionOp.getLimit())
                             .setPredicate(unionOp.getPredicate()).setProjection(unionOp.getProjection()).build();
-            return Lists.newArrayList(OptExpression.create(newValuesOperator));
+            return List.of(OptExpression.create(newValuesOperator));
         } else {
             List<OptExpression> inputs = new ArrayList<>(otherChildren);
             if (!newRows.isEmpty()) {
@@ -133,7 +100,40 @@ public class UnionToValuesRule extends TransformationRule {
                             .build();
             OptExpression newUnionExpr = OptExpression.create(newUnionOp, inputs);
 
-            return Lists.newArrayList(newUnionExpr);
+            return List.of(newUnionExpr);
         }
+    }
+
+    private static boolean isMergeable(OptExpression input) {
+        if (input.getOp().getOpType() != OperatorType.LOGICAL_VALUES) {
+            return false;
+        }
+
+        if (input.getOp().hasLimit() || input.getOp().getPredicate() != null) {
+            return false;
+        }
+
+        LogicalValuesOperator values = (LogicalValuesOperator) input.getOp();
+        return isConstantValues(values) || isConstantUnion(values);
+    }
+
+    private static boolean isConstantUnion(LogicalValuesOperator valuesOp) {
+        if (valuesOp.getProjection() == null ||
+                !valuesOp.getProjection().getColumnRefMap().values().stream().allMatch(ScalarOperator::isConstant)) {
+            return false;
+        }
+
+        List<List<ScalarOperator>> rows = valuesOp.getRows();
+        if (!(rows.size() == 1 && rows.get(0).size() == 1)) {
+            return false;
+        }
+
+        ScalarOperator value = rows.get(0).get(0);
+        return value.equals(ConstantOperator.createNull(value.getType()));
+    }
+
+    private static boolean isConstantValues(LogicalValuesOperator valuesOp) {
+        return valuesOp.getProjection() == null &&
+                valuesOp.getRows().stream().flatMap(List::stream).allMatch(ScalarOperator::isConstant);
     }
 }
