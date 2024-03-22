@@ -168,7 +168,7 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     }
 
     if ((master_info.network_address.hostname == LOCALHOST)) {
-        if (!(master_info.backend_ip == LOCALHOST || master_info.backend_ip == LOCALHOST_V6)) {
+        if (!(master_info.backend_ip == LOCALHOST || master_info.backend_ip == LOCALHOST_IPV6)) {
             return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
         }
     }
