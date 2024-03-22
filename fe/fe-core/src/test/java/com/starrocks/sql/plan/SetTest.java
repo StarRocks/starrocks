@@ -205,10 +205,10 @@ public class SetTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
-        Assert.assertTrue(plan.contains("  9:Project\n" +
+        Assert.assertTrue(plan.contains("  5:Project\n" +
                 "  |  <slot 7> : 499\n" +
                 "  |  \n" +
-                "  8:UNION\n" +
+                "  4:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
         Assert.assertTrue(plan.contains("0:EXCEPT"));
