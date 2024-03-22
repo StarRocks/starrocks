@@ -332,6 +332,13 @@ private:
     std::string _time_zone;
 };
 
+class KuduTableDescriptor : public HiveTableDescriptor {
+public:
+    KuduTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~KuduTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+};
+
 // ===========================================
 
 class OlapTableDescriptor : public TableDescriptor {

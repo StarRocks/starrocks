@@ -129,6 +129,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.MYSQL,
                     Table.TableType.PAIMON,
                     Table.TableType.ODPS,
+                    Table.TableType.KUDU,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
                     Table.TableType.HIVE_VIEW);

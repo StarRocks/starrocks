@@ -207,6 +207,7 @@ public class Authorizer {
             case SCHEMA:
             case PAIMON:
             case ODPS:
+            case KUDU:
                 // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
                     checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));

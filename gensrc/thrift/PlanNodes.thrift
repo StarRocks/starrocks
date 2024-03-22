@@ -61,7 +61,7 @@ enum TPlanNodeType {
   META_SCAN_NODE,
   ANALYTIC_EVAL_NODE,
   OLAP_REWRITE_NODE,
-  KUDU_SCAN_NODE, // Deprecated
+  KUDU_SCAN_NODE,
   FILE_SCAN_NODE,
   EMPTY_SET_NODE,
   UNION_NODE,
@@ -363,6 +363,15 @@ struct THdfsScanRange {
 
     // delete columns slots like iceberg equality delete column slots
     21: optional list<Types.TSlotId> delete_column_slot_ids;
+
+    // whether to use JNI scanner to read data of kudu table
+    22: optional bool use_kudu_jni_reader
+
+    // kudu master addresses
+    23: optional string kudu_master
+
+    // kudu scan token
+    24: optional string kudu_scan_token
 }
 
 struct TBinlogScanRange {
@@ -1058,6 +1067,12 @@ struct THdfsScanNode {
     17: optional Types.TTupleId mor_tuple_id;
 }
 
+struct TKuduScanNode {
+    1: optional Types.TTupleId tuple_id
+    // table name it scans
+    2: optional string table_name;
+}
+
 struct TProjectNode {
     1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
     // Used for common operator compute result reuse
@@ -1226,6 +1241,8 @@ struct TPlanNode {
   70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
+  // Scan node for kudu
+  73: optional TKuduScanNode kudu_scan_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

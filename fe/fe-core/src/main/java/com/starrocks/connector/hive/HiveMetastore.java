@@ -113,20 +113,21 @@ public class HiveMetastore implements IHiveMetastore {
             throw new StarRocksConnectorException("Table is missing storage descriptor");
         }
 
-        if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
+        if (HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
+            return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
+        } else if (HiveMetastoreApiConverter.isKuduTable(table.getSd().getInputFormat())) {
+            return HiveMetastoreApiConverter.toKuduTable(table, catalogName);
+        } else {
             validateHiveTableType(table.getTableType());
             if (AcidUtils.isFullAcidTable(table)) {
-                throw new StarRocksConnectorException(
-                        String.format("%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName,
-                                tableName));
+                throw new StarRocksConnectorException(String.format(
+                        "%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName, tableName));
             }
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
             } else {
                 return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
             }
-        } else {
-            return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
         }
     }
 
