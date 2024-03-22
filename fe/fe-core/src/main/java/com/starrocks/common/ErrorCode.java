@@ -113,7 +113,7 @@ public enum ErrorCode {
 
     ERR_ACCESS_DENIED(1252, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
-                    ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
+                    ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(1253, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
 

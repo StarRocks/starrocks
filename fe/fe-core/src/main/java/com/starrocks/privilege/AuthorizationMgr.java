@@ -60,7 +60,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -90,7 +89,7 @@ public class AuthorizationMgr {
             CacheBuilder.newBuilder()
                     .maximumSize(MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION)
                     .expireAfterAccess(CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN, TimeUnit.MINUTES)
-                    .build(new CacheLoader<>() {
+                    .build(new CacheLoader<Pair<UserIdentity, Set<Long>>, PrivilegeCollectionV2>() {
                         @NotNull
                         @Override
                         public PrivilegeCollectionV2 load(@NotNull Pair<UserIdentity, Set<Long>> userIdentitySetPair)
@@ -1678,10 +1677,7 @@ public class AuthorizationMgr {
 
             // 1 json for num user
             writer.writeJson(userToPrivilegeCollection.size());
-            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollectionV2>> iterator =
-                    userToPrivilegeCollection.entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry = iterator.next();
+            for (Map.Entry<UserIdentity, UserPrivilegeCollectionV2> entry : userToPrivilegeCollection.entrySet()) {
                 writer.writeJson(entry.getKey());
 
                 UserPrivilegeCollectionV2 userPrivilegeCollection = entry.getValue();
@@ -1698,10 +1694,7 @@ public class AuthorizationMgr {
             }
             // 1 json for num roles
             writer.writeJson(roleIdToPrivilegeCollection.size());
-            Iterator<Map.Entry<Long, RolePrivilegeCollectionV2>> roleIter =
-                    roleIdToPrivilegeCollection.entrySet().iterator();
-            while (roleIter.hasNext()) {
-                Map.Entry<Long, RolePrivilegeCollectionV2> entry = roleIter.next();
+            for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : roleIdToPrivilegeCollection.entrySet()) {
                 writer.writeJson(entry.getKey());
 
                 RolePrivilegeCollectionV2 rolePrivilegeCollection = entry.getValue();
@@ -1905,7 +1898,11 @@ public class AuthorizationMgr {
             // 1 json for myself
             AuthorizationMgr ret = reader.readJson(AuthorizationMgr.class);
             ret.globalStateMgr = globalStateMgr;
-            ret.provider = Objects.requireNonNullElseGet(provider, DefaultAuthorizationProvider::new);
+            if (provider == null) {
+                ret.provider = new DefaultAuthorizationProvider();
+            } else {
+                ret.provider = provider;
+            }
             ret.initBuiltinRolesAndUsers();
 
             // 1 json for num user
