@@ -456,6 +456,22 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    protected ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+        return runningCompactions;
+    }
+
+    public boolean existCompaction(long txnId) {
+        for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = getRunningCompactions().entrySet().iterator();
+                iterator.hasNext(); ) {
+            Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
+            CompactionJob job = entry.getValue();
+            if (job.getTxnId() == txnId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static class SynchronizedCircularQueue<E> {
         private CircularFifoQueue<E> q;
 
