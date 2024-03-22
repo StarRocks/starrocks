@@ -8,7 +8,8 @@ coredump_log()
 # Define constant for 1TB in bytes
 TB_IN_BYTES=$((1024 * 1024 * 1024 * 1024))
 
-COREDUMP_PATH=$STARROCKS_HOME/storage/coredumps
+# Set COREDUMP_PATH if hasn't been set in environment variable
+COREDUMP_PATH=${COREDUMP_PATH:-$STARROCKS_HOME/storage/coredumps}
 
 if [ ! -d ${COREDUMP_PATH} ]; then
     mkdir -p ${COREDUMP_PATH}
