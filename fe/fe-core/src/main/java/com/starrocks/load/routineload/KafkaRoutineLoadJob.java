@@ -815,16 +815,14 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         long now = System.currentTimeMillis();
 
         for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
-            if (entry.getValue().longValue() > 0 && Config.routine_load_unstable_threshold_second > 0) {
-                int partition = entry.getKey();
-                long lag = (now - entry.getValue().longValue()) / 1000;
-                if (lag > Config.routine_load_unstable_threshold_second) {
-                    updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
-                            String.format("The lag [%d] of partition [%d] exceeds " +
-                                            "Config.routine_load_unstable_threshold_second [%d]",
-                                    lag, partition, Config.routine_load_unstable_threshold_second)));
-                    return;
-                }
+            int partition = entry.getKey();
+            long lag = (now - entry.getValue().longValue()) / 1000;
+            if (lag > Config.routine_load_unstable_threshold_second) {
+                updateSubstate(JobSubstate.UNSTABLE, new ErrorReason(InternalErrorCode.SLOW_RUNNING_ERR,
+                        String.format("The lag [%d] of partition [%d] exceeds " +
+                                        "Config.routine_load_unstable_threshold_second [%d]",
+                                lag, partition, Config.routine_load_unstable_threshold_second)));
+                return;
             }
         }
         updateSubstate(JobSubstate.STABLE, null);

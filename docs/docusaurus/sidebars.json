@@ -39,7 +39,7 @@
         {
           "type": "category",
           "label": "Shared-data deployment",
-          "link": {"type": "doc", "id": "cover_pages/shared_data_deployment"},
+          "link": {"type": "doc", "id": "deployment/shared_data/shared_data"},
           "items": ["deployment/shared_data/s3", "deployment/shared_data/gcs", "deployment/shared_data/azure", "deployment/shared_data/minio"]
         },
         {
@@ -60,7 +60,7 @@
           "type": "category",
           "label": "Table types",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
-          "items": ["table_design/table_types/table_capabilities","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
+          "items": ["table_design/table_types/table_capabilities", "table_design/table_types/primary_key_table","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table" ]
         },
         {
           "type": "category",
@@ -755,16 +755,18 @@
             {
               "type": "category",
               "label": "Backup and restore",
+              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-definition/backup_restore/backup_restore"},
               "items": [
-                "sql-reference/sql-statements/data-definition/BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_RESTORE",
-                "sql-reference/sql-statements/data-definition/CREATE_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/DROP_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/RECOVER",
-                "sql-reference/sql-statements/data-definition/RESTORE",
-                "sql-reference/sql-statements/data-manipulation/SHOW_BACKUP",
-                "sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES"
+                "sql-reference/sql-statements/data-definition/backup_restore/BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_RESTORE",
+                "sql-reference/sql-statements/data-definition/backup_restore/CREATE_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/DROP_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/RECOVER",
+                "sql-reference/sql-statements/data-definition/backup_restore/RESTORE",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_SNAPSHOT"
               ]
             },
             {
@@ -1070,7 +1072,7 @@
         {
           "type": "category",
           "label": "存算分离模式部署",
-          "link": {"type": "doc", "id": "cover_pages/shared_data_deployment"},
+          "link": {"type": "doc", "id": "deployment/shared_data/shared_data"},
           "items": ["deployment/shared_data/s3", "deployment/shared_data/gcs", "deployment/shared_data/azure", "deployment/shared_data/minio", "deployment/shared_data/hdfs", "deployment/shared_data/other"]
         },
         {
@@ -1091,7 +1093,7 @@
           "type": "category",
           "label": "表类型",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
-          "items": ["table_design/table_types/table_capabilities","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
+          "items": ["table_design/table_types/table_capabilities","table_design/table_types/primary_key_table","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table"]
         },
         {
           "type": "category",
@@ -1792,16 +1794,18 @@
             {
               "type": "category",
               "label": "备份与恢复",
+              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-definition/backup_restore/backup_restore"},
               "items": [
-                "sql-reference/sql-statements/data-definition/BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_RESTORE",
-                "sql-reference/sql-statements/data-definition/CREATE_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/DROP_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/RECOVER",
-                "sql-reference/sql-statements/data-definition/RESTORE",
-                "sql-reference/sql-statements/data-manipulation/SHOW_BACKUP",
-                "sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES"
+                "sql-reference/sql-statements/data-definition/backup_restore/BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_RESTORE",
+                "sql-reference/sql-statements/data-definition/backup_restore/CREATE_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/DROP_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/RECOVER",
+                "sql-reference/sql-statements/data-definition/backup_restore/RESTORE",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_SNAPSHOT"
               ]
             },
             {

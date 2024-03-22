@@ -308,7 +308,6 @@ PARTITION BY RANGE(`time`)
 DISTRIBUTED BY HASH(`time`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"

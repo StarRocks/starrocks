@@ -19,7 +19,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
 );
 -- result:
@@ -38,7 +37,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,v2)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
 );
 -- result:
@@ -57,7 +55,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
 );
 -- result:
@@ -125,12 +122,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
 ORDER BY(`k1`, `k2`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from uni_test;
@@ -163,12 +158,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
 ORDER BY(`k1`, `k2`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from uni_test;
@@ -206,7 +199,6 @@ DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
 );
 -- result:
@@ -254,7 +246,7 @@ E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected 
 -- !result
 alter table uni_test order by (k1,k2);
 -- result:
-E: (1064, 'A materialized view or rollup index is being created on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW or https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER')
+E: (1064, 'A materialized view or rollup index is being created on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW or https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER')
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -274,12 +266,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
 ORDER BY(`k2`, `k1`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from uni_test;
@@ -293,7 +283,7 @@ select * from uni_test;
 -- !result
 alter table uni_test order by (k2,k1,v2,v1,v3);
 -- result:
-E: (1064, 'A materialized view or rollup index is being created on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW or https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER')
+E: (1064, 'A materialized view or rollup index is being created on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW or https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER')
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -313,12 +303,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
 ORDER BY(`k2`, `k1`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from uni_test;
