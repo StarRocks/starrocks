@@ -61,7 +61,7 @@ enum CommitType {
 };
 
 struct IOStat {
-    uint32_t get_in_shard_cnt = 0;
+    uint32_t read_iops = 0;
     uint32_t filtered_kv_cnt = 0;
     uint64_t get_in_shard_cost = 0;
     uint64_t read_io_bytes = 0;
@@ -73,10 +73,10 @@ struct IOStat {
 
     std::string print_str() {
         return fmt::format(
-                "IOStat get_in_shard_cnt: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
+                "IOStat read_iops: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
                 "l0_write_cost: {} "
                 "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
-                get_in_shard_cnt, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
+                read_iops, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
                 flush_or_wal_cost, compaction_cost, reload_meta_cost);
     }
 };
@@ -514,8 +514,8 @@ private:
                                         std::map<size_t, IndexPage>& pages) const;
 
     Status _get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
-                                 KeysInfo* found_keys_info,
-                                 std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const;
+                                 KeysInfo* found_keys_info, std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                 IOStat* stat) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                          IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
