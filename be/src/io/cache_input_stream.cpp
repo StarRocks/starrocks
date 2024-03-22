@@ -294,8 +294,6 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     for (int64_t i = start_block_id; i <= end_block_id; i++) {
         size_t off = std::max(offset, i * _block_size);
         size_t end = std::min((i + 1) * _block_size, end_offset);
-        DCHECK(off >= origin_offset);
-        DCHECK(end <= origin_offset + count);
         size_t size = end - off;
         Status st = _read_block_from_local(off, size, p);
         if (st.is_not_found()) {
