@@ -59,12 +59,12 @@ SHOW AUTHENTICATION;
 
 ```Plain
 SHOW ALL AUTHENTICATION;
-+---------------+----------+-------------------------+-------------------+
-| UserIdentity  | Password | AuthPlugin              | UserForAuthPlugin |
-+---------------+----------+-------------------------+-------------------+
-| 'root'@'%'    | Yes      | NULL                    | NULL              |
-| 'chelsea'@'%' | No       | AUTHENTICATION_KERBEROS | HADOOP.COM        |
-+---------------+----------+-------------------------+-------------------+
++---------------+----------+----------------------------+-------------------+
+| UserIdentity  | Password | AuthPlugin                 | UserForAuthPlugin |
++---------------+----------+----------------------------+-------------------+
+| 'root'@'%'    | Yes      | NULL                       | NULL              |
+| 'chelsea'@'%' | No       | AUTHENTICATION_LDAP_SIMPLE | NULL              |
++---------------+----------+----------------------------+-------------------+
 ```
 
 示例三：查看指定用户的认证信息。
