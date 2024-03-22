@@ -33,13 +33,28 @@
 
 namespace starrocks {
 
+void append_to_bool(const vpack::Slice* json, NullableColumn* result) {
+    try {
+        if (json->isNone() || json->isNull()) {
+            result->append_nulls(1);
+        } else if (json->isBool()) {
+            result->null_column()->append(0);
+            auto res = json->getBool();
+            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+        } else {
+            result->append_nulls(1);
+        }
+    } catch (const vpack::Exception& e) {
+        result->append_nulls(1);
+    }
+}
+
 template <LogicalType TYPE>
 void append_to_number(const vpack::Slice* json, NullableColumn* result) {
     try {
         if (json->isNone() || json->isNull()) {
             result->append_nulls(1);
         } else if (json->isNumber()) {
-            DCHECK(json->isNumber());
             result->null_column()->append(0);
             RunTimeCppType<TYPE> res = json->getNumber<RunTimeCppType<TYPE>>();
             down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(res);
@@ -99,7 +114,7 @@ static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE 
     {JSON_TYPE_BITS.at(vpack::ValueType::Null),        LogicalType::TYPE_BOOLEAN},
     {JSON_TYPE_BITS.at(vpack::ValueType::Bool),        LogicalType::TYPE_BOOLEAN},
     {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    LogicalType::TYPE_SMALLINT},
-    {JSON_TYPE_BITS.at(vpack::ValueType::Int),         LogicalType::TYPE_INT},
+    {JSON_TYPE_BITS.at(vpack::ValueType::Int),         LogicalType::TYPE_BIGINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::UInt),        LogicalType::TYPE_BIGINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::Double),      LogicalType::TYPE_DOUBLE},
     {JSON_TYPE_BITS.at(vpack::ValueType::String),      LogicalType::TYPE_VARCHAR},
@@ -107,10 +122,10 @@ static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE 
 };
 
 static const std::unordered_map<uint8_t, JsonFlatAppendFunc> JSON_BITS_FUNC {
-    {JSON_TYPE_BITS.at(vpack::ValueType::Null),        &append_to_number<LogicalType::TYPE_BOOLEAN>},
-    {JSON_TYPE_BITS.at(vpack::ValueType::Bool),        &append_to_number<LogicalType::TYPE_BOOLEAN>},
+    {JSON_TYPE_BITS.at(vpack::ValueType::Null),        &append_to_bool},
+    {JSON_TYPE_BITS.at(vpack::ValueType::Bool),        &append_to_bool},
     {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    &append_to_number<LogicalType::TYPE_SMALLINT>},
-    {JSON_TYPE_BITS.at(vpack::ValueType::Int),         &append_to_number<LogicalType::TYPE_INT>},
+    {JSON_TYPE_BITS.at(vpack::ValueType::Int),         &append_to_number<LogicalType::TYPE_BIGINT>},
     {JSON_TYPE_BITS.at(vpack::ValueType::UInt),        &append_to_number<LogicalType::TYPE_BIGINT>},
     {JSON_TYPE_BITS.at(vpack::ValueType::Double),      &append_to_number<LogicalType::TYPE_DOUBLE>},
     {JSON_TYPE_BITS.at(vpack::ValueType::String),      &append_to_string},
