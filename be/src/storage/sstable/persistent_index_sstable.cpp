@@ -23,16 +23,17 @@
 
 namespace starrocks::sstable {
 
-Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const int64_t filesz, Cache* cache) {
+Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
+                                    Cache* cache) {
     Options options;
     _filter_policy.reset(const_cast<FilterPolicy*>(NewBloomFilterPolicy(10)));
     options.filter_policy = _filter_policy.get();
     options.block_cache = cache;
     Table* table;
-    RETURN_IF_ERROR(Table::Open(options, rf.get(), filesz, &table));
+    RETURN_IF_ERROR(Table::Open(options, rf.get(), sstable_pb.filesz(), &table));
     _sst.reset(table);
     _rf = std::move(rf);
-    _filesz = filesz;
+    _sstable_pb.CopyFrom(sstable_pb);
     return Status::OK();
 }
 

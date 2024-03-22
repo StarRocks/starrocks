@@ -225,7 +225,10 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
     std::unique_ptr<Cache> cache_ptr;
     cache_ptr.reset(new_lru_cache(100));
-    ASSERT_OK(sst->init(std::move(read_file), filesz, cache_ptr.get()));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesz(filesz);
+    ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
 
     {
         // 3. multi get with version (all keys included)

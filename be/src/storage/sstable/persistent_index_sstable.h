@@ -27,6 +27,7 @@ namespace starrocks {
 
 struct KeyIndexesInfo;
 class WritableFile;
+class PersistentIndexSstablePB;
 
 namespace sstable {
 
@@ -38,7 +39,7 @@ public:
     PersistentIndexSstable() = default;
     ~PersistentIndexSstable() = default;
 
-    Status init(std::unique_ptr<RandomAccessFile> rf, const int64_t filesz, Cache* cache);
+    Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache);
 
     static Status build_sstable(const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz);
@@ -59,7 +60,7 @@ private:
     std::unique_ptr<Table> _sst{nullptr};
     std::unique_ptr<FilterPolicy> _filter_policy{nullptr};
     std::unique_ptr<RandomAccessFile> _rf{nullptr};
-    int64_t _filesz{0};
+    PersistentIndexSstablePB _sstable_pb;
 };
 
 } // namespace sstable

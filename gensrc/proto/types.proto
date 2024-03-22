@@ -176,14 +176,10 @@ message IndexValueWithVerPB {
     repeated uint64 values = 2;
 }
 
-message SstableMetaPB {
-   optional string filename = 1;
-   optional int64 filesz = 2;
-}
-
 message PersistentIndexSstablePB {
     optional int64 version = 1;
-    repeated SstableMetaPB sstable_metas = 2;
+    optional string filename = 2;
+    optional int64 filesz = 3;
 }
 
 message PersistentIndexSstableMetaPB {

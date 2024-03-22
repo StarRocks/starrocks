@@ -37,13 +37,11 @@ LakePersistentIndex::~LakePersistentIndex() {
 Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     for (auto& pindex_sstable : sstable_meta.sstables()) {
-        for (auto& sstable_meta : pindex_sstable.sstable_metas()) {
-            ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                              opts, _tablet_mgr->sst_location(_tablet_id, sstable_meta.filename())));
-            auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
-            RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_meta.filesz(), nullptr));
-            _sstables.emplace_back(std::move(sstable));
-        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
+                                          opts, _tablet_mgr->sst_location(_tablet_id, pindex_sstable.filename())));
+        auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
+        RETURN_IF_ERROR(sstable->init(std::move(rf), pindex_sstable, nullptr));
+        _sstables.emplace_back(std::move(sstable));
     }
     return Status::OK();
 }
@@ -178,7 +176,11 @@ Status LakePersistentIndex::minor_compact() {
     auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), filesz, nullptr));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesz(filesz);
+    sstable_pb.set_version(_version.major_number());
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
     _sstables.emplace_back(std::move(sstable));
     _immutable_memtable = nullptr;
     return Status::OK();
