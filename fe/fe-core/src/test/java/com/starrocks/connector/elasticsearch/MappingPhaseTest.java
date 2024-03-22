@@ -43,6 +43,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import mockit.Injectable;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -136,14 +137,26 @@ public class MappingPhaseTest extends EsTestCase {
         assertFalse(searchContext.docValueFieldsContext().containsKey("k3"));
     }
 
-    @Test(expected = DdlException.class)
-    public void testBadHostsConfig() throws DdlException {
-        Map<String, String> props = new HashMap<>();
-        props.put(EsTable.KEY_HOSTS, "127.0.0.1:8200");
-        props.put(EsTable.KEY_INDEX, "test");
-        props.put(EsTable.KEY_TYPE, "_doc");
-        props.put(EsTable.KEY_VERSION, "6.5.3");
-        EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
+    @Test
+    public void testEsTableConfig() throws DdlException {
+        {
+            Map<String, String> props = new HashMap<>();
+            props.put(EsTable.KEY_HOSTS, "127.0.0.1:8200");
+            props.put(EsTable.KEY_INDEX, "test");
+            props.put(EsTable.KEY_TYPE, "_doc");
+            props.put(EsTable.KEY_VERSION, "6.5.3");
+            Assert.assertThrows(DdlException.class, () -> {
+                EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
+            });
+        }
+        {
+            Map<String, String> props = new HashMap<>();
+            props.put(EsTable.KEY_HOSTS, "http://127.0.0.1:8200, https://127.0.0.1:443");
+            props.put(EsTable.KEY_INDEX, "test");
+            props.put(EsTable.KEY_TYPE, "_doc");
+            props.put(EsTable.KEY_VERSION, "6.5.3");
+            EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
+        }
     }
 
     @Test

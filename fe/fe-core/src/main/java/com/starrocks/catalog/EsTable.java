@@ -203,6 +203,9 @@ public class EsTable extends Table implements GsonPostProcessable {
         }
         hosts = properties.get(KEY_HOSTS).trim();
         seeds = hosts.split(",");
+        for (int i = 0; i < seeds.length; i++) {
+            seeds[i] = seeds[i].trim();
+        }
         for (String seed : seeds) {
             if (!seed.startsWith("http://") && !seed.startsWith("https://")) {
                 throw new DdlException("Host of ES table should start with 'http:// or 'https://'. Current value is " + seed);
