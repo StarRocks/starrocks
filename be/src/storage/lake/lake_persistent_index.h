@@ -19,12 +19,11 @@
 
 namespace starrocks {
 struct KeyIndexesInfo;
-class PersistentIndexSstableMetaPB;
-class PersistentIndexSstablePB;
 
 namespace sstable {
 class PersistentIndexSstable;
 } // namespace sstable
+
 namespace lake {
 
 class PersistentIndexMemtable;
@@ -37,8 +36,6 @@ public:
     ~LakePersistentIndex();
 
     DISALLOW_COPY(LakePersistentIndex);
-
-    Status init(const PersistentIndexSstableMetaPB& sstable_meta);
 
     // batch get
     // |n|: size of key/value array
