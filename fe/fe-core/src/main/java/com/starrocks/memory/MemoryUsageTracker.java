@@ -53,15 +53,20 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("Load", currentState.getLoadMgr());
         registerMemoryTracker("Load", currentState.getRoutineLoadMgr());
         registerMemoryTracker("Load", currentState.getStreamLoadMgr());
+        registerMemoryTracker("Load", currentState.getInsertOverwriteJobMgr());
 
+        registerMemoryTracker("Compaction", currentState.getCompactionMgr());
         registerMemoryTracker("Export", currentState.getExportMgr());
         registerMemoryTracker("Delete", currentState.getDeleteMgr());
         registerMemoryTracker("Transaction", currentState.getGlobalTransactionMgr());
         registerMemoryTracker("Backup", currentState.getBackupHandler());
         registerMemoryTracker("Task", currentState.getTaskManager());
         registerMemoryTracker("Task", currentState.getTaskManager().getTaskRunManager());
-        registerMemoryTracker("Tablet", currentState.getTabletInvertedIndex());
+        registerMemoryTracker("TabletInvertedIndex", currentState.getTabletInvertedIndex());
+
+        registerMemoryTracker("Query", new QueryTracker());
         registerMemoryTracker("Profile", ProfileManager.getInstance());
+        registerMemoryTracker("Agent", new AgentTaskTracker());
         registerMemoryTracker("LocalCatalog", new InternalCatalogMemoryTracker());
 
         QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
