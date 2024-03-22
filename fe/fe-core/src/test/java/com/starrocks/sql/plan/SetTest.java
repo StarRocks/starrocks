@@ -604,14 +604,61 @@ public class SetTest extends PlanTestBase {
                 "  |      [2: expr, TINYINT, false]\n" +
                 "  |      [4: expr, TINYINT, false]\n");
 
-        sql = "select k1 from db1.tbl6 union all  select * from (values (1), (2)) t;";
+        sql = "select k1 from db1.tbl6 union all select 1 union" +
+                " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
         assertContains(plan, "  0:UNION\n" +
                 "  |  output exprs:\n" +
-                "  |      [7, VARCHAR(32), true]\n" +
+                "  |      [13, VARCHAR(32), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1: k1, VARCHAR, true]\n" +
-                "  |      [6: cast, VARCHAR(32), false]\n");
+                "  |      [12: cast, VARCHAR(32), false]\n" +
+                "  |      [7: cast, VARCHAR(32), true]\n");
+
+        sql = "select k1 from db1.tbl6 union all select 1 union" +
+                " all select 2 union all select * from (values (3)) t";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [13, VARCHAR(32), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [1: k1, VARCHAR, true]\n" +
+                "  |      [12: cast, VARCHAR(32), false]\n" +
+                "  |      [7: cast, VARCHAR(32), true]\n");
+
+        sql = "select 1 union all select 2 union all select * from (values (1)) t;";
+        plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         1\n");
+
+        sql = "select 1 union select 2 union select * from (values (1));";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         1\n");
+
+        sql = "select 1  union all select 2 union all select * from (values (3)) t;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1\n" +
+                "         2\n" +
+                "         3\n");
+
+        sql = "select 1, 2 union all select 3, 4 union all select * from (values (5, 6)) t;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         1 | 2\n" +
+                "         3 | 4\n" +
+                "         5 | 6\n");
     }
 }
