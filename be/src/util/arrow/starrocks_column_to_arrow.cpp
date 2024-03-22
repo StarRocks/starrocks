@@ -422,12 +422,14 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
 
         auto& key_type_desc = type_desc.children[0];
         auto& key_arrow_type = arrow_type->field(0)->type();
-        auto key_func = resolve_convert_func(key_type_desc.type, key_arrow_type->id(), data_column->is_nullable());
+        auto key_func = resolve_convert_func(key_type_desc.type, key_arrow_type->id(),
+                                             data_column->keys_column()->is_nullable());
         column_context->child_columns.push_back({key_type_desc, key_arrow_type, key_func});
 
         auto& value_type_desc = type_desc.children[1];
         auto& value_arrow_type = arrow_type->field(1)->type();
-        auto value_func = resolve_convert_func(key_type_desc.type, key_arrow_type->id(), data_column->is_nullable());
+        auto value_func = resolve_convert_func(value_type_desc.type, value_arrow_type->id(),
+                                               data_column->values_column()->is_nullable());
         column_context->child_columns.push_back({value_type_desc, value_arrow_type, value_func});
 
         return arrow::Status::OK();
