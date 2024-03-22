@@ -30,9 +30,10 @@ public class FeNameFormat {
     private FeNameFormat() {
     }
 
-    private static final char[] SPECIAL_CHARACTERS_IN_DB_NAME = new char[] {'-', '~', '!', '@', '#', '$',
-            '%', '^', '&', '<', '>', '='};
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
+
+    public static final char[] SPECIAL_CHARACTERS_IN_DB_NAME = new char[] {'-', '~', '!', '@', '#', '$',
+            '%', '^', '&', '<', '>', '='};
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
 
     // The length of db name is 256
@@ -100,7 +101,7 @@ public class FeNameFormat {
         if (Strings.isNullOrEmpty(columnName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
-        String pattern = "";
+        String pattern;
         if (RunMode.isSharedNothingMode()) {
             pattern = SHARED_NOTHING_COLUMN_NAME_REGEX;
         } else {
