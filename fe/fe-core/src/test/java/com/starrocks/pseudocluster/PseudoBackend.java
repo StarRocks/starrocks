@@ -24,6 +24,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
@@ -430,7 +431,7 @@ public class PseudoBackend {
     }
 
     public String getHostHeartbeatPort() {
-        return host + ":" + heartBeatPort;
+        return NetUtils.getHostPortInAccessibleFormat(host, heartBeatPort);
     }
 
     public long getId() {

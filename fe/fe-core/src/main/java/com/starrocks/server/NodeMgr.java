@@ -81,7 +81,9 @@ import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -381,7 +383,8 @@ public class NodeMgr {
                     isVersionFileChanged = true;
                 }
                 try {
-                    URL idURL = new URL("http://" + rightHelperNode.first + ":" + Config.http_port + "/check");
+                    URL idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(
+                            rightHelperNode.first, Config.http_port) + "/check");
                     HttpURLConnection conn = null;
                     conn = (HttpURLConnection) idURL.openConnection();
                     conn.setConnectTimeout(2 * 1000);
@@ -472,8 +475,11 @@ public class NodeMgr {
         Pair<String, Integer> rightHelperNode = null;
         for (Pair<String, Integer> helperNode : helperNodes) {
             try {
-                URL url = new URL("http://" + helperNode.first + ":" + Config.http_port
-                        + "/role?host=" + selfNode.first + "&port=" + selfNode.second);
+                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
+                String encodedAddress = URLEncoder.encode(selfNode.first,
+                        StandardCharsets.UTF_8.toString());
+                URL url = new URL("http://" + accessibleHostPort + "/role?host=" + encodedAddress +
+                        "&port=" + selfNode.second);
                 HttpURLConnection conn = null;
                 conn = (HttpURLConnection) url.openConnection();
                 if (conn.getResponseCode() != 200) {
@@ -530,6 +536,7 @@ public class NodeMgr {
         for (Pair<String, Integer> helperNode : helperNodes) {
             if (selfNode.equals(helperNode)) {
                 containSelf = true;
+                break;
             }
         }
         if (containSelf) {
@@ -651,7 +658,8 @@ public class NodeMgr {
     }
 
     private boolean getVersionFileFromHelper(Pair<String, Integer> helperNode) throws IOException {
-        String url = "http://" + helperNode.first + ":" + Config.http_port + "/version";
+        String url = "http://" + NetUtils.getHostPortInAccessibleFormat(
+                helperNode.first, Config.http_port) + "/version";
         LOG.info("Downloading version file from {}", url);
         try {
             File dir = new File(this.imageDir);
@@ -676,12 +684,12 @@ public class NodeMgr {
         Storage storage = new Storage(dirStr);
         localImageVersion = storage.getImageJournalId();
 
-        URL infoUrl = new URL("http://" + helperNode.first + ":" + Config.http_port + "/info?subdir=" + subDir);
+        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
+        URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
         StorageInfo info = getStorageInfo(infoUrl);
         long version = info.getImageJournalId();
         if (version > localImageVersion) {
-            String url = "http://" + helperNode.first + ":" + Config.http_port
-                    + "/image?version=" + version + "&subdir=" + subDir;
+            String url = "http://" + accessibleHostPort + "/image?version=" + version + "&subdir=" + subDir;
             LOG.info("start to download image.{} from {}", version, url);
             String filename = Storage.IMAGE + "." + version;
             File dir = new File(dirStr);
@@ -780,7 +788,7 @@ public class NodeMgr {
     }
 
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
-        if (host.equals(selfNode.first) && port == selfNode.second &&
+        if (NetUtils.isSameIP(host, selfNode.first) && port == selfNode.second &&
                 GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.LEADER) {
             throw new DdlException("can not drop current master node.");
         }
@@ -791,10 +799,12 @@ public class NodeMgr {
         try {
             fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
-                throw new DdlException("frontend does not exist[" + host + ":" + port + "]");
+                throw new DdlException("frontend does not exist[" + 
+                        NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
             }
             if (fe.getRole() != role) {
-                throw new DdlException(role.toString() + " does not exist[" + host + ":" + port + "]");
+                throw new DdlException(role.toString() + " does not exist[" +
+                        NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
             }
             frontends.remove(fe.getNodeName());
             removedFrontends.add(fe.getNodeName());
@@ -908,7 +918,7 @@ public class NodeMgr {
 
     public Frontend unprotectCheckFeExist(String host, int port) {
         for (Frontend fe : frontends.values()) {
-            if (fe.getHost().equals(host) && fe.getEditLogPort() == port) {
+            if (fe.getEditLogPort() == port && NetUtils.isSameIP(fe.getHost(), host)) {
                 return fe;
             }
         }
@@ -962,7 +972,7 @@ public class NodeMgr {
                 continue;
             }
             // target, cur has same ip
-            if (targetPair.first.equals(curPair.first)) {
+            if (NetUtils.isSameIP(targetPair.first, curPair.first)) {
                 return fe;
             }
             // target, cur has same fqdn and both of them are not equal ""
