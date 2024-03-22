@@ -101,3 +101,97 @@ select * from test_union_mv2_${uuid0} order by k1, v1;
 drop table t1;
 drop table t2;
 drop materialized view test_union_mv2_${uuid0};
+
+-- name: test_materialized_view_union_all_unaligned
+-- unaligned partitions: https://github.com/StarRocks/starrocks/issues/42949
+CREATE TABLE IF NOT EXISTS t1 (
+    leg_id VARCHAR(100) NOT NULL,
+    cabin_class VARCHAR(1) NOT NULL,
+    observation_date DATE NOT NULL
+)
+DUPLICATE KEY(leg_id, cabin_class)
+PARTITION BY date_trunc('day', observation_date);
+
+CREATE TABLE IF NOT EXISTS t2 (
+    leg_id VARCHAR(100) NOT NULL,
+    cabin_class VARCHAR(1) NOT NULL,
+    observation_date DATE NOT NULL
+)
+DUPLICATE KEY(leg_id, cabin_class)
+PARTITION BY date_trunc('day', observation_date);
+
+CREATE TABLE IF NOT EXISTS t3 (
+    leg_id VARCHAR(100) NOT NULL,
+    cabin_class VARCHAR(1) NOT NULL,
+    observation_date DATE NOT NULL
+)
+DUPLICATE KEY(leg_id, cabin_class)
+PARTITION BY date_trunc('month', observation_date);
+
+CREATE TABLE IF NOT EXISTS t4 (
+    leg_id VARCHAR(100) NOT NULL,
+    cabin_class VARCHAR(1) NOT NULL,
+    observation_date DATE NOT NULL
+)
+DUPLICATE KEY(leg_id, cabin_class)
+PARTITION BY RANGE(observation_date) (
+  PARTITION p0 VALUES LESS THAN ('2024-03-01'),
+  PARTITION p1 VALUES LESS THAN ('2024-03-02'),
+  PARTITION p2 VALUES LESS THAN ('2024-04-02')
+);
+
+insert into t1 (leg_id, cabin_class, observation_date) values
+('FL_123', 'Y', '2024-03-21'),
+('FL_124', 'Y', '2024-03-21'),
+('FL_125', 'Y', '2024-03-21'),
+('FL_126', 'Y', '2024-03-21');
+
+insert into t2 (leg_id, cabin_class, observation_date) values
+('FL_123', 'Y', '2024-03-22'),
+('FL_124', 'Y', '2024-03-22'),
+('FL_125', 'Y', '2024-03-22'),
+('FL_126', 'Y', '2024-03-22');
+
+insert into t3 (leg_id, cabin_class, observation_date) values
+('FL_123', 'Y', '2024-03-22'),
+('FL_124', 'Y', '2024-03-22'),
+('FL_125', 'Y', '2024-03-22'),
+('FL_126', 'Y', '2024-03-22');
+
+CREATE MATERIALIZED VIEW v1 
+PARTITION BY date_trunc('day', observation_date)
+DISTRIBUTED BY HASH(leg_id)
+REFRESH ASYNC
+AS 
+SELECT * FROM t1
+UNION ALL
+SELECT * FROM t2;
+	
+REFRESH MATERIALIZED VIEW v1 WITH SYNC MODE;
+select count(*) from v1;
+
+-- day and month
+CREATE MATERIALIZED VIEW v2
+PARTITION BY date_trunc('day', observation_date)
+DISTRIBUTED BY HASH(leg_id)
+REFRESH ASYNC
+AS 
+SELECT * FROM t1
+UNION ALL
+SELECT * FROM t3;
+
+REFRESH MATERIALIZED VIEW v2 WITH SYNC MODE;
+select count(*) from v2;
+
+-- unaligned range
+CREATE MATERIALIZED VIEW v3
+PARTITION BY date_trunc('day', observation_date)
+DISTRIBUTED BY HASH(leg_id)
+REFRESH ASYNC
+AS 
+SELECT * FROM t1
+UNION ALL
+SELECT * FROM t4;
+
+REFRESH MATERIALIZED VIEW v3 WITH SYNC MODE;
+select count(*) from v3;
