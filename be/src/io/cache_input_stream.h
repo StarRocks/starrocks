@@ -98,7 +98,6 @@ private:
     std::string _buffer;
     Stats _stats;
     int64_t _size;
-    const int64_t _ignore_block_nums = 1;
     bool _enable_populate_cache = false;
     bool _enable_block_buffer = false;
     BlockCache* _cache = nullptr;

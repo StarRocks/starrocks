@@ -291,32 +291,16 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
 
     std::vector<ReadFromRemoteIORange> need_read_from_remote{};
 
-    // The number of blocks we ignored
-    // For example [block1] [block2] [block3] [block4]
-    // If [block1] not existed in cache, we will not check [block2] is existed in cache, just go to check [block3],
-    // then [block1] and [block2] will from remote directly.
-    // The reason for this is to reduce iops
-    int64_t _remain_ignore_block_nums = 0;
     for (int64_t i = start_block_id; i <= end_block_id; i++) {
         size_t off = std::max(offset, i * _block_size);
         size_t end = std::min((i + 1) * _block_size, end_offset);
         DCHECK(off >= origin_offset);
         DCHECK(end <= origin_offset + count);
         size_t size = end - off;
-        Status st;
-        if (_remain_ignore_block_nums > 0) {
-            st = Status::NotFound("Ingore this block");
-            _remain_ignore_block_nums--;
-        } else {
-            DCHECK_EQ(0, _remain_ignore_block_nums);
-            st = _read_block_from_local(off, size, p);
-        }
+        Status st = _read_block_from_local(off, size, p);
         if (st.is_not_found()) {
             // Not found block from local, we need to load it from remote
             need_read_from_remote.emplace_back(off, p, size);
-            if (_remain_ignore_block_nums == 0) {
-                _remain_ignore_block_nums = _ignore_block_nums;
-            }
         } else if (!st.ok()) {
             return st;
         }
