@@ -36,6 +36,7 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -58,6 +59,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 public class MetaService {
     private static final int TIMEOUT_SECOND = 10;
@@ -235,8 +239,8 @@ public class MetaService {
                 return;
             }
 
-            String url = "http://" + machine + ":" + portStr
-                    + "/image?version=" + versionStr + "&subdir=" + subDirStr;
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(machine, Integer.parseInt(portStr)) + 
+                    "/image?version=" + versionStr + "&subdir=" + subDirStr;
             String filename = Storage.IMAGE + "." + versionStr;
 
             String realDir = GlobalStateMgr.getCurrentState().getImageDir() + subDirStr;
@@ -311,6 +315,11 @@ public class MetaService {
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
             String host = request.getSingleParameter(HOST);
+            try {
+                host = URLDecoder.decode(host,  StandardCharsets.UTF_8.toString());
+            } catch (UnsupportedEncodingException e) {
+                throw new RuntimeException(e);
+            }
             String portString = request.getSingleParameter(PORT);
 
             if (!Strings.isNullOrEmpty(host) && !Strings.isNullOrEmpty(portString)) {

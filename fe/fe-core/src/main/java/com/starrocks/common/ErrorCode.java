@@ -249,8 +249,7 @@ public enum ErrorCode {
             "Access denied; This sql is in blacklist, please contact your admin"),
     ERR_ACCESS_DENIED(5203, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
-                    "Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. " +
-                    "Current role(s): %s. Inactivated role(s): %s."),
+                    ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
 
@@ -279,6 +278,9 @@ public enum ErrorCode {
             "Partition '%s' has sub partitions, should specify the partition id"),
     ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
     ;
+
+    public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
+            " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

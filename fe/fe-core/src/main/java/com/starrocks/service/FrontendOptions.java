@@ -37,11 +37,12 @@ package com.starrocks.service;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.net.InetAddresses;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.Storage;
-import org.apache.commons.net.util.SubnetUtils;
+import inet.ipaddr.IPAddressString;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,14 +50,14 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Properties;
 
 public class FrontendOptions {
-    
+
     public enum HostType {
         FQDN,
         IP,
@@ -78,7 +79,7 @@ public class FrontendOptions {
     public static void init(String[] args) throws UnknownHostException {
         localAddr = null;
         if (!"0.0.0.0".equals(Config.frontend_address)) {
-            if (!InetAddressValidator.getInstance().isValidInet4Address(Config.frontend_address)) {
+            if (!InetAddressValidator.getInstance().isValid(Config.frontend_address)) {
                 throw new UnknownHostException("invalid frontend_address: " + Config.frontend_address);
             }
             localAddr = InetAddress.getByName(Config.frontend_address);
@@ -223,19 +224,17 @@ public class FrontendOptions {
         boolean hasMatchedIp = false;
         for (InetAddress addr : hosts) {
             LOG.debug("check ip address: {}", addr);
-            if (addr instanceof Inet4Address) {
-                if (addr.isLoopbackAddress()) {
-                    loopBack = addr;
-                } else if (!PRIORITY_CIDRS.isEmpty()) {
-                    if (isInPriorNetwork(addr.getHostAddress())) {
-                        localAddr = addr;
-                        hasMatchedIp = true;
-                        break;
-                    }
-                } else {
+            if (addr.isLoopbackAddress()) {
+                loopBack = addr;
+            } else if (!PRIORITY_CIDRS.isEmpty()) {
+                if (isInPriorNetwork(addr.getHostAddress())) {
                     localAddr = addr;
+                    hasMatchedIp = true;
                     break;
                 }
+            } else {
+                localAddr = addr;
+                break;
             }
         }
         //if all ips not match the priority_networks then print the warning log
@@ -272,7 +271,7 @@ public class FrontendOptions {
         if (useFqdn) {
             return localAddr.getCanonicalHostName();
         }
-        return localAddr.getHostAddress();
+        return InetAddresses.toAddrString(localAddr);
     }
 
     public static String getHostname() {
@@ -308,21 +307,17 @@ public class FrontendOptions {
         ip = ip.trim();
         for (String cidr : PRIORITY_CIDRS) {
             cidr = cidr.trim();
-            if (!cidr.contains("/")) {
-                // it is not valid CIDR, compare ip directly.
-                if (cidr.equals(ip)) {
-                    return true;
-                }
-            } else {
-                SubnetUtils subnetUtils = new SubnetUtils(cidr);
-                subnetUtils.setInclusiveHostCount(true);
-                SubnetUtils.SubnetInfo subnetInfo = subnetUtils.getInfo();
-                if (subnetInfo.isInRange(ip)) {
-                    return true;
-                }
+            IPAddressString network = new IPAddressString(cidr);
+            IPAddressString address = new IPAddressString(ip);
+            if (network.contains(address)) {
+                return true;
             }
         }
         return false;
+    }
+
+    public static boolean isBindIPV6() {
+        return localAddr instanceof Inet6Address;
     }
 }
 
