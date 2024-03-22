@@ -68,6 +68,8 @@ Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRa
 
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
                                         RuntimeFilterProbeCollector* runtime_bloom_filters) {
+    TEST_ERROR_POINT("OlapScanContext::parse_conjuncts");
+
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
 

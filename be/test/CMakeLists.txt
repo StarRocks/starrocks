@@ -44,6 +44,7 @@ set(EXEC_FILES
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/tablet_info_test.cpp
+<<<<<<< HEAD
         ./exec/vectorized/agg_hash_map_test.cpp
         ./exec/vectorized/analytor_test.cpp
         ./exec/vectorized/analytor_test.cpp
@@ -61,6 +62,31 @@ set(EXEC_FILES
         ./exec/vectorized/repeat_node_test.cpp
         ./exec/vectorized/sorting_test.cpp
         ./exec/vectorized/table_function_node_test.cpp
+=======
+        ./exec/agg_hash_map_test.cpp
+        ./exec/pipeline/olap_scan_operator_test.cpp
+        ./exec/analytor_test.cpp
+        ./exec/analytor_test.cpp
+        ./exec/arrow_converter_test.cpp
+        ./exec/chunks_sorter_heap_sort_test.cpp
+        ./exec/chunks_sorter_test.cpp
+        ./exec/connector_scan_node_test.cpp
+        ./exec/csv_scanner_test.cpp
+        ./exec/orc_scanner_test.cpp
+        ./exec/file_scanner_test.cpp
+        ./exec/file_scan_node_test.cpp
+        ./exec/hdfs_scanner_test.cpp
+        ./exec/hdfs_scan_node_test.cpp
+        ./exec/join_hash_map_test.cpp
+        ./exec/json_parser_test.cpp
+        ./exec/json_scanner_test.cpp
+        ./exec/lake_meta_scanner_test.cpp
+        ./exec/avro_scanner_test.cpp
+        ./exec/parquet_scanner_test.cpp
+        ./exec/repeat_node_test.cpp
+        ./exec/sorting_test.cpp
+        ./exec/table_function_node_test.cpp
+>>>>>>> d9d9c70453 ([BugFix] Fix the has_output check bug of scan operator (#42994))
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
