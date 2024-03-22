@@ -2089,7 +2089,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             String mvName = mvNameGen.apply(i);
             starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
                     "refresh async " +
-                    "properties('query_rewrite_consistency'='loose') " +
+                    "properties('query_rewrite_consistency'='nocheck') " +
                     "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension);
         }
 
