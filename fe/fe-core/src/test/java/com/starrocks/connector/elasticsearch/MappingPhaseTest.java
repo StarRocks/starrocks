@@ -37,15 +37,23 @@ package com.starrocks.connector.elasticsearch;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import mockit.Injectable;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -127,6 +135,46 @@ public class MappingPhaseTest extends EsTestCase {
         mappingPhase
                 .resolveFields(searchContext, loadJsonFromFile("data/es/test_index_mapping_field_mult_analyzer.json"));
         assertFalse(searchContext.docValueFieldsContext().containsKey("k3"));
+    }
 
+    @Test
+    public void testEsTableConfig() throws DdlException {
+        {
+            Map<String, String> props = new HashMap<>();
+            props.put(EsTable.KEY_HOSTS, "127.0.0.1:8200");
+            props.put(EsTable.KEY_INDEX, "test");
+            props.put(EsTable.KEY_TYPE, "_doc");
+            props.put(EsTable.KEY_VERSION, "6.5.3");
+            Assert.assertThrows(DdlException.class, () -> {
+                EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
+            });
+        }
+        {
+            Map<String, String> props = new HashMap<>();
+            props.put(EsTable.KEY_HOSTS, "http://127.0.0.1:8200, https://127.0.0.1:443");
+            props.put(EsTable.KEY_INDEX, "test");
+            props.put(EsTable.KEY_TYPE, "_doc");
+            props.put(EsTable.KEY_VERSION, "6.5.3");
+            EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
+        }
+    }
+
+    @Test
+    public void testNestedObjectColumnTypeMapping(@Injectable EsRestClient client)
+            throws AnalysisException, IOException, URISyntaxException {
+        String jsonMapping = loadJsonFromFile("data/es/nested_object_mapping.json");
+        new Expectations(client) {
+            {
+                client.getMapping(anyString);
+                minTimes = 0;
+                result = jsonMapping;
+            }
+        };
+        List<Column> columns = EsUtil.convertColumnSchema(client, "xxx");
+        for (Column c : columns) {
+            if (c.getName().equals("contactData")) {
+                assertEquals(c.getType(), Type.JSON);
+            }
+        }
     }
 }
