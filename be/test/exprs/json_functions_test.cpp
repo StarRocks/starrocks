@@ -34,6 +34,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
 #include "testutil/assert.h"
+#include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/json.h"
 #include "util/json_flater.h"
@@ -201,7 +202,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns).value();
+        ColumnPtr result = JsonFunctions::get_json_value<TYPE_DOUBLE>(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -491,11 +492,7 @@ TEST_P(FlatJsonQueryTestFixture, json_query) {
     auto flat_json_ptr = flat_json.get();
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        if (param_path.starts_with("$")) {
-            full_paths.emplace_back("$." + p);
-        } else {
-            full_paths.emplace_back(p);
-        }
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
@@ -691,7 +688,7 @@ TEST_P(FlatJsonExistsTestFixture, flat_json_exists_test) {
 
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
@@ -767,7 +764,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
 
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
@@ -815,7 +812,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_constant_json_test) {
 
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
@@ -861,7 +858,7 @@ TEST_F(JsonFunctionsTest, flat_json_variable_path_test) {
 
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
@@ -908,7 +905,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_variable_path_test) {
 
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
@@ -957,7 +954,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_null_path_test) {
 
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
@@ -1005,7 +1002,7 @@ TEST_F(JsonFunctionsTest, flat_json_constant_path_test) {
 
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
@@ -1315,7 +1312,7 @@ TEST_P(FlatJsonLengthTestFixture, flat_json_length_test) {
 
     std::vector<std::string> full_paths;
     for (const auto& p : param_flat_path) {
-        full_paths.emplace_back("$." + p);
+        full_paths.emplace_back(p);
     }
     flat_json_ptr->init_flat_columns(full_paths);
 
