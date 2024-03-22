@@ -474,45 +474,10 @@ public class ShowExecutor {
                         CaseSensibility.TABLE.getCaseSensibility());
             }
 
-<<<<<<< HEAD
             for (Table table : db.getTables()) {
                 if (table.isMaterializedView()) {
                     MaterializedView mvTable = (MaterializedView) table;
                     if (matcher != null && !matcher.match(mvTable.getName())) {
-=======
-            Map<String, String> tableMap = Maps.newTreeMap();
-            MetaUtils.checkDbNullAndReport(db, statement.getDb());
-
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listTableNames(catalogName, dbName);
-
-                for (String tableName : tableNames) {
-                    if (matcher != null && !matcher.match(tableName)) {
-                        continue;
-                    }
-                    BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                            catalogName, dbName, tableName);
-                    if (table == null) {
-                        LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
-                        continue;
-                    }
-                    try {
-                        if (table.isOlapView()) {
-                            Authorizer.checkAnyActionOnView(
-                                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                    new TableName(db.getFullName(), table.getName()));
-                        } else if (table.isMaterializedView()) {
-                            Authorizer.checkAnyActionOnMaterializedView(context.getCurrentUserIdentity(),
-                                    context.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
-                        } else {
-                            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                                    context.getCurrentRoleIds(),
-                                    new TableName(catalogName, db.getFullName(), table.getName()));
-                        }
-                    } catch (AccessDeniedException e) {
->>>>>>> 5e8ea06ff7 ([Enhancement] Fix show external tables slowly (#42961))
                         continue;
                     }
 
@@ -2828,14 +2793,14 @@ public class ShowExecutor {
         storageVolumeNames = storageVolumeNames.stream()
                 .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
                 .filter(storageVolumeName -> {
-                                try {
-                                    Authorizer.checkAnyActionOnStorageVolume(connectContext.getCurrentUserIdentity(),
-                                            connectContext.getCurrentRoleIds(), storageVolumeName);
-                                } catch (AccessDeniedException e) {
-                                    return false;
-                                }
-                                return true;
+                            try {
+                                Authorizer.checkAnyActionOnStorageVolume(connectContext.getCurrentUserIdentity(),
+                                        connectContext.getCurrentRoleIds(), storageVolumeName);
+                            } catch (AccessDeniedException e) {
+                                return false;
                             }
+                            return true;
+                        }
                 ).collect(Collectors.toList());
         for (String storageVolumeName : storageVolumeNames) {
             rows.add(Lists.newArrayList(storageVolumeName));
