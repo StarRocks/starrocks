@@ -113,12 +113,10 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 4 
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 select * from t;
@@ -142,13 +140,11 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "3",
 "bucket_size" = "4294967296",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 select * from t;
@@ -190,12 +186,10 @@ PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
 PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
 DISTRIBUTED BY HASH(`k`) BUCKETS 4 
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 select * from t;
@@ -224,12 +218,10 @@ PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
 PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
 DISTRIBUTED BY HASH(`k`)
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 select * from t;
@@ -258,12 +250,10 @@ PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
 PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
 DISTRIBUTED BY HASH(`k1`) BUCKETS 4 
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 select * from t;
@@ -292,13 +282,11 @@ PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
 PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "3",
 "bucket_size" = "4294967296",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 select * from t;
@@ -339,12 +327,10 @@ PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
 PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 select * from t;
@@ -370,12 +356,10 @@ PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
 PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 alter table t partitions(p202006,p202008) distributed by random;
@@ -395,11 +379,9 @@ PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
 PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
 DISTRIBUTED BY HASH(`k`) BUCKETS 10 
 PROPERTIES (
-"replication_num" = "3",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result

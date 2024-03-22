@@ -12,7 +12,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`, `dt`) BUCKETS 64
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 DROP TABLE if exists t1;
@@ -28,7 +27,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`, `dt`) BUCKETS 64
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 DROP TABLE if exists profile_table;
@@ -44,7 +42,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`query_no`, `line_no`) BUCKETS 2
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 DROP TABLE if exists result_table;
@@ -58,7 +55,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`result`) BUCKETS 1
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 DROP TABLE if exists seed0;
@@ -72,7 +68,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c`) BUCKETS 64
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 INSERT INTO seed0
@@ -89,7 +84,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c`) BUCKETS 64
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 INSERT INTO seed1

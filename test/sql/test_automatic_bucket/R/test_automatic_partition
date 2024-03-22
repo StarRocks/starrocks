@@ -10,13 +10,11 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "3",
 "bucket_size" = "4294967296",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 alter table t set('bucket_size'='1024');
@@ -30,13 +28,11 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "3",
 "bucket_size" = "1024",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 -- name: test_invalid_bucket_size

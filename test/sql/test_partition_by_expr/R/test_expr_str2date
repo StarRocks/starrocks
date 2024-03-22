@@ -114,13 +114,11 @@ PARTITION p20210109 VALUES [("2021-01-09"), ("2021-01-10")),
 PARTITION p20231226 VALUES [("2023-12-26"), ("2023-12-27")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "1",
 "bucket_size" = "4294967296",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 -- name: test_expr_str2date_partition_prune

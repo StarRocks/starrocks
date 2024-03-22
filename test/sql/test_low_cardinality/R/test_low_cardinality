@@ -15,7 +15,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -38,7 +37,6 @@ DISTRIBUTED BY HASH(`c2`, `c1`, `c0`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3, c4",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
