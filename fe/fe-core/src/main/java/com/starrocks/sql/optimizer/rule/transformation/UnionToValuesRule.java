@@ -30,6 +30,29 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+// Transform all constant UNION ALLs into a single Values operator
+//
+// Pattern:
+//
+//      Union
+//      /   \
+//     X     Y
+//
+// Transform:
+//
+//           Union                              Union
+//         /   |   \          ===>             /     \
+//   Values1 Child2 Values3               Child2     Values(1, 3)
+//
+//
+//            UnionAll
+//         /     |     \          ===>      Values(1, 2, 3)
+//   Values1  Value2   Values3
+//
+//
+// Requirements:
+// 1. The operators for x and y must be of the LOGICAL_VALUES type, and must not contain limit and Predicate
+
 public class UnionToValuesRule extends TransformationRule {
 
     private UnionToValuesRule() {
@@ -71,7 +94,6 @@ public class UnionToValuesRule extends TransformationRule {
                 if (isConstantUnion(valuesOp)) {
                     List<ScalarOperator> scalarOperators = unionOp.getChildOutputColumns().get(i).stream()
                             .map(valuesOp.getProjection().getColumnRefMap()::get).collect(Collectors.toList());
-
                     newRows.add(scalarOperators);
                 } else if (isConstantValues(valuesOp)) {
                     newRows.addAll(rows);
