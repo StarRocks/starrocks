@@ -623,10 +623,18 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             if (!res.ok()) {
                 return res.status();
             }
-            res.value()->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                                  &_add_batch_closures[_current_request_index]->result,
-                                                  _add_batch_closures[_current_request_index]);
+            butil::IOBuf iobuf;
+            butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
+            request.SerializeToZeroCopyStream(&wrapper);
+            size_t request_size = iobuf.size();
+            _add_batch_closures[_current_request_index]->cntl.request_attachment().append(&request_size,
+                                                                                          sizeof(request_size));
+            _add_batch_closures[_current_request_index]->cntl.request_attachment().append(iobuf);
+            res.value()->tablet_writer_add_chunks_via_http(&_add_batch_closures[_current_request_index]->cntl, nullptr,
+                                                           &_add_batch_closures[_current_request_index]->result,
+                                                           _add_batch_closures[_current_request_index]);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+
         } else {
             _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
                                             &_add_batch_closures[_current_request_index]->result,
@@ -643,10 +651,19 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             if (!res.ok()) {
                 return res.status();
             }
-            res.value()->tablet_writer_add_chunk(
-                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
-                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+
+            butil::IOBuf iobuf;
+            butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
+            request.requests(0).SerializeToZeroCopyStream(&wrapper);
+            size_t request_size = iobuf.size();
+            _add_batch_closures[_current_request_index]->cntl.request_attachment().append(&request_size,
+                                                                                          sizeof(request_size));
+            _add_batch_closures[_current_request_index]->cntl.request_attachment().append(iobuf);
+            res.value()->tablet_writer_add_chunk_via_http(&_add_batch_closures[_current_request_index]->cntl, nullptr,
+                                                          &_add_batch_closures[_current_request_index]->result,
+                                                          _add_batch_closures[_current_request_index]);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+
         } else {
             _stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),

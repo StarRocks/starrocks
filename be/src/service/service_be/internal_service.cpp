@@ -96,6 +96,44 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunks(google::protobuf::R
 }
 
 template <typename T>
+void BackendInternalServiceImpl<T>::tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller,
+                                                                     const PHttpRequest* request,
+                                                                     PTabletWriterAddBatchResult* response,
+                                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto add_chunk_req = std::make_shared<PTabletWriterAddChunkRequest>();
+    auto* cntl = static_cast<brpc::Controller*>(controller);
+    butil::IOBuf& iobuf = cntl->request_attachment();
+    // deserialize
+    size_t request_size = 0;
+    iobuf.cutn(&request_size, sizeof(request_size));
+    butil::IOBuf request_from;
+    iobuf.cutn(&request_from, request_size);
+    butil::IOBufAsZeroCopyInputStream wrapper(request_from);
+    add_chunk_req->ParseFromZeroCopyStream(&wrapper);
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunk(*add_chunk_req, response);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::tablet_writer_add_chunks_via_http(google::protobuf::RpcController* controller,
+                                                                      const PHttpRequest* request,
+                                                                      PTabletWriterAddBatchResult* response,
+                                                                      google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto add_chunk_req = std::make_shared<PTabletWriterAddChunksRequest>();
+    auto* cntl = static_cast<brpc::Controller*>(controller);
+    butil::IOBuf& iobuf = cntl->request_attachment();
+    // deserialize
+    size_t request_size = 0;
+    iobuf.cutn(&request_size, sizeof(request_size));
+    butil::IOBuf request_from;
+    iobuf.cutn(&request_from, request_size);
+    butil::IOBufAsZeroCopyInputStream wrapper(request_from);
+    add_chunk_req->ParseFromZeroCopyStream(&wrapper);
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunks(*add_chunk_req, response);
+}
+
+template <typename T>
 void BackendInternalServiceImpl<T>::tablet_writer_add_segment(google::protobuf::RpcController* controller,
                                                               const PTabletWriterAddSegmentRequest* request,
                                                               PTabletWriterAddSegmentResult* response,
