@@ -26,6 +26,6 @@ public class HiveStorageFormatTest {
                 "Please use 'file_format' instead of 'format' in the table properties",
                 () -> HiveStorageFormat.check(ImmutableMap.of("format", "csv")));
 
-        HiveStorageFormat.check(ImmutableMap.of("file_format", "textfile"));
+        HiveStorageFormat.check(ImmutableMap.of("file_format", "text"));
     }
 }

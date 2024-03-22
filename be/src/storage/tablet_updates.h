@@ -333,7 +333,7 @@ public:
 
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
-    double get_pk_index_write_amp_score();
+    double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
     Status pk_index_major_compaction();
 
@@ -347,6 +347,10 @@ public:
     Status recover();
 
     void set_error(const string& msg) { _set_error(msg); }
+    void reset_error() {
+        _error = false;
+        _error_msg = "";
+    }
 
     Status generate_pk_dump_if_in_error_state();
 
@@ -531,6 +535,8 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
+
+    std::atomic<double> _pk_index_write_amp_score{0.0};
 };
 
 } // namespace starrocks

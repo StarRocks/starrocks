@@ -80,6 +80,7 @@ import com.starrocks.analysis.TaskName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserDesc;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateType;
@@ -122,6 +123,7 @@ import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -2133,6 +2135,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitAdminSetPartitionVersion(StarRocksParser.AdminSetPartitionVersionContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        String partitionName = null;
+        if (context.partitionName != null) {
+            partitionName = ((Identifier) visit(context.partitionName)).getValue();
+        }
+        Long partitionId = null;
+        if (context.partitionId != null) {
+            partitionId = Long.parseLong(context.partitionId.getText());
+        }
+        long version = Long.parseLong(context.version.getText());
+        if (partitionName != null) {
+            return new AdminSetPartitionVersionStmt(targetTableName, partitionName, version, createPos(context));
+        } else {
+            return new AdminSetPartitionVersionStmt(targetTableName, partitionId, version, createPos(context));
+        }
+    }
+
+    @Override
     public ParseNode visitKillStatement(StarRocksParser.KillStatementContext context) {
         NodePosition pos = createPos(context);
         long id = Long.parseLong(context.INTEGER_VALUE().getText());
@@ -3340,7 +3362,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSetUserVar(StarRocksParser.SetUserVarContext context) {
-        VariableExpr variableDesc = (VariableExpr) visit(context.userVariable());
+        UserVariableExpr variableDesc = (UserVariableExpr) visit(context.userVariable());
         Expr expr = (Expr) visit(context.expression());
         return new UserVariable(variableDesc.getName(), expr, createPos(context));
     }
@@ -6535,7 +6557,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUserVariable(StarRocksParser.UserVariableContext context) {
         String variable = ((Identifier) visit(context.identifierOrString())).getValue();
-        return new VariableExpr(variable, SetType.USER, createPos(context));
+        return new UserVariableExpr(variable, createPos(context));
     }
 
     @Override
@@ -7017,7 +7039,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.identifierOrString() != null) {
             queryStatementContext.forEach(varNameContext -> {
                 Identifier identifier = (Identifier) visit(varNameContext);
-                variableExprs.add(new VariableExpr(identifier.getValue(), SetType.USER));
+                variableExprs.add(new UserVariableExpr(identifier.getValue(), identifier.getPos()));
             });
         }
         return new ExecuteStmt(stmtName, variableExprs);

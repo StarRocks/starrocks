@@ -35,6 +35,10 @@ public interface AuthorizationProvider {
 
     boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType);
 
+    PrivilegeType getPrivilegeType(String privTypeString);
+
+    ObjectType getObjectType(String objectTypeUnResolved);
+
     /**
      * generate PEntryObject by tokenlist
      */

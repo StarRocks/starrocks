@@ -12,7 +12,7 @@ JSON constructor functions are used to construct JSON data, such as JSON objects
 
 | Function                                                     | Description                                                  | Example                                                   | Return value                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------- | -------------------------------------- |
-| [json_object](./json-constructor-functions/json_object.md) | Converts one or more key-value pairs to a JSON object that consists of the key-value pairs, which are sorted by key in dictionary order. | `SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25);` | `{"Daniel Smith": 26, "Lily Smith": 25}` |
+| [json_object](./json-constructor-functions/json_object.md) | Converts one or more key-value pairs to a JSON object that consists of the key-value pairs, which are sorted by key in dictionary order. | `SELECT JSON_OBJECT('Daniel Smith', 26, 'Lily Smith', 25);` | `{"Daniel Smith": 26, "Lily Smith": 25}` |
 | [json_array](./json-constructor-functions/json_array.md) | Converts each element of an SQL array to a JSON value and returns a JSON array that consists of those JSON values. | `SELECT JSON_ARRAY(1, 2, 3);`                                | `[1,2,3]`                                |
 | [parse_json](./json-constructor-functions/parse_json.md) | Converts a string to a JSON value.                           | `SELECT PARSE_JSON('{"a": 1}');`                             | `{"a": 1}`                               |
 

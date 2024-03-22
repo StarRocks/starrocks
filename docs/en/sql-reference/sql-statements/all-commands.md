@@ -99,6 +99,7 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [ADMIN CHECK TABLET](./Administration/ADMIN_CHECK_TABLET.md)
 - [ADMIN REPAIR TABLE](./Administration/ADMIN_REPAIR.md)
 - [ADMIN SET REPLICA STATUS](./Administration/ADMIN_SET_REPLICA_STATUS.md)
+- [ADMIN SET PARTITION VERSION](./Administration/ADMIN_SET_PARTITION_VERSION.md)
 - [ADMIN SHOW REPLICA DISTRIBUTION](./Administration/ADMIN_SHOW_REPLICA_DISTRIBUTION.md)
 - [ADMIN SHOW REPLICA STATUS](./Administration/ADMIN_SHOW_REPLICA_STATUS.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
@@ -268,17 +269,17 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 
 ## Backup and restore
 
-- [BACKUP](./data-definition/BACKUP.md)
-- [CANCEL BACKUP](./data-definition/CANCEL_BACKUP.md)
-- [CANCEL RESTORE](./data-definition/CANCEL_RESTORE.md)
-- [CREATE REPOSITORY](./data-definition/CREATE_REPOSITORY.md)
-- [DROP REPOSITORY](./data-definition/DROP_REPOSITORY.md)
-- [RECOVER](./data-definition/RECOVER.md)
-- [RESTORE](./data-definition/RESTORE.md)
-- [SHOW BACKUP](./data-manipulation/SHOW_BACKUP.md)
-- [SHOW REPOSITORIES](./data-manipulation/SHOW_REPOSITORIES.md)
-- [SHOW RESTORE](./data-manipulation/SHOW_RESTORE.md)
-- [SHOW SNAPSHOT](./data-manipulation/SHOW_SNAPSHOT.md)
+- [BACKUP](./data-definition/backup_restore/BACKUP.md)
+- [CANCEL BACKUP](./data-definition/backup_restore/CANCEL_BACKUP.md)
+- [CANCEL RESTORE](./data-definition/backup_restore/CANCEL_RESTORE.md)
+- [CREATE REPOSITORY](./data-definition/backup_restore/CREATE_REPOSITORY.md)
+- [DROP REPOSITORY](./data-definition/backup_restore/DROP_REPOSITORY.md)
+- [RECOVER](./data-definition/backup_restore/RECOVER.md)
+- [RESTORE](./data-definition/backup_restore/RESTORE.md)
+- [SHOW BACKUP](./data-manipulation/backup_restore/SHOW_BACKUP.md)
+- [SHOW REPOSITORIES](./data-manipulation/backup_restore/SHOW_REPOSITORIES.md)
+- [SHOW RESTORE](./data-manipulation/backup_restore/SHOW_RESTORE.md)
+- [SHOW SNAPSHOT](./data-manipulation/backup_restore/SHOW_SNAPSHOT.md)
 
 ## Utility commands
 

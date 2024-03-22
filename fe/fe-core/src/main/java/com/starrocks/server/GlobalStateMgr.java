@@ -110,6 +110,7 @@ import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
+import com.starrocks.consistency.MetaRecoveryDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -164,6 +165,7 @@ import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -309,6 +311,10 @@ public class GlobalStateMgr {
     private boolean isDefaultWarehouseCreated = false;
 
     private FrontendNodeType feType;
+
+    // The time when this node becomes leader.
+    private long dominationStartTimeMs;
+
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
 
@@ -447,6 +453,8 @@ public class GlobalStateMgr {
     private final RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
 
     private MemoryUsageTracker memoryUsageTracker;
+
+    private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -600,7 +608,7 @@ public class GlobalStateMgr {
         this.tabletStatMgr = new TabletStatMgr();
         this.authenticationMgr = new AuthenticationMgr();
         this.domainResolver = new DomainResolver(authenticationMgr);
-        this.authorizationMgr = new AuthorizationMgr(this, null);
+        this.authorizationMgr = new AuthorizationMgr(this, new DefaultAuthorizationProvider());
 
         this.resourceGroupMgr = new ResourceGroupMgr();
 
@@ -1108,6 +1116,7 @@ public class GlobalStateMgr {
         // Set the feType to LEADER before writing edit log, because the feType must be Leader when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
         feType = FrontendNodeType.LEADER;
+        dominationStartTimeMs = System.currentTimeMillis();
 
         try {
             // Log meta_version
@@ -1262,6 +1271,11 @@ public class GlobalStateMgr {
         }
 
         replicationMgr.start();
+
+        if (Config.metadata_enable_recovery_mode) {
+            LOG.info("run system in recovery mode");
+            metaRecoveryDaemon.start();
+        }
     }
 
     // start threads that should run on all FE
@@ -1807,10 +1821,15 @@ public class GlobalStateMgr {
     }
 
     protected boolean canSkipBadReplayedJournal(Throwable t) {
+        if (Config.metadata_enable_recovery_mode) {
+            LOG.warn("skip journal load failure because cluster is in recovery mode");
+            return true;
+        }
+
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
-                    LOG.error("skip bad replayed journal id {} because configured {}",
+                    LOG.warn("skip bad replayed journal id {} because configured {}",
                             idStr, Config.metadata_journal_skip_bad_journal_ids);
                     return true;
                 }
@@ -1831,10 +1850,10 @@ public class GlobalStateMgr {
         if (opCode != OperationType.OP_INVALID
                 && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
             if (Config.metadata_journal_ignore_replay_failure) {
-                LOG.error("skip ignorable journal load failure, opCode: {}", opCode);
+                LOG.warn("skip ignorable journal load failure, opCode: {}", opCode);
                 return true;
             } else {
-                LOG.error("the failure of opCode: {} is ignorable, " +
+                LOG.warn("the failure of opCode: {} is ignorable, " +
                         "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
                 return false;
             }
@@ -2400,5 +2419,13 @@ public class GlobalStateMgr {
 
     public boolean isInTransferringToLeader() {
         return isInTransferringToLeader;
+    }
+
+    public long getDominationStartTimeMs() {
+        return dominationStartTimeMs;
+    }
+
+    public MetaRecoveryDaemon getMetaRecoveryDaemon() {
+        return metaRecoveryDaemon;
     }
 }

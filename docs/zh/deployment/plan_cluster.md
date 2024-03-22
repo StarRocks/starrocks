@@ -14,7 +14,7 @@ StarRocks 主要由两种类型的组件组成：FE 节点和 BE 节点。每个
 
 FE 节点主要负责元数据管理、客户端连接管理、查询计划和查询调度。
 
-对于 StarRocks 生产集群，建议您至少部署**三个** Follower FE 节点，以防止单点故障。
+对于 StarRocks 生产集群，建议您至少部署**三个** Follower FE 节点，以防止单点故障。Leader FE 会从 Follower FE 中自动选出。
 
 StarRocks 通过 BDB JE 协议跨 FE 节点管理元数据。StarRocks 从所有 Follower FE 节点中选出一个 Leader FE 节点。只有 Leader FE 节点可以写入元数据，其他 Follower FE 节点只能根据 Leader FE 节点的日志更新元数据。如果 Leader FE 节点掉线，只要超过半数的 Follower FE 节点存活，StarRocks 就会重新选举出一个新的 Leader FE 节点。
 
@@ -72,13 +72,13 @@ BE 节点所需的总存储空间 = 原始数据大小 * 数据副本数/数据�
 
 - 在 StarRocks 集群中添加新的 BE 节点
 
-  您可以在 StarRocks 集群中添加新的 BE 节点，从而将数据重新平分至更多节点上。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../administration/Scale_up_down.md)。
+  您可以在 StarRocks 集群中添加新的 BE 节点，从而将数据重新平分至更多节点上。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../administration/management/Scale_up_down.md)。
 
   添加新的 BE 节点后，StarRocks 会自动重新平衡数据在所有 BE 节点之间的分布。所有表类型均支持这种自动平衡。
 
 - 在 BE 节点上添加额外的存储卷
 
-  您还可以在已有 BE 节点上添加额外的存储卷。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../administration/Scale_up_down.md)。
+  您还可以在已有 BE 节点上添加额外的存储卷。有关详细说明，请参阅 [扩容 StarRocks - 扩容 BE 集群](../administration/management/Scale_up_down.md)。
 
   添加额外的存储卷后，StarRocks 会自动重新平衡所有表中的数据。
 

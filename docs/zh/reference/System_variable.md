@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['session','variable']
 ---
 
 # 系统变量
@@ -167,6 +168,12 @@ SELECT /*+ SET_VAR
 
 用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
 
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* 含义：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
+* 默认值：64
+* 引入版本：v3.1.9, v3.2.5
+
 ### character_set_database（global）
 
 StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
@@ -219,7 +226,7 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 ### enable_group_level_query_queue （3.1.4 及以后）
 
-是否开启资源组粒度的[查询队列](../administration/query_queues.md)。
+是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
 
 默认值：false，表示不开启。
 
@@ -441,11 +448,11 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 ### max_pushdown_conditions_per_column
 
-该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### max_scan_key_num
 
-该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### nested_mv_rewrite_max_level
 

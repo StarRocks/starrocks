@@ -51,6 +51,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.BrokerTable;
@@ -1180,6 +1181,14 @@ public class AstToStringBuilder {
                     sb.append("SESSION.");
                 }
             }
+            sb.append(node.getName());
+            return sb.toString();
+        }
+
+        @Override
+        public String visitUserVariableExpr(UserVariableExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("@");
             sb.append(node.getName());
             return sb.toString();
         }

@@ -71,6 +71,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -1225,7 +1226,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         @Override
         public boolean equals(Object obj) {
             return obj instanceof NetworkAddress
-                    && this.hostname.equals(((NetworkAddress) obj).hostname)
+                    && NetUtils.isSameIP(this.hostname, ((NetworkAddress) obj).hostname)
                     && this.port == ((NetworkAddress) obj).port;
         }
 
@@ -1236,7 +1237,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         @Override
         public String toString() {
-            return hostname + ":" + port;
+            return NetUtils.getHostPortInAccessibleFormat(hostname, port);
         }
     }
 }

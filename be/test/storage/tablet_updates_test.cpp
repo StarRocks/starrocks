@@ -368,6 +368,50 @@ TEST_F(TabletUpdatesTest, writeread_with_persistent_index) {
     test_writeread(true);
 }
 
+TEST_F(TabletUpdatesTest, test_pk_index_write_amp_score) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    std::vector<int64_t> keys2;
+    std::vector<int64_t> keys3;
+    std::vector<int64_t> keys4;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+        keys2.push_back(i + N);
+        keys3.push_back(i + N * 2);
+        keys4.push_back(i + N * 3);
+    }
+    const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    // make sure generate l1
+    config::l0_max_mem_usage = 10;
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    // read
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+    // check score
+    ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() == 0);
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    auto rs1 = create_rowset(_tablet, keys2);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    auto rs2 = create_rowset(_tablet, keys3);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    auto rs3 = create_rowset(_tablet, keys4);
+    ASSERT_TRUE(_tablet->rowset_commit(5, rs3).ok());
+    ASSERT_EQ(5, _tablet->updates()->max_version());
+    // read
+    ASSERT_EQ(N * 4, read_tablet(_tablet, 5));
+    // check score
+    ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() > 0);
+    ASSERT_TRUE(_tablet->updates()->pk_index_major_compaction().ok());
+    ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() == 0);
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+}
+
 TEST_F(TabletUpdatesTest, writeread_with_sort_key) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet_with_sort_key(rand(), rand(), {1});
@@ -3035,6 +3079,52 @@ TEST_F(TabletUpdatesTest, test_recover_rowset_sorter) {
     ASSERT_TRUE(latest_rowsets[0]->rowset_meta()->max_compact_input_rowset_id() <
                 latest_rowsets[1]->rowset_meta()->get_rowset_seg_id());
     config::max_update_compaction_num_singleton_deltas = old_config;
+}
+
+TEST_F(TabletUpdatesTest, test_load_primary_index_failed) {
+    const int N = 10;
+    _tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<int64_t> keys2(N);
+    for (int i = 0; i < N; i++) {
+        keys2[i] = (i + 1) * 1000;
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(20);
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys2, nullptr, false, false));
+    }
+    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+    for (int i = 0; i < rowsets.size(); i++) {
+        auto version = i + 2;
+        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Ensure that there is at most one thread doing the version apply job.
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+    }
+    ASSERT_EQ(N * 2, read_tablet(_tablet, rowsets.size() + 1));
+
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_TRUE(_tablet->updates()->is_error());
+    config::enable_pindex_rebuild_in_compaction = false;
+    auto index_entry = StorageEngine::instance()->update_manager()->index_cache().get_or_create(_tablet->tablet_id());
+    auto& index = index_entry->value();
+    index.set_status(true, Status::InternalError("ut"));
+    _tablet->updates()->reset_error();
+    ASSERT_FALSE(_tablet->updates()->is_error());
+
+    ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    ASSERT_TRUE(_tablet->updates()->is_error());
 }
 
 TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {

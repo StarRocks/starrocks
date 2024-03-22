@@ -38,6 +38,23 @@ PROPERTIES (
 "compression" = "LZ4");
 -- result:
 -- !result
+CREATE TABLE all_type (
+    date_col DATE,
+    datetime_col DATETIME,
+    int_col int,
+    float_col FLOAT,
+    double_col DOUBLE,
+    decimal_col DECIMAL(10, 2),
+    varchar_col VARCHAR(255),
+    char_col CHAR(10),
+    array_col ARRAY<STRING>
+) ENGINE=OLAP
+  DUPLICATE KEY(date_col)
+  COMMENT "OLAP"
+  DISTRIBUTED BY HASH(date_col) BUCKETS 5
+  PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
 INSERT INTO t1 (c0, c1, c2, c3) VALUES
   (1, 'a', 'Value1', 10),
   (2, 'b', 'Value2', 20),
@@ -45,6 +62,9 @@ INSERT INTO t1 (c0, c1, c2, c3) VALUES
   (4, 'd', 'Value4', 40),
   (5, null, 'Value5', 50),
   (5, 'f', 'Value6', 60);
+-- result:
+-- !result
+insert into all_type values('2021-01-01', '2021-01-01 12:00:01.123', 111111, -1.23, 1.54654, 120.26, '测试 test"', '测试\'', ['测试', '测试', 'abc'] );
 -- result:
 -- !result
 insert /*+ set_user_variable(@a = (select max(c3) from t1)) */ into t2 select /*+ set_user_variable(@b = (select min(c1) from t1)) */
@@ -142,4 +162,99 @@ properties (
 ) as select /*+ set_user_variable(@c = (select min(c3) from t1)) */ * from t1;
 -- result:
 E: (1064, 'unsupported user variable hint in Materialized view for now.')
+-- !result
+set @test = (select date_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+2021-01-01
+-- !result
+set @test = (select datetime_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+2021-01-01 12:00:01.123000
+-- !result
+set @test = (select int_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+111111
+-- !result
+set @test = (select float_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+-1.23
+-- !result
+set @test = (select double_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+1.54654
+-- !result
+set @test = (select decimal_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+120.26
+-- !result
+set @test = (select varchar_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+测试 test"
+-- !result
+set @test = (select char_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+测试'
+-- !result
+set @test = (select array_col from all_type);
+-- result:
+-- !result
+select @test;
+-- result:
+["测试","测试","abc"]
+-- !result
+set @test = (select array_col from all_type where date_col > '2021-01-01');
+-- result:
+-- !result
+select @test;
+-- result:
+None
+-- !result
+set @test= (select JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25));
+-- result:
+-- !result
+select @test;
+-- result:
+{" Daniel Smith": 26, "Lily Smith": 25}
+-- !result
+set @test = (select array_agg(c2) from (select t2.c2 from t2 join t2 tt join t2 ttt join t2 tttt) t);
+-- result:
+-- !result
+select array_length(@test);
+-- result:
+1296
+-- !result
+set @test= (select cast(50 as boolean));
+-- result:
+-- !result
+select @test;
+-- result:
+1
+-- !result
+set @test= (select cast(50 as time));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Can't set variable with type TIME.")
 -- !result

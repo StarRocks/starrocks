@@ -1,0 +1,17 @@
+-- name: test_short_circuit_unique
+create table unique_tbl(a int, b string) 
+unique key(a)
+distributed by hash(a)
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into unique_tbl values(1,'hi'),(2,'hello');
+-- result:
+-- !result
+set global enable_short_circuit = true;
+-- result:
+-- !result
+select * from unique_tbl where a=1;
+-- result:
+1	hi
+-- !result

@@ -182,20 +182,6 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
-# This option will soon be deprecated.
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    # force turn off cachelib on arm platform
-    WITH_CACHELIB=OFF
-elif [[ -z ${WITH_CACHELIB} ]]; then
-    WITH_CACHELIB=OFF
-fi
-
-if [[ "${WITH_CACHELIB}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
-    echo "WITH_CACHELIB=ON but missing depdency libraries(cachelib)"
-    exit 1
-fi
-
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
@@ -282,7 +268,6 @@ echo "Get params:
     JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    WITH_CACHELIB       -- $WITH_CACHELIB
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
     OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
@@ -377,7 +362,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
-                  -DWITH_CACHELIB=${WITH_CACHELIB}                      \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
@@ -529,11 +513,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/hive-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
-
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/odps-reader-lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/
     fi
 
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
@@ -545,11 +524,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
-
-    if [ "${WITH_CACHELIB}" == "ON"  ]; then
-        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
-        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
-    fi
 
     MSG="${MSG} √ ${MSG_BE}"
 fi

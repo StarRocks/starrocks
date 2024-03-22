@@ -128,28 +128,33 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-    outputs:
-      ip: ${{ steps.update-image.outputs.ip }}
-      instance_id: ${{ steps.update-image.outputs.instance_id }}
-      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [ Release, ASAN ]
     steps:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Update Image
+      - name: Update Image (${{ matrix.build_type }})
         id: update-image
+        if: needs.be-checker.outputs.output2  == 'true'
+        env:
+          linux_distro: ${{ matrix.build_type }}
         run: |
-          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-              ./bin/run-pr-update-image.sh
-          fi
+          cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/run-pr-update-image.sh
+
+      - name: Upload Thirdparty Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: THIRDPARTY-RESULT-${{ matrix.build_type }}
+          path: image_cache.info
+          retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -160,9 +165,36 @@ jobs:
           fi
           rm -rf ${{ github.workspace }}/*
 
+  thirdparty-info:
+    runs-on: [ self-hosted, normal ]
+    needs:
+      - thirdparty-update
+    name: Thirdparty Info
+    outputs:
+      centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
+      ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
+    steps:
+      - name: Download Thirdparty Artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: THIRDPARTY-RESULT-*
+          path: outputs
+
+      - name: Read Info
+        id: info
+        run: |
+          if [[ -e "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" ]]; then
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
+            echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          fi
+          if [[ -e "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" ]]; then
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
+            echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          fi
+
   be-ut:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, thirdparty-update ]
+    needs: [ be-checker, thirdparty-info ]
     timeout-minutes: 180
     name: BE UT
     env:
@@ -182,7 +214,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
@@ -433,7 +465,6 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
-      CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
     steps:
       - name: upload info
         if: always()

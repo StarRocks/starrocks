@@ -218,6 +218,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            // get the updated foreign key constraint from table property.
+            // for external table, create time is added into FOREIGN_KEY_CONSTRAINT
+            Map<String, String> mvProperties = materializedView.getTableProperty().getProperties();
+            String foreignKeys = mvProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+            propClone.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, foreignKeys);
             isChanged = true;
         }
         if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {

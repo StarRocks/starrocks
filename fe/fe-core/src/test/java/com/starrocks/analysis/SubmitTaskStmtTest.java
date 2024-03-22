@@ -37,7 +37,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
@@ -175,7 +175,7 @@ public class SubmitTaskStmtTest {
         new MockUp<WarehouseManager>() {
             @Mock
             Warehouse getWarehouse(String name) {
-                return new LocalWarehouse(123, name);
+                return new DefaultWarehouse(123, name, 0);
             }
         };
 

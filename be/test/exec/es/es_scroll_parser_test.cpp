@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/runtime_state.h"
 
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
@@ -28,8 +30,57 @@ namespace starrocks {
 using ScrollParser = ScrollParser;
 using ColumnHelper = ColumnHelper;
 using ColumnPtr = ColumnPtr;
+struct SlotDesc {
+    std::string name;
+    TypeDescriptor type;
+};
 
-TEST(ScrollParserTest, ArrayTest) {
+class ScrollParserTest : public ::testing::Test {
+public:
+    void SetUp() override { _create_runtime_state(""); }
+    void TearDown() override {}
+
+protected:
+    void _create_runtime_state(const std::string& timezone);
+    TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
+    ObjectPool _pool;
+    RuntimeState* _runtime_state = nullptr;
+};
+
+void ScrollParserTest::_create_runtime_state(const std::string& timezone) {
+    TUniqueId fragment_id;
+    TQueryOptions query_options;
+    TQueryGlobals query_globals;
+    if (timezone != "") {
+        query_globals.__set_time_zone(timezone);
+    }
+    _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
+    _runtime_state->init_instance_mem_tracker();
+}
+
+TupleDescriptor* ScrollParserTest::_create_tuple_desc(SlotDesc* descs) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    TTupleDescriptorBuilder tuple_desc_builder;
+    int slot_id = 0;
+    while (descs->name != "") {
+        slot_desc_builder.column_name(descs->name).type(descs->type).id(slot_id).nullable(true);
+        tuple_desc_builder.add_slot(slot_desc_builder.build());
+        descs += 1;
+        slot_id += 1;
+    }
+    tuple_desc_builder.build(&table_desc_builder);
+    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+    std::vector<bool> nullable_tuples = std::vector<bool>{true};
+    DescriptorTbl* tbl = nullptr;
+    CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                  .ok());
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    auto* tuple_desc = row_desc->tuple_descriptors()[0];
+    return tuple_desc;
+}
+
+TEST_F(ScrollParserTest, ArrayTest) {
     std::unique_ptr<ScrollParser> scroll_parser = std::make_unique<ScrollParser>(false);
 
     TypeDescriptor t(TYPE_ARRAY);
@@ -183,6 +234,37 @@ TEST(ScrollParserTest, ArrayTest) {
     }
 }
 
-// TODO: We should add more detailed UT in the future.
+TEST_F(ScrollParserTest, JsonTestOK) {
+    {
+        SlotDesc slot_descs[] = {{"contactData", TypeDescriptor::from_logical_type(LogicalType::TYPE_JSON)}, {""}};
+        std::unique_ptr<ScrollParser> scroll_parser = std::make_unique<ScrollParser>(false);
+        scroll_parser->set_params(_create_tuple_desc(slot_descs), nullptr, _runtime_state->timezone());
+        Status st = scroll_parser->parse(
+                R"( {"_scroll_id":"xxxx","hits":{"total":1,"hits":[{"_id":"1YGqWI4BIIvgRRz3t8R_","_source":{"contactData":[{"firstName":"Jane","lastName":"Doe","emailAddress":"jane.doe@example.com","phoneNumber":"+1987654321","contactType":"email"}]}}]}})",
+                true);
+        EXPECT_TRUE(st.ok()) << st.message();
+        ChunkPtr chunk;
+        bool line_eos = false;
+        st = scroll_parser->fill_chunk(_runtime_state, &chunk, &line_eos);
+        EXPECT_TRUE(st.ok()) << st.message();
+        std::string result = chunk->debug_row(0);
+        EXPECT_EQ(
+                result,
+                R"([[{"contactType": "email", "emailAddress": "jane.doe@example.com", "firstName": "Jane", "lastName": "Doe", "phoneNumber": "+1987654321"}]])");
+    }
+    {
+        SlotDesc slot_descs[] = {{"contactData", TypeDescriptor::from_logical_type(LogicalType::TYPE_JSON)}, {""}};
+        std::unique_ptr<ScrollParser> scroll_parser = std::make_unique<ScrollParser>(false);
+        scroll_parser->set_params(_create_tuple_desc(slot_descs), nullptr, _runtime_state->timezone());
+        Status st = scroll_parser->parse(
+                R"( {"_scroll_id":"xxxx","hits":{"total":1,"hits":[{"_id":"1YGqWI4BIIvgRRz3t8R_","_source":{"contactData":123}}]}})",
+                true);
+        EXPECT_TRUE(st.ok()) << st.message();
+        ChunkPtr chunk;
+        bool line_eos = false;
+        st = scroll_parser->fill_chunk(_runtime_state, &chunk, &line_eos);
+        EXPECT_FALSE(st.ok()) << st.message();
+    }
+}
 
 } // namespace starrocks

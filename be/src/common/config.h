@@ -153,7 +153,7 @@ CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
 CONF_mInt32(replication_threads, "0");
-CONF_mInt32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -615,6 +615,8 @@ CONF_mInt32(tablet_meta_checkpoint_min_interval_secs, "600");
 CONF_Int64(brpc_max_body_size, "2147483648");
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
+// brpc connection types, "single", "pooled", "short".
+CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
 
 // Max number of txns for every txn_partition_map in txn manager.
 // this is a self-protection to avoid too many txns saving in manager.
@@ -1142,6 +1144,8 @@ CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 // so large tabletmeta object can fit in block cache. After we optimize PK table's tabletmeta object size, we can
 // revert this config change.
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
+
+CONF_String(rocksdb_db_options_string, "create_if_missing=true;create_missing_column_families=true");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB

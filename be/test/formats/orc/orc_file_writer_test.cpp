@@ -986,6 +986,7 @@ TEST_F(OrcFileWriterTest, TestFactory) {
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto fs = std::make_shared<MemoryFileSystem>();
     auto factory = formats::ORCFileWriterFactory(fs, {}, column_names, std::move(column_evaluators));
+    ASSERT_OK(factory.init());
     auto maybe_writer = factory.create("/test.orc");
     ASSERT_OK(maybe_writer.status());
     auto writer = maybe_writer.value();
