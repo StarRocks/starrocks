@@ -70,6 +70,11 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     _morsel_queue->set_tablets(_ctx->tablets());
     _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
 
+    DeferOp defer([&]() {
+        _ctx->set_prepare_finished();
+        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
+    });
+
     if (!status.ok()) {
         TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::before_set_finished");
         // OlapScanOperator::has_output() will `use !_ctx->is_prepare_finished() || _ctx->is_finished()` to
@@ -80,11 +85,8 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
         // So we will set_finished first and set_prepare_finished()
         static_cast<void>(_ctx->set_finished());
         TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_finished");
-        _ctx->set_prepare_finished();
-        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
         return status;
     } else {
-        _ctx->set_prepare_finished();
         return nullptr;
     }
 }
