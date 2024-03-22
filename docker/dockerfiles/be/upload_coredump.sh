@@ -31,7 +31,7 @@ while true; do
   done < <(inotifywait -e close_write $COREDUMP_PATH)
 
   if [[ $latestCoreFile == "" ]]; then
-    coredump_log "missiong core file name"
+    coredump_log "missing core file name"
 
     continue
   fi
