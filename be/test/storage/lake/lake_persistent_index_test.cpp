@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include "gen_cpp/BackendService_types.h"
 #include "storage/olap_common.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -87,9 +86,7 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
     auto tablet_id = _tablet_metadata->id();
-    PersistentIndexSstableMetaPB sstable_meta;
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(sstable_meta));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
     // insert duplicate should return error
     // ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), 0).ok());
@@ -178,9 +175,7 @@ TEST_F(LakePersistentIndexTest, test_replace) {
     }
 
     auto tablet_id = _tablet_metadata->id();
-    PersistentIndexSstableMetaPB sstable_meta;
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(sstable_meta));
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
 
     //replace

@@ -15,7 +15,6 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include "fs/fs_util.h"
-#include "gen_cpp/BackendService_types.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/tablet_manager.h"
@@ -32,18 +31,6 @@ LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tabl
 LakePersistentIndex::~LakePersistentIndex() {
     _memtable->clear();
     _sstables.clear();
-}
-
-Status LakePersistentIndex::init(const PersistentIndexSstableMetaPB& sstable_meta) {
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-    for (auto& pindex_sstable : sstable_meta.sstables()) {
-        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                          opts, _tablet_mgr->sst_location(_tablet_id, pindex_sstable.filename())));
-        auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
-        RETURN_IF_ERROR(sstable->init(std::move(rf), pindex_sstable, nullptr));
-        _sstables.emplace_back(std::move(sstable));
-    }
-    return Status::OK();
 }
 
 bool LakePersistentIndex::is_memtable_full() {
@@ -168,11 +155,14 @@ Status LakePersistentIndex::minor_compact() {
     if (_immutable_memtable == nullptr) {
         return Status::OK();
     }
+
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(location));
     uint64_t filesz = 0;
     RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesz));
+    RETURN_IF_ERROR(wf->close());
+
     auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
@@ -182,6 +172,7 @@ Status LakePersistentIndex::minor_compact() {
     sstable_pb.set_version(_version.major_number());
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
     _sstables.emplace_back(std::move(sstable));
+
     _immutable_memtable = nullptr;
     return Status::OK();
 }
