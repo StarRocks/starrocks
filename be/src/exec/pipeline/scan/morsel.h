@@ -84,7 +84,9 @@ public:
     int64_t from_version() { return _from_version; }
 
     void set_rowsets(const std::vector<BaseRowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
-    void set_delta_rowsets(std::vector<BaseRowsetSharedPtr>&& delta_rowsets) { _delta_rowsets = std::move(delta_rowsets); }
+    void set_delta_rowsets(std::vector<BaseRowsetSharedPtr>&& delta_rowsets) {
+        _delta_rowsets = std::move(delta_rowsets);
+    }
     const std::vector<BaseRowsetSharedPtr>& rowsets() const {
         if (_delta_rowsets.has_value()) {
             return _delta_rowsets.value();
