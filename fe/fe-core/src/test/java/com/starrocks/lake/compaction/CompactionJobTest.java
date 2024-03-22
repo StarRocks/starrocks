@@ -15,8 +15,7 @@
 package com.starrocks.lake.compaction;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PhysicalPartitionImpl;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import org.junit.Test;
 
@@ -27,7 +26,7 @@ public class CompactionJobTest {
     public void testBuildTabletCommitInfo() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
-        PhysicalPartition partition = new PhysicalPartitionImpl(0, 1, 2, null);
+        Partition partition = new Partition(0, "p0", null, null);
         CompactionJob job = new CompactionJob(db, table, partition, 10010);
         assertDoesNotThrow(() -> {
             job.buildTabletCommitInfo();
