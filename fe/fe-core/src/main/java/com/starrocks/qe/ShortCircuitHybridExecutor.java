@@ -66,8 +66,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
     public ShortCircuitHybridExecutor(ConnectContext context, PlanFragment planFragment,
                                       List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
-                                      boolean isBinaryRow, boolean enableProfile) {
-        super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile);
+                                      boolean isBinaryRow, boolean enableProfile, String protocol) {
+        super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile, protocol);
     }
 
     @Override
@@ -95,7 +95,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
             PBackendService service = BrpcProxy.getBackendService(beAddress);
             try {
                 PExecShortCircuitRequest pRequest = new PExecShortCircuitRequest();
-                pRequest.setRequest(tRequest);
+                pRequest.setAttachmentProtocol(protocol);
+                pRequest.setRequest(tRequest, protocol);
                 watch.start();
                 Future<PExecShortCircuitResult> future = service.execShortCircuit(pRequest);
                 PExecShortCircuitResult shortCircuitResult = future.get(
