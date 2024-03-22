@@ -95,6 +95,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
             PBackendService service = BrpcProxy.getBackendService(beAddress);
             try {
                 PExecShortCircuitRequest pRequest = new PExecShortCircuitRequest();
+                pRequest.setAttachmentProtocol(protocol);
                 pRequest.setRequest(tRequest, protocol);
                 watch.start();
                 Future<PExecShortCircuitResult> future = service.execShortCircuit(pRequest);
