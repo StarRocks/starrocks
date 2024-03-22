@@ -30,6 +30,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/datetime_value.h"
+#include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
@@ -52,6 +53,7 @@ public:
     }
 
 public:
+    RuntimeState runtime_state;
     TExprNode expr_node;
 };
 
