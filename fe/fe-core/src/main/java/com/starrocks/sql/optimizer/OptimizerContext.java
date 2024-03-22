@@ -47,6 +47,7 @@ public class OptimizerContext {
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
     private DumpInfo dumpInfo;
+    private Set<Long> currentSqlDbIds;
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private OptimizerTraceInfo traceInfo;
@@ -93,6 +94,7 @@ public class OptimizerContext {
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = connectContext.getSessionVariable();
         this.dumpInfo = connectContext.getDumpInfo();
+        this.currentSqlDbIds = connectContext.getCurrentSqlDbIds();
         this.cteContext = new CTEContext();
         cteContext.reset();
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
@@ -132,6 +134,10 @@ public class OptimizerContext {
 
     public DumpInfo getDumpInfo() {
         return dumpInfo;
+    }
+
+    public Set<Long> getCurrentSqlDbIds() {
+        return currentSqlDbIds;
     }
 
     public CTEContext getCteContext() {
