@@ -45,6 +45,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -57,6 +58,7 @@ import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SetDefaultRoleExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.SqlModeHelper;
@@ -70,6 +72,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -3593,5 +3596,47 @@ public class PrivilegeCheckerTest {
         }
 
         Config.access_control = "native";
+    }
+
+    @Test
+    public void testGetErrorRespWhenUnauthorized() throws Exception {
+        // setup
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user user_x_11 IDENTIFIED BY ''", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create role role_x_11", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create role role_x_12", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+
+        // test AccessDeniedException with specified error message
+        RestBaseAction restBaseAction = new RestBaseAction(null);
+        Assert.assertEquals("Radio gaga",
+                restBaseAction.getErrorRespWhenUnauthorized(new AccessDeniedException("Radio gaga")));
+
+        // test AccessDeniedException with no error message
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant role_x_11, role_x_12 to user_x_11",
+                starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        SetDefaultRoleStmt setDefaultRoleStmt = (SetDefaultRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "set default role role_x_11 to user_x_11",
+                starRocksAssert.getCtx());
+        SetDefaultRoleExecutor.execute(setDefaultRoleStmt, starRocksAssert.getCtx());
+        ConnectContext context = new ConnectContext();
+        UserIdentity userIdentity = new UserIdentity("user_x_11", "%");
+        context.setCurrentUserIdentity(userIdentity);
+        context.setCurrentRoleIds(userIdentity);
+        context.setThreadLocalInfo();
+        String msg = restBaseAction.getErrorRespWhenUnauthorized(new AccessDeniedException());
+        System.out.println(msg);
+        Assert.assertTrue(msg.contains("Current role(s): [role_x_11]. Inactivated role(s): [role_x_12]."));
+        starRocksAssert.getCtx().setThreadLocalInfo();
+
+        // clean
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "drop user user_x_11", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "drop role role_x_11", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "drop role role_x_12", starRocksAssert.getCtx()), starRocksAssert.getCtx());
     }
 }

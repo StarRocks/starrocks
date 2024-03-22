@@ -113,8 +113,7 @@ public enum ErrorCode {
 
     ERR_ACCESS_DENIED(1252, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
-                    "Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. " +
-                    "Current role(s): %s. Inactivated role(s): %s."),
+                    ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(1253, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
 
@@ -339,6 +338,9 @@ public enum ErrorCode {
 
     ERR_PRIVILEGE_STORAGE_VOLUME_DENIED(6020, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied for user '%s' to storage volume '%s' when checking privilege");
+
+    public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
+            " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
