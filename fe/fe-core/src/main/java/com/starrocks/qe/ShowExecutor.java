@@ -473,7 +473,8 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(tableName)) {
                         continue;
                     }
-                    BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(catalogName, dbName, tableName);
+                    BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                            catalogName, dbName, tableName);
                     if (table == null) {
                         LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                         continue;
