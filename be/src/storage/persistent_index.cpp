@@ -543,7 +543,14 @@ Status ImmutableIndexWriter::init(const string& idx_file_path, const EditVersion
     WritableFileOptions wblock_opts{.sync_on_close = sync_on_close, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_idx_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
 
+<<<<<<< HEAD
     if (config::enable_pindex_compression) {
+=======
+    _bf_file_path = _idx_file_path + BloomFilterSuffix;
+    ASSIGN_OR_RETURN(_bf_wb, _fs->new_writable_file(wblock_opts, _bf_file_path));
+    // The minimum unit of compression is shard now, and read on a page-by-page basis is disable after compression.
+    if (config::enable_pindex_compression && !config::enable_pindex_read_by_page) {
+>>>>>>> 478d2cb948 ([Enhancement] Enable read pindex page by page (#42870))
         _meta.set_compression_type(CompressionTypePB::LZ4_FRAME);
     } else {
         _meta.set_compression_type(CompressionTypePB::NO_COMPRESSION);
@@ -2521,12 +2528,17 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
 
 Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
                                              KeysInfo* found_keys_info,
-                                             std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const {
+                                             std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                             IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
     std::map<size_t, IndexPage> pages;
     for (auto [pageid, keys_info] : keys_info_by_page) {
         IndexPage page;
         RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + kPageSize * pageid, page.data, kPageSize));
+        if (stat != nullptr) {
+            stat->read_iops++;
+            stat->read_io_bytes += kPageSize;
+        }
         pages[pageid] = std::move(page);
     }
     if (shard_info.key_size != 0) {
@@ -2559,6 +2571,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         return Status::OK();
     }
 
+<<<<<<< HEAD
     if (config::enable_reab_pindex_by_page) {
         // an optimization for very small data import. In some real time scenario, user only import a very small batch data
         // once, and we only need to read a little page but not total shard.
@@ -2571,6 +2584,12 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         if (st.ok() && keys_info_by_page.size() == 1 && shard_info.uncompressed_size == 0) {
             return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page);
         }
+=======
+    if (config::enable_pindex_read_by_page && shard_info.uncompressed_size == 0) {
+        std::map<size_t, std::vector<KeyInfo>> keys_info_by_page;
+        RETURN_IF_ERROR(_split_keys_info_by_page(shard_idx, check_keys_info, keys_info_by_page));
+        return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page, stat);
+>>>>>>> 478d2cb948 ([Enhancement] Enable read pindex page by page (#42870))
     }
 
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
@@ -2583,7 +2602,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
                                             shard_info.bytes));
     if (stat != nullptr) {
-        stat->get_in_shard_cnt++;
+        stat->read_iops++;
         stat->read_io_bytes += shard_info.bytes;
     }
     if (shard_info.key_size != 0) {
