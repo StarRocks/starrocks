@@ -49,6 +49,7 @@ public class UDFHelper {
     public static final int TYPE_ARRAY = 19;
     public static final int TYPE_BOOLEAN = 24;
     public static final int TYPE_TIME = 44;
+    public static final int TYPE_DATE = 50;
     public static final int TYPE_DATETIME = 51;
 
     private static final byte[] emptyBytes = new byte[0];
@@ -339,6 +340,10 @@ public class UDFHelper {
                 } else {
                     throw new UnsupportedOperationException("unsupported type:" + boxedResult);
                 }
+                break;
+            }
+            case TYPE_DATE:{
+                getStringDateResult(numRows, (Date[]) boxedResult, columnAddr);
                 break;
             }
             default:
