@@ -125,7 +125,9 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
             ColumnRefSet usedCols = optExpression.getRowOutputInfo().getUsedColumnRefSet();
             if (optExpression.getOp().getPredicate() != null) {
                 ColumnRefSet predicateCols = optExpression.getOp().getPredicate().getUsedColumns();
-                predicateCols.except(optExpression.getRowOutputInfo().getOutputColumnRefSet());
+                //
+                predicateCols.except(ColumnRefSet.createByIds(optExpression.getRowOutputInfo()
+                        .getOriginalColOutputInfo().keySet()));
                 usedCols.union(predicateCols);
             }
             checkInputCols(inputCols, usedCols, optExpression);
