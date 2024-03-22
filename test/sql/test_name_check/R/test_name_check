@@ -1,8 +1,10 @@
 -- name: test_name_check
-create database `abc$abc!abc#`;
+'-', '~', '!', '@', '#', '$',
+            '%', '^', '&', '<', '>', '='
+create database `abc-~!@#$%^&<>=+abc`;
 -- result:
 -- !result
-use `abc$abc!abc#`;
+use `abc-~!@#$%^&<>=+abc`;
 -- result:
 -- !result
 CREATE TABLE `!a#cc` (

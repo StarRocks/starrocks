@@ -1,7 +1,7 @@
 -- name: test_name_check
-create database `abc$abc!abc#`;
+create database `abc-~!@#$%^&<>=+abc`;
 
-use `abc$abc!abc#`;
+use `abc-~!@#$%^&<>=+abc`;
 
 CREATE TABLE `!a#cc` (
   `c0` int(11) NULL COMMENT "",
