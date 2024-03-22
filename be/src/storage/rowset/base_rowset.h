@@ -27,6 +27,7 @@ using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 
 class BaseRowset {
 public:
+    virtual ~BaseRowset() = default;
     virtual RowsetId rowset_id() const = 0;
     virtual int64_t num_rows() const = 0;
     virtual bool is_overlapped() const = 0;
