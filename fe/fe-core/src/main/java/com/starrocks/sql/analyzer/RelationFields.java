@@ -76,7 +76,7 @@ public class RelationFields {
     /**
      * Gets the index of all columns matching the specified name
      */
-    public List<Field>  resolveFields(SlotRef name) {
+    public List<Field> resolveFields(SlotRef name) {
         if (resolveStruct) {
             return allFields.stream().filter(x -> x.canResolve(name)).collect(Collectors.toList());
         }
