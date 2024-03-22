@@ -1556,8 +1556,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_STRING_FROM(TYPE_JSON, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_VARBINARY, allow_throw_exception);
         default:
-            LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
-                         << ", to type: " << type_to_string(to_type);
+            LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
             return nullptr;
         }
     } else if (from_type == TYPE_JSON || to_type == TYPE_JSON) {
@@ -1574,8 +1573,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
             default:
-                LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
-                             << ", to type: " << type_to_string(to_type);
+                LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
             }
         } else {
@@ -1598,8 +1596,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_TO_JSON(TYPE_TIME, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DATETIME, allow_throw_exception);
             default:
-                LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
-                             << ", to type: " << type_to_string(to_type);
+                LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
             }
         }
@@ -1611,8 +1608,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_VARBINARY, false>(node);
             }
         } else {
-            LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
-                         << ", to type: " << type_to_string(to_type);
+            LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
             return nullptr;
         }
     } else {
@@ -1633,8 +1629,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_TYPE(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL128, allow_throw_exception);
         default:
-            LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
-                         << ", to type: " << type_to_string(to_type);
+            LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
             return nullptr;
         }
     }
@@ -1707,7 +1702,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
     }
     auto ret = create_cast_expr(pool, node, from_type, to_type, allow_throw_exception);
     if (!ret.ok()) {
-        LOG(WARNING) << "Don't support to cast type: " << from_type << " to type: " << to_type;
+        LOG(WARNING) << "Not support cast " << from_type << " to " << to_type;
         return nullptr;
     }
     return std::move(ret).value().release();
@@ -1729,7 +1724,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
                                            ObjectPool* pool, bool allow_throw_exception) {
     auto ret = create_cast_expr(pool, from, to, allow_throw_exception);
     if (!ret.ok()) {
-        LOG(WARNING) << "Don't support to cast type: " << from << " to type: " << to;
+        LOG(WARNING) << "Not support cast " << from << " to " << to;
         return nullptr;
     }
     auto cast_expr = std::move(ret).value().release();
