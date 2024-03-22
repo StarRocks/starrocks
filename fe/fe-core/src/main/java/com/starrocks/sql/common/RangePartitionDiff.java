@@ -68,13 +68,19 @@ public class RangePartitionDiff {
         RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
         for (RangePartitionDiff diff : diffList) {
             for (Map.Entry<String, Range<PartitionKey>> add : diff.getAdds().entrySet()) {
-                Map.Entry<Range<PartitionKey>, String> existedRange =
-                        addRanges.getEntry(add.getValue().lowerEndpoint());
-                if (existedRange != null &&
-                        !existedRange.getKey().upperEndpoint().equals(add.getValue().upperEndpoint())) {
-                    throw new IllegalArgumentException(String.format("intersected partition must be same: (%s) != (%s)",
-                            existedRange.getKey(), add.getValue()));
+                Map<Range<PartitionKey>, String> intersectedRange =
+                        addRanges.subRangeMap(add.getValue()).asMapOfRanges();
+                // should either empty or exactly same
+                if (!intersectedRange.isEmpty()) {
+                    Range<PartitionKey> existingRange = intersectedRange.keySet().iterator().next();
+                    if (intersectedRange.size() > 1 ||
+                            !existingRange.equals(add.getValue()) ||
+                            !addRanges.getEntry(existingRange.lowerEndpoint()).getKey().equals(add.getValue())) {
+                        throw new IllegalArgumentException(
+                                "Partition is intersected: " + existingRange + " and " + add);
+                    }
                 }
+
                 addRanges.put(add.getValue(), add.getKey());
             }
             result.getAdds().putAll(diff.getAdds());
