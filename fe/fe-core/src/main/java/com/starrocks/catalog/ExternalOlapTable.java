@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -76,6 +77,13 @@ public class ExternalOlapTable extends OlapTable {
     private static final String JSON_KEY_SOURCE_TABLE_ID = "source_table_id";
     private static final String JSON_KEY_SOURCE_TABLE_NAME = "source_table_name";
     private static final String JSON_KEY_SOURCE_TABLE_TYPE = "source_table_type";
+
+    private static final String PROPERTIES_HOST = "host";
+    private static final String PROPERTIES_PORT = "port";
+    private static final String PROPERTIES_USER = "user";
+    private static final String PROPERTIES_PASSWORD = "password";
+    private static final String PROPERTIES_DATABASE = "database";
+    private static final String PROPERTIES_TABLE = "table";
 
     public class ExternalTableInfo {
         // remote doris cluster fe addr
@@ -195,13 +203,13 @@ public class ExternalOlapTable extends OlapTable {
                         + "they are: host, port, user, password, database and table");
             }
 
-            host = properties.get("host");
+            host = properties.get(PROPERTIES_HOST);
             if (Strings.isNullOrEmpty(host)) {
                 throw new DdlException("Host of external table is null. "
                         + "Please add properties('host'='xxx.xxx.xxx.xxx') when create table");
             }
 
-            String portStr = properties.get("port");
+            String portStr = properties.get(PROPERTIES_PORT);
             if (Strings.isNullOrEmpty(portStr)) {
                 // Maybe null pointer or number convert
                 throw new DdlException("miss port of external table is null. "
@@ -214,25 +222,25 @@ public class ExternalOlapTable extends OlapTable {
                         + "Please add properties('port'='3306') when create table");
             }
 
-            user = properties.get("user");
+            user = properties.get(PROPERTIES_USER);
             if (Strings.isNullOrEmpty(user)) {
                 throw new DdlException("User of external table is null. "
                         + "Please add properties('user'='root') when create table");
             }
 
-            password = properties.get("password");
+            password = properties.get(PROPERTIES_PASSWORD);
             if (password == null) {
                 throw new DdlException("Password of external table is null. "
                         + "Please add properties('password'='xxxx') when create table");
             }
 
-            dbName = properties.get("database");
+            dbName = properties.get(PROPERTIES_DATABASE);
             if (Strings.isNullOrEmpty(dbName)) {
                 throw new DdlException("Database of external table is null. "
                         + "Please add properties('database'='xxxx') when create table");
             }
 
-            tableName = properties.get("table");
+            tableName = properties.get(PROPERTIES_TABLE);
             if (Strings.isNullOrEmpty(tableName)) {
                 throw new DdlException("external table name missing."
                         + "Please add properties('table'='xxxx') when create table");
@@ -604,5 +612,17 @@ public class ExternalOlapTable extends OlapTable {
                 endOfPartitionBuild - start, endOfIndexMetaBuild - endOfPartitionBuild,
                 endOfSchemaRebuild - endOfIndexMetaBuild, endOfTabletMetaBuild - endOfSchemaRebuild,
                 System.currentTimeMillis() - start);
+    }
+
+    @Override
+    public Map<String, String> getUniqueProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PROPERTIES_HOST, getSourceTableHost());
+        properties.put(PROPERTIES_PORT, String.valueOf(getSourceTablePort()));
+        properties.put(PROPERTIES_USER, getSourceTableUser());
+        properties.put(PROPERTIES_PASSWORD, getSourceTablePassword());
+        properties.put(PROPERTIES_DATABASE, getSourceTableDbName());
+        properties.put(PROPERTIES_TABLE, getSourceTableName());
+        return properties;
     }
 }

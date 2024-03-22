@@ -10,8 +10,7 @@ DUPLICATE KEY(id)
 PARTITION BY (dt,province)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -44,8 +43,7 @@ DUPLICATE KEY(id)
 PARTITION BY (id)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -67,8 +65,7 @@ DUPLICATE KEY(dt)
 PARTITION BY (dt)
 DISTRIBUTED BY HASH(`dt`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -90,8 +87,7 @@ DUPLICATE KEY(dt)
 PARTITION BY (dt)
 DISTRIBUTED BY HASH(`dt`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -114,8 +110,7 @@ DUPLICATE KEY(id)
 PARTITION BY (dt)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -137,8 +132,7 @@ DUPLICATE KEY(id)
 PARTITION BY LIST (dt)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result

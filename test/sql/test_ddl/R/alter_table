@@ -20,11 +20,18 @@ DUPLICATE KEY(`id1`)
 COMMENT "c2"
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> d59798f7bb ([Refactor] Refactor olap table get properties (#42626))
 );
 -- !result
 CREATE TABLE `test_pk_tbl1` (

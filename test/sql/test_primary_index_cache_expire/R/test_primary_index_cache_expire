@@ -28,12 +28,16 @@ tab1	CREATE TABLE `tab1` (
 PRIMARY KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
+<<<<<<< HEAD
 "replicated_storage" = "true",
+=======
+"fast_schema_evolution" = "true",
+>>>>>>> d59798f7bb ([Refactor] Refactor olap table get properties (#42626))
 "primary_index_cache_expire_sec" = "3600",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 insert into tab1 values(100, "100", 100, 100, 100), (200, "200", 200, 200, 200), (300, "300", 300, 300, 300);
@@ -58,11 +62,16 @@ tab1	CREATE TABLE `tab1` (
 PRIMARY KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
+<<<<<<< HEAD
 "replicated_storage" = "true",
 "compression" = "LZ4"
+=======
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> d59798f7bb ([Refactor] Refactor olap table get properties (#42626))
 );
 -- !result
 alter table tab1 set ("primary_index_cache_expire_sec" = "7200");
@@ -80,12 +89,16 @@ tab1	CREATE TABLE `tab1` (
 PRIMARY KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
+<<<<<<< HEAD
 "replicated_storage" = "true",
+=======
+"fast_schema_evolution" = "true",
+>>>>>>> d59798f7bb ([Refactor] Refactor olap table get properties (#42626))
 "primary_index_cache_expire_sec" = "7200",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from tab1 where v2 = 200;
@@ -136,5 +149,10 @@ PROPERTIES (
     "primary_index_cache_expire_sec" = "asd"
 );
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: Property primary_index_cache_expire_sec must be integer: asd')
 -- !result
+=======
+E: (1064, 'Property primary_index_cache_expire_sec must be integer: asd')
+-- !result
+>>>>>>> d59798f7bb ([Refactor] Refactor olap table get properties (#42626))
