@@ -22,6 +22,7 @@
 #include "agent/agent_server.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
@@ -30,9 +31,6 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
-#ifdef USE_STAROS
-#include "storage/lake/star_cache_mgr.h"
-#endif
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
@@ -640,7 +638,6 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             }
             for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
                 data_size += file.size();
-                // TODO need cache stat for delvec file?
             }
 
             std::lock_guard l(response_mtx);
@@ -651,6 +648,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
 #ifdef USE_STAROS
             if (config::starlet_use_star_cache && config::experimental_lake_enable_collect_cache_stat &&
                 tablet_info.enable_cache()) {
+                auto start = std::chrono::steady_clock::now();
                 std::unordered_map<std::string, int64_t> file_size_map;
                 for (const auto& rowset : (*tablet_metadata)->rowsets()) {
                     int index = 0;
@@ -662,13 +660,19 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         index++;
                     }
                 }
+
+                int64_t total_size = 0;
                 if (!file_size_map.empty()) {
-                    auto start = std::chrono::steady_clock::now();
-                    int64_t total_size = 0;
                     for (const auto& pair : file_size_map) {
                         auto file_path = pair.first;
+                        auto fs_or = FileSystem::CreateSharedFromString(file_path);
+                        if (!fs_or.ok()) {
+                            LOG(WARNING) << "Can not retrieve right file system from path: " << file_path;
+                            continue;
+                        }
+                        auto fs = std::move(fs_or).value();
                         auto file_size = pair.second;
-                        auto size_st = starrocks::lake::calculate_cache_size(file_path, file_size);
+                        auto size_st = fs->collect_cache_size(file_path, file_size);
                         if (size_st.ok()) {
                             total_size += size_st.value();
                         } else {
@@ -677,12 +681,12 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         }
                     }
                     tablet_stat->set_data_cache_size(total_size);
-                    auto end = std::chrono::steady_clock::now();
-                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-                    LOG(WARNING) << "Total cache stat size collected, size: " << total_size
-                                 << ", file count: " << file_size_map.size() << ", tablet_id: " << tablet_id
-                                 << ", time cost: " << duration.count() << " milliseconds";
                 }
+                auto end = std::chrono::steady_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+                LOG(WARNING) << "Total cache stat size collected, size: " << total_size
+                             << ", file count: " << file_size_map.size() << ", tablet_id: " << tablet_id
+                             << ", time cost: " << duration.count() << " milliseconds";
             }
 #endif
         };

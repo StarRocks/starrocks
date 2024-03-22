@@ -47,11 +47,11 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"DATA_SIZE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"ROW_COUNT", TYPE_BIGINT, sizeof(int64_t), false},
         {"ENABLE_DATACACHE", TYPE_BOOLEAN, sizeof(bool), false},
-        {"DATA_CACHE_SIZE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"AVG_CS", TYPE_DOUBLE, sizeof(double), false},
         {"P50_CS", TYPE_DOUBLE, sizeof(double), false},
         {"MAX_CS", TYPE_DOUBLE, sizeof(double), false},
         {"STORAGE_PATH", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATA_CACHE_SIZE", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaPartitionsMetaScanner::SchemaPartitionsMetaScanner()
@@ -249,30 +249,30 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 22: {
-            // DATACACHE_SIZE
-            Slice data_cache_size = Slice(info.data_cache_size);
-            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&data_cache_size);
-            break;
-        }
-        case 23: {
             // AVG_CS
             fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.avg_cs);
             break;
         }
-        case 24: {
+        case 23: {
             // P50_CS
             fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.p50_cs);
             break;
         }
-        case 25: {
+        case 24: {
             // MAX_CS
             fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.max_cs);
             break;
         }
-        case 26: {
+        case 25: {
             // STORAGE_PATH
             Slice storage_path = Slice(info.storage_path);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&storage_path);
+            break;
+        }
+        case 26: {
+            // DATA_CACHE_SIZE
+            Slice data_cache_size = Slice(info.data_cache_size);
+            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&data_cache_size);
             break;
         }
         default:

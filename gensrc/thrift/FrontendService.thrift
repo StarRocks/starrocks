@@ -1414,11 +1414,11 @@ struct TPartitionMetaInfo {
     19: optional string data_size
     20: optional i64 row_count
     21: optional bool enable_datacache
-    22: optional string data_cache_size
-    23: optional double avg_cs
-    24: optional double p50_cs
-    25: optional double max_cs
-    26: optional string storage_path
+    22: optional double avg_cs
+    23: optional double p50_cs
+    24: optional double max_cs
+    25: optional string storage_path
+    26: optional string data_cache_size
 }
 
 struct TGetTablesInfoRequest {

@@ -502,6 +502,19 @@ public:
         return to_status((*fs_st)->drop_cache(pair.first));
     }
 
+    StatusOr<int64_t> collect_cache_size(const std::string& path, int64_t file_size) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto cache_size_st = (*fs_st)->cache_size(pair.first, file_size);
+        if (!cache_size_st.ok()) {
+            return to_status(cache_size_st.status());
+        }
+        return cache_size_st.value();
+    }
+
     Status delete_files(const std::vector<std::string>& paths) override {
         if (paths.empty()) {
             return Status::OK();
