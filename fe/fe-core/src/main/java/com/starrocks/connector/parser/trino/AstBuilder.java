@@ -151,6 +151,7 @@ import io.trino.sql.tree.Node;
 import io.trino.sql.tree.NotExpression;
 import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
+import io.trino.sql.tree.Offset;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
@@ -367,7 +368,16 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else {
             resultSelectRelation.setOrderBy(new ArrayList<>());
         }
-        resultSelectRelation.setLimit((LimitElement) processOptional(node.getLimit(), context));
+
+        LimitElement limitElement = (LimitElement) processOptional(node.getLimit(), context);
+        if (node.getOffset().isPresent()) {
+            if (limitElement == null) {
+                throw new ParsingException("StarRocks do not support OFFSET without LIMIT now");
+            }
+            LimitElement offsetElement = (LimitElement) processOptional(node.getOffset(), context);
+            limitElement = new LimitElement(offsetElement.getOffset(), limitElement.getLimit());
+        }
+        resultSelectRelation.setLimit(limitElement);
         return resultSelectRelation;
     }
 
@@ -530,6 +540,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         boolean isAsc = node.getOrdering() == SortItem.Ordering.ASCENDING;
         return new OrderByElement((Expr) visit(node.getSortKey(), context), isAsc,
                 getNullOrderingType(isAsc, node.getNullOrdering()));
+    }
+
+    @Override
+    protected ParseNode visitOffset(Offset node, ParseTreeContext context) {
+        long offset = ((LiteralExpr) visit(node.getRowCount(), context)).getLongValue();
+        return new LimitElement(offset, 0);
     }
 
     @Override
