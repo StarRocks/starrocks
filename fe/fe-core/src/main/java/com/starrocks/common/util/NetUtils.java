@@ -35,7 +35,9 @@
 package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import inet.ipaddr.IPAddressString;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.io.IOException;
@@ -85,7 +87,7 @@ public class NetUtils {
 
         String ip = "";
         String fqdn = "";
-        if (InetAddressValidator.getInstance().isValidInet4Address(host)) {
+        if (InetAddressValidator.getInstance().isValid(host)) {
             // ipOrFqdn is ip
             ip = host;
         } else {
@@ -112,4 +114,47 @@ public class NetUtils {
         }
         return accessible;
     }
+
+    // assemble an accessible HostPort str, the addr maybe an ipv4/ipv6/FQDN
+    // if ip is ipv6 return: [$addr]:$port
+    // if ip is ipv4 or FQDN return: $addr:$port
+    public static String getHostPortInAccessibleFormat(String addr, int port) {
+        if (InetAddressValidator.getInstance().isValidInet6Address(addr)) {
+            return "[" + addr + "]:" + port;
+        }
+        return addr + ":" + port;
+    }
+
+    public static String[] resolveHostInfoFromHostPort(String hostPort) throws AnalysisException {
+        String[] pair;
+        if (hostPort.charAt(0) == '[') {
+            pair = hostPort.substring(1).split("]:");
+        } else {
+            int separatorIdx = hostPort.lastIndexOf(":");
+            if (separatorIdx == -1) {
+                throw new AnalysisException("invalid host port: " + hostPort);
+            }
+            pair = new String[2];
+            pair[0] = hostPort.substring(0, separatorIdx);
+            pair[1] = hostPort.substring(separatorIdx + 1);
+        }
+        if (pair.length != 2) {
+            throw new AnalysisException("invalid host port: " + hostPort);
+        }
+        return pair;
+    }
+
+    public static boolean isSameIP(String ip1, String ip2) {
+        if (ip1 == null || ip2 == null) {
+            return false;
+        }
+        if (ip1.equals(ip2)) {
+            return true;
+        }
+        IPAddressString addr1 = new IPAddressString(ip1);
+        IPAddressString addr2 = new IPAddressString(ip2);
+        return addr1.equals(addr2);
+
+    }
+
 }

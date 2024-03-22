@@ -49,6 +49,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.fs.HdfsUtil.HdfsReader;
 import com.starrocks.fs.HdfsUtil.HdfsWriter;
@@ -903,7 +904,7 @@ public class BlobStorage implements Writable {
     }
 
     public static String clientId() {
-        return FrontendOptions.getLocalHostAddress() + ":" + Config.edit_log_port;
+        return NetUtils.getHostPortInAccessibleFormat(FrontendOptions.getLocalHostAddress(), Config.edit_log_port);
     }
 
     private Status getBroker(Pair<TFileBrokerService.Client, TNetworkAddress> result) {

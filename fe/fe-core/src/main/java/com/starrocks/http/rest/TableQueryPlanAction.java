@@ -43,6 +43,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksHttpException;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
@@ -339,7 +340,7 @@ public class TableQueryPlanAction extends RestBaseAction {
             TInternalScanRange scanRange = scanRangeLocations.scan_range.internal_scan_range;
             Node tabletRouting = new Node(Long.parseLong(scanRange.version), Integer.parseInt(scanRange.schema_hash));
             for (TNetworkAddress address : scanRange.hosts) {
-                tabletRouting.addRouting(address.hostname + ":" + address.port);
+                tabletRouting.addRouting(NetUtils.getHostPortInAccessibleFormat(address.hostname, address.port));
             }
             result.put(String.valueOf(scanRange.tablet_id), tabletRouting);
         }

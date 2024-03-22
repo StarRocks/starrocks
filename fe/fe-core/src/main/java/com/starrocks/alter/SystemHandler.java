@@ -46,6 +46,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
@@ -201,7 +202,8 @@ public class SystemHandler extends AlterHandler {
                 for (Pair<String, Integer> pair : clause.getHostPortPairs()) {
                     Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
                     if (backend == null) {
-                        throw new DdlException("Backend does not exist[" + pair.first + ":" + pair.second + "]");
+                        throw new DdlException("Backend does not exist[" +
+                                NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) + "]");
                     }
                     if (backend.isDecommissioned()) {
                         // already under decommission, ignore it
@@ -364,7 +366,8 @@ public class SystemHandler extends AlterHandler {
             // check if exist
             Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
             if (backend == null) {
-                throw new DdlException("Backend does not exists[" + pair.first + "]");
+                throw new DdlException("Backend does not exist[" +
+                        NetUtils.getHostPortInAccessibleFormat(pair.first, pair.second) + "]");
             }
 
             if (!backend.isDecommissioned()) {

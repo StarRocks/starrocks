@@ -215,11 +215,11 @@ under the License.
                 <version>2.3</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
+            <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
             <dependency>
-                <groupId>commons-net</groupId>
-                <artifactId>commons-net</artifactId>
-                <version>3.9.0</version>
+                <groupId>com.github.seancfoley</groupId>
+                <artifactId>ipaddress</artifactId>
+                <version>5.4.2</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -295,7 +295,7 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starrocks-bdb-je</artifactId>
-                <version>18.3.16</version>
+                <version>18.3.17</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->

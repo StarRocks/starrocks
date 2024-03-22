@@ -29,6 +29,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.proto.DeleteTabletRequest;
@@ -211,7 +212,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
             for (Backend backend : backends) {
                 if (backend.getStarletPort() != 0) {
-                    String workerAddr = backend.getHost() + ":" + backend.getStarletPort();
+                    String workerAddr = NetUtils.getHostPortInAccessibleFormat(backend.getHost(),
+                            backend.getStarletPort());
                     workerAddresses.remove(workerAddr);
                 }
             }
@@ -220,7 +222,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
             for (ComputeNode computeNode : computeNodes) {
                 if (computeNode.getStarletPort() != 0) {
-                    String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
+                    String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(),
+                            computeNode.getStarletPort());
                     workerAddresses.remove(workerAddr);
                 }
             }

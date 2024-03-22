@@ -125,7 +125,7 @@ public class BDBEnvironment {
                 throw new JournalException(errMsg);
             }
         } catch (IOException e) {
-            String errMsg = String.format("failed to check if %s:%s is used!", selfNode.first, selfNode.second);
+            String errMsg = String.format("failed to check if [%s]:%s is used!", selfNode.first, selfNode.second);
             LOG.error(errMsg, e);
             JournalException journalException = new JournalException(errMsg);
             journalException.initCause(e);
@@ -133,7 +133,7 @@ public class BDBEnvironment {
         }
 
         // constructor
-        String selfNodeHostPort = selfNode.first + ":" + selfNode.second;
+        String selfNodeHostPort = NetUtils.getHostPortInAccessibleFormat(selfNode.first, selfNode.second);
 
         File dbEnv = new File(getBdbDir());
         if (!dbEnv.exists()) {
@@ -141,7 +141,7 @@ public class BDBEnvironment {
         }
 
         Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNode();
-        String helperHostPort = helperNode.first + ":" + helperNode.second;
+        String helperHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, helperNode.second);
 
         BDBEnvironment bdbEnvironment = new BDBEnvironment(dbEnv, nodeName, selfNodeHostPort,
                 helperHostPort, GlobalStateMgr.getCurrentState().isElectable());
@@ -348,6 +348,7 @@ public class BDBEnvironment {
         // 1. init environment as an observer
         initConfigs(false);
 
+        // this HostAndPort.fromString method support get ipv6 host and port, but remember to use [host]:port
         HostAndPort hostAndPort = HostAndPort.fromString(helperHostPort);
 
         JournalException exception = null;
@@ -367,7 +368,7 @@ public class BDBEnvironment {
 
                 // 3. found if match
                 for (ReplicationNode node : localNodes) {
-                    if (node.getHostName().equals(hostAndPort.getHost()) && node.getPort() == hostAndPort.getPort()) {
+                    if (NetUtils.isSameIP(hostAndPort.getHost(), node.getHostName()) && node.getPort() == hostAndPort.getPort()) {
                         LOG.info("found {} in local environment!", helperHostPort);
                         return;
                     }
