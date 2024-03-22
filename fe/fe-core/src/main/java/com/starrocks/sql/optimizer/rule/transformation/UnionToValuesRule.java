@@ -32,10 +32,16 @@ import java.util.stream.Collectors;
 
 public class UnionToValuesRule extends TransformationRule {
 
-    public UnionToValuesRule() {
+    private UnionToValuesRule() {
         super(RuleType.TF_MERGE_CONSTANT_UNION, Pattern.create(OperatorType.LOGICAL_UNION)
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)));
     }
+
+    public static UnionToValuesRule getInstance() {
+        return INSTANCE;
+    }
+
+    private static final UnionToValuesRule INSTANCE = new UnionToValuesRule();
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
