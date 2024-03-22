@@ -557,6 +557,8 @@ ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
           _scan_task_group(std::make_shared<workgroup::ScanTaskGroup>()) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
+    TEST_SUCC_POINT("ScanOperatorFactory::prepare");
+
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(do_prepare(state));
 
