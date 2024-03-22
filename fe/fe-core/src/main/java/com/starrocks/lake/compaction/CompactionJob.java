@@ -20,6 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -34,7 +35,7 @@ public class CompactionJob {
     private volatile long commitTs;
     private volatile long finishTs;
     private VisibleStateWaiter visibleStateWaiter;
-    private List<CompactionTask> tasks;
+    private List<CompactionTask> tasks = Collections.emptyList();
 
     public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId) {
         this.db = Objects.requireNonNull(db, "db is null");
