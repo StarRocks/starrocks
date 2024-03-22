@@ -5,7 +5,10 @@ coredump_log()
     echo "[`date`] [coredump] $@" >&2
 }
 
-COREDUMP_PATH=/opt/starrocks/be/storage/coredumps
+# Define constant for 1TB in bytes
+TB_IN_BYTES=$((1024 * 1024 * 1024 * 1024))
+
+COREDUMP_PATH=$STARROCKS_HOME/storage/coredumps
 
 if [ ! -d ${COREDUMP_PATH} ]; then
     mkdir -p ${COREDUMP_PATH}
@@ -35,20 +38,17 @@ while true; do
   coredump_log "Core dump generated $latestCoreFile"
   coredump_log "$(ls -lh ${latestCoreFile})"
 
-  fileSize=$(ls -lh "${latestCoreFile}" | awk '{print $5}')
   fileSizeBytes=$(stat -c %s "${latestCoreFile}")
 
-
-  # Check if file size is greater than 1TB (1000 GB)
-  if [[ "$fileSize" =~ T$ ]]; then
+  # Check if file size is greater than 1TB
+  if (( fileSizeBytes > TB_IN_BYTES )); then
       coredump_log "File size (${fileSizeBytes} B) exceeds 1TB: ${fileSizeBytes} bytes, skip"
-      rm ${latestCoreFile}
-
+      rm "${latestCoreFile}"
       continue
   fi
 
 
-  DATESTR=`TZ=${TZ} date +"%m-%d-%y.%H-%M-%S.%Z"`
+  DATESTR=`date +"%m-%d-%y.%H-%M-%S.%Z"`
   COREDUMP_FILE_ZIP=${KUBE_CLUSTER_NAME}.${POD_NAMESPACE}.${POD_NAME}.${SR_IMAGE_TAG}.${DATESTR}.gz
 
   coredump_log "Compressing core dump files to ${COREDUMP_FILE_ZIP} ..."

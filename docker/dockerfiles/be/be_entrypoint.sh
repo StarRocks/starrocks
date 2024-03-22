@@ -9,7 +9,7 @@ MY_SELF=
 MY_IP=`hostname -i`
 MY_HOSTNAME=`hostname -f`
 STARROCKS_ROOT=${STARROCKS_ROOT:-"/opt/starrocks"}
-STARROCKS_HOME=${STARROCKS_ROOT}/be
+export STARROCKS_HOME=${STARROCKS_ROOT}/be
 BE_CONFIG=$STARROCKS_HOME/conf/be.conf
 
 
@@ -109,7 +109,7 @@ collect_env_info
 add_self $svc_name || exit $?
 log_stderr "run start_be.sh"
 
-if [ $COREDUMP_ENABLED == "true" ]; then
+if [[ "$COREDUMP_ENABLED" == "true" ]]; then
   # start inotifywait loop daemon to monitor core dump generation
   $STARROCKS_ROOT/upload_coredump.sh &
 fi
@@ -132,7 +132,7 @@ while true; do
       tail -n $nol $STARROCKS_HOME/log/be.out
   fi
 
-  if [ $COREDUMP_ENABLED != "true" ]; then
+  if [[ "$COREDUMP_ENABLED" != "true" ]]; then
     exit $ret
   fi
 
