@@ -105,7 +105,7 @@ public class UnionToValuesRule extends TransformationRule {
             }
         }
 
-        if (otherChildren.isEmpty() && !newRows.isEmpty() && unionOp.isUnionAll()) {
+        if (otherChildren.isEmpty() && !newRows.isEmpty()) {
             LogicalValuesOperator newValuesOperator =
                     new LogicalValuesOperator.Builder().setColumnRefSet(unionOp.getOutputColumnRefOp()).setRows(newRows)
                             .setLimit(unionOp.getLimit())
