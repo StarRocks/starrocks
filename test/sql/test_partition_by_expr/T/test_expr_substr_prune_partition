@@ -17,8 +17,7 @@ PARTITION p202008 VALUES [('2020-07-01'), ('2020-07-29')),
 PARTITION p202012 VALUES [('2020-08-01'), (MAXVALUE)))
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 
 CREATE TABLE `ptest_expr` (
@@ -34,8 +33,7 @@ COMMENT "OLAP"
 PARTITION BY date_trunc('month', d2)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 
 insert into ptest (k1, d2) values (1, '1000-01-01'), (2, '1000-01-02'), (3, '1100-05-06'), (4, '1500-06-06'), (5, '1999-07-08'),
