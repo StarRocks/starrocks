@@ -178,7 +178,9 @@ public final class MetricRepo {
         // load jobs
         LoadMgr loadManger = GlobalStateMgr.getCurrentState().getLoadMgr();
         for (EtlJobType jobType : EtlJobType.values()) {
-            if (jobType == EtlJobType.MINI || jobType == EtlJobType.UNKNOWN) {
+            // Only broker/spark/insert loads are stored into LoadManager,
+            // so these 3 types of jobs are displayed, others are always 0.
+            if (!(jobType == EtlJobType.BROKER || jobType == EtlJobType.SPARK || jobType == EtlJobType.INSERT)) {
                 continue;
             }
 
