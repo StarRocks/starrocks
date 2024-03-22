@@ -18,11 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
-<<<<<<< HEAD
-=======
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
->>>>>>> 8bcffcf299 ([Enhancement] add mv db id to currentSqlDbIds for resource group  (#42946))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -34,11 +30,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
->>>>>>> 8bcffcf299 ([Enhancement] add mv db id to currentSqlDbIds for resource group  (#42946))
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -103,6 +95,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
@@ -241,9 +234,6 @@ public class Optimizer {
             OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
         }
 
-<<<<<<< HEAD
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PlanValidate")) {
-=======
         // collect all mv scan operator
         collectAllPhysicalOlapScanOperators(result, rootTaskContext);
         List<PhysicalOlapScanOperator> mvScan = rootTaskContext.getAllPhysicalOlapScanOperators().stream().
@@ -252,8 +242,7 @@ public class Optimizer {
         Set<Long> currentSqlDbIds = rootTaskContext.getOptimizerContext().getCurrentSqlDbIds();
         mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
 
-        try (Timer ignored = Tracers.watchScope("PlanValidate")) {
->>>>>>> 8bcffcf299 ([Enhancement] add mv db id to currentSqlDbIds for resource group  (#42946))
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PlanValidate")) {
             // valid the final plan
             PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
             // validate mv and log tracer if needed
