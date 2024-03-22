@@ -2901,4 +2901,65 @@ TEST_F(OrcChunkReaderTest, TestColumnMismatched) {
     }
 }
 
+TEST_F(OrcChunkReaderTest, TestORCIntToSRFloat) {
+    MemoryOutputStream buffer(1024000);
+
+    {
+        // prepare data
+        orc::WriterOptions writerOptions;
+        // force to make stripe every time.
+        writerOptions.setStripeSize(128);
+        writerOptions.setRowIndexStride(128);
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<col1:smallint,col2:int>"));
+        ORC_UNIQUE_PTR<orc::Writer> writer = createWriter(*schema, &buffer, writerOptions);
+
+        size_t batch_size = 128;
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(batch_size);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* col1 = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        auto* col2 = dynamic_cast<orc::LongVectorBatch*>(root->fields[1]);
+
+        size_t index = 1;
+        for (size_t i = 0; i < batch_size; i++) {
+            col1->data[i] = index;
+            col2->data[i] = 10000 + index;
+            index += 1;
+        }
+        col1->numElements = batch_size;
+        col2->numElements = batch_size;
+        root->numElements = batch_size;
+        writer->add(*batch);
+        writer->close();
+    }
+
+    // test with col2, col1 reorderd, enable invalid_as_null, and test with search argument
+    {
+        SlotDesc col1{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT)};
+        SlotDesc col2{"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE)};
+
+        SlotDesc slot_descs[] = {col1, col2, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream =
+                ORC_UNIQUE_PTR<orc::InputStream>(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        Status st = reader.init(std::move(input_stream), nullptr);
+        ASSERT_TRUE(st.ok()) << st.message();
+
+        EXPECT_OK(reader.read_next());
+        ChunkPtr ckptr = reader.create_chunk();
+        EXPECT_TRUE(ckptr != nullptr);
+        EXPECT_OK(reader.fill_chunk(&ckptr));
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        EXPECT_TRUE(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 128);
+        EXPECT_EQ(result->num_columns(), 2);
+        EXPECT_EQ("[1, 10001]", result->debug_row(0));
+        EXPECT_EQ("[2, 10002]", result->debug_row(1));
+    }
+}
+
 } // namespace starrocks
