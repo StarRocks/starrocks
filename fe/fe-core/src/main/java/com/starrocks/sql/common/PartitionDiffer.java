@@ -79,8 +79,8 @@ public class PartitionDiffer {
         Range<PartitionKey> rangeToInclude = null;
         Column partitionColumn =
                 ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-        String start = context.getProperties().get(TaskRun.PARTITION_START);
-        String end = context.getProperties().get(TaskRun.PARTITION_END);
+        String start = context == null ? null : context.getProperties().get(TaskRun.PARTITION_START);
+        String end = context == null ? null : context.getProperties().get(TaskRun.PARTITION_END);
         if (start != null || end != null) {
             rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         }

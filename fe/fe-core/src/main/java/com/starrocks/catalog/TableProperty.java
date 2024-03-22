@@ -91,8 +91,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
-        LOOSE,      // 1: enable query rewrite, and skip the partition version check
-        CHECKED;    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+        LOOSE,      // 1: enable query rewrite, and skip the partition version check, still need to check mv partition exist
+        CHECKED,    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+        NOCHECK;   // 3: enable query rewrite, and rewrite without any check
 
         public static QueryRewriteConsistencyMode defaultQueryRewriteConsistencyMode() {
             return CHECKED;
