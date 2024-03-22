@@ -191,6 +191,10 @@ public class CompactionMgr {
         compactionScheduler.cancelCompaction(txnId);
     }
 
+    public boolean existCompaction(long txnId) {
+        return compactionScheduler.existCompaction(txnId);
+    }
+
     public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
         String json = Text.readString(in);
         CompactionMgr compactionManager = GsonUtils.GSON.fromJson(json, CompactionMgr.class);
