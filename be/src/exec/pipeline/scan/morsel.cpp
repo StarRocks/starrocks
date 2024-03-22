@@ -32,7 +32,7 @@
 namespace starrocks::pipeline {
 
 /// Morsel.
-
+const std::vector<BaseRowsetSharedPtr> ScanMorselX::kEmptyRowsets;
 class PhysicalSplitScanMorsel final : public ScanMorsel {
 public:
     PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
