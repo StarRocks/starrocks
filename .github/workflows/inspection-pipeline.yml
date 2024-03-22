@@ -5,7 +5,7 @@ on:
     - cron: "30 0 * * 1-5"
     - cron: "30 4 * * 1-5"
     - cron: "30 9 * * 1-5"
-    - cron: "0 10 * * 1-5"
+    - cron: "0 11 * * 1-5"
   workflow_dispatch:
     inputs:
       BRANCH:
@@ -79,15 +79,14 @@ jobs:
         id: param
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            if [[ "${{ github.event.schedule }}" == "0 10 * * 1-5" ]]; then
+            if [[ "${{ github.event.schedule }}" == "0 11 * * 1-5" ]]; then
               branch=branch-3.2
-              all_linux=true
+              [[ "$GITHUB_REPOSITORY" == 'StarRocks/starrocks' ]] && all_linux=true
             elif [[ "${{ github.event.schedule }}" == "30 0 * * 1-5" ]]; then
               branch=main
               all_linux=true
             else
               branch=main
-              all_linux=false
             fi
             base_sha=$(gh api /repos/${REPO}/branches/${branch} | jq -r .commit.sha)
             [[ "${base_sha}" == "null" ]] && (echo "::error::Get HEAD SHA error, please check." && exit -1);
@@ -258,6 +257,7 @@ jobs:
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      ALL_LINUX: ${{ needs.info.outputs.ALL_LINUX }}
     steps:
       - name: CLEAN
         run: |
@@ -267,6 +267,7 @@ jobs:
         id: run_build
         shell: bash
         timeout-minutes: 90
+        if: (matrix.build_type == 'Release' && matrix.linux == 'centos7') || env.ALL_LINUX == 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --build ${{ matrix.build_type }} --linuxdistro ${{ matrix.linux }}
@@ -304,6 +305,8 @@ jobs:
       - info
       - build
     if: always() && needs.info.result == 'success'
+    env:
+      ALL_LINUX: needs.info.outputs.ALL_LINUX
     outputs:
       RELEASE_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_RELEASE_TAR_PATH }}
       ASAN_TAR_PATH: ${{ steps.set_output.outputs.CENTOS_ASAN_TAR_PATH }}
@@ -329,31 +332,31 @@ jobs:
             build_result=$(cat "./outputs/BUILD-RESULT-Release-centos7/tar.txt")
             echo "CENTOS_RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
           else
-            echo "::error::BUILD FAILED (Release & Centos)!"
-            exit 1
+            has_failure=true
           fi
           
           if [[ -e "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt" ]]; then
             build_result=$(cat "./outputs/BUILD-RESULT-ASAN-centos7/tar.txt")
             echo "CENTOS_ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
           else
-            echo "::error::BUILD FAILED (ASAN & Centos)!"
-            exit 1
+            has_failure=true
           fi
           
           if [[ -e "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt" ]]; then
             build_result=$(cat "./outputs/BUILD-RESULT-Release-ubuntu/tar.txt")
             echo "UBUNTU_RELEASE_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
           else
-            echo "::error::BUILD FAILED (Release & Ubuntu)!"
-            exit 1
+            has_failure=true
           fi
           
           if [[ -e "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt" ]]; then
             build_result=$(cat "./outputs/BUILD-RESULT-ASAN-ubuntu/tar.txt")
             echo "UBUNTU_ASAN_TAR_PATH=${build_result}" >> $GITHUB_OUTPUT
           else
-            echo "::error::BUILD FAILED (ASAN & Ubuntu)!"
+            has_failure=true
+          fi
+          
+          if [[ "${has_failure}" == "true" && "${ALL_LINUX}" == "true" ]]; then
             exit 1
           fi
 
