@@ -308,7 +308,6 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
 
 template <LogicalType Type>
 Status DoubleColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& column, size_t from, size_t size) {
-    auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
     size_t column_start = column->size();
     column->resize_uninitialized(column_start + size);
     if (_nullable) {
@@ -316,11 +315,32 @@ Status DoubleColumnReader<Type>::get_next(orc::ColumnVectorBatch* cvb, ColumnPtr
         handle_null(cvb, null_column, column_start, from, size);
     }
 
-    Column* data_column = ColumnHelper::get_data_column(column.get());
-    auto* values = ColumnHelper::cast_to_raw<Type>(data_column)->get_data().data();
-    double* cvb_data = data->data.data();
+    {
+        auto* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
+        if (data != nullptr) {
+            return _fill_double_column_from_cvb(data, column, from, column_start, size);
+        }
+    }
+    {
+        auto* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
+        if (data != nullptr) {
+            return _fill_double_column_from_cvb(data, column, from, column_start, size);
+        }
+    }
+    return Status::InternalError("Unreachable code in DoubleColumnReader");
+}
 
-    for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size; column_pos++, vb_pos++) {
+template <LogicalType Type>
+template <typename OrcColumnVectorBatch>
+Status DoubleColumnReader<Type>::_fill_double_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
+                                                              const size_t vb_pos_from, const size_t column_start,
+                                                              const size_t size) {
+    Column* data_column = ColumnHelper::get_data_column(col.get());
+    auto* values = ColumnHelper::cast_to_raw<Type>(data_column)->get_data().data();
+    auto* cvb_data = data->data.data();
+
+    for (size_t column_pos = column_start, vb_pos = vb_pos_from; column_pos < column_start + size;
+         column_pos++, vb_pos++) {
         values[column_pos] = cvb_data[vb_pos];
     }
     return Status::OK();

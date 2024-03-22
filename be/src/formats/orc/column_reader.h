@@ -143,7 +143,7 @@ private:
     Status _fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, size_t from, size_t size);
 
     template <typename OrcColumnVectorBatch>
-    Status _fill_int_column_from_cvb(OrcColumnVectorBatch* data, starrocks::ColumnPtr& col, size_t from, size_t size);
+    Status _fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, size_t from, size_t size);
 };
 
 template <LogicalType Type>
@@ -154,6 +154,11 @@ public:
     ~DoubleColumnReader() override = default;
 
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+
+private:
+    template <typename OrcColumnVectorBatch>
+    Status _fill_double_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, const size_t vb_pos_from,
+                                        const size_t column_start, const size_t size);
 };
 
 class TimeColumnReader : public PrimitiveColumnReader {
