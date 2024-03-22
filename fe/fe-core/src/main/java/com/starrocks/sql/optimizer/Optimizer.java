@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -34,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
@@ -222,7 +224,7 @@ public class Optimizer {
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
         // collect all olap scan operator
-        collectAllScanOperators(logicOperatorTree, rootTaskContext);
+        collectAllLogicalOlapScanOperators(logicOperatorTree, rootTaskContext);
 
         try (Timer ignored = Tracers.watchScope("RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
@@ -273,6 +275,14 @@ public class Optimizer {
             finalPlan = physicalRuleRewrite(rootTaskContext, result);
             OptimizerTraceUtil.logOptExpression("final plan after physical rewrite:\n%s", finalPlan);
         }
+
+        // collect all mv scan operator
+        collectAllPhysicalOlapScanOperators(result, rootTaskContext);
+        List<PhysicalOlapScanOperator> mvScan = rootTaskContext.getAllPhysicalOlapScanOperators().stream().
+                filter(scan -> scan.getTable().isMaterializedView()).collect(Collectors.toList());
+        // add mv db id to currentSqlDbIds, the resource group could use this to distinguish sql patterns
+        Set<Long> currentSqlDbIds = rootTaskContext.getOptimizerContext().getCurrentSqlDbIds();
+        mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
 
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
             // valid the final plan
@@ -792,10 +802,16 @@ public class Optimizer {
         return expression;
     }
 
-    private void collectAllScanOperators(OptExpression tree, TaskContext rootTaskContext) {
+    private void collectAllLogicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOperator(tree, list, op -> op instanceof LogicalOlapScanOperator);
-        rootTaskContext.setAllScanOperators(Collections.unmodifiableList(list));
+        rootTaskContext.setAllLogicalOlapScanOperators(Collections.unmodifiableList(list));
+    }
+
+    private void collectAllPhysicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {
+        List<PhysicalOlapScanOperator> list = Lists.newArrayList();
+        Utils.extractOperator(tree, list, op -> op instanceof PhysicalOlapScanOperator);
+        rootTaskContext.setAllPhysicalOlapScanOperators(Collections.unmodifiableList(list));
     }
 
     private void ruleRewriteIterative(OptExpression tree, TaskContext rootTaskContext, RuleSetType ruleSetType) {
