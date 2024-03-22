@@ -81,7 +81,7 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     auto sink_ctx = std::make_shared<connector::FileChunkSinkContext>();
     sink_ctx->path = target_table.path;
     sink_ctx->cloud_conf = thrift_sink.table_function_table_sink.cloud_configuration;
-    sink_ctx->column_names = column_names;
+    sink_ctx->column_names = std::move(column_names);
     if (target_table.__isset.partition_column_ids) {
         sink_ctx->partition_column_indices = target_table.partition_column_ids;
     }
