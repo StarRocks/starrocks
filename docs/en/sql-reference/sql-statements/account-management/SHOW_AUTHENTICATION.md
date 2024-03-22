@@ -57,12 +57,12 @@ Example 2: Display the authentication information of all users in the current cl
 
 ```Plain
 SHOW ALL AUTHENTICATION;
-+---------------+----------+-------------------------+-------------------+
-| UserIdentity  | Password | AuthPlugin              | UserForAuthPlugin |
-+---------------+----------+-------------------------+-------------------+
-| 'root'@'%'    | Yes      | NULL                    | NULL              |
-| 'chelsea'@'%' | No       | AUTHENTICATION_KERBEROS | HADOOP.COM        |
-+---------------+----------+-------------------------+-------------------+
++---------------+----------+----------------------------+-------------------+
+| UserIdentity  | Password | AuthPlugin                 | UserForAuthPlugin |
++---------------+----------+----------------------------+-------------------+
+| 'root'@'%'    | Yes      | NULL                       | NULL              |
+| 'chelsea'@'%' | No       | AUTHENTICATION_LDAP_SIMPLE | NULL              |
++---------------+----------+----------------------------+-------------------+
 ```
 
 Example 3: Display the authentication information of a specified user.
