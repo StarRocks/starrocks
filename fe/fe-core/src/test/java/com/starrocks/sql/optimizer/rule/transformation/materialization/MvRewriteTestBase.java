@@ -117,6 +117,13 @@ public class MvRewriteTestBase {
         return mv;
     }
 
+    protected void refreshMaterializedViewWithPartition(String dbName, String mvName, String partitionStart,
+                                                        String partitionEnd) throws SQLException {
+        cluster.runSql(dbName, String.format("refresh materialized view %s partition start (\"%s\") " +
+                "end (\"%s\") with sync mode", mvName, partitionStart, partitionEnd));
+        cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
+    }
+
     protected void refreshMaterializedView(String dbName, String mvName) throws SQLException {
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
         cluster.runSql(dbName, String.format("analyze table %s with sync mode", mvName));
