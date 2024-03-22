@@ -152,6 +152,8 @@ public:
 
     StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 
+    StatusOr<int64_t> get_tablet_num_rows(int64_t tablet_id, int64_t* version_hint)
+
     int64_t in_writing_data_size(int64_t tablet_id);
 
     void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);

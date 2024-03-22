@@ -187,8 +187,14 @@ int64_t Tablet::data_size() {
 }
 
 size_t Tablet::num_rows() const {
-    // TODO get the actual num_rows
-    return 59986052;
+    int64_t version = _version_hint;
+    auto num_rows = _mgr->get_tablet_num_rows(_id, &version);
+    if (num_rows.ok()) {
+        return num_rows.value();
+    } else {
+        LOG(WARNING) << "failed to get tablet rows num" << _id << "num rows: " << num_rows.status();
+        return 0;
+    }
 }
 
 } // namespace starrocks::lake
