@@ -202,7 +202,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_value<TYPE_DOUBLE>(ctx.get(), columns).value();
+        ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -776,7 +776,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.push_back(ConstColumn::create(path_column));
     }
 
     ctx.get()->set_constant_columns(columns);
@@ -824,7 +824,7 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_constant_json_test) {
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.push_back(ConstColumn::create(path_column, 2));
     }
 
     ctx.get()->set_constant_columns(columns);

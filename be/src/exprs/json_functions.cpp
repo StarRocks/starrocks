@@ -455,6 +455,7 @@ struct NativeJsonState {
 public:
     JsonPath json_path;
 
+    // flat json used
     std::once_flag init_flat_once;
     bool init_flat = false;
     bool is_partial_match = false;
@@ -474,7 +475,7 @@ static NativeJsonState* get_native_json_state(FunctionContext* context) {
 
 static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice slice, JsonPath* out) {
     auto* prepared = reinterpret_cast<NativeJsonState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    if (prepared != nullptr) {
+    if (prepared != nullptr && !prepared->json_path.is_empty()) {
         return &prepared->json_path;
     }
     auto res = JsonPath::parse(slice);
@@ -484,20 +485,22 @@ static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice
 }
 
 Status JsonFunctions::native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_notnull_constant_column(1)) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
 
-    auto path_column = context->get_constant_column(1);
-    Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
-    auto json_path = JsonPath::parse(path_value);
-    RETURN_IF(!json_path.ok(), json_path.status());
     auto* state = new NativeJsonState();
-    state->json_path.reset(std::move(json_path.value()));
-    state->init_flat = false;
+    if (context->is_notnull_constant_column(1)) {
+        auto path_column = context->get_constant_column(1);
+        Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
+        auto json_path = JsonPath::parse(path_value);
+        RETURN_IF(!json_path.ok(), json_path.status());
+        state->json_path.reset(std::move(json_path.value()));
+        VLOG(10) << "prepare json path: " << path_value;
+    }
 
+    state->init_flat = false;
     context->set_function_state(scope, state);
-    VLOG(10) << "prepare json path: " << path_value;
     return Status::OK();
 }
 
@@ -565,6 +568,9 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
     }
 
     auto* state = get_native_json_state(context);
+    if (state == nullptr) {
+        return Status::JsonFormatError("flat json required prepare status");
+    }
     if (state->init_flat) {
         JsonColumn* json_column;
         if (columns[0]->is_nullable()) {
