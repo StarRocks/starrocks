@@ -1,6 +1,4 @@
 -- name: test_name_check
-'-', '~', '!', '@', '#', '$',
-            '%', '^', '&', '<', '>', '='
 create database `abc-~!@#$%^&<>=+abc`;
 -- result:
 -- !result
