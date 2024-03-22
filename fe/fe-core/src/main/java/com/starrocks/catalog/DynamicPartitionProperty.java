@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DynamicPartitionUtil.StartOfDate;
@@ -171,6 +172,30 @@ public class DynamicPartitionProperty {
         return historyPartitionNum;
     }
 
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(ENABLE, String.valueOf(enable));
+        properties.put(TIME_UNIT, timeUnit);
+        properties.put(TIME_ZONE, tz.getID());
+        properties.put(START, String.valueOf(start));
+        properties.put(END, String.valueOf(end));
+        properties.put(PREFIX, prefix);
+        if (buckets > 0) {
+            properties.put(BUCKETS, String.valueOf(buckets));
+        }
+        properties.put(HISTORY_PARTITION_NUM, String.valueOf(historyPartitionNum));
+        if (replicationNum != NOT_SET_REPLICATION_NUM) {
+            properties.put(REPLICATION_NUM, String.valueOf(replicationNum));
+        }
+        if (getTimeUnit().equalsIgnoreCase(TimeUnit.WEEK.toString())) {
+            properties.put(START_DAY_OF_WEEK, String.valueOf(startOfWeek.dayOfWeek));
+        } else if (getTimeUnit().equalsIgnoreCase(TimeUnit.MONTH.toString())) {
+            properties.put(START_DAY_OF_MONTH, String.valueOf(startOfMonth.day));
+        }
+        return properties;
+    }
+
+    // todo: remove
     public String getPropString() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");

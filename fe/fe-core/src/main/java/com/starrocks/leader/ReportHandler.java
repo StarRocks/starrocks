@@ -73,6 +73,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -232,7 +233,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             } else {
                 tStatus.setStatus_code(TStatusCode.INTERNAL_ERROR);
                 List<String> errorMsgs = Lists.newArrayList();
-                errorMsgs.add("backend or compute node [" + host + ":" + bePort + "] does not exist.");
+                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(host, bePort);
+                errorMsgs.add("backend or compute node [" + accessibleHostPort + "] does not exist.");
                 tStatus.setError_msgs(errorMsgs);
                 return result;
             }
