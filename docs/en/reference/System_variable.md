@@ -750,4 +750,6 @@ The StarRocks version. Cannot be changed.
 
 ### wait_timeout
 
-Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
+The number of seconds the server waits for activity on a noninteractive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
+
+Unit: seconds. Default value: 28800 (8 hours).
