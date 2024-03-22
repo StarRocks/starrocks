@@ -70,11 +70,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.UserIdentity;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.common.PartitionDiffer;
-import com.starrocks.sql.common.PartitionRange;
->>>>>>> 13690c7e75 ([Enhancement] check mv partition exist in loose mode for mv query rewrite (#42867))
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
@@ -1276,39 +1272,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return false;
     }
 
-<<<<<<< HEAD
-=======
-    public Map<Table, Expr> getTableToPartitionExprMap() {
-        Map<Table, Expr> tableToJoinExprMap = new HashMap<>();
-        for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTableChecked();
-            for (Map.Entry<Expr, SlotRef> entry : partitionExprMaps.entrySet()) {
-                SlotRef slotRef = entry.getValue();
-                if (com.starrocks.common.util.StringUtils.areTableNamesEqual(table,
-                        slotRef.getTblNameWithoutAnalyzed().getTbl())) {
-                    tableToJoinExprMap.put(table, entry.getKey());
-                    break;
-                }
-            }
-        }
-        return tableToJoinExprMap;
-    }
-
-    public Map<Table, SlotRef> getTableToPartitionSlotMap() {
-        Map<Table, SlotRef> tableToJoinExprMap = new HashMap<>();
-        for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTableChecked();
-            for (Map.Entry<Expr, SlotRef> entry : partitionExprMaps.entrySet()) {
-                SlotRef slotRef = entry.getValue();
-                if (com.starrocks.common.util.StringUtils.areTableNamesEqual(table,
-                        slotRef.getTblNameWithoutAnalyzed().getTbl())) {
-                    tableToJoinExprMap.put(table, slotRef);
-                    break;
-                }
-            }
-        }
-        return tableToJoinExprMap;
-    }
 
     // In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
     // Only need to check the mv partition existence.
@@ -1322,24 +1285,21 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return true;
         }
         Expr partitionExpr = getFirstPartitionRefTableExpr();
-        Map<Table, Column> partitionTableAndColumn = getRelatedPartitionTableAndColumn();
+        Pair<Table, Column> partitionTableAndColumn = getBaseTableAndPartitionColumn();
+        Table refBaseTable = partitionTableAndColumn.first;
+        Column refBaseTablePartitionColumn = partitionTableAndColumn.second;
         Map<String, Range<PartitionKey>> mvRangePartitionMap = getRangePartitionMap();
-        Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
+        Map<String, Range<PartitionKey>> refBaseTablePartitionMap = Maps.newHashMap();
         RangePartitionDiff rangePartitionDiff = null;
         try {
-            for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
-                Table refBaseTable = entry.getKey();
-                Column refBaseTablePartitionColumn = entry.getValue();
-                // Collect the ref base table's partition range map.
-                refBaseTablePartitionMap.put(refBaseTable, PartitionUtil.getPartitionKeyRange(
-                        refBaseTable, refBaseTablePartitionColumn, partitionExpr));
+            // Collect the ref base table's partition range map.
+            refBaseTablePartitionMap = PartitionUtil.getPartitionKeyRange(
+                    refBaseTable, refBaseTablePartitionColumn, partitionExpr);
 
-            }
-            Table partitionTable = getDirectTableAndPartitionColumn().first;
             Column partitionColumn = getPartitionInfo().getPartitionColumns().get(0);
             PartitionDiffer differ = PartitionDiffer.build(this, null);
             rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
-                    refBaseTablePartitionMap.get(partitionTable), mvRangePartitionMap, differ);
+                    refBaseTablePartitionMap, mvRangePartitionMap, differ);
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return false;
@@ -1358,7 +1318,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return true;
     }
 
->>>>>>> 13690c7e75 ([Enhancement] check mv partition exist in loose mode for mv query rewrite (#42867))
     /**
      * Once the materialized view's base tables have updated, we need to check correspond materialized views' partitions
      * to be refreshed.
