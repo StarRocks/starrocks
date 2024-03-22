@@ -80,6 +80,7 @@ uint128_t to_bigendian(uint128_t v) {
 
 template <class T>
 void encode_integral(const T& v, std::string* dest) {
+    LOG(INFO) << "encode integral";
     if constexpr (std::is_signed<T>::value) {
         typedef typename std::make_unsigned<T>::type UT;
         UT uv = v;
@@ -164,6 +165,10 @@ static inline void EncodeChunkLoop(const uint8_t** srcp, uint8_t** dstp, int len
 }
 
 inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
+    LOG(INFO) << "encode slice";
+    CHECK(dst != nullptr) << "dst string is null";
+    LOG(INFO) << "dst size: " << dst->size();
+    LOG(INFO) << "src size: " <<  s.size;
     if (is_last) {
         dst->append(s.data, s.size);
     } else {
@@ -369,37 +374,45 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
     auto& ops = *pops;
     auto& datas = *pdatas;
     for (int j = 0; j < ncol; j++) {
+        LOG(INFO) << "prepare_ops for idx:" << j << " col idx:" << sort_key_idxes[j];
         datas[j] = chunk.get_column_by_index(sort_key_idxes[j])->raw_data();
+        CHECK(datas[j] != nullptr) << "col:" << j << " sort_key_idx:" << sort_key_idxes[j] << " return nullptr";
         switch (schema.field(sort_key_idxes[j])->type()->type()) {
         case TYPE_BOOLEAN:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const uint8_t*)data)[idx], buff);
             };
+            LOG(INFO) << "type boolean";
             break;
         case TYPE_TINYINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int8_t*)data)[idx], buff);
             };
+            LOG(INFO) << "type tinyint";
             break;
         case TYPE_SMALLINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int16_t*)data)[idx], buff);
             };
+            LOG(INFO) << "type smallint";
             break;
         case TYPE_INT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int32_t*)data)[idx], buff);
             };
+            LOG(INFO) << "type int";
             break;
         case TYPE_BIGINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int64_t*)data)[idx], buff);
             };
+            LOG(INFO) << "type bigint";
             break;
         case TYPE_LARGEINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int128_t*)data)[idx], buff);
             };
+            LOG(INFO) << "type largeint";
             break;
         case TYPE_VARCHAR:
             if (j + 1 == ncol) {
@@ -411,16 +424,19 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
                     encode_slice(((const Slice*)data)[idx], buff, false);
                 };
             }
+            LOG(INFO) << "type varchar";
             break;
         case TYPE_DATE:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int32_t*)data)[idx], buff);
             };
+            LOG(INFO) << "type date";
             break;
         case TYPE_DATETIME:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int64_t*)data)[idx], buff);
             };
+            LOG(INFO) << "type datetime";
             break;
         default:
             CHECK(false) << "type not supported for primary key encoding "
@@ -488,7 +504,12 @@ void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk
     int ncol = schema.sort_key_idxes().size();
     std::vector<EncodeOp> ops(ncol);
     std::vector<const void*> datas(ncol);
+    LOG(INFO) << "sort key idxes size:" << schema.sort_key_idxes().size() << ", chunk size:" << chunk.num_columns() << " schema field size:" << schema.num_fields();
+    for (int i = 0; i < ncol; i++) {
+        LOG(INFO) << "sort_key_idxes[" << i << "]:" << schema.sort_key_idxes()[i];
+    }
     prepare_ops_datas(schema, schema.sort_key_idxes(), chunk, &ops, &datas);
+    LOG(INFO) << "prepare_ops_datas success";
     std::vector<std::shared_ptr<Column>> cols(ncol);
     for (int i = 0; i < ncol; i++) {
         cols[i] = chunk.get_column_by_index(schema.sort_key_idxes()[i]);
@@ -501,6 +522,7 @@ void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk
         }
     }
     if (dest->is_binary()) {
+        LOG(INFO) << "encode binary column";
         auto& bdest = down_cast<BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         std::string buff;
@@ -527,6 +549,7 @@ void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk
             }
         }
     } else {
+        LOG(INFO) << "encode large binary column";
         auto& bdest = down_cast<LargeBinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         std::string buff;
