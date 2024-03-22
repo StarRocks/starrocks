@@ -58,6 +58,7 @@ set(EXEC_FILES
         ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
