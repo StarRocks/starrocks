@@ -68,11 +68,7 @@ The prefix index of a table helps accelerate queries on the table but rely on th
 
 StarRocks supports per-column indexes such as Bloom filters, zone maps, and bitmap indexes:
 
-<<<<<<< HEAD
 - A Bloom filter is used to determine whether data blocks contain the values you want to query.
-=======
-### [Data types](../sql-reference/data-types/data-type-list.md)
->>>>>>> 3aa7e96e5e ([Doc] Organize sqlref: move data types up (#43007))
 
 - A zone map is used to locate the values within a specified range.
 
