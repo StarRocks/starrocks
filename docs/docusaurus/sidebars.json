@@ -313,62 +313,62 @@
         {
           "type": "category",
           "label": "Data Types",
-          "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/data-type-list"},
+          "link": {"type": "doc", "id": "sql-reference/data-types/data-type-list"},
           "items": [
             {
               "type": "category",
               "label": "Numeric",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/numeric"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/numeric/numeric"},
               "items": [
-                "sql-reference/sql-statements/data-types/TINYINT",
-                "sql-reference/sql-statements/data-types/SMALLINT",
-                "sql-reference/sql-statements/data-types/INT",
-                "sql-reference/sql-statements/data-types/BIGINT",
-                "sql-reference/sql-statements/data-types/LARGEINT",
-                "sql-reference/sql-statements/data-types/DECIMAL",
-                "sql-reference/sql-statements/data-types/DOUBLE",
-                "sql-reference/sql-statements/data-types/FLOAT",
-                "sql-reference/sql-statements/data-types/BOOLEAN"
+                "sql-reference/data-types/numeric/TINYINT",
+                "sql-reference/data-types/numeric/SMALLINT",
+                "sql-reference/data-types/numeric/INT",
+                "sql-reference/data-types/numeric/BIGINT",
+                "sql-reference/data-types/numeric/LARGEINT",
+                "sql-reference/data-types/numeric/DECIMAL",
+                "sql-reference/data-types/numeric/DOUBLE",
+                "sql-reference/data-types/numeric/FLOAT",
+                "sql-reference/data-types/numeric/BOOLEAN"
               ]
             },
             {
               "type": "category",
               "label": "String",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/string"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/string-type/string-type"},
               "items": [
-                "sql-reference/sql-statements/data-types/STRING",
-                "sql-reference/sql-statements/data-types/BINARY",
-                "sql-reference/sql-statements/data-types/CHAR",
-                "sql-reference/sql-statements/data-types/VARCHAR"
+                "sql-reference/data-types/string-type/STRING",
+                "sql-reference/data-types/string-type/BINARY",
+                "sql-reference/data-types/string-type/CHAR",
+                "sql-reference/data-types/string-type/VARCHAR"
               ]
             },
             {
               "type": "category",
               "label": "Date",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/date"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/date-types/date-types"},
               "items": [
-                "sql-reference/sql-statements/data-types/DATE",
-                "sql-reference/sql-statements/data-types/DATETIME"
+                "sql-reference/data-types/date-types/DATE",
+                "sql-reference/data-types/date-types/DATETIME"
               ]
             },
             {
               "type": "category",
               "label": "Semi-structured",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/semi_structured/semi_structured"},
               "items": [
-                "sql-reference/sql-statements/data-types/Array",
-                "sql-reference/sql-statements/data-types/JSON",
-                "sql-reference/sql-statements/data-types/Map",
-                "sql-reference/sql-statements/data-types/STRUCT"
+                "sql-reference/data-types/semi_structured/Array",
+                "sql-reference/data-types/semi_structured/JSON",
+                "sql-reference/data-types/semi_structured/Map",
+                "sql-reference/data-types/semi_structured/STRUCT"
               ]
             },
             {
               "type": "category",
               "label": "Other",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/other-data-types/other-data-types"},
               "items": [
-                "sql-reference/sql-statements/data-types/BITMAP",
-                "sql-reference/sql-statements/data-types/HLL"
+                "sql-reference/data-types/other-data-types/BITMAP",
+                "sql-reference/data-types/other-data-types/HLL"
               ]
             }
           ]
@@ -1225,62 +1225,62 @@
         {
           "type": "category",
           "label": "数据类型",
-          "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/data-type-list"},
+          "link": {"type": "doc", "id": "sql-reference/data-types/data-type-list"},
           "items": [
             {
               "type": "category",
               "label": "数值类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/numeric"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/numeric/numeric"},
               "items": [
-                "sql-reference/sql-statements/data-types/TINYINT",
-                "sql-reference/sql-statements/data-types/SMALLINT",
-                "sql-reference/sql-statements/data-types/INT",
-                "sql-reference/sql-statements/data-types/BIGINT",
-                "sql-reference/sql-statements/data-types/LARGEINT",
-                "sql-reference/sql-statements/data-types/DECIMAL",
-                "sql-reference/sql-statements/data-types/DOUBLE",
-                "sql-reference/sql-statements/data-types/FLOAT",
-                "sql-reference/sql-statements/data-types/BOOLEAN"
+                "sql-reference/data-types/numeric/TINYINT",
+                "sql-reference/data-types/numeric/SMALLINT",
+                "sql-reference/data-types/numeric/INT",
+                "sql-reference/data-types/numeric/BIGINT",
+                "sql-reference/data-types/numeric/LARGEINT",
+                "sql-reference/data-types/numeric/DECIMAL",
+                "sql-reference/data-types/numeric/DOUBLE",
+                "sql-reference/data-types/numeric/FLOAT",
+                "sql-reference/data-types/numeric/BOOLEAN"
               ]
             },
             {
               "type": "category",
               "label": "字符串类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/string"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/string-type/string-type"},
               "items": [
-                "sql-reference/sql-statements/data-types/STRING",
-                "sql-reference/sql-statements/data-types/BINARY",
-                "sql-reference/sql-statements/data-types/CHAR",
-                "sql-reference/sql-statements/data-types/VARCHAR"
+                "sql-reference/data-types/string-type/STRING",
+                "sql-reference/data-types/string-type/BINARY",
+                "sql-reference/data-types/string-type/CHAR",
+                "sql-reference/data-types/string-type/VARCHAR"
               ]
             },
             {
               "type": "category",
               "label": "日期类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/date"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/date-types/date-types"},
               "items": [
-                "sql-reference/sql-statements/data-types/DATE",
-                "sql-reference/sql-statements/data-types/DATETIME"
+                "sql-reference/data-types/date-types/DATE",
+                "sql-reference/data-types/date-types/DATETIME"
               ]
             },
             {
               "type": "category",
               "label": "半结构化类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/semi_structured/semi_structured"},
               "items": [
-                "sql-reference/sql-statements/data-types/Array",
-                "sql-reference/sql-statements/data-types/JSON",
-                "sql-reference/sql-statements/data-types/Map",
-                "sql-reference/sql-statements/data-types/STRUCT"
+                "sql-reference/data-types/semi_structured/Array",
+                "sql-reference/data-types/semi_structured/JSON",
+                "sql-reference/data-types/semi_structured/Map",
+                "sql-reference/data-types/semi_structured/STRUCT"
               ]
             },
             {
               "type": "category",
               "label": "其他类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/other-data-types/other-data-types"},
               "items": [
-                "sql-reference/sql-statements/data-types/BITMAP",
-                "sql-reference/sql-statements/data-types/HLL"
+                "sql-reference/data-types/other-data-types/BITMAP",
+                "sql-reference/data-types/other-data-types/HLL"
               ]
             }
           ]

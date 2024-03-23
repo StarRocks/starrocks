@@ -68,4 +68,24 @@ StarRocks 支持布隆过滤器 (Bloom Filter)、ZoneMap 索引和 位图 (Bitma
 
 - ZoneMap 索引有助于通过数据范围快速过滤出待查找的值。
 
+<<<<<<< HEAD
 - 位图索引有助于快速计算出枚举类型的列满足一定条件的行。
+=======
+### [数据类型](../sql-reference/data-types/data-type-list.md)
+
+除了基本的数据类型，如数值、日期和字符串类型，StarRocks 还支持复杂的半结构化数据类型，包括 ARRAY、JSON、MAP、STRUCT。
+
+### [索引](./indexes/indexes_overview.md)
+
+索引是一种特殊的数据结构，相当于数据的目录。查询条件命中索引列时，StarRocks 能够快速定位到满足条件的数据的位置。
+
+StarRocks 提供内置索引，包括前缀索引、Ordinal 索引和 ZoneMap 索引。也支持用户手动创建索引，以提高查询效率，包括 Bitmap 和 Bloom Filter 索引。
+
+### 约束
+
+约束用于确保数据的完整性、一致性和准确性。主键表的 Primary Key 列具有唯一非空约束，聚合表的 Aggregate Key 列和更新表的 Unique Key 列具有唯一约束。 
+
+###  更多特性
+
+除了上述常用的特性之外，您还可以根据业务需求使用更多的特性，设计更加健壮的表结构，例如通过 Bitmap 和 HLL 列来加速去重计数，指定生成列或者自增列来加速部分查询，配置灵活的数据自动降冷策略来降低运维成本，配置 Colocate Join 来加速多表 JOIN 查询。
+>>>>>>> 3aa7e96e5e ([Doc] Organize sqlref: move data types up (#43007))
