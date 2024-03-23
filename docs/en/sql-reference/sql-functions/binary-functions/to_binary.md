@@ -70,4 +70,4 @@ mysql> select to_binary('U1RBUlJPQ0tT', 'hex');
 ## References
 
 - [from_binary](from_binary.md)
-- [BINARY/VARBINARY data type](../../sql-statements/data-types/BINARY.md)
+- [BINARY/VARBINARY data type](../../data-types/string-type/BINARY.md)

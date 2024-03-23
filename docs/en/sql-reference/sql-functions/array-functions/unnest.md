@@ -26,7 +26,7 @@ unnest(array0[, array1 ...])
 
 Returns the multiple rows converted from the array. The type of return value depends on the types of elements in the array.
 
-For the element types supported in an array, see [ARRAY](../../sql-statements/data-types/Array.md).
+For the element types supported in an array, see [ARRAY](../../data-types/semi_structured/Array.md).
 
 ## Usage notes
 

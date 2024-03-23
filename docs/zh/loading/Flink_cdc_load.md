@@ -225,7 +225,7 @@ displayed_sidebar: "Chinese"
 
     - `[other]` ：其他信息
         - `be_num`： StarRocks 集群的 BE 节点数（后续生成的 StarRocks 建表 SQL 文件会参考该参数，设置合理的分桶数量）。
-        - `use_decimal_v3`：是否开启 [decimalV3](../sql-reference/sql-statements/data-types/DECIMAL.md)。开启后，MySQL 小数类型的数据同步至 StarRocks 时会转换为 decimalV3。
+        - `use_decimal_v3`：是否开启 [decimalV3](../sql-reference/data-types/numeric/DECIMAL.md)。开启后，MySQL 小数类型的数据同步至 StarRocks 时会转换为 decimalV3。
         - `output_dir` ：待生成的 SQL 文件的路径。SQL 文件会用于在 StarRocks 集群创建库表， 向 Flink 集群提交 Flink job。默认为 `./result`，不建议修改。
 
 2. 执行如下命令，SMT 会读取 MySQL 中同步对象的库表结构，并且结合配置文件信息，在 **result** 目录生成 SQL 文件，用于  StarRocks 集群创建库表（**starrocks-create.all.sql**）， 用于向 Flink 集群提交同步数据的 flink job（**flink-create.all.sql**）。

@@ -231,7 +231,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 
     - `[other]`: other information
        - `be_num`: The number of BEs in your StarRocks cluster (This parameter will be used for setting a reasonable number of tablets in subsequent StarRocks table creation).
-       - `use_decimal_v3`: Whether to enable [Decimal V3](../sql-reference/sql-statements/data-types/DECIMAL.md). After Decimal V3 is enabled, MySQL decimal data will be converted into Decimal V3 data when data is synchronized to StarRocks.
+       - `use_decimal_v3`: Whether to enable [Decimal V3](../sql-reference/data-types/numeric/DECIMAL.md). After Decimal V3 is enabled, MySQL decimal data will be converted into Decimal V3 data when data is synchronized to StarRocks.
        - `output_dir`: The path to save the SQL files to be generated. The SQL files will be used to create a database & table in StarRocks and submit a Flink job to the Flink cluster. The default path is `./result` and we recommend that you retain the default settings.
 
 2. Run the SMT to read the database & table schema in MySQL and generate SQL files in the `./result` directory based on the configuration file. The `starrocks-create.all.sql` file is used to create a database & table in StarRocks and the `flink-create.all.sql` file is used to submit a Flink job to the Flink cluster.

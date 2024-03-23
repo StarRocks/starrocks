@@ -36,7 +36,7 @@ StarRocks 1.18 版本开始起，Decimal 类型支持更高精度的 Fast Decima
 
 Fast Decimal 功能由 FE 动态参数 `enable_decimal_v3` 控制，默认值为 `true`，表示开启。
 
-从 3.1 版本开始，[ARRAY](Array.md)、[MAP](Map.md)、[STRUCT](STRUCT.md) 支持 Fast Decimal。
+从 3.1 版本开始，[ARRAY](../semi_structured/Array.md)、[MAP](../semi_structured/Map.md)、[STRUCT](../semi_structured/STRUCT.md) 支持 Fast Decimal。
 
 ### 使用限制
 

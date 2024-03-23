@@ -51,5 +51,5 @@ select struct(1,2,3);
 
 ## 相关文档
 
-- [STRUCT 数据类型](../../sql-statements/data-types/STRUCT.md)
+- [STRUCT 数据类型](../../data-types/semi_structured/STRUCT.md)
 - [named_struct](named_struct.md)

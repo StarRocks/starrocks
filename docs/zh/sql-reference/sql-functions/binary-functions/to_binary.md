@@ -72,4 +72,4 @@ mysql> select to_binary('U1RBUlJPQ0tT', 'hex');
 ## 相关文档
 
 - [from_binary](from_binary.md)
-- [BINARY/VARBINARY](../../sql-statements/data-types/BINARY.md)
+- [BINARY/VARBINARY](../../data-types/string-type/BINARY.md)
