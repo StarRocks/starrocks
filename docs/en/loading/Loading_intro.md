@@ -18,7 +18,7 @@ StarRocks supports two communication protocols that can be used to submit load j
 
 ## Supported data types
 
-StarRocks supports loading data of all data types. You only need to take note of the limits on the loading of a few specific data types. For more information, see [Data types](../sql-reference/sql-statements/data-types/BIGINT.md).
+StarRocks supports loading data of all data types. You only need to take note of the limits on the loading of a few specific data types. For more information, see [Data types](../sql-reference/data-types/numeric/BIGINT.md).
 
 ## Loading modes
 

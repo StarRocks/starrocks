@@ -18,7 +18,7 @@ StarRocks 提供两种访问协议用于提交导入作业：MySQL 协议和 HTT
 
 ## 支持的数据类型
 
-StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../sql-reference/sql-statements/data-types/BIGINT.md)。
+StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../sql-reference/data-types/numeric/BIGINT.md)。
 
 ## 导入模式
 

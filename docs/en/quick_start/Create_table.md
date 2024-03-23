@@ -75,7 +75,7 @@ To learn more about conceptual details of StarRocks tables, see [StarRocks Table
 
 In addition to the features this tutorial has demonstrated, StarRocks also supports:
 
-- A variety of [data types](../sql-reference/sql-statements/data-types/BIGINT.md)
+- A variety of [data types](../sql-reference/data-types/numeric/BIGINT.md)
 - Multiple [table types](../table_design/table_types/table_types.md)
 - Flexible [partitioning strategies](../table_design/Data_distribution.md#dynamic-partition-management)
 - Classic database query indexes, including [bitmap index](../using_starrocks/Bitmap_index.md) and [bloom filter index](../using_starrocks/Bloomfilter_index.md)
