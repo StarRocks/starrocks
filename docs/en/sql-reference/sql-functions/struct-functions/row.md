@@ -33,6 +33,7 @@ select row(1,"Star","Rocks");
 +-------------------------+
 ```
 
+<<<<<<< HEAD
 ```Plaintext
 select row("StarRocks", NULL);
 +------------------------+
@@ -41,3 +42,9 @@ select row("StarRocks", NULL);
 | {"StarRocks",null}     |
 +------------------------+
 ```
+=======
+## References
+
+- [STRUCT data type](../../data-types/semi_structured/STRUCT.md)
+- [named_struct](named_struct.md)
+>>>>>>> 3aa7e96e5e ([Doc] Organize sqlref: move data types up (#43007))

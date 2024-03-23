@@ -287,7 +287,75 @@
       "items": [
         {
           "type": "category",
+<<<<<<< HEAD
           "label": "SQL Reference",
+=======
+          "label": "Data Types",
+          "link": {"type": "doc", "id": "sql-reference/data-types/data-type-list"},
+          "items": [
+            {
+              "type": "category",
+              "label": "Numeric",
+              "link": {"type": "doc", "id": "sql-reference/data-types/numeric/numeric"},
+              "items": [
+                "sql-reference/data-types/numeric/TINYINT",
+                "sql-reference/data-types/numeric/SMALLINT",
+                "sql-reference/data-types/numeric/INT",
+                "sql-reference/data-types/numeric/BIGINT",
+                "sql-reference/data-types/numeric/LARGEINT",
+                "sql-reference/data-types/numeric/DECIMAL",
+                "sql-reference/data-types/numeric/DOUBLE",
+                "sql-reference/data-types/numeric/FLOAT",
+                "sql-reference/data-types/numeric/BOOLEAN"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "String",
+              "link": {"type": "doc", "id": "sql-reference/data-types/string-type/string-type"},
+              "items": [
+                "sql-reference/data-types/string-type/STRING",
+                "sql-reference/data-types/string-type/BINARY",
+                "sql-reference/data-types/string-type/CHAR",
+                "sql-reference/data-types/string-type/VARCHAR"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Date",
+              "link": {"type": "doc", "id": "sql-reference/data-types/date-types/date-types"},
+              "items": [
+                "sql-reference/data-types/date-types/DATE",
+                "sql-reference/data-types/date-types/DATETIME"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Semi-structured",
+              "link": {"type": "doc", "id": "sql-reference/data-types/semi_structured/semi_structured"},
+              "items": [
+                "sql-reference/data-types/semi_structured/Array",
+                "sql-reference/data-types/semi_structured/JSON",
+                "sql-reference/data-types/semi_structured/Map",
+                "sql-reference/data-types/semi_structured/STRUCT"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Other",
+              "link": {"type": "doc", "id": "sql-reference/data-types/other-data-types/other-data-types"},
+              "items": [
+                "sql-reference/data-types/other-data-types/BITMAP",
+                "sql-reference/data-types/other-data-types/HLL"
+              ]
+            }
+          ]
+        },
+        "sql-reference/sql-statements/keywords",
+        {
+          "type": "category",
+          "label": "SQL Statements",
+>>>>>>> 3aa7e96e5e ([Doc] Organize sqlref: move data types up (#43007))
           "link": {"type": "doc", "id": "sql-reference/sql-statements/all-commands"},
           "items": [
             {
@@ -901,7 +969,75 @@
       "items": [
         {
           "type": "category",
+<<<<<<< HEAD
           "label": "SQL参考",
+=======
+          "label": "数据类型",
+          "link": {"type": "doc", "id": "sql-reference/data-types/data-type-list"},
+          "items": [
+            {
+              "type": "category",
+              "label": "数值类型",
+              "link": {"type": "doc", "id": "sql-reference/data-types/numeric/numeric"},
+              "items": [
+                "sql-reference/data-types/numeric/TINYINT",
+                "sql-reference/data-types/numeric/SMALLINT",
+                "sql-reference/data-types/numeric/INT",
+                "sql-reference/data-types/numeric/BIGINT",
+                "sql-reference/data-types/numeric/LARGEINT",
+                "sql-reference/data-types/numeric/DECIMAL",
+                "sql-reference/data-types/numeric/DOUBLE",
+                "sql-reference/data-types/numeric/FLOAT",
+                "sql-reference/data-types/numeric/BOOLEAN"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "字符串类型",
+              "link": {"type": "doc", "id": "sql-reference/data-types/string-type/string-type"},
+              "items": [
+                "sql-reference/data-types/string-type/STRING",
+                "sql-reference/data-types/string-type/BINARY",
+                "sql-reference/data-types/string-type/CHAR",
+                "sql-reference/data-types/string-type/VARCHAR"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "日期类型",
+              "link": {"type": "doc", "id": "sql-reference/data-types/date-types/date-types"},
+              "items": [
+                "sql-reference/data-types/date-types/DATE",
+                "sql-reference/data-types/date-types/DATETIME"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "半结构化类型",
+              "link": {"type": "doc", "id": "sql-reference/data-types/semi_structured/semi_structured"},
+              "items": [
+                "sql-reference/data-types/semi_structured/Array",
+                "sql-reference/data-types/semi_structured/JSON",
+                "sql-reference/data-types/semi_structured/Map",
+                "sql-reference/data-types/semi_structured/STRUCT"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "其他类型",
+              "link": {"type": "doc", "id": "sql-reference/data-types/other-data-types/other-data-types"},
+              "items": [
+                "sql-reference/data-types/other-data-types/BITMAP",
+                "sql-reference/data-types/other-data-types/HLL"
+              ]
+            }
+          ]
+        },
+        "sql-reference/sql-statements/keywords",
+        {
+          "type": "category",
+          "label": "SQL 参考",
+>>>>>>> 3aa7e96e5e ([Doc] Organize sqlref: move data types up (#43007))
           "link": {"type": "doc", "id": "sql-reference/sql-statements/all-commands"},
           "items": [
             {

@@ -32,6 +32,7 @@ DECIMAL(P [, S])
   
   1. 内部采用多种宽度的整数表示 decimal，decimal(P `<=` 18, S)使用 64-bit 整数，相比于原来 DecimalV2 实现统一采用 128-bit 整数，算数运算和转换运算在 64-bit 的处理器上使用更少的指令数量，因此性能有大幅提升。
 
+<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-types/DECIMAL.md
   2. Fast Decimal 实现和 DecimalV2 相比，具体算法做了极致的优化，尤其是乘法运算，性能提升有 4 倍左右。
   
   当前的限制：
@@ -39,6 +40,15 @@ DECIMAL(P [, S])
   1. 目前 Fast Decimal 不支持 ARRAY 类型。如果用户想使用 array(decimal)类型，请使用 array(double) 类型，或者关闭 DecimalV3 之后，使用 array(decimal) 类型。
   
   2. Hive 直连外表中，ORC 和 Parquet 数据格式对 Decimal 暂未支持。
+=======
+1. 内部采用多种宽度的整数来表示 Decimal。比如使用 64-bit 整数来表示 P &le; 18 的 Decimal 数值。相比于 Decimal V2 统一采用 128-bit 整数，算数运算和转换运算在 64-bit 的处理器上使用更少的指令，因此性能有大幅提升。
+
+2. 和 Decimal V2 相比，Fast Decimal 的算法做了极致的优化，尤其是乘法运算，性能提升有 4 倍左右。
+
+Fast Decimal 功能由 FE 动态参数 `enable_decimal_v3` 控制，默认值为 `true`，表示开启。
+
+从 3.1 版本开始，[ARRAY](../semi_structured/Array.md)、[MAP](../semi_structured/Map.md)、[STRUCT](../semi_structured/STRUCT.md) 支持 Fast Decimal。
+>>>>>>> 3aa7e96e5e ([Doc] Organize sqlref: move data types up (#43007)):docs/zh/sql-reference/data-types/numeric/DECIMAL.md
 
 ### 使用限制
 

@@ -55,7 +55,7 @@ create table test(
 distributed by hash(id);
 ```
 
-### 通过 [Stream load](../data-manipulation/STREAM_LOAD.md) 导入数据
+### 通过 [Stream load](../../sql-statements/data-manipulation/STREAM_LOAD.md) 导入数据
 
 ```bash
 a. 使用表中的列生成 HLL 列。

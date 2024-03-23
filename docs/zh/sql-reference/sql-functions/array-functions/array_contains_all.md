@@ -20,7 +20,7 @@ BOOLEAN array_contains_all(arr1, arr2)
 
 `arr`: 用来比较的两个数组。上述语法检查`arr2`是否为`arr1`的子集。
 
-`arr1`和`arr2`内元素的数据类型必须一致。关于 StarRocks 支持的数组元素数据类型，请参见[ARRAY](../../sql-statements/data-types/Array.md)。
+`arr1`和`arr2`内元素的数据类型必须一致。关于 StarRocks 支持的数组元素数据类型，请参见[ARRAY](../../data-types/semi_structured/Array.md)。
 
 ## 返回值说明
 

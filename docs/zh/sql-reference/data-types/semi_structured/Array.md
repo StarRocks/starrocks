@@ -200,7 +200,11 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### 通过 Broker Load 批量导入 ORC 或 Parquet 文件中的数组
 
+<<<<<<< HEAD:docs/zh/sql-reference/sql-statements/data-types/Array.md
 StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../../../loading/BrokerLoad.md)。
+=======
+StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../../sql-statements/data-manipulation/BROKER_LOAD.md)。
+>>>>>>> 3aa7e96e5e ([Doc] Organize sqlref: move data types up (#43007)):docs/zh/sql-reference/data-types/semi_structured/Array.md
 
 当前 StarRocks 支持直接导入 ORC 文件的 List 结构。Parquet 格式导入正在开发中。
 

@@ -73,7 +73,11 @@ StarRocks supports the following ways to load data and store it as BINARY type.
     INSERT INTO test_binary select 7, to_binary('abab', 'utf8');
     ```
 
+<<<<<<< HEAD:docs/en/sql-reference/sql-statements/data-types/BINARY.md
 - Method 3: Use Broker Load to load a Parquet or ORC file and store the file as BINARY data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
+=======
+- Method 3: Use Broker Load to load a Parquet or ORC file and store the file as BINARY data. For more information, see [Broker Load](../../sql-statements/data-manipulation/BROKER_LOAD.md).
+>>>>>>> 3aa7e96e5e ([Doc] Organize sqlref: move data types up (#43007)):docs/en/sql-reference/data-types/string-type/BINARY.md
 
   - For Parquet files, convert `parquet::Type::type::BYTE_ARRAY` to `TYPE_VARBINARY` directly.
   - For ORC files, convert `orc::BINARY` to `TYPE_VARBINARY` directly.
