@@ -12,7 +12,7 @@ TB_IN_BYTES=$((1024 * 1024 * 1024 * 1024))
 COREDUMP_PATH=${COREDUMP_PATH:-$STARROCKS_HOME/storage/coredumps}
 
 # Default minimal interval in 600 seconds
-COREDUMP_COLLECT_MINIMAL_INTERVAL=${COREDUMP_COLLECT_MINIMAL_INTERVAL:-600}
+COREDUMP_COLLECT_MINIMUM_INTERVAL=${COREDUMP_COLLECT_MINIMUM_INTERVAL:-600}
 
 
 if [ ! -d ${COREDUMP_PATH} ]; then
@@ -63,8 +63,8 @@ while true; do
   currentFileTimestamp=$(stat -c %Y "${latestCoreFile}")
   timeDifference=$((currentFileTimestamp - previousFileTimestamp))
 
-  if (( timeDifference < $COREDUMP_COLLECT_MINIMAL_INTERVAL )); then
-    coredump_log "File was created less than ${COREDUMP_COLLECT_MINIMAL_INTERVAL} seconds after the previous crash, removing file and continuing loop"
+  if (( timeDifference < $COREDUMP_COLLECT_MINIMUM_INTERVAL )); then
+    coredump_log "File was created less than ${COREDUMP_COLLECT_MINIMUM_INTERVAL} seconds after the previous crash, removing file and continuing loop"
     rm "${latestCoreFile}"
     continue
   fi
