@@ -96,6 +96,29 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunks(google::protobuf::R
 }
 
 template <typename T>
+static void parse_from_iobuf(butil::IOBuf& iobuf, T* proto_obj, PTabletWriterAddBatchResult* response) {
+    // deserialize
+    size_t request_size = 0;
+    if (!iobuf.cutn(&request_size, sizeof(request_size))) {
+        LOG(ERROR) << "Failed to read request size";
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        return;
+    }
+    butil::IOBuf request_from;
+    if (!iobuf.cutn(&request_from, request_size)) {
+        LOG(ERROR) << "Failed to cut the required size from the io buffer";
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        return;
+    }
+    butil::IOBufAsZeroCopyInputStream wrapper(request_from);
+    if (!proto_obj->ParseFromZeroCopyStream(&wrapper)) {
+        LOG(ERROR) << "Failed to parse the request";
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        return;
+    }
+}
+
+template <typename T>
 void BackendInternalServiceImpl<T>::tablet_writer_add_chunk_via_http(google::protobuf::RpcController* controller,
                                                                      const PHttpRequest* request,
                                                                      PTabletWriterAddBatchResult* response,
@@ -103,14 +126,7 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunk_via_http(google::pro
     ClosureGuard closure_guard(done);
     auto add_chunk_req = std::make_shared<PTabletWriterAddChunkRequest>();
     auto* cntl = static_cast<brpc::Controller*>(controller);
-    butil::IOBuf& iobuf = cntl->request_attachment();
-    // deserialize
-    size_t request_size = 0;
-    iobuf.cutn(&request_size, sizeof(request_size));
-    butil::IOBuf request_from;
-    iobuf.cutn(&request_from, request_size);
-    butil::IOBufAsZeroCopyInputStream wrapper(request_from);
-    add_chunk_req->ParseFromZeroCopyStream(&wrapper);
+    parse_from_iobuf<PTabletWriterAddChunkRequest>(cntl->request_attachment(), add_chunk_req.get(), response);
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunk(*add_chunk_req, response);
 }
 
@@ -122,14 +138,7 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunks_via_http(google::pr
     ClosureGuard closure_guard(done);
     auto add_chunk_req = std::make_shared<PTabletWriterAddChunksRequest>();
     auto* cntl = static_cast<brpc::Controller*>(controller);
-    butil::IOBuf& iobuf = cntl->request_attachment();
-    // deserialize
-    size_t request_size = 0;
-    iobuf.cutn(&request_size, sizeof(request_size));
-    butil::IOBuf request_from;
-    iobuf.cutn(&request_from, request_size);
-    butil::IOBufAsZeroCopyInputStream wrapper(request_from);
-    add_chunk_req->ParseFromZeroCopyStream(&wrapper);
+    parse_from_iobuf<PTabletWriterAddChunksRequest>(cntl->request_attachment(), add_chunk_req.get(), response);
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunks(*add_chunk_req, response);
 }
 
