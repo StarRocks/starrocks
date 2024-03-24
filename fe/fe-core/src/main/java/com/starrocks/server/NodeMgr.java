@@ -40,7 +40,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.BrokerMgr;
-import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -48,7 +47,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -78,13 +76,14 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -144,8 +143,6 @@ public class NodeMgr {
     private final List<Pair<String, Integer>> helperNodes = Lists.newArrayList();
     private Pair<String, Integer> selfNode = null;
 
-    private final Map<Integer, SystemInfoService> systemInfoMap = new ConcurrentHashMap<>();
-
     private final AtomicInteger leaderChangeListenerIndex = new AtomicInteger();
     private final Map<Integer, Consumer<LeaderInfo>> leaderChangeListeners = new ConcurrentHashMap<>();
 
@@ -199,15 +196,6 @@ public class NodeMgr {
 
     public List<String> getRemovedFrontendNames() {
         return Lists.newArrayList(removedFrontends);
-    }
-
-    public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
-        SystemInfoService systemInfoService = systemInfoMap.get(clusterId);
-        if (systemInfoService == null) {
-            systemInfoService = new SystemInfoService();
-            systemInfoMap.put(clusterId, systemInfoService);
-        }
-        return systemInfoService;
     }
 
     public SystemInfoService getClusterInfo() {
@@ -303,7 +291,7 @@ public class NodeMgr {
             Preconditions.checkNotNull(nodeName);
 
             if (!versionFile.exists()) {
-                clusterId = Config.cluster_id == -1 ? Storage.newClusterID() : Config.cluster_id;
+                clusterId = Storage.newClusterID();
                 token = Strings.isNullOrEmpty(Config.auth_token) ?
                         Storage.newToken() : Config.auth_token;
                 storage = new Storage(clusterId, token, this.imageDir);
@@ -395,17 +383,12 @@ public class NodeMgr {
                     isVersionFileChanged = true;
                 }
                 try {
-                    URL idURL = new URL("http://" + rightHelperNode.first + ":" + Config.http_port + "/check");
+                    URL idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(
+                            rightHelperNode.first, Config.http_port) + "/check");
                     HttpURLConnection conn = null;
                     conn = (HttpURLConnection) idURL.openConnection();
                     conn.setConnectTimeout(2 * 1000);
                     conn.setReadTimeout(2 * 1000);
-                    String clusterIdString = conn.getHeaderField(MetaBaseAction.CLUSTER_ID);
-                    int remoteClusterId = Integer.parseInt(clusterIdString);
-                    if (remoteClusterId != clusterId) {
-                        LOG.error("cluster id is not equal with helper node {}. will exit.", rightHelperNode.first);
-                        System.exit(-1);
-                    }
 
                     String remoteToken = conn.getHeaderField(MetaBaseAction.TOKEN);
                     if (token == null && remoteToken != null) {
@@ -455,12 +438,6 @@ public class NodeMgr {
             }
         }
 
-        if (Config.cluster_id != -1 && clusterId != Config.cluster_id) {
-            LOG.error("cluster id is not equal with config item cluster_id. will exit.");
-            System.exit(-1);
-        }
-
-
         if (Strings.isNullOrEmpty(runMode)) {
             if (isFirstTimeStartUp) {
                 runMode = RunMode.name();
@@ -486,11 +463,8 @@ public class NodeMgr {
 
         isElectable = role.equals(FrontendNodeType.FOLLOWER);
 
-        systemInfoMap.put(clusterId, systemInfo);
-
         Preconditions.checkState(helperNodes.size() == 1);
-        LOG.info("Got cluster id: {}, role: {}, node name: {} and run_mode: {}",
-                clusterId, role.name(), nodeName, runMode);
+        LOG.info("Got role: {}, node name: {} and run_mode: {}", role.name(), nodeName, runMode);
     }
 
     // Get the role info and node name from helper node.
@@ -501,8 +475,11 @@ public class NodeMgr {
         Pair<String, Integer> rightHelperNode = null;
         for (Pair<String, Integer> helperNode : helperNodes) {
             try {
-                URL url = new URL("http://" + helperNode.first + ":" + Config.http_port
-                        + "/role?host=" + selfNode.first + "&port=" + selfNode.second);
+                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
+                String encodedAddress = URLEncoder.encode(selfNode.first,
+                        StandardCharsets.UTF_8.toString());
+                URL url = new URL("http://" + accessibleHostPort + "/role?host=" + encodedAddress +
+                        "&port=" + selfNode.second);
                 HttpURLConnection conn = null;
                 conn = (HttpURLConnection) url.openConnection();
                 if (conn.getResponseCode() != 200) {
@@ -559,6 +536,7 @@ public class NodeMgr {
         for (Pair<String, Integer> helperNode : helperNodes) {
             if (selfNode.equals(helperNode)) {
                 containSelf = true;
+                break;
             }
         }
         if (containSelf) {
@@ -567,59 +545,6 @@ public class NodeMgr {
         }
 
         return containSelf;
-    }
-
-    public long loadFrontends(DataInputStream dis, long checksum) throws IOException {
-        int size = dis.readInt();
-        long newChecksum = checksum ^ size;
-        for (int i = 0; i < size; i++) {
-            Frontend fe = Frontend.read(dis);
-            replayAddFrontend(fe);
-        }
-
-        size = dis.readInt();
-        newChecksum ^= size;
-        for (int i = 0; i < size; i++) {
-            removedFrontends.add(Text.readString(dis));
-        }
-        LOG.info("finished replay frontends from image");
-        return newChecksum;
-    }
-
-    public long saveFrontends(DataOutputStream dos, long checksum) throws IOException {
-        int size = frontends.size();
-        checksum ^= size;
-
-        dos.writeInt(size);
-        for (Frontend fe : frontends.values()) {
-            fe.write(dos);
-        }
-
-        size = removedFrontends.size();
-        checksum ^= size;
-
-        dos.writeInt(size);
-        for (String feName : removedFrontends) {
-            Text.writeString(dos, feName);
-        }
-
-        return checksum;
-    }
-
-    public long loadBackends(DataInputStream dis, long checksum) throws IOException {
-        return systemInfo.loadBackends(dis, checksum);
-    }
-
-    public long saveBackends(DataOutputStream dos, long checksum) throws IOException {
-        return systemInfo.saveBackends(dos, checksum);
-    }
-
-    public long loadComputeNodes(DataInputStream dis, long checksum) throws IOException {
-        return systemInfo.loadComputeNodes(dis, checksum);
-    }
-
-    public long saveComputeNodes(DataOutputStream dos, long checksum) throws IOException {
-        return systemInfo.saveComputeNodes(dos, checksum);
     }
 
     private StorageInfo getStorageInfo(URL url) throws IOException {
@@ -733,7 +658,8 @@ public class NodeMgr {
     }
 
     private boolean getVersionFileFromHelper(Pair<String, Integer> helperNode) throws IOException {
-        String url = "http://" + helperNode.first + ":" + Config.http_port + "/version";
+        String url = "http://" + NetUtils.getHostPortInAccessibleFormat(
+                helperNode.first, Config.http_port) + "/version";
         LOG.info("Downloading version file from {}", url);
         try {
             File dir = new File(this.imageDir);
@@ -758,12 +684,12 @@ public class NodeMgr {
         Storage storage = new Storage(dirStr);
         localImageVersion = storage.getImageJournalId();
 
-        URL infoUrl = new URL("http://" + helperNode.first + ":" + Config.http_port + "/info?subdir=" + subDir);
+        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
+        URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
         StorageInfo info = getStorageInfo(infoUrl);
         long version = info.getImageJournalId();
         if (version > localImageVersion) {
-            String url = "http://" + helperNode.first + ":" + Config.http_port
-                    + "/image?version=" + version + "&subdir=" + subDir;
+            String url = "http://" + accessibleHostPort + "/image?version=" + version + "&subdir=" + subDir;
             LOG.info("start to download image.{} from {}", version, url);
             String filename = Storage.IMAGE + "." + version;
             File dir = new File(dirStr);
@@ -862,7 +788,7 @@ public class NodeMgr {
     }
 
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
-        if (host.equals(selfNode.first) && port == selfNode.second &&
+        if (NetUtils.isSameIP(host, selfNode.first) && port == selfNode.second &&
                 GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.LEADER) {
             throw new DdlException("can not drop current master node.");
         }
@@ -873,10 +799,12 @@ public class NodeMgr {
         try {
             fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
-                throw new DdlException("frontend does not exist[" + host + ":" + port + "]");
+                throw new DdlException("frontend does not exist[" + 
+                        NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
             }
             if (fe.getRole() != role) {
-                throw new DdlException(role.toString() + " does not exist[" + host + ":" + port + "]");
+                throw new DdlException(role.toString() + " does not exist[" +
+                        NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
             }
             frontends.remove(fe.getNodeName());
             removedFrontends.add(fe.getNodeName());
@@ -990,7 +918,7 @@ public class NodeMgr {
 
     public Frontend unprotectCheckFeExist(String host, int port) {
         for (Frontend fe : frontends.values()) {
-            if (fe.getHost().equals(host) && fe.getEditLogPort() == port) {
+            if (fe.getEditLogPort() == port && NetUtils.isSameIP(fe.getHost(), host)) {
                 return fe;
             }
         }
@@ -1044,7 +972,7 @@ public class NodeMgr {
                 continue;
             }
             // target, cur has same ip
-            if (targetPair.first.equals(curPair.first)) {
+            if (NetUtils.isSameIP(targetPair.first, curPair.first)) {
                 return fe;
             }
             // target, cur has same fqdn and both of them are not equal ""
@@ -1071,10 +999,6 @@ public class NodeMgr {
 
     public int getClusterId() {
         return this.clusterId;
-    }
-
-    public void setClusterId(int clusterId) {
-        this.clusterId = clusterId;
     }
 
     public String getToken() {
@@ -1192,67 +1116,6 @@ public class NodeMgr {
         return frontends;
     }
 
-    public long loadBrokers(DataInputStream dis, long checksum) throws IOException {
-        int count = dis.readInt();
-        checksum ^= count;
-        for (long i = 0; i < count; ++i) {
-            String brokerName = Text.readString(dis);
-            int size = dis.readInt();
-            checksum ^= size;
-            List<FsBroker> addrs = Lists.newArrayList();
-            for (int j = 0; j < size; j++) {
-                FsBroker addr = FsBroker.readIn(dis);
-                addrs.add(addr);
-            }
-            brokerMgr.replayAddBrokers(brokerName, addrs);
-        }
-        LOG.info("finished replay brokerMgr from image");
-        return checksum;
-    }
-
-    public long saveBrokers(DataOutputStream dos, long checksum) throws IOException {
-        Map<String, List<FsBroker>> addressListMap = brokerMgr.getBrokerListMap();
-        int size = addressListMap.size();
-        checksum ^= size;
-        dos.writeInt(size);
-
-        for (Map.Entry<String, List<FsBroker>> entry : addressListMap.entrySet()) {
-            Text.writeString(dos, entry.getKey());
-            final List<FsBroker> addrs = entry.getValue();
-            size = addrs.size();
-            checksum ^= size;
-            dos.writeInt(size);
-            for (FsBroker addr : addrs) {
-                addr.write(dos);
-            }
-        }
-
-        return checksum;
-    }
-
-    public long loadLeaderInfo(DataInputStream dis, long checksum) throws IOException {
-        leaderIp = Text.readString(dis);
-        leaderRpcPort = dis.readInt();
-        long newChecksum = checksum ^ leaderRpcPort;
-        leaderHttpPort = dis.readInt();
-        newChecksum ^= leaderHttpPort;
-
-        LOG.info("finished replay masterInfo from image");
-        return newChecksum;
-    }
-
-    public long saveLeaderInfo(DataOutputStream dos, long checksum) throws IOException {
-        Text.writeString(dos, leaderIp);
-
-        checksum ^= leaderRpcPort;
-        dos.writeInt(leaderRpcPort);
-
-        checksum ^= leaderHttpPort;
-        dos.writeInt(leaderHttpPort);
-
-        return checksum;
-    }
-
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.NODE_MGR, 1);
         writer.writeJson(this);
@@ -1276,7 +1139,6 @@ public class NodeMgr {
         }
 
         systemInfo = nodeMgr.systemInfo;
-        systemInfoMap.put(clusterId, systemInfo);
         brokerMgr = nodeMgr.brokerMgr;
     }
 

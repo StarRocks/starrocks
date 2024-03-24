@@ -130,8 +130,14 @@ public class CompactionScheduler extends Daemon {
                 iterator.hasNext(); ) {
             Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
             PartitionIdentifier partition = entry.getKey();
-            CompactionJob job = entry.getValue();
 
+            // Make sure all running compactions' priority is reset
+            PartitionStatistics statistics = compactionManager.getStatistics(partition);
+            if (statistics != null && statistics.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT) {
+                statistics.resetPriority();
+            }
+
+            CompactionJob job = entry.getValue();
             if (!job.transactionHasCommitted()) {
                 String errorMsg = null;
 
@@ -160,7 +166,6 @@ public class CompactionScheduler extends Daemon {
                     continue;
                 }
             }
-
             if (job.transactionHasCommitted() && job.waitTransactionVisible(50, TimeUnit.MILLISECONDS)) {
                 iterator.remove();
                 job.finish();
@@ -353,7 +358,7 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utils.chooseBackend((LakeTablet) tablet);
+                Long beId = Utils.chooseNodeId((LakeTablet) tablet);
                 if (beId == null) {
                     beToTablets.clear();
                     return beToTablets;

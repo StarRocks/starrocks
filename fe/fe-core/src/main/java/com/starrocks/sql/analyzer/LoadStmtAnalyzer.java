@@ -48,7 +48,7 @@ public class LoadStmtAnalyzer {
         new LoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class LoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class LoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private static final String VERSION = "version";
 

@@ -211,7 +211,7 @@ LEFT SEMI JOIN (join-predicate [3: v3 = 8: max] post-join-predicate [null])
 [sql]
 select v2, min(v1) from t0 group by v2 having min(v1) not in (select v4 from t1 where v5 = v2);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [4: min = 5: v4 AND 2: v2 = 6: v5] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [4: min = 5: v4 AND 6: v5 = 2: v2] post-join-predicate [null])
     AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
         EXCHANGE SHUFFLE[2]
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
@@ -223,7 +223,7 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [4: min = 5: v4 AND 2: v2 = 6: v5] pos
 [sql]
 select v2, min(v1) from t0 group by v2 having v2 not in (select v4 from t1 where v5 = v2);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v4 AND 2: v2 = 6: v5] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v4 AND 6: v5 = 2: v2] post-join-predicate [null])
     AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
         EXCHANGE SHUFFLE[2]
             AGGREGATE ([LOCAL] aggregate [{4: min=min(1: v1)}] group by [[2: v2]] having [null]
@@ -420,7 +420,7 @@ CTEAnchor(cteid=1)
 [sql]
 select v3, v1 from t0 where (t0.v3 = 3 or t0.v2 in (select v6 from t1 where v5 = v1)) and t0.v2 not in (select v5 from t1 where v4 = v2);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 9: v5 AND 2: v2 = 8: v4] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 9: v5 AND 8: v4 = 2: v2] post-join-predicate [null])
     CTEAnchor(cteid=1)
         CTEProducer(cteid=1)
             SCAN (columns[5: v5, 6: v6] predicate[null])
@@ -620,7 +620,7 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [18: cast = 19: cast AND add(19: cast,
 [sql]
 select t0.v1 from t0 left join t1 on true where t0.v1 + t1.v4 not in (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [18: cast = 19: cast AND 21: add = 20: cast AND add(add(20: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [18: cast = 19: cast AND 20: cast = 21: add AND add(add(20: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
     RIGHT OUTER JOIN (join-predicate [null] post-join-predicate [null])
         EXCHANGE GATHER
             SCAN (columns[4: v4, 5: v5] predicate[null])
@@ -673,7 +673,7 @@ LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v
 [sql]
 select * from t0 where (v1, v2) NOT IN (select t1.v4, t1.v5 from t1 WHERE t1.v6 = t0.v3 AND t1.v5 > 10)
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v6] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 6: v6 = 3: v3] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         SCAN (columns[4: v4, 5: v5, 6: v6] predicate[5: v5 > 10])

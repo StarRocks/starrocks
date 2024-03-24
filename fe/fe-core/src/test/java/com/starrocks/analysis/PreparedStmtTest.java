@@ -21,7 +21,6 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -29,6 +28,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
@@ -64,7 +64,7 @@ public class PreparedStmtTest{
 
     @Test
     public void testParser() throws Exception {
-        String sql1= "PREPARE stmt2 FROM select * from demo.prepare_stmt where k1 = ? and k2 = ?;";
+        String sql1 = "PREPARE stmt2 FROM select * from demo.prepare_stmt where c1 = ? and c2 = ?;";
         String sql2 = "PREPARE stmt3 FROM 'select * from demo.prepare_stmt';";
         String sql3 = "execute stmt3;";
         String sql4 = "execute stmt2 using @i;";
@@ -98,7 +98,8 @@ public class PreparedStmtTest{
     @Test
     public void testPrepareStatementParser() {
         String sql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";
-        assertThrows("Invalid statement type for prepared statement", ValidateException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        Exception e = assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        assertEquals("Getting analyzing error. Detail message: This command is not supported in the " +
+                "prepared statement protocol yet.", e.getMessage());
     }
 }

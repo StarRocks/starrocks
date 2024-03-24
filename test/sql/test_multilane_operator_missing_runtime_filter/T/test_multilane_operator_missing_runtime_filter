@@ -1,0 +1,106 @@
+-- name: test_multilane_operator_missing_runtime_filter
+DROP TABLE if exists t0;
+
+CREATE TABLE if not exists t0
+(
+c0 INT NOT NULL,
+c1 INT NOT NULL,
+c2 INT NOT NULL,
+c3 INT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 6
+PROPERTIES(
+"replication_num" = "1",
+"storage_format" = "default"
+);
+DROP TABLE if exists t1;
+
+CREATE TABLE if not exists t1
+(
+c0 INT NOT NULL,
+c1 INT NOT NULL,
+c2 INT NOT NULL,
+c3 INT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 6
+PROPERTIES(
+"replication_num" = "1",
+"storage_format" = "default"
+);
+DROP TABLE if exists t2;
+
+CREATE TABLE if not exists t2
+(
+c0 INT NOT NULL,
+c1 INT NOT NULL,
+c2 INT NOT NULL,
+c3 INT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 6
+PROPERTIES(
+"replication_num" = "1",
+"storage_format" = "default"
+);
+INSERT INTO t0
+  (c0, c1, c2, c3)
+VALUES
+  ('0', '0', '-8', '-86233'),
+  ('1', '1', '2147483647', '-55135770'),
+  ('2', '2', '218458331', '6832'),
+  ('3', '3', '19035352', '-47198402'),
+  ('4', '4', '-970243835', '-173500'),
+  ('5', '5', '-1690', '33272840'),
+  ('6', '6', '7139649', '7357'),
+  ('7', '7', '2147483647', '-128350'),
+  ('8', '8', '-48029138', '-40581'),
+  ('9', '9', '35698', '15');
+INSERT INTO t1
+  (c0, c1, c2, c3)
+VALUES
+  ('0', '0', '26619964', '-50283149'),
+  ('1', '1', '56751', '3986576'),
+  ('2', '2', '-12087982', '77783421'),
+  ('3', '3', '-251234335', '-67881035'),
+  ('4', '4', '3414', '22609'),
+  ('5', '5', '15', '-5'),
+  ('6', '6', '-669202', '-1'),
+  ('7', '7', '-103268058', '-2147483648'),
+  ('8', '8', '0', '-5'),
+  ('9', '9', '469887482', '-194');
+INSERT INTO t2
+  (c0, c1, c2, c3)
+VALUES
+  ('0', '0', '-1', '-6260'),
+  ('1', '1', '1872854', '3517981'),
+  ('2', '2', '-41', '0'),
+  ('3', '3', '70691', '17282106'),
+  ('4', '4', '670', '3587'),
+  ('5', '5', '12', '230'),
+  ('6', '6', '-2', '-171766'),
+  ('7', '7', '-3870183', '-1039'),
+  ('8', '8', '-2', '-219'),
+  ('9', '9', '31', '-1');
+with cte1 as (
+select distinct t1.c0
+from t0 join[bucket] t1 on t0.c0 = t1.c0
+),
+cte2 as (
+select t2.c1
+from cte1 join[bucket] t2 on cte1.c0 = t2.c0
+)
+select  /*+SET_VAR(enable_query_cache=true,pipeline_dop=1,enable_profile=true)*/count(c1) from cte2;
+with cte1 as (
+select distinct t1.c0
+from t0 join[bucket] t1 on t0.c0 = t1.c0
+),
+cte2 as (
+select t2.c1
+from cte1 join[bucket] t2 on cte1.c0 = t2.c0
+)
+select  /*+SET_VAR(enable_query_cache=false,pipeline_dop=1,enable_profile=true)*/count(c1) from cte2;

@@ -624,6 +624,11 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
                                                  google::protobuf::Closure* done, int timeout_ms) {
     ClosureGuard closure_guard(done);
 
+    // If we use timeout specified by user directly, there will be an issue that librakafka connect to kafka broker
+    // time out, but the BE did not have the opportunity to send the error message back to the FE , and the timer on
+    // the FE side has already timed out. This mean that the FE cannot retrieve the event message from librdkafka.
+    // Therefore, here we are reducing the actual timeout threshold of librdkafka.
+    timeout_ms = timeout_ms * 0.8;
     if (timeout_ms <= 0) {
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
         return;
@@ -1163,14 +1168,14 @@ void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcControlle
 }
 
 template <typename T>
-Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest*,
+Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
                                                         PExecShortCircuitResult* response) {
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_requests.get()));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_requests.get()));
     }
     ShortCircuitExecutor executor{_exec_env};
     RETURN_IF_ERROR(executor.prepare(*t_requests));

@@ -58,9 +58,9 @@ public class MetaUtils {
         }
     }
 
-    public static void checkDbNullAndReport(Database db, String name) throws AnalysisException {
+    public static void checkDbNullAndReport(Database db, String name) {
         if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, name);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, name);
         }
     }
 

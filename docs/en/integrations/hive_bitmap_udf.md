@@ -73,13 +73,13 @@ Supported source and target data types:
 2. Upload the JAR package to HDFS.
 
    ```bash
-   hadoop  fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive1-udf-1.0.0.jar
+   hadoop  fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar
    ```
 
 3. Load the JAR package to Hive.
 
    ```bash
-   hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive1-udf-1.0.0.jar;
+   hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar;
    ```
 
 4. Load UDF functions.

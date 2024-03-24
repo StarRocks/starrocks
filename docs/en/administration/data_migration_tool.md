@@ -59,17 +59,17 @@ Please note that increasing the values of the following configuration items can 
 
 #### FE Parameters
 
-The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](../administration/FE_configuration.md#configure-fe-dynamic-parameters) on how to modify them.
+The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) on how to modify them.
 
 | **Parameter**                         | **Default** | **Unit** | **Description**                                              |
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
 | replication_max_parallel_table_count  | 100         | -        | The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table. |
 | replication_max_parallel_data_size_mb | 10240       | MB       | The maximum size of data allowed for concurrent synchronization. |
-| replication_transaction_timeout_sec   | 3600        | 秒       | The timeout duration for synchronization tasks.              |
+| replication_transaction_timeout_sec   | 3600        | Seconds  | The timeout duration for synchronization tasks.              |
 
 #### BE Parameters
 
-The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/BE_configuration.md#configure-be-dynamic-parameters) on how to modify it.
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md#configure-be-dynamic-parameters) on how to modify it.
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |

@@ -401,6 +401,7 @@ struct TMaterializedViewStatus {
     25: optional string inactive_reason
 
     26: optional string extra_message
+    27: optional string query_rewrite_status
 }
 
 struct TListPipesParams {

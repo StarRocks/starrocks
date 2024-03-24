@@ -29,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -203,6 +204,36 @@ public class Locker {
         }
     }
 
+    /**
+     * FYI: should deduplicate dbs before call this api.
+     * lock databases in ascending order of id.
+     * @param dbs: databases to be locked
+     * @param lockType: lock type
+     */
+    public void lockDatabases(List<Database> dbs, LockType lockType) {
+        if (dbs == null) {
+            return;
+        }
+        dbs.sort(Comparator.comparingLong(Database::getId));
+        for (Database db : dbs) {
+            lockDatabase(db, lockType);
+        }
+    }
+
+    /**
+     * FYI: should deduplicate dbs before call this api.
+     * @param dbs: databases to be locked
+     * @param lockType: lock type
+     */
+    public void unlockDatabases(List<Database> dbs, LockType lockType) {
+        if (dbs == null) {
+            return;
+        }
+        for (Database db : dbs) {
+            unLockDatabase(db, lockType);
+        }
+    }
+
     private String getOwnerInfo(Thread owner) {
         if (owner == null) {
             return "";
@@ -222,7 +253,7 @@ public class Locker {
             lastSlowLockLogTime = endMs;
             lastSlowLockLogTimeMap.put(databaseId, lastSlowLockLogTime);
             LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
-                            "former {}, current stack trace: {}", type, databaseId, fullQualifiedName, endMs - startMs,
+                            "former: {}, current stack trace: {}", type, databaseId, fullQualifiedName, endMs - startMs,
                     threadDump, LogUtil.getCurrentStackTrace());
         }
     }

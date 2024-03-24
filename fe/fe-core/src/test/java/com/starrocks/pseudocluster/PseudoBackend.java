@@ -24,6 +24,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
@@ -108,6 +109,7 @@ import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TCancelPlanFragmentParams;
 import com.starrocks.thrift.TCancelPlanFragmentResult;
 import com.starrocks.thrift.TCloneReq;
+import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDeleteEtlFilesRequest;
@@ -429,7 +431,7 @@ public class PseudoBackend {
     }
 
     public String getHostHeartbeatPort() {
-        return host + ":" + heartBeatPort;
+        return NetUtils.getHostPortInAccessibleFormat(host, heartBeatPort);
     }
 
     public long getId() {
@@ -578,7 +580,15 @@ public class PseudoBackend {
         if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             lakeTabletManager.createTablet(request.create_tablet_req);
         } else {
-            tabletManager.createTablet(request.create_tablet_req);
+            TCreateTabletReq createTabletReq = request.create_tablet_req;
+            tabletManager.createTablet(createTabletReq);
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setPath_hash(PATH_HASH);
+            tabletInfo.setData_size(0);
+            tabletInfo.setTablet_id(createTabletReq.tablet_id);
+            tabletInfo.setSchema_hash(createTabletReq.tablet_schema.schema_hash);
+            tabletInfo.setVersion(createTabletReq.version);
+            finish.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
         }
     }
 

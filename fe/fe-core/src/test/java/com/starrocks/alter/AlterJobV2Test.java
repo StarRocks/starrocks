@@ -116,8 +116,8 @@ public class AlterJobV2Test {
         String showAlterStmtStr = "show alter table column from test;";
         ShowAlterStmt showAlterStmt =
                 (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet showResultSet = showExecutor.execute(showAlterStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
@@ -143,8 +143,8 @@ public class AlterJobV2Test {
         String showAlterStmtStr = "show alter table rollup from test;";
         ShowAlterStmt showAlterStmt =
                 (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet showResultSet = showExecutor.execute(showAlterStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }
@@ -162,8 +162,8 @@ public class AlterJobV2Test {
         String showCreateTableStr = "show create table test.properties_change_test;";
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet showResultSet = showExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
 
@@ -178,7 +178,7 @@ public class AlterJobV2Test {
         // 5. check enable persistent index
         showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
-        showResultSet = showExecutor.execute();
+        showResultSet = showExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
     }

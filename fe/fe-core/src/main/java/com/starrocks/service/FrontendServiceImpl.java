@@ -142,10 +142,12 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Frontend;
@@ -515,7 +517,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 if (tbl != null) {
                                     try {
                                         Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                                null, tableName.getDb(), tbl);
+                                                null, db.getFullName(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
                                     }
@@ -1351,7 +1353,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (timeoutInfo.length() > 240) {
                 timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
-            status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
+            status.addToError_msgs("Publish timeout. The data will be visible after a while, " + timeoutInfo);
             return;
         }
         // if commit and publish is success, load can be regarded as success
@@ -2028,7 +2030,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(olapTable.getClusterId());
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo();
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
         return result;
@@ -2112,7 +2114,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                     LocalTablet localTablet = (LocalTablet) tablet;
                     Multimap<Replica, Long> bePathsMap =
-                            localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
+                            localTablet.getNormalReplicaBackendPathMap();
                     if (bePathsMap.keySet().size() < quorum) {
                         throw new UserException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                         "tablet_id: %s, replicas: %s. Check quorum number failed(buildTablets): " +
@@ -2228,6 +2230,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
         try {
+            // ingestion is top priority, if schema change or rollup is running, cancel it
+            try {
+                if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
+                    LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
+                    state.getLocalMetastore().cancelAlter(
+                            new CancelAlterTableStmt(
+                                    ShowAlterStmt.AlterType.ROLLUP,
+                                    new TableName(db.getFullName(), olapTable.getName())),
+                                    "conflict with expression partition");
+                }
+
+                if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                    LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
+                    state.getLocalMetastore().cancelAlter(
+                            new CancelAlterTableStmt(
+                                    ShowAlterStmt.AlterType.COLUMN,
+                                    new TableName(db.getFullName(), olapTable.getName())),
+                                    "conflict with expression partition");
+                }
+            } catch (Exception e) {
+                LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
+            }
             state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn(e);
@@ -2324,7 +2348,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
                         Multimap<Replica, Long> bePathsMap =
-                                localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
+                                localTablet.getNormalReplicaBackendPathMap();
                         if (bePathsMap.keySet().size() < quorum) {
                             String errorMsg = String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                             "tablet_id: %s, replicas: %s. Check quorum number failed" +
@@ -2349,7 +2373,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(olapTable.getClusterId());
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo();
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
         return result;
@@ -2692,7 +2716,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TFinishSlotRequirementResponse finishSlotRequirement(TFinishSlotRequirementRequest request) throws TException {
-        Status status = GlobalStateMgr.getCurrentState().getSlotProvider()
+        Status status = GlobalStateMgr.getCurrentState().getGlobalSlotProvider()
                 .finishSlotRequirement(request.getSlot_id(), request.getPipeline_dop(), new Status(request.getStatus()));
 
         TFinishSlotRequirementResponse res = new TFinishSlotRequirementResponse();
@@ -2744,9 +2768,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
                     dictTable.getAutomaticBucketSize(), allPartitions);
             response.setPartition(partitionParam);
-            response.setLocation(OlapTableSink.createLocation(
-                    dictTable, dictTable.getClusterId(), partitionParam, dictTable.enableReplicatedStorage()));
-            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));
+            response.setLocation(OlapTableSink.createLocation(dictTable, partitionParam, dictTable.enableReplicatedStorage()));
+            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo());
         } catch (UserException e) {
             SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
             semanticException.initCause(e);

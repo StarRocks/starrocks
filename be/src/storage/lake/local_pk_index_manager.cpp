@@ -27,8 +27,14 @@
 
 namespace starrocks::lake {
 
-Status LocalPkIndexManager::clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir) {
+Status LocalPkIndexManager::clear_persistent_index(int64_t tablet_id) {
     // remove meta in RocksDB
+    auto data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
+    if (data_dir == nullptr) {
+        // Properly handle the case where the data_dir is null before proceeding.
+        return Status::NotFound("Data directory not found for tablet_id=" + std::to_string(tablet_id));
+    }
+
     WriteBatch wb;
     auto status = TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id);
     if (status.ok()) {
@@ -38,10 +44,12 @@ Status LocalPkIndexManager::clear_persistent_index(DataDir* data_dir, int64_t ta
                          << "] error[" << status.to_string() << "]";
         } else {
             // remove tablet persistent_index dir
-            status = fs::remove_all(dir);
+            auto pk_path = data_dir->get_persistent_index_path();
+            auto tablet_pk_path = pk_path + "/" + std::to_string(tablet_id);
+            status = fs::remove_all(tablet_pk_path);
             if (!status.ok()) {
-                LOG(WARNING) << "fail to remove local persistent index dir=[" + dir << "] error[" << status.to_string()
-                             << "]";
+                LOG(WARNING) << "fail to remove local persistent index dir=[" + tablet_pk_path << "] error["
+                             << status.to_string() << "]";
             }
         }
     }
@@ -60,7 +68,6 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
     auto pk_path = data_dir->get_persistent_index_path();
     LOG(INFO) << "start to gc local persistent index dir:" << pk_path;
     for (const auto& tablet_id : tablet_ids) {
-        auto tablet_pk_path = pk_path + "/" + tablet_id;
         int64_t id = 0;
         try {
             id = std::stoll(tablet_id);
@@ -73,7 +80,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
         // just remove if not.
         if (StorageEngine::instance()->get_persistent_index_store(id) != data_dir) {
             dir_changed_tablet_ids.push_back(id);
-            if (clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
+            if (clear_persistent_index(id).ok()) {
                 removed_dir_tablet_ids.push_back(id);
             }
         } else if (!tablet_manager->is_tablet_in_worker(id)) {
@@ -88,7 +95,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
             if (!tablet_manager->is_tablet_in_worker(id)) {
                 // try to remove pk index cache to avoid continuing to use the index in the cache after deletion.
                 if (update_manager->try_remove_primary_index_cache(id)) {
-                    if (clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
+                    if (clear_persistent_index(id).ok()) {
                         removed_dir_tablet_ids.push_back(id);
                     }
                 }
@@ -173,7 +180,7 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager, DataDir* data_dir
             continue;
         }
         if (update_manager->try_remove_primary_index_cache(id)) {
-            if (clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
+            if (clear_persistent_index(id).ok()) {
                 removed_dir_tablet_ids.push_back(id);
             }
         }

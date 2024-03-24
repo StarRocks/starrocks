@@ -140,17 +140,17 @@ public class DictionaryCacheSink extends DataSink {
         Map<String, SlotDescriptor> valueSlots = new HashMap();
 
         for (Column column : tbl.getBaseSchema()) {
-            if (!dictionary.getKeys().contains(column.getName()) && !dictionary.getValues().contains(column.getName())) {
-                currentSlotId++;
-                continue;
-            }
-            SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
-            slotDescriptor.setColumn(column);
-            slotDescriptor.setIsMaterialized(true);
-
             if (dictionary.getKeys().contains(column.getName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsMaterialized(true);
+
                 keySlots.put(column.getName(), slotDescriptor);
             } else if (dictionary.getValues().contains(column.getName())) {
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(currentSlotId++), tupleDescriptor);
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsMaterialized(true);
+
                 valueSlots.put(column.getName(), slotDescriptor);
             }
         }

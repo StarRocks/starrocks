@@ -44,6 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
@@ -92,8 +93,9 @@ public class HeartbeatMgr extends FrontendDaemon {
     }
 
     public void setLeader(int clusterId, String token, long epoch) {
-        TMasterInfo tMasterInfo = new TMasterInfo(
-                new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
+        TMasterInfo tMasterInfo = new TMasterInfo(new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port),
+                epoch);
+        tMasterInfo.setCluster_id(clusterId);
         tMasterInfo.setToken(token);
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();
@@ -135,11 +137,10 @@ public class HeartbeatMgr extends FrontendDaemon {
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         String masterFeNodeName = "";
         for (Frontend frontend : frontends) {
-            if (frontend.getHost().equals(MASTER_INFO.get().getNetwork_address().getHostname())) {
+            if (NetUtils.isSameIP(frontend.getHost(), MASTER_INFO.get().getNetwork_address().getHostname())) {
                 masterFeNodeName = frontend.getNodeName();
             }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
                     GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
             hbResponses.add(executor.submit(handler));
         }
@@ -229,7 +230,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                                 Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().
                                         getDefaultWarehouse();
                                 long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-                                String workerAddr = computeNode.getHost() + ":" + starletPort;
+                                String workerAddr = NetUtils.getHostPortInAccessibleFormat(computeNode.getHost(), 
+                                        starletPort);
 
                                 GlobalStateMgr.getCurrentState().getStarOSAgent().
                                         addWorker(computeNode.getId(), workerAddr, workerGroupId);
@@ -347,13 +349,11 @@ public class HeartbeatMgr extends FrontendDaemon {
 
     // frontend heartbeat
     public static class FrontendHeartbeatHandler implements Callable<HeartbeatResponse> {
-        private Frontend fe;
-        private int clusterId;
-        private String token;
+        private final Frontend fe;
+        private final String token;
 
-        public FrontendHeartbeatHandler(Frontend fe, int clusterId, String token) {
+        public FrontendHeartbeatHandler(Frontend fe, String token) {
             this.fe = fe;
-            this.clusterId = clusterId;
             this.token = token;
         }
 
@@ -371,8 +371,10 @@ public class HeartbeatMgr extends FrontendDaemon {
                 }
             }
 
-            String url = "http://" + fe.getHost() + ":" + Config.http_port
-                    + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
+
+            String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(fe.getHost(), Config.http_port);
+            String url = "http://" + accessibleHostPort
+                    + "/api/bootstrap?token=" + token;
             try {
                 String result = Util.getResultForUrl(url, null,
                         Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);

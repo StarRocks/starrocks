@@ -49,6 +49,7 @@ public class OptimizerContext {
     private final ColumnRefFactory columnRefFactory;
     private SessionVariable sessionVariable;
     private DumpInfo dumpInfo;
+    private Set<Long> currentSqlDbIds;
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private final OptimizerConfig optimizerConfig;
@@ -101,6 +102,7 @@ public class OptimizerContext {
         this.queryId = connectContext.getQueryId();
         this.sessionVariable = connectContext.getSessionVariable();
         this.dumpInfo = connectContext.getDumpInfo();
+        this.currentSqlDbIds = connectContext.getCurrentSqlDbIds();
         this.cteContext = new CTEContext();
         cteContext.reset();
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
@@ -140,6 +142,10 @@ public class OptimizerContext {
 
     public DumpInfo getDumpInfo() {
         return dumpInfo;
+    }
+
+    public Set<Long> getCurrentSqlDbIds() {
+        return currentSqlDbIds;
     }
 
     public CTEContext getCteContext() {
@@ -282,7 +288,7 @@ public class OptimizerContext {
     }
 
     // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
-    public void reset() {
+    public void clearNotNullPredicates() {
         pushdownNotNullPredicates.clear();
     }
 }

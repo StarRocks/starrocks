@@ -503,4 +503,16 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
     ASSERT_EQ(to_replace.size(), 3);
 }
 
+TEST_F(TabletMgrTest, RemoveTabletInDiskDisable) {
+    TTabletId tablet_id = 4251234;
+    TSchemaHash schema_hash = 3929134;
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(tablet_id, schema_hash);
+    Status create_st = StorageEngine::instance()->create_tablet(create_tablet_req);
+    std::vector<TabletInfo> tablet_info_vec;
+    TabletInfo tablet_info(tablet_id, schema_hash, UniqueId::gen_uid());
+
+    tablet_info_vec.push_back(tablet_info);
+    StorageEngine::instance()->tablet_manager()->drop_tablets_on_error_root_path(tablet_info_vec);
+}
+
 } // namespace starrocks

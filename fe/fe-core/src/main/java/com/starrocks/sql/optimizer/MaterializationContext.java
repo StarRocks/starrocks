@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -45,6 +44,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.isNeedCompensatePartitionPredicate;
 
 public class MaterializationContext {
     private final MaterializedView mv;
@@ -92,8 +92,6 @@ public class MaterializationContext {
     // But it is different for each materialized view, compensate partition predicate from the plan's
     // `selectedPartitionIds`, and check `isNeedCompensatePartitionPredicate` to get more information.
     private Optional<Boolean> isCompensatePartitionPredicateOpt = Optional.empty();
-    // Cache a mv's pruned partition predicates in the rewrite because it's not changed through the context.
-    private Optional<ScalarOperator> mvPrunedPartitionPredicateOpt = Optional.empty();
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
     private Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
 
@@ -429,25 +427,13 @@ public class MaterializationContext {
             SessionVariable sessionVariable = optimizerContext.getSessionVariable();
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
             isCompensatePartitionPredicateOpt = sessionVariable.isEnableMaterializedViewRewritePartitionCompensate() ?
-                    MvUtils.isNeedCompensatePartitionPredicate(queryExpression, this) : Optional.of(false);
+                    isNeedCompensatePartitionPredicate(queryExpression, this) : Optional.of(false);
         }
         return isCompensatePartitionPredicateOpt.orElse(true);
     }
 
     public boolean isCompensatePartitionPredicate() {
         return isCompensatePartitionPredicateOpt.orElse(true);
-    }
-
-    public ScalarOperator getMVPrunedPartitionPredicate() {
-        if (!mvPrunedPartitionPredicateOpt.isPresent()) {
-            List<ScalarOperator> mvPrunedPartitionPredicates = MvUtils.getMVPrunedPartitionPredicates(mv, mvExpression);
-            if (mvPrunedPartitionPredicates == null || mvPrunedPartitionPredicates.isEmpty()) {
-                mvPrunedPartitionPredicateOpt = Optional.of(ConstantOperator.TRUE);
-            } else {
-                mvPrunedPartitionPredicateOpt = Optional.of(Utils.compoundAnd(mvPrunedPartitionPredicates));
-            }
-        }
-        return mvPrunedPartitionPredicateOpt.get();
     }
 
     public Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {

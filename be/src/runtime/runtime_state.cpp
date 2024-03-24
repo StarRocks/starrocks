@@ -46,6 +46,7 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/jit/jit_engine.h"
 #include "fs/fs_util.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
@@ -509,6 +510,11 @@ Status RuntimeState::reset_epoch() {
     _tablet_commit_infos.clear();
     _tablet_fail_infos.clear();
     return Status::OK();
+}
+
+bool RuntimeState::is_jit_enabled() const {
+    return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
+           _query_options.jit_level != 0;
 }
 
 } // end namespace starrocks

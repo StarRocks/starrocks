@@ -18,7 +18,7 @@ displayed_sidebar: "Chinese"
 
 - [安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
 - 在服务器上安装 JDK 1.8。
-- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/FE_configuration.md)。
+- 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/management/FE_configuration.md)。
 
 ## 开发并使用 UDF
 
@@ -297,7 +297,7 @@ public class WindowSumInt {
 
 方法的含义
 
-更新窗口数据。窗口函数的详细说明，请参见[窗口函数](../sql-reference/sql-functions/Window_function.md]。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
+更新窗口数据。窗口函数的详细说明，请参见[窗口函数](./Window_function.md)。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
 
 - peer_group_start：是当前分区开始的位置。<br />分区：OVER子句中 PARTITION BY 指定分区列， 分区列的值相同的行被视为在同一个分区内。
 - peer_group_end：当前分区结束的位置。

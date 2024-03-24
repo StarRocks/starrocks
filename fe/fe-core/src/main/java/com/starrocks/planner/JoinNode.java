@@ -51,6 +51,7 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
 import org.apache.logging.log4j.LogManager;
@@ -80,6 +81,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected String colocateReason = ""; // if can not do colocate join, set reason here
     // the flag for local bucket shuffle join
     protected boolean isLocalHashBucket = false;
+    protected UKFKConstraints.JoinProperty ukfkProperty;
 
     protected final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     protected final List<Integer> filter_null_value_columns = Lists.newArrayList();
@@ -176,7 +178,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl) {
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl, ExecGroupSets execGroupSets) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
@@ -225,7 +227,9 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 // push down rf to left child node, and build it only when it
                 // can be accepted by left child node.
                 rf.setBuildExpr(left);
-                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, right, probePartitionByExprs)) {
+                RuntimeFilterPushDownContext rfPushDownCxt =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, right, probePartitionByExprs)) {
                     buildRuntimeFilters.add(rf);
                 }
             } else {
@@ -241,7 +245,9 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 rf.setBuildExpr(right);
                 rf.setOnlyLocal(true);
-                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
+                RuntimeFilterPushDownContext rfPushDownCxt =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, left, probePartitionByExprs)) {
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
@@ -283,17 +289,18 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
-    public boolean pushDownRuntimeFiltersForChild(DescriptorTable descTbl, RuntimeFilterDescription description,
+    public boolean pushDownRuntimeFiltersForChild(RuntimeFilterPushDownContext context,
                                                   Expr probeExpr,
                                                   List<Expr> partitionByExprs, int childIdx) {
-        return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                 candidatesOfSlotExprForChild(probeExpr, childIdx),
                 partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, childIdx), childIdx, false);
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -305,17 +312,17 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             // SlotRef(b) are equivalent.
             boolean isInnerOrSemiJoin = joinOp.isSemiJoin() || joinOp.isInnerJoin();
             if ((probeExpr instanceof SlotRef) && isInnerOrSemiJoin) {
-                hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, description, probeExpr, partitionByExprs, 0);
-                hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, description, probeExpr, partitionByExprs, 1);
+                hasPushedDown |= pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 0);
+                hasPushedDown |= pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 1);
             }
             // fall back to PlanNode.pushDownRuntimeFilters for HJ if rf cannot be pushed down via equivalent
             // equalJoinConjuncts
-            if (hasPushedDown || super.pushDownRuntimeFilters(descTbl, description, probeExpr, partitionByExprs)) {
+            if (hasPushedDown || super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs)) {
                 return true;
             }
 
             // use runtime filter at this level if rf can not be pushed down to children.
-            if (description.canProbeUse(this)) {
+            if (description.canProbeUse(this, context)) {
                 description.addProbeExpr(id.asInt(), probeExpr);
                 description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(description);
@@ -394,6 +401,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     public void setCanLocalShuffle(boolean v) {
         canLocalShuffle = v;
+    }
+
+    public void setUkfkProperty(UKFKConstraints.JoinProperty ukfkProperty) {
+        this.ukfkProperty = ukfkProperty;
     }
 
     @Override

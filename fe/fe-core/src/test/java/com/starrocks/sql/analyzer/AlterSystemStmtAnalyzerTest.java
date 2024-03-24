@@ -151,8 +151,8 @@ public class AlterSystemStmtAnalyzerTest {
         String showBackendLocationSqlStr = "show backends";
         ShowBackendsStmt showBackendsStmt = (ShowBackendsStmt) UtFrameUtils.parseStmtWithNewParser(showBackendLocationSqlStr,
                 connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showBackendsStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet showResultSet = showExecutor.execute(showBackendsStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("a:b"));
     }

@@ -26,28 +26,14 @@ namespace starrocks::pipeline {
 
 class MockSinkIOBuffer : public SinkIOBuffer {
 public:
-    MockSinkIOBuffer(int num_sinkers) : SinkIOBuffer(num_sinkers) { _value = std::make_unique<int>(); }
+    MockSinkIOBuffer(int num_sinkers) : SinkIOBuffer(num_sinkers) {}
 
-    static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
-        return SinkIOBuffer::execute_io_task(meta, iter);
-    }
+    void _add_chunk(const ChunkPtr& chunk) override { ++_chunk_added; }
 
-    Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) override {
-        _state = state;
-        _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-        int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), nullptr,
-                                                           &MockSinkIOBuffer::execute_io_task, this);
-        if (ret != 0) {
-            _exec_queue_id.reset();
-            return Status::InternalError("start execution queue failed");
-        }
-        return Status::OK();
-    }
-
-    void _add_chunk(const ChunkPtr& chunk) override { *_value = 10; }
+    int num_chunks() const { return _chunk_added; }
 
 private:
-    std::unique_ptr<int> _value;
+    int _chunk_added = 0;
 };
 
 class SinkIOBufferTest : public testing::Test {
@@ -63,6 +49,13 @@ protected:
 
         auto second_chunk = gen_test_chunk(2);
         ASSERT_OK(buf->append_chunk(runtime_state, second_chunk));
+
+        // append a nullptr, won't cause the queue termination
+        ASSERT_OK(buf->append_chunk(runtime_state, nullptr));
+
+        // the forth chunk can be processed correctly
+        auto forth_chunk = gen_test_chunk(4);
+        ASSERT_OK(buf->append_chunk(runtime_state, forth_chunk));
     }
 
     static void poll_thread(void* arg1) {
@@ -70,16 +63,17 @@ protected:
         (void)buf->set_finishing();
     }
 
-    void wait(const std::function<bool()>& func) {
+    static bool wait(const std::function<bool()>& func) {
         int i = 0;
         while (!func()) {
             bthread_usleep(1000);
             i++;
-            if (i > 50000) {
-                // max wait 50s
-                ASSERT_TRUE(false);
+            if (i > 10000) {
+                // max wait 10s
+                return false;
             }
         }
+        return true;
     }
 
 protected:
@@ -107,23 +101,14 @@ std::shared_ptr<RuntimeState> SinkIOBufferTest::gen_test_runtime_state() {
 // Execute sequentially one by one
 TEST_F(SinkIOBufferTest, test_basic_1) {
     SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
-        wait([this]() -> bool { return _data_chunk <= 0; });
-
-        if (arg == nullptr) {
-            _close_chunk++;
-        } else {
-            _data_chunk++;
-        }
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void*) {
+        ASSERT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk <= 0; });
+        _data_chunk++;
     });
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [](void* arg) {});
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void* arg) {
-        if (arg == nullptr) {
-            _close_chunk--;
-        } else {
-            _data_chunk--;
-        }
-    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [](void*) {});
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void*) { _data_chunk--; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_apend_chunk_end_queue", [this](void*) { _close_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_process_chunk_end_queue", [this](void*) { _close_chunk--; });
 
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
@@ -135,9 +120,11 @@ TEST_F(SinkIOBufferTest, test_basic_1) {
     std::thread thread2(poll_thread, sink_buffer.get());
     thread2.join();
 
-    wait([this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
-    wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
+    // MockSinkIOBuffer::_add_chunk() called 4 times
+    EXPECT_EQ(4, sink_buffer->num_chunks());
     sink_buffer.reset();
 
     SyncPoint::GetInstance()->DisableProcessing();
@@ -147,24 +134,13 @@ TEST_F(SinkIOBufferTest, test_basic_1) {
 TEST_F(SinkIOBufferTest, test_basic_2) {
     SyncPoint::GetInstance()->EnableProcessing();
     bool _need_process_chunk = false;
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
-        if (arg == nullptr) {
-            _close_chunk++;
-        } else {
-            _data_chunk++;
-        }
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void*) { _data_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [&_need_process_chunk](void* arg) {
+        ASSERT_PRED1(SinkIOBufferTest::wait, [&_need_process_chunk]() -> bool { return _need_process_chunk; });
     });
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk",
-                                          [this, &_need_process_chunk](void* arg) {
-                                              wait([&_need_process_chunk]() -> bool { return _need_process_chunk; });
-                                          });
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void* arg) {
-        if (arg == nullptr) {
-            _close_chunk--;
-        } else {
-            _data_chunk--;
-        }
-    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void*) { _data_chunk--; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_apend_chunk_end_queue", [this](void*) { _close_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_process_chunk_end_queue", [this](void*) { _close_chunk--; });
 
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
@@ -173,16 +149,18 @@ TEST_F(SinkIOBufferTest, test_basic_2) {
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
     thread1.join();
 
-    wait([this]() -> bool { return _data_chunk == 2; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk == 4; });
 
     std::thread thread2(poll_thread, sink_buffer.get());
     thread2.join();
 
-    wait([this]() -> bool { return _close_chunk == 1; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _close_chunk == 1; });
     _need_process_chunk = true;
 
-    wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
+    // MockSinkIOBuffer::_add_chunk() called 4 times
+    EXPECT_EQ(4, sink_buffer->num_chunks());
     sink_buffer.reset();
 
     SyncPoint::GetInstance()->DisableProcessing();
@@ -191,21 +169,11 @@ TEST_F(SinkIOBufferTest, test_basic_2) {
 // Cancel when there is no task
 TEST_F(SinkIOBufferTest, test_cancel_1) {
     SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
-        if (arg == nullptr) {
-            _close_chunk++;
-        } else {
-            _data_chunk++;
-        }
-    });
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [](void* arg) {});
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void* arg) {
-        if (arg == nullptr) {
-            _close_chunk--;
-        } else {
-            _data_chunk--;
-        }
-    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void*) { _data_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [](void*) {});
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void*) { _data_chunk--; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_apend_chunk_end_queue", [this](void*) { _close_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_process_chunk_end_queue", [this](void*) { _close_chunk--; });
 
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
@@ -214,15 +182,17 @@ TEST_F(SinkIOBufferTest, test_cancel_1) {
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
     thread1.join();
 
-    wait([this]() -> bool { return _data_chunk == 0; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk == 0; });
 
     sink_buffer->cancel_one_sinker();
     std::thread thread2(poll_thread, sink_buffer.get());
     thread2.join();
 
-    wait([this]() -> bool { return _close_chunk == 0; });
-    wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _close_chunk == 0; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
+    // MockSinkIOBuffer::_add_chunk() called 4 times
+    EXPECT_EQ(4, sink_buffer->num_chunks());
     sink_buffer.reset();
 
     SyncPoint::GetInstance()->DisableProcessing();
@@ -235,23 +205,13 @@ TEST_F(SinkIOBufferTest, test_cancel_2) {
     ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
 
     SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
-        if (arg == nullptr) {
-            _close_chunk++;
-        } else {
-            _data_chunk++;
-        }
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void*) { _data_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [&sink_buffer](void* arg) {
+        ASSERT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_cancelled(); });
     });
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [&sink_buffer, this](void* arg) {
-        wait([&sink_buffer]() -> bool { return sink_buffer->is_cancelled(); });
-    });
-    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void* arg) {
-        if (arg == nullptr) {
-            _close_chunk--;
-        } else {
-            _data_chunk--;
-        }
-    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void*) { _data_chunk--; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_apend_chunk_end_queue", [this](void*) { _close_chunk++; });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_process_chunk_end_queue", [this](void*) { _close_chunk--; });
 
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
     thread1.join();
@@ -261,9 +221,12 @@ TEST_F(SinkIOBufferTest, test_cancel_2) {
     std::thread thread2(poll_thread, sink_buffer.get());
     thread2.join();
 
-    wait([this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
-    wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
+    EXPECT_PRED1(SinkIOBufferTest::wait, [&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
+    // MockSinkIOBuffer::_add_chunk() can be called at most once (because the callback is waiting for the cancelling),
+    // and possibly never done if the cancel is done before the processing. Rest of the chunks are all fast skipped.
+    EXPECT_LE(sink_buffer->num_chunks(), 1);
     sink_buffer.reset();
 
     SyncPoint::GetInstance()->DisableProcessing();

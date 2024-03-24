@@ -82,11 +82,11 @@ void logs_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* ou
 
 // Registered to handle "/varz", and prints out all command-line flags and their values
 void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
+    std::vector<config::ConfigInfo> configs = config::list_configs();
     (*output) << "<h2>Configurations</h2>";
     (*output) << "<pre>";
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
-    for (const auto& it : *(config::full_conf_map)) {
-        (*output) << it.first << "=" << it.second << std::endl;
+    for (const auto& cfg : configs) {
+        (*output) << cfg.name << '=' << cfg.value << '\n';
     }
     (*output) << "</pre>";
 }

@@ -12,26 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/olap/task/engine_checksum_task.cpp
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 #include "storage/task/engine_manual_compaction_task.h"
 
 #include <memory>
@@ -45,7 +25,6 @@
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
@@ -55,7 +34,8 @@ namespace starrocks {
 EngineManualCompactionTask::EngineManualCompactionTask(MemTracker* mem_tracker, TTabletId tablet_id,
                                                        bool base_compaction)
         : _tablet_id(tablet_id), _base_compaction(base_compaction) {
-    _mem_tracker = mem_tracker;
+    _mem_tracker =
+            std::make_unique<MemTracker>(-1, fmt::format("manual_compact_task_of_tablet_{}", tablet_id), mem_tracker);
 }
 
 Status EngineManualCompactionTask::execute() {
@@ -64,7 +44,7 @@ Status EngineManualCompactionTask::execute() {
         LOG(WARNING) << "Failed to manual compaction tablet_id=" << _tablet_id << " error=" << st;
     }
     return st;
-} // execute
+}
 
 Status EngineManualCompactionTask::_manual_compaction() {
     LOG(INFO) << "begin to manual compaction. "
@@ -74,7 +54,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
     RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", _tablet_id)));
 
     if (tablet->updates() != nullptr) {
-        RETURN_IF_ERROR(tablet->updates()->compaction(_mem_tracker));
+        RETURN_IF_ERROR(tablet->updates()->compaction(_mem_tracker.get()));
         return Status::OK();
     }
 
@@ -98,7 +78,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
                         fmt::format("Failed to base compaction tablet={} no need to do", tablet->full_name()));
             }
         } else {
-            BaseCompaction base_compaction(_mem_tracker, tablet);
+            BaseCompaction base_compaction(_mem_tracker.get(), tablet);
 
             Status res = base_compaction.compact();
             if (!res.ok()) {
@@ -130,7 +110,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
                 }
             }
         } else {
-            CumulativeCompaction cumulative_compaction(_mem_tracker, tablet);
+            CumulativeCompaction cumulative_compaction(_mem_tracker.get(), tablet);
 
             Status res = cumulative_compaction.compact();
             if (!res.ok()) {

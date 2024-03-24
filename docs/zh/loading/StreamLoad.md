@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Stream Load']
 ---
 
 # 从本地文件系统导入
@@ -14,7 +15,7 @@ StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 两种导入方式各有优势：
 
 - Stream Load 支持 CSV 和 JSON 两种数据文件格式，适用于数据文件数量较少且单个文件的大小不超过 10 GB 的场景。
-- Broker Load 支持 Parquet、ORC、及 CSV 三种文件格式，适用于数据文件数量较多且单个文件的大小超过 10 GB 的场景、以及文件存储在 NAS 的场景。**但是该功能自 v2.5 起支持，而且这种导入方式需要您在数据所在的机器上[部署 Broker](../deployment/deploy_broker.md)。**
+- Broker Load 支持 Parquet、ORC、CSV、及 JSON 四种文件格式（JSON 文件格式自 3.2.3 版本起支持），适用于数据文件数量较多且单个文件的大小超过 10 GB 的场景、以及文件存储在 NAS 的场景。
 
 对于 CSV 格式的数据，需要注意以下两点：
 
@@ -246,7 +247,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
 这里介绍使用 Stream Load 导入方式需要注意的一些系统参数配置。这些参数作用于所有 Stream Load 导入作业。
 
-- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE 动态参数](../administration/BE_configuration.md)。
+- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE 动态参数](../administration/management/BE_configuration.md)。
 
   建议一次导入的数据量不要超过 10 GB。如果数据文件的大小超过 10 GB，建议您拆分成若干小于 10 GB 的文件分次导入。如果由于业务场景需要，无法拆分数据文件，可以适当调大该参数的取值，从而提高数据文件的大小上限。
 
@@ -261,7 +262,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
   :::
 
-- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/FE_configuration.md)。
+- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/management/FE_configuration.md)。
 
   如果您创建的导入作业经常发生超时，可以通过该参数适当地调大超时时间。您可以通过如下公式计算导入作业的超时时间：
 
@@ -292,23 +293,7 @@ Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks �
 ### 使用限制
 
 - 目前只能从单个 Broker 中导入数据，并且 Broker 版本必须为 2.5 及以后。
-- 并发访问单点的 Broker 容易成为瓶颈，并发越高反而越容易造成超时、OOM 等问题。您可以通过设置 `pipeline_dop`（参见[调整查询并发度](../administration/Query_management.md#调整查询并发度)）来限制 Broker Load 的并行度，对于单个 Broker 的访问并行度建议设置小于 `16`。
-
-### 准备工作
-
-在使用 Broker Load 从本地文件系统导入数据前，需要完成如下准备工作：
-
-1. 按照“[部署前提条件](../deployment/deployment_prerequisites.md)”、“[检查环境配置](../deployment/environment_configurations.md)”和“[准备部署文件](../deployment/prepare_deployment_files.md)”中的介绍，在本地文件所在机器上完成必要的环境配置。然后，在该机器上部署一个 Broker。具体操作跟在 BE 节点上部署一样，参见[部署 Broker 节点](../deployment/deploy_broker.md)。
-
-   > **NOTICE**
-   >
-   > 只能从单个 Broker 中导入数据，并且 Broker 版本必须为 2.5 及以后。
-
-2. 通过 [ALTER SYSTEM](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md#broker) 语句在 StarRocks 中添加上一步骤中部署好的 Broker（如 `172.26.199.40:8000`），并给 Broker 指定新名称（如 `sole_broker`）：
-
-   ```SQL
-   ALTER SYSTEM ADD BROKER sole_broker "172.26.199.40:8000";
-   ```
+- 并发访问单点的 Broker 容易成为瓶颈，并发越高反而越容易造成超时、OOM 等问题。您可以通过设置 `pipeline_dop`（参见[调整查询并发度](../administration/management/resource_management/Query_management.md#调整查询并发度)）来限制 Broker Load 的并行度，对于单个 Broker 的访问并行度建议设置小于 `16`。
 
 ### 操作示例
 

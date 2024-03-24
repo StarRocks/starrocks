@@ -48,6 +48,7 @@ public:
         int64_t ref_count;
         std::vector<uint8_t> buffer;
         void align(int64_t align_size, int64_t file_size);
+        std::string debug_string() const;
     };
 
     SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename, size_t file_size);
@@ -81,6 +82,7 @@ public:
 
     int64_t shared_io_count() const { return _shared_io_count; }
     int64_t shared_io_bytes() const { return _shared_io_bytes; }
+    int64_t shared_align_io_bytes() const { return _shared_align_io_bytes; }
     int64_t shared_io_timer() const { return _shared_io_timer; }
     int64_t direct_io_count() const { return _direct_io_count; }
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
@@ -104,6 +106,7 @@ private:
     int64_t _file_size = 0;
     int64_t _shared_io_count = 0;
     int64_t _shared_io_bytes = 0;
+    int64_t _shared_align_io_bytes = 0;
     int64_t _shared_io_timer = 0;
     int64_t _direct_io_count = 0;
     int64_t _direct_io_bytes = 0;

@@ -181,6 +181,12 @@ public:
         ASSERT_TRUE(tablet_pk->rowset_commit(4, rs2).ok());
         ASSERT_EQ(4, tablet_pk->updates()->max_version());
 
+        /*
+            create primary key empty tablet
+        */
+        TabletSharedPtr tablet_pk_empty = create_pk_tablet(66669, 6669);
+        tablet_pk_empty->set_enable_persistent_index(false);
+
         sleep(2);
     }
 
@@ -524,6 +530,27 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
     ASSERT_EQ(5, tablet->updates()->max_version());
 }
 
+TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
+    int64_t empty_tablet_id = 66669;
+    int32_t empty_schema_hash = 6669;
+    TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
+    TabletSharedPtr tablet = tablet_manager->get_tablet(empty_tablet_id);
+    ASSERT_TRUE(tablet != nullptr);
+    ASSERT_EQ(tablet->tablet_id(), empty_tablet_id);
+    DataDir* source_path = tablet->data_dir();
+    tablet.reset();
+    DataDir* dest_path = nullptr;
+    DataDir* data_dir_1 = starrocks::StorageEngine::instance()->get_stores()[0];
+    DataDir* data_dir_2 = starrocks::StorageEngine::instance()->get_stores()[1];
+    if (source_path == data_dir_1) {
+        dest_path = data_dir_2;
+    } else {
+        dest_path = data_dir_1;
+    }
+    EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path);
+    ASSERT_OK(migration_task.execute());
+}
+
 } // namespace starrocks
 
 int main(int argc, char** argv) {
@@ -534,7 +561,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
     std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
-    if (!starrocks::config::init(conffile.c_str(), false)) {
+    if (!starrocks::config::init(conffile.c_str())) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }

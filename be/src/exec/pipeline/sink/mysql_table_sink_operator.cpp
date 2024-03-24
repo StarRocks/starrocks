@@ -38,8 +38,6 @@ public:
 
     ~MysqlTableSinkIOBuffer() override = default;
 
-    Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) override;
-
     void close(RuntimeState* state) override;
 
 private:
@@ -52,26 +50,6 @@ private:
     std::unique_ptr<MysqlTableWriter> _writer;
     FragmentContext* _fragment_ctx;
 };
-
-Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
-    bool expected = false;
-    if (!_is_prepared.compare_exchange_strong(expected, true)) {
-        return Status::OK();
-    }
-    _state = state;
-
-    bthread::ExecutionQueueOptions options;
-    options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
-                                                       &MysqlTableSinkIOBuffer::execute_io_task, this);
-    if (ret != 0) {
-        _exec_queue_id.reset();
-        return Status::InternalError("start execution queue error");
-    }
-
-    return Status::OK();
-}
 
 void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
     _writer.reset();

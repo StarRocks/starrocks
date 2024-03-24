@@ -71,6 +71,6 @@ public class UtilsTest {
             }
         };
 
-        Assert.assertNull(Utils.chooseBackend(new LakeTablet(1000L)));
+        Assert.assertNull(Utils.chooseNodeId(new LakeTablet(1000L)));
     }
 }

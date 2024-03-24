@@ -93,13 +93,18 @@ public:
         switch (event.type()) {
         case RdKafka::Event::EVENT_ERROR:
             LOG(INFO) << "kafka error: " << RdKafka::err2str(event.err()) << ", event: " << event.str();
+            log_event_msg(event);
             break;
+
         case RdKafka::Event::EVENT_STATS:
             LOG(INFO) << "kafka stats: " << event.str();
             break;
 
         case RdKafka::Event::EVENT_LOG:
             LOG(INFO) << "kafka log-" << event.severity() << "-" << event.fac().c_str() << ", event: " << event.str();
+            if (event.severity() <= RdKafka::Event::EVENT_SEVERITY_WARNING) {
+                log_event_msg(event);
+            }
             break;
 
         case RdKafka::Event::EVENT_THROTTLE:
@@ -113,6 +118,27 @@ public:
             break;
         }
     }
+
+    std::string get_error_msg() const {
+        std::unique_lock l(_lock);
+        return _error_msg;
+    }
+
+    void reset_error_msg() {
+        std::unique_lock l(_lock);
+        _error_msg.clear();
+    }
+
+private:
+    void log_event_msg(const RdKafka::Event& event) {
+        std::unique_lock l(_lock);
+        if (_error_msg.empty() && event.str().size() > 0) {
+            _error_msg = "event: " + event.str();
+        }
+    }
+
+    std::string _error_msg;
+    mutable std::mutex _lock;
 };
 
 class KafkaDataConsumer : public DataConsumer {

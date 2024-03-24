@@ -18,6 +18,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
@@ -27,6 +28,13 @@
 namespace starrocks::lake {
 
 static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
+
+LakePrimaryIndex::~LakePrimaryIndex() {
+    if (!_enable_persistent_index && _persistent_index != nullptr) {
+        auto st = LocalPkIndexManager::clear_persistent_index(_tablet_id);
+        LOG_IF(WARNING, !st.ok()) << "Fail to clear pk index from local disk: " << st.to_string();
+    }
+}
 
 Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
@@ -94,6 +102,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                                     ->get_persistent_index_store(metadata->id())
                                     ->create_dir_if_path_not_exists(path));
             _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+            set_enable_persistent_index(true);
             return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                     ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
@@ -107,9 +116,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     std::unique_ptr<Column> pk_column;
     if (pk_columns.size() > 1) {
         // more than one key column
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     }
     vector<uint32_t> rowids;
     rowids.reserve(4096);
@@ -125,7 +132,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             return res.status();
         }
         auto& itrs = res.value();
-        CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
             if (itr == nullptr) {

@@ -22,6 +22,8 @@
 
 namespace starrocks::io {
 
+class SharedBufferedInputStreamTest : public ::testing::Test {};
+
 PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
     size_t len = 1 * 1024 * 1024; // 1MB
     const std::string rand_string = random_string(len);
@@ -44,6 +46,137 @@ PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
     sb_stream->release_to_offset(520 * 1024);
     auto sb = sb_stream->find_shared_buffer(550 * 1024, 100 * 1024);
     ASSERT_OK(sb.status());
+}
+
+TEST_F(SharedBufferedInputStreamTest, test_orc) {
+    size_t len = 100 * 1024 * 1024; // 1MB
+    const std::string rand_string = random_string(len);
+    auto in = std::make_shared<TestInputStream>(rand_string, len);
+    auto sb_stream = std::make_shared<io::SharedBufferedInputStream>(in, "test", len);
+    sb_stream->set_align_size(256 * 1024); // 256kb
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+
+    {
+        // put lazy
+        ranges.emplace_back(3, 1746 - 3, false);
+        ranges.emplace_back(1978, 4125 - 1978, false);
+        ranges.emplace_back(4288, 5235 - 4288, false);
+        ranges.emplace_back(5523, 2833805 - 5523, false);
+        ranges.emplace_back(2913460, 3261935 - 2913460, false);
+        ranges.emplace_back(3295862, 22211037 - 3295862, false);
+        ranges.emplace_back(22417540, 22417878 + 35 - 22417540, false);
+    }
+
+    {
+        // put active
+        ranges.emplace_back(1746, 1978 - 1746, true);
+        ranges.emplace_back(4125, 4288 - 4125, true);
+        ranges.emplace_back(5235, 5523 - 5235, true);
+        ranges.emplace_back(2833805, 2913460 - 2833805, true);
+        ranges.emplace_back(3261935, 3295862 - 3261935, true);
+        ranges.emplace_back(22211037, 22417540 - 22211037, true);
+    }
+
+    auto st = sb_stream->set_io_ranges(ranges, false);
+    ASSERT_TRUE(st.ok());
+
+    // read active first
+    auto sb = sb_stream->find_shared_buffer(1746, 1978 - 1746);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(1746, sb.value()->raw_offset);
+    ASSERT_EQ(5523 - 1746, sb.value()->raw_size);
+
+    sb = sb_stream->find_shared_buffer(2833805, 2913460 - 2833805);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(2833805, sb.value()->raw_offset);
+    ASSERT_EQ(3295862 - 2833805, sb.value()->raw_size);
+
+    sb = sb_stream->find_shared_buffer(22211037, 22417540 - 22211037);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(22211037, sb.value()->raw_offset);
+    ASSERT_EQ(22417540 - 22211037, sb.value()->raw_size);
+
+    // read lazy column
+    sb = sb_stream->find_shared_buffer(3, 1746 - 3);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(1746, sb.value()->raw_offset);
+    ASSERT_EQ(5523 - 1746, sb.value()->raw_size);
+
+    sb = sb_stream->find_shared_buffer(1978, 4125 - 1978);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(1746, sb.value()->raw_offset);
+    ASSERT_EQ(5523 - 1746, sb.value()->raw_size);
+
+    sb = sb_stream->find_shared_buffer(4288, 5235 - 4288);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(1746, sb.value()->raw_offset);
+    ASSERT_EQ(5523 - 1746, sb.value()->raw_size);
+
+    sb = sb_stream->find_shared_buffer(5523, 2833805 - 5523);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(5523, sb.value()->raw_offset);
+    ASSERT_EQ(2833805 - 5523, sb.value()->raw_size);
+
+    sb = sb_stream->find_shared_buffer(2913460, 3261935 - 2913460);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(2833805, sb.value()->raw_offset);
+    ASSERT_EQ(3295862 - 2833805, sb.value()->raw_size);
+
+    sb = sb_stream->find_shared_buffer(3295862, 22211037 - 3295862);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(3295862, sb.value()->raw_offset);
+    ASSERT_EQ(22211037 - 3295862, sb.value()->raw_size);
+
+    sb = sb_stream->find_shared_buffer(22417540, 22417878 + 35 - 22417540);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(22417540, sb.value()->raw_offset);
+    ASSERT_EQ(22417878 + 35 - 22417540, sb.value()->raw_size);
+
+    // clear previous stripe io range
+    sb_stream->release_to_offset(22418414);
+
+    ranges.clear();
+    {
+        // put active
+        ranges.emplace_back(22420223, 22420420 - 22420223, true);
+    }
+    {
+        // put lazy
+        ranges.emplace_back(22418414, 22420223 - 22418414, false);
+    }
+
+    st = sb_stream->set_io_ranges(ranges, false);
+    ASSERT_TRUE(st.ok());
+
+    // get active
+    sb = sb_stream->find_shared_buffer(22420223, 22420420 - 22420223);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(22420223, sb.value()->raw_offset);
+    ASSERT_EQ(22420420 - 22420223, sb.value()->raw_size);
+
+    // get lazy
+    sb = sb_stream->find_shared_buffer(22418414, 22420223 - 22418414);
+    ASSERT_TRUE(sb.ok());
+    // std::cout << sb.value()->debug() << std::endl;
+    ASSERT_EQ(22420223, sb.value()->raw_offset);
+    ASSERT_EQ(22420420 - 22420223, sb.value()->raw_size);
+
+    // check debug function
+    ASSERT_EQ(
+            "SharedBuffer raw_offset=22420223, raw_size=197, offset=22282240, size=262144, ref_count=2, "
+            "buffer_capacity=0",
+            sb.value()->debug_string());
 }
 
 } // namespace starrocks::io

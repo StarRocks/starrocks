@@ -27,8 +27,9 @@ public class DictQueryOperator extends CallOperator {
     private final TDictQueryExpr dictQueryExpr;
     private final Function fn;
 
-    public DictQueryOperator(List<ScalarOperator> arguments, TDictQueryExpr dictQueryExpr, Function fn) {
-        super(FunctionSet.DICT_MAPPING, Type.BIGINT, arguments);
+    public DictQueryOperator(List<ScalarOperator> arguments, TDictQueryExpr dictQueryExpr, Function fn,
+                             Type type) {
+        super(FunctionSet.DICT_MAPPING, type, arguments);
         this.dictQueryExpr = dictQueryExpr;
         this.fn = fn;
     }

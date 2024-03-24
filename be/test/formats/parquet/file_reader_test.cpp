@@ -1035,7 +1035,7 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     {
         ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
         int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
-        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
     }
 
     // get next
@@ -1110,7 +1110,7 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     {
         ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
         int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
-        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+        ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
     }
 
     // c0 is conjunct filter column
@@ -1172,7 +1172,7 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     {
         ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_column_indices.size());
         int col_idx = file_reader->_row_group_readers[0]->_dict_column_indices[0];
-        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id);
+        ASSERT_EQ(1, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
     }
 
     // get next

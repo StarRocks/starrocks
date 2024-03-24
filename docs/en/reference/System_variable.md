@@ -125,7 +125,7 @@ SELECT /*+ SET_VAR
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
 
-### activate_all_roles_on_login (global）
+### activate_all_roles_on_login (global)
 
 Whether to enable all roles (including default roles and granted roles) for a StarRocks user when the user connects to the StarRocks cluster. This variable is supported since v3.0.
 
@@ -143,6 +143,10 @@ Used for MySQL client compatibility. No practical usage.
 ### autocommit
 
 Used for MySQL client compatibility. No practical usage.
+
+### catalog (3.2.4 and later)
+
+Used to specify the catalog to which the session belongs.
 
 ### batch_size
 
@@ -164,9 +168,15 @@ Whether to enable low cardinality optimization. After this feature is enabled, t
 
 ### cbo_eq_base_type (2.5.14 and later)
 
-Specifies the data type used for data comparison between DECIMAL-type data and STRING-type data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
+Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
 
-### character_set_database (global）
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* Description: Specifies the maximum number of candidate materialized views allowed during query planning.
+* Default: 64
+* Introduced in: v3.1.9, v3.2.5
+
+### character_set_database (global)
 
 The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
 
@@ -224,9 +234,13 @@ You can also enable bucketization for the COUNT DISTINCT column by adding the `s
 
 ### enable_group_level_query_queue (3.1.4 and later)
 
-Whether to enable resource group-level [query queue](../administration/query_queues.md).
+Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 
 Default value: false, which means this feature is disabled.
+
+### enable_iceberg_metadata_cache (3.2.1 and later)
+
+Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 
 ### enable_insert_strict
 
@@ -280,7 +294,7 @@ Boolean value to enable query queues for SELECT queries. Default: `false`.
 
 Boolean value to enable query queues for statistics queries.
 
-### enable_query_tablet_affinity（2.5 and later）
+### enable_query_tablet_affinity (2.5 and later)
 
 Boolean value to control whether to direct multiple queries against the same tablet to a fixed replica.
 
@@ -541,7 +555,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_mem_limit
 
-Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enbaled.
+Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled.
 
 When the `Memory Exceed Limit` error happens, you could try to increase this variable.
 

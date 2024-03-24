@@ -16,8 +16,8 @@ DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE]
 
 Note:
 
-- If a table was deleted within 24 hours by using the DROP TABLE statement, you can use the [RECOVER](../data-definition/RECOVER.md) statement to restore the table.
-- If DROP Table FORCE is executed, the table will be deleted directly and cannot be recovered without checking whether there are unfinished activities in the database. Generally this operation is not recommended.
+- After a table is dropped, you can use the [RECOVER](../data-definition/backup_restore/RECOVER.md) statement to restore the table within a specified period (1 day by default).
+- If DROP Table FORCE is executed, the table will be deleted directly and cannot be recovered without checking whether there are unfinished activities in the database. Generally, this operation is not recommended.
 
 ## Examples
 

@@ -66,6 +66,7 @@ public class BackendsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(BackendsProcDir.class);
 
     public static final ImmutableList<String> TITLE_NAMES;
+    public static final ImmutableList<String> TITLE_NAMES_SHARED_DATA;
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                 .add("BackendId").add("IP").add("HeartbeatPort")
@@ -76,10 +77,12 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
                 .add("DataCacheMetrics")
                 .add("location");
-        if (RunMode.isSharedDataMode()) {
-            builder.add("StarletPort").add("WorkerId");
-        }
         TITLE_NAMES = builder.build();
+        builder = new ImmutableList.Builder<String>()
+                .addAll(TITLE_NAMES)
+                .add("StarletPort")
+                .add("WorkerId");
+        TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
     private SystemInfoService clusterInfoService;
@@ -88,12 +91,20 @@ public class BackendsProcDir implements ProcDirInterface {
         this.clusterInfoService = clusterInfoService;
     }
 
+    public static List<String> getMetadata() {
+        if (RunMode.isSharedDataMode()) {
+            return TITLE_NAMES_SHARED_DATA;
+        } else {
+            return TITLE_NAMES;
+        }
+    }
+
     @Override
     public ProcResult fetchResult() throws AnalysisException {
         Preconditions.checkNotNull(clusterInfoService);
 
         BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
+        result.setNames(getMetadata());
 
         final List<List<String>> backendInfos = getClusterBackendInfos();
         for (List<String> backendInfo : backendInfos) {
@@ -116,6 +127,7 @@ public class BackendsProcDir implements ProcDirInterface {
         long start = System.currentTimeMillis();
         Stopwatch watch = Stopwatch.createUnstarted();
         List<List<Comparable>> comparableBackendInfos = new LinkedList<>();
+        long tabletNum = 0;
         for (long backendId : backendIds) {
             Backend backend = clusterInfoService.getBackend(backendId);
             if (backend == null) {
@@ -123,7 +135,12 @@ public class BackendsProcDir implements ProcDirInterface {
             }
 
             watch.start();
-            long tabletNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletNumByBackendId(backendId);
+            if (RunMode.isSharedDataMode()) {
+                String workerAddr = backend.getHost() + ":" + backend.getStarletPort();
+                tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);
+            } else {
+                tabletNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletNumByBackendId(backendId);
+            }
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));

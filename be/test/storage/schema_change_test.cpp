@@ -40,14 +40,15 @@ class SchemaChangeTest : public testing::Test {
     }
 
 protected:
-    void SetCreateTabletReq(TCreateTabletReq* request, int64_t tablet_id, TKeysType::type type = TKeysType::DUP_KEYS) {
+    void SetCreateTabletReq(TCreateTabletReq* request, int64_t tablet_id, TKeysType::type type = TKeysType::DUP_KEYS,
+                            TStorageType::type storage_type = TStorageType::COLUMN) {
         request->tablet_id = tablet_id;
         request->__set_version(1);
         request->__set_version_hash(0);
         request->tablet_schema.schema_hash = 270068375;
         request->tablet_schema.short_key_column_count = 2;
         request->tablet_schema.keys_type = type;
-        request->tablet_schema.storage_type = TStorageType::COLUMN;
+        request->tablet_schema.storage_type = storage_type;
     }
 
     void AddColumn(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type, bool is_key,
@@ -169,6 +170,43 @@ protected:
 
     SchemaChange* _sc_procedure;
 };
+
+TEST_F(SchemaChangeTest, column_with_row) {
+    StorageEngine* engine = StorageEngine::instance();
+    int64_t old_id = 1415001;
+    int64_t new_id = old_id + 1;
+    {
+        TCreateTabletReq create_tablet_req;
+        SetCreateTabletReq(&create_tablet_req, old_id, TKeysType::PRIMARY_KEYS, TStorageType::COLUMN_WITH_ROW);
+        AddColumn(&create_tablet_req, "k1", TPrimitiveType::INT, true);
+        AddColumn(&create_tablet_req, "k2", TPrimitiveType::INT, true);
+        AddColumn(&create_tablet_req, "v1", TPrimitiveType::INT, false);
+        AddColumn(&create_tablet_req, "v2", TPrimitiveType::INT, false);
+        Status res = engine->create_tablet(create_tablet_req);
+        ASSERT_TRUE(res.ok()) << res.to_string();
+    }
+    {
+        TCreateTabletReq create_tablet_req;
+        SetCreateTabletReq(&create_tablet_req, new_id, TKeysType::PRIMARY_KEYS, TStorageType::COLUMN_WITH_ROW);
+        create_tablet_req.__set_base_tablet_id(old_id);
+        AddColumn(&create_tablet_req, "k1", TPrimitiveType::INT, true);
+        AddColumn(&create_tablet_req, "k2", TPrimitiveType::INT, true);
+        AddColumn(&create_tablet_req, "v0", TPrimitiveType::INT, false);
+        AddColumn(&create_tablet_req, "v1", TPrimitiveType::INT, false);
+        AddColumn(&create_tablet_req, "v2", TPrimitiveType::INT, false);
+        AddColumn(&create_tablet_req, "v3", TPrimitiveType::INT, false);
+        Status res = engine->create_tablet(create_tablet_req);
+        ASSERT_TRUE(res.ok()) << res.to_string();
+    }
+    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(old_id);
+    ASSERT_TRUE(base_tablet != nullptr);
+    ASSERT_EQ(base_tablet->tablet_schema()->columns().back().name(), Schema::FULL_ROW_COLUMN);
+    ASSERT_EQ(base_tablet->tablet_schema()->columns().back().unique_id(), 4);
+    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(new_id);
+    ASSERT_TRUE(new_tablet != nullptr);
+    ASSERT_EQ(new_tablet->tablet_schema()->columns().back().name(), Schema::FULL_ROW_COLUMN);
+    ASSERT_EQ(new_tablet->tablet_schema()->columns().back().unique_id(), 6);
+}
 
 TEST_F(SchemaChangeTest, convert_tinyint_to_varchar) {
     test_convert_to_varchar<int8_t>(TYPE_TINYINT, 1, 127, "127");

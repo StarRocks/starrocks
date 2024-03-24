@@ -40,7 +40,7 @@ namespace starrocks::lake {
 class LakeAutoIncrementPartialUpdateTest : public TestBase {
 public:
     LakeAutoIncrementPartialUpdateTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
@@ -171,7 +171,7 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_auto_increment_partial_update";
     constexpr static const int kChunkSize = 12;
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = 7561;

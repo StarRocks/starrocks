@@ -95,6 +95,8 @@ import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DisableDiskInfo;
+import com.starrocks.persist.DisablePartitionRecoveryInfo;
+import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;
@@ -114,6 +116,7 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -152,6 +155,7 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
@@ -288,6 +292,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ERASE_MULTI_TABLES: {
                 data = MultiEraseTableInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DISABLE_TABLE_RECOVERY: {
+                data = DisableTableRecoveryInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
+                data = DisablePartitionRecoveryInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -962,6 +976,16 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
+                data = ExternalHistogramStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META: {
+                data = ExternalHistogramStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                 data = ModifyTableColumnOperationLog.read(in);
                 isRead = true;
@@ -1063,6 +1087,10 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_AUTH_UPGRADE_V2:
+                // for compatibility reason, just ignore the auth upgrade log
+                isRead = true;
+                break;
             case OperationType.OP_MV_JOB_STATE:
                 data = MVMaintenanceJob.read(in);
                 isRead = true;
@@ -1122,6 +1150,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_REPLICATION_JOB:
                 data = ReplicationJobLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_RECOVER_PARTITION_VERSION:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
                 isRead = true;
                 break;
             default: {

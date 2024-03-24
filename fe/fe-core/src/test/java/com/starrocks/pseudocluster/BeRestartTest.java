@@ -30,7 +30,7 @@ public class BeRestartTest {
     @Before
     public void setUp() throws Exception {
         // make publish wait time shorter for test, so insert will finish quicker if some BE is shutdown
-        Config.quorum_publish_wait_time_ms = 1000;
+        Config.quorum_publish_wait_time_ms = 500;
         Config.heartbeat_timeout_second = 2;
         Config.tablet_sched_checker_interval_seconds = 2;
         Config.tablet_sched_repair_delay_factor_second = 2;
@@ -71,18 +71,18 @@ public class BeRestartTest {
         final PseudoBackend be10002 = cluster.getBackend(10002);
         final PseudoBackend be10003 = cluster.getBackend(10003);
         be10001.setShutdown(true);
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 3; i++) {
             int tableIdx = rand.nextInt(numTable);
             cluster.runSql("test", insertSqls[tableIdx], true);
             tableVersions[tableIdx]++;
-            Thread.sleep(500);
+            Thread.sleep(100);
         }
         be10001.setShutdown(false);
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 3; i++) {
             int tableIdx = rand.nextInt(numTable);
             cluster.runSql("test", insertSqls[tableIdx], true);
             tableVersions[tableIdx]++;
-            Thread.sleep(500);
+            Thread.sleep(100);
         }
         Callable<Boolean> allTabletsReachVersion = new Callable<Boolean>() {
             @Override

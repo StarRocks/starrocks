@@ -9,24 +9,26 @@ displayed_sidebar: "Chinese"
 - [All commands](#all-commands)
   - [用户账户管理](#用户账户管理)
   - [集群管理](#集群管理)
-    - [FE，BE，CN，Broker，process](#febecnbrokerprocess)
+    - [节点和进程](#节点和进程)
     - [资源组](#资源组)
     - [存储卷](#存储卷)
-    - [表，tablet，副本](#表tablet副本)
-    - [文件，索引，变量](#文件索引变量)
+    - [表，tablet，副本检查与修复](#表tablet副本检查与修复)
+    - [系统配置、变量](#系统配置变量)
+    - [文件](#文件)
     - [SQL 黑名单](#sql-黑名单)
     - [插件](#插件)
-    - [查询分析](#查询分析)
+    - [执行计划和 Profile](#执行计划和-profile)
   - [导入，导出](#导入导出)
     - [Routine load](#routine-load)
     - [其他导入](#其他导入)
+    - [Pipe](#pipe)
     - [导出](#导出)
     - [ETL 任务](#etl-任务)
   - [数据目录 (Catalog)，数据库，资源](#数据目录-catalog数据库资源)
     - [Catalog](#catalog)
     - [数据库](#数据库)
     - [资源](#资源)
-  - [建表，分区](#建表分区)
+  - [表，分区，分桶，索引](#表分区分桶索引)
   - [视图，物化视图](#视图物化视图)
     - [视图](#视图)
     - [物化视图](#物化视图)
@@ -59,12 +61,10 @@ displayed_sidebar: "Chinese"
 
 ## 集群管理
 
-管理集群，包括 FE、BE、Compute Node (CN)、资源组 (Resource Group)、存储卷（Storage Volume）、表、Tablet、副本 (Replica)、文件、索引（Index）、变量（Variable）、插件（Plugin）等。
+管理集群，包括 FE、BE、Compute Node (CN) 节点、资源组 (Resource Group)、存储卷（Storage Volume）、表、Tablet、副本 (Replica)、文件、变量（Variable）、插件（Plugin）、SQL Blacklist 等。
 
-### FE，BE，CN，Broker，process
+### 节点和进程
 
-- [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
-- [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
 - [ALTER SYSTEM](./Administration/ALTER_SYSTEM.md)
 - [CANCEL DECOMMISSION](./Administration/CANCEL_DECOMMISSION.md)
 - [KILL](./Administration/KILL.md)
@@ -78,8 +78,8 @@ displayed_sidebar: "Chinese"
 
 ### 资源组
 
-- [CREATE RESOURCE GROUP](./Administration/CREATE_RESOURCE_GROUP.md)
 - [ALTER RESOURCE GROUP](./Administration/ALTER_RESOURCE_GROUP.md)
+- [CREATE RESOURCE GROUP](./Administration/CREATE_RESOURCE_GROUP.md)
 - [DROP RESOURCE GROUP](./Administration/DROP_RESOURCE_GROUP.md)
 - [SHOW RESOURCE GROUP](./Administration/SHOW_RESOURCE_GROUP.md)
 - [SHOW USAGE RESOURCE GROUPS](./Administration/SHOW_USAGE_RESOURCE_GROUPS.md)
@@ -93,34 +93,35 @@ displayed_sidebar: "Chinese"
 - [SET DEFAULT STORAGE VOLUME](./Administration/SET_DEFAULT_STORAGE_VOLUME.md)
 - [SHOW STORAGE VOLUMES](./Administration/SHOW_STORAGE_VOLUMES.md)
 
-### 表，tablet，副本
+### 表，tablet，副本检查与修复
 
 - [ADMIN CANCEL REPAIR TABLE](./Administration/ADMIN_CANCEL_REPAIR.md)
 - [ADMIN CHECK TABLET](./Administration/ADMIN_CHECK_TABLET.md)
 - [ADMIN REPAIR TABLE](./Administration/ADMIN_REPAIR.md)
 - [ADMIN SET REPLICA STATUS](./Administration/ADMIN_SET_REPLICA_STATUS.md)
+- [ADMIN SET PARTITION VERSION](./Administration/ADMIN_SET_PARTITION_VERSION.md)
 - [ADMIN SHOW REPLICA DISTRIBUTION](./Administration/ADMIN_SHOW_REPLICA_DISTRIBUTION.md)
 - [ADMIN SHOW REPLICA STATUS](./Administration/ADMIN_SHOW_REPLICA_STATUS.md)
-- [RECOVER](./data-definition/RECOVER.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
-### 文件，索引，变量
+### 系统配置、变量
+
+- [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
+- [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
+- [SET (variable)](./Administration/SET.md)
+- [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
+
+### 文件
 
 - [CREATE FILE](./Administration/CREATE_FILE.md)
-- [CREATE INDEX](./data-definition/CREATE_INDEX.md)
 - [DROP FILE](./Administration/DROP_FILE.md)
-- [DROP INDEX](./data-definition/DROP_INDEX.md)
-- [SET (variable)](./Administration/SET.md)
 - [SHOW FILE](./Administration/SHOW_FILE.md)
-- [SHOW FULL COLUMNS](./Administration/SHOW_FULL_COLUMNS.md)
-- [SHOW INDEX](./Administration/SHOW_INDEX.md)
-- [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
 
 ### SQL 黑名单
 
 - [ADD SQLBLACKLIST](./Administration/ADD_SQLBLACKLIST.md)
-- [SHOW SQLBLACKLIST](./Administration/SHOW_SQLBLACKLIST.md)
 - [DELETE SQLBLACKLIST](./Administration/DELETE_SQLBLACKLIST.md)
+- [SHOW SQLBLACKLIST](./Administration/SHOW_SQLBLACKLIST.md)
 
 ### 插件
 
@@ -128,7 +129,7 @@ displayed_sidebar: "Chinese"
 - [SHOW PLUGINS](./Administration/SHOW_PLUGINS.md)
 - [UNINSTALL PLUGIN](./Administration/UNINSTALL_PLUGIN.md)
 
-### 查询分析
+### 执行计划和 Profile
 
 - [ANALYZE PROFILE](./Administration/ANALYZE_PROFILE.md)
 - [EXPLAIN](./Administration/EXPLAIN.md)
@@ -150,18 +151,21 @@ displayed_sidebar: "Chinese"
 ### 其他导入
 
 - [ALTER LOAD](./data-manipulation/ALTER_LOAD.md)
-- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
 - [BROKER LOAD](./data-manipulation/BROKER_LOAD.md)
 - [CANCEL LOAD](./data-manipulation/CANCEL_LOAD.md)
-- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
-- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
 - [INSERT](./data-manipulation/INSERT.md)
-- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
 - [SHOW LOAD](./data-manipulation/SHOW_LOAD.md)
-- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SHOW TRANSACTION](./data-manipulation/SHOW_TRANSACTION.md)
 - [SPARK LOAD](./data-manipulation/SPARK_LOAD.md)
 - [STREAM LOAD](./data-manipulation/STREAM_LOAD.md)
+
+### Pipe
+
+- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
+- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
+- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
+- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
+- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SUSPEND or RESUME PIPE](./data-manipulation/SUSPEND_or_RESUME_PIPE.md)
 
 ### 导出
@@ -201,24 +205,29 @@ displayed_sidebar: "Chinese"
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [SHOW RESOURCES](./data-definition/SHOW_RESOURCES.md)
 
-## 建表，分区
+## 表，分区，分桶，索引
 
 - [ALTER TABLE](./data-definition/ALTER_TABLE.md)
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
+- [CREATE INDEX](./data-definition/CREATE_INDEX.md)
 - [CREATE TABLE](./data-definition/CREATE_TABLE.md)
 - [CREATE TABLE AS SELECT](./data-definition/CREATE_TABLE_AS_SELECT.md)
 - [CREATE TABLE LIKE](./data-definition/CREATE_TABLE_LIKE.md)
+- [DELETE](./data-manipulation/DELETE.md)
+- [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
-- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
-- [DELETE](./data-manipulation/DELETE.md)
+- [SELECT](./data-manipulation/SELECT.md)
 - [SHOW ALTER TABLE](./data-manipulation/SHOW_ALTER.md)
 - [SHOW CREATE TABLE](./data-manipulation/SHOW_CREATE_TABLE.md)
 - [SHOW DELETE](./data-manipulation/SHOW_DELETE.md)
 - [SHOW DYNAMIC PARTITION TABLES](./data-manipulation/SHOW_DYNAMIC_PARTITION_TABLES.md)
 - [SHOW PARTITIONS](./data-manipulation/SHOW_PARTITIONS.md)
+- [SHOW FULL COLUMNS](./data-manipulation/SHOW_FULL_COLUMNS.md)
+- [SHOW INDEX](./data-manipulation/SHOW_INDEX.md)
 - [SHOW TABLES](./data-manipulation/SHOW_TABLES.md)
 - [SHOW TABLET](./data-manipulation/SHOW_TABLET.md)
+- [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
 - [UPDATE](./data-manipulation/UPDATE.md)
 
 ## 视图，物化视图
@@ -227,15 +236,15 @@ displayed_sidebar: "Chinese"
 
 - [ALTER VIEW](./data-definition/ALTER_VIEW.md)
 - [CREATE VIEW](./data-definition/CREATE_VIEW.md)
-- [SHOW CREATE VIEW](./data-manipulation/SHOW_CREATE_VIEW.md)
 - [DROP VIEW](./data-definition/DROP_VIEW.md)
+- [SHOW CREATE VIEW](./data-manipulation/SHOW_CREATE_VIEW.md)
 
 ### 物化视图
 
 - [ALTER MATERIALIZED VIEW](./data-definition/ALTER_MATERIALIZED_VIEW.md)
+- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [CREATE MATERIALIZED VIEW](./data-definition/CREATE_MATERIALIZED_VIEW.md)
 - [DROP MATERIALIZED VIEW](./data-definition/DROP_MATERIALIZED_VIEW.md)
-- [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
 - [REFRESH MATERIALIZED VIEW](./data-manipulation/REFRESH_MATERIALIZED_VIEW.md)
 - [SHOW ALTER MATERIALIZED VIEW](./data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md)
 - [SHOW CREATE MATERIALIZED VIEW](./data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW.md)
@@ -245,8 +254,7 @@ displayed_sidebar: "Chinese"
 
 - [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
 - [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
-- [SHOW FUNCTION](./data-definition/SHOW_FUNCTIONS.md)
-- [SELECT](./data-manipulation/SELECT.md)
+- [SHOW FUNCTIONS](./data-definition/SHOW_FUNCTIONS.md)
 
 ## CBO 统计信息
 
@@ -261,17 +269,17 @@ displayed_sidebar: "Chinese"
 
 ## 备份与恢复
 
-- [BACKUP](./data-definition/BACKUP.md)
-- [CANCEL BACKUP](./data-definition/CANCEL_BACKUP.md)
-- [CANCEL RESTORE](./data-definition/CANCEL_RESTORE.md)
-- [CREATE REPOSITORY](./data-definition/CREATE_REPOSITORY.md)
-- [DROP REPOSITORY](./data-definition/DROP_REPOSITORY.md)
-- [RECOVER](./data-definition/RECOVER.md)
-- [RESTORE](./data-definition/RESTORE.md)
-- [SHOW BACKUP](./data-manipulation/SHOW_BACKUP.md)
-- [SHOW REPOSITORIES](./data-manipulation/SHOW_REPOSITORIES.md)
-- [SHOW RESTORE](./data-manipulation/SHOW_RESTORE.md)
-- [SHOW SNAPSHOT](./data-manipulation/SHOW_SNAPSHOT.md)
+- [BACKUP](./data-definition/backup_restore/BACKUP.md)
+- [CANCEL BACKUP](./data-definition/backup_restore/CANCEL_BACKUP.md)
+- [CANCEL RESTORE](./data-definition/backup_restore/CANCEL_RESTORE.md)
+- [CREATE REPOSITORY](./data-definition/backup_restore/CREATE_REPOSITORY.md)
+- [DROP REPOSITORY](./data-definition/backup_restore/DROP_REPOSITORY.md)
+- [RECOVER](./data-definition/backup_restore/RECOVER.md)
+- [RESTORE](./data-definition/backup_restore/RESTORE.md)
+- [SHOW BACKUP](./data-manipulation/backup_restore/SHOW_BACKUP.md)
+- [SHOW REPOSITORIES](./data-manipulation/backup_restore/SHOW_REPOSITORIES.md)
+- [SHOW RESTORE](./data-manipulation/backup_restore/SHOW_RESTORE.md)
+- [SHOW SNAPSHOT](./data-manipulation/backup_restore/SHOW_SNAPSHOT.md)
 
 ## 工具辅助语句
 

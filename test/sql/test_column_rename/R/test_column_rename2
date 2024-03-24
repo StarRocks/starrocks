@@ -98,12 +98,12 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Table 'site_access' already exists.")
+E: (1050, "Getting analyzing error. Detail message: Table 'site_access' already exists.")
 -- !result
 alter table site_access rename column site_id to id;
 -- result:
 -- !result
 alter table site_access add column site_id int;
 -- result:
-E: (1064, 'Unexpected exception: Can not add column which already exists in physical column: site_id, you can remove `id` int(11) NULL DEFAULT "10" COMMENT "" and try again.')
+E: (1064, 'Can not add column which already exists in physical column: site_id, you can remove `id` int(11) NULL DEFAULT "10" COMMENT "" and try again.')
 -- !result
