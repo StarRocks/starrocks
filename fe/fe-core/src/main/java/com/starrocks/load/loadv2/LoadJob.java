@@ -437,6 +437,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             if (properties.containsKey(LoadStmt.JSONROOT)) {
                 jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
             }
+
+            if (properties.containsKey(LoadStmt.ENVELOPE)) {
+                jsonOptions.envelope = properties.get(LoadStmt.ENVELOPE);
+            }
         }
     }
 
@@ -1309,5 +1313,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
         @SerializedName("jr")
         public String jsonRoot;
+
+        @SerializedName("e")
+        public String envelope;
     }
 }

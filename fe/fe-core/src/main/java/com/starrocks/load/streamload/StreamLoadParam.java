@@ -16,6 +16,7 @@ package com.starrocks.load.streamload;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
+import com.starrocks.thrift.TEnvelope;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -47,6 +48,8 @@ public class StreamLoadParam {
     private static final String IDLE_TRANSACTION_TIMEOUT = "idle_transaction_timeout";
     private static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
+    private static final String ENVELOPE = "envelope";
+
     public TFileFormatType formatType = TFileFormatType.FORMAT_CSV_PLAIN;
     public TFileType fileType = TFileType.FILE_STREAM;
     public int jsonMaxBodyBytes = Config.max_stream_load_batch_size_mb * 1024 * 1024;
@@ -67,6 +70,7 @@ public class StreamLoadParam {
     public String jsonRoot = null;
     public boolean stripOuterArray = false;
     public boolean partialUpdate = false;
+    public TEnvelope envelope;
     public String transmissionCompressionType = null;
     // load dop always be 1 here
     public int loadDop = 1;
@@ -91,6 +95,13 @@ public class StreamLoadParam {
             return TFileFormatType.FORMAT_CSV_ZSTD;
         }
         return TFileFormatType.FORMAT_UNKNOWN;
+    }
+
+    public TEnvelope parseStreamLoadEnvelope(String envelope) {
+        if (envelope.equalsIgnoreCase("debezium")) {
+            return TEnvelope.DEBEZIUM;
+        }
+        return TEnvelope.UNKNOWN;
     }
 
     public StreamLoadParam() {
@@ -183,6 +194,9 @@ public class StreamLoadParam {
         }
         if (headers.contains(PARTIAL_UPDATE_MODE)) {
             context.partialUpdateMode = headers.get(PARTIAL_UPDATE_MODE);
+        }
+        if (headers.contains(ENVELOPE)) {
+            context.envelope = context.parseStreamLoadEnvelope(headers.get(ENVELOPE));
         }
         return context;
     }

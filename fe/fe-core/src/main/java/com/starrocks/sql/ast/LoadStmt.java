@@ -112,6 +112,7 @@ public class LoadStmt extends DdlStmt {
     public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
     public static final String JSONPATHS = "jsonpaths";
     public static final String JSONROOT = "json_root";
+    public static final String ENVELOPE = "envelope";
 
     // mini load params
     public static final String KEY_IN_PARAM_COLUMNS = "columns";
@@ -152,6 +153,7 @@ public class LoadStmt extends DdlStmt {
             .add(STRIP_OUTER_ARRAY)
             .add(JSONPATHS)
             .add(JSONROOT)
+            .add(ENVELOPE)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,

@@ -39,6 +39,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.LabelName;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.InternalErrorCode;
@@ -53,6 +55,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.thrift.TEnvelope;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
@@ -64,6 +67,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -321,6 +325,35 @@ public class RoutineLoadJobTest {
     public void testPartialUpdateMode(@Mocked GlobalStateMgr globalStateMgr) {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Assert.assertEquals(routineLoadJob.getPartialUpdateMode(), "row");
+    }
+    @Test
+    public void testEnvelope(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+        RoutineLoadJob routineLoadJob1 = new KafkaRoutineLoadJob();
+        Assert.assertSame(routineLoadJob1.getEnvelope(), TEnvelope.UNKNOWN);
+
+
+        String jobName = "job1";
+        String dbName = "db1";
+        LabelName labelName = new LabelName(dbName, jobName);
+        String tableNameString = "table1";
+        List<ParseNode> loadPropertyList = new ArrayList<>();
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY, "2");
+        properties.put(CreateRoutineLoadStmt.FORMAT, "json");
+        properties.put(CreateRoutineLoadStmt.ENVELOPE, "debezium");
+        String typeName = LoadDataSourceType.KAFKA.name();
+        Map<String, String> customProperties = Maps.newHashMap();
+        String topicName = "topic1";
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, topicName);
+        String serverAddress = "http://127.0.0.1:8080";
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY, serverAddress);
+        CreateRoutineLoadStmt createRoutineLoadStmt = new CreateRoutineLoadStmt(labelName, tableNameString,
+                loadPropertyList, properties,
+                typeName, customProperties);
+        KafkaRoutineLoadJob kafkaRoutineLoadJob2 = new KafkaRoutineLoadJob();
+        createRoutineLoadStmt.checkJobProperties();
+        kafkaRoutineLoadJob2.setOptional(createRoutineLoadStmt);
+        Assert.assertSame(kafkaRoutineLoadJob2.getEnvelope(), TEnvelope.DEBEZIUM);
     }
 
     @Test
