@@ -30,6 +30,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -117,6 +118,7 @@ public class JDBCScanner {
             BigDecimal.class,
             java.sql.Date.class,
             Timestamp.class,
+            LocalDate.class,
             LocalDateTime.class,
             Time.class,
             String.class
