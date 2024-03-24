@@ -1503,7 +1503,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableConnectorAdaptiveIoTasks = false;
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SPLIT_IO_TASKS)
-    private boolean enableConnectorSplitIoTasks = false;
+    private boolean enableConnectorSplitIoTasks = true;
 
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
     private int connectorIoTasksSlowIoLatency = 50;
