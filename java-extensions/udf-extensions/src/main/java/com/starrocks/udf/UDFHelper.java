@@ -346,6 +346,9 @@ public class UDFHelper {
                 if (boxedResult instanceof Date[]) {
                     getStringDateResult(numRows, (Date[]) boxedResult, columnAddr);
                 } else if(boxedResult instanceof String[]){
+                    for(String i: boxedResult){
+                        log.info("boxedResult element :" + i);
+                    }
                     getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
                 }else {
                     throw new UnsupportedOperationException("unsupported type:" + boxedResult);
