@@ -30,6 +30,7 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
@@ -227,6 +228,17 @@ public class UDFHelper {
         getStringBoxedResult(numRows, results, columnAddr);
     }
 
+    private static void getStringLocalDateResult(int numRows, LocalDate[] column, long columnAddr) {
+        // TODO: return timestamp
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = dateTimeFormatter.format(column[i]);
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
     private static void getStringTimeStampResult(int numRows, Timestamp[] column, long columnAddr) {
         // TODO: return timestamp
         String[] results = new String[numRows];
@@ -327,6 +339,8 @@ public class UDFHelper {
             case TYPE_VARCHAR: {
                 if (boxedResult instanceof Date[]) {
                     getStringDateResult(numRows, (Date[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof LocalDate[]) {
+                    getStringLocalDateResult(numRows, (LocalDate[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof LocalDateTime[]) {
                     getStringDateTimeResult(numRows, (LocalDateTime[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof Timestamp[]) {
@@ -338,16 +352,6 @@ public class UDFHelper {
                 } else if (boxedResult instanceof String[]) {
                     getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
                 } else {
-                    throw new UnsupportedOperationException("unsupported type:" + boxedResult);
-                }
-                break;
-            }
-            case TYPE_DATE:{
-                if (boxedResult instanceof Date[]) {
-                    getStringDateResult(numRows, (Date[]) boxedResult, columnAddr);
-                } else if(boxedResult instanceof String[]){
-                    getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
-                }else {
                     throw new UnsupportedOperationException("unsupported type:" + boxedResult);
                 }
                 break;
