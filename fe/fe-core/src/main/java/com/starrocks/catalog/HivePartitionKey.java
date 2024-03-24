@@ -16,8 +16,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.connector.hive.HiveMetaClient;
 
 import java.util.List;
@@ -30,35 +28,5 @@ public class HivePartitionKey extends PartitionKey implements NullablePartitionK
     @Override
     public List<String> nullPartitionValueList() {
         return ImmutableList.of(HiveMetaClient.PARTITION_NULL_VALUE);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-
-        PartitionKey that = (PartitionKey) o;
-
-        if (getKeys().size() != that.getKeys().size()) {
-            return false;
-        }
-
-        for (int i = 0; i < getKeys().size(); i++) {
-            LiteralExpr literalExpr = getKeys().get(i);
-            LiteralExpr thatLiteralExpr = that.getKeys().get(i);
-
-            // like hour=06 and hour=6, they are two partitions in hms
-            if (literalExpr instanceof IntLiteral && thatLiteralExpr instanceof IntLiteral) {
-                if (!literalExpr.getStringValue().equals(thatLiteralExpr.getStringValue())) {
-                    return false;
-                }
-            }
-        }
-
-        return super.equals(o);
     }
 }

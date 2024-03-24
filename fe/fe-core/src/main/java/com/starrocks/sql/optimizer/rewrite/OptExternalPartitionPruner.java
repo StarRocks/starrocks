@@ -32,6 +32,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
@@ -217,7 +218,7 @@ public class OptExternalPartitionPruner {
                         .setPartitionNames(new ArrayList<>());
             }
 
-            Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
+            List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
             if (!hmsTable.isUnPartitioned()) {
                 // get partition names
                 List<String> partitionNames;
@@ -241,17 +242,19 @@ public class OptExternalPartitionPruner {
                     PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
                     keys.add(partitionKey);
                 }
-                List<Long> ids = table.allocatePartitionIdByKey(keys);
+                List<Long> ids = table.allocateUniquePartitionIdByPartitionKey(keys);
                 for (int i = 0; i < keys.size(); i++) {
-                    partitionKeys.put(keys.get(i), ids.get(i));
+                    partitionKeys.add(new Pair<>(keys.get(i), ids.get(i)));
                 }
             } else {
-                partitionKeys.put(new PartitionKey(), 0L);
+                partitionKeys.add(new Pair<>(new PartitionKey(), 0L));
             }
 
-            partitionKeys.entrySet().stream().parallel().forEach(entry -> {
-                PartitionKey key = entry.getKey();
-                long partitionId = entry.getValue();
+
+
+            partitionKeys.stream().parallel().forEach(entry -> {
+                PartitionKey key = entry.first;
+                long partitionId = entry.second;
                 List<LiteralExpr> literals = key.getKeys();
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
@@ -267,9 +270,9 @@ public class OptExternalPartitionPruner {
                 }
             });
 
-            for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
-                PartitionKey key = entry.getKey();
-                long partitionId = entry.getValue();
+            for (Pair<PartitionKey, Long> entry : partitionKeys) {
+                PartitionKey key = entry.first;
+                long partitionId = entry.second;
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
             }
         }
@@ -320,7 +323,7 @@ public class OptExternalPartitionPruner {
                 String catalogName = icebergTable.getCatalogName();
                 List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
-                List<Long> ids = table.allocatePartitionIdByKey(partitionKeys);
+                List<Long> ids = table.allocateUniquePartitionIdByPartitionKey(partitionKeys);
                 for (int i = 0; i < partitionKeys.size(); i++) {
                     idToPartitionKey.put(ids.get(i), partitionKeys.get(i));
                 }

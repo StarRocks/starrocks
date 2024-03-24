@@ -201,14 +201,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     // foreign key constraint for mv rewrite
     protected List<ForeignKeyConstraint> foreignKeyConstraints;
 
-    protected Map<PartitionKey, Long> partitionKeyToId;
+    // uniquePartitionIdGenerator for external catalog
+    private Long uniquePartitionIdGenerator = 0L;
 
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
-        this.partitionKeyToId = Maps.newHashMap();
     }
 
     public Table(long id, String tableName, TableType type, List<Column> fullSchema) {
@@ -231,7 +231,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         }
         this.createTime = Instant.now().getEpochSecond();
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
-        this.partitionKeyToId = Maps.newHashMap();
     }
 
     public void setTypeRead(boolean isTypeRead) {
@@ -831,19 +830,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
     }
 
-    public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {
-        long size = partitionKeyToId.size();
-        List<Long> ret = new ArrayList<>();
-        for (PartitionKey key : keys) {
-            Long v = partitionKeyToId.get(key);
-            if (v == null) {
-                partitionKeyToId.put(key, size);
-                v = size;
-                size += 1;
+    public synchronized List<Long> allocateUniquePartitionIdByPartitionKey(List<PartitionKey> keys) {
+        List<Long> res = new ArrayList<>(keys.size());
+        for (PartitionKey ignored : keys) {
+            if (uniquePartitionIdGenerator == Long.MAX_VALUE) {
+                uniquePartitionIdGenerator = 0L;
             }
-            ret.add(v);
+            res.add(uniquePartitionIdGenerator++);
         }
-        return ret;
+        return res;
     }
 
     public boolean isTable() {
