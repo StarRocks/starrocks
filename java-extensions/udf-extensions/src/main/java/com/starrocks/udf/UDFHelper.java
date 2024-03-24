@@ -58,6 +58,8 @@ public class UDFHelper {
     private static final ThreadLocal<DateFormat> formatter =
             ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
     private static final TimeZone timeZone = TimeZone.getDefault();
 
     private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
@@ -233,7 +235,7 @@ public class UDFHelper {
         String[] results = new String[numRows];
         for (int i = 0; i < numRows; i++) {
             if (column[i] != null) {
-                results[i] = dateTimeFormatter.format(column[i]);
+                results[i] = dateFormatter.format(column[i]);
             }
         }
         getStringBoxedResult(numRows, results, columnAddr);
