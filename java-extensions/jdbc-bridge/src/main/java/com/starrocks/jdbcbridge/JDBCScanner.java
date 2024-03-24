@@ -164,12 +164,18 @@ public class JDBCScanner {
                 } else if (dataColumn instanceof Double[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
                 } else if (dataColumn instanceof String[] && resultObject instanceof String) {
+                    System.out.println(1);
+                    System.out.println(resultObject);
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;
                 } else if (!(dataColumn instanceof String[])) {
+                    System.out.println(2);
                     // for other general class type, assign value directly
+                    System.out.println(resultObject);
                     dataColumn[resultNumRows] = resultObject;
                 } else {
+                    System.out.println(3);
+                    System.out.println(resultSet.getString(i + 1));
                     // for non-general class type, use string representation
                     dataColumn[resultNumRows] = resultSet.getString(i + 1);
                 }

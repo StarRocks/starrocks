@@ -329,7 +329,7 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
                       "Type mismatches on column[{}], JDBC result type is LocalDate, please set the type to date",
                       slot_desc->col_name()));
           }
-          return TYPE_DATE;
+          return TYPE_VARCHAR;
     } else if (java_class == "java.math.BigDecimal") {
         if (type != TYPE_DECIMAL32 && type != TYPE_DECIMAL64 && type != TYPE_DECIMAL128 && type != TYPE_VARCHAR) {
             return Status::NotSupported(
