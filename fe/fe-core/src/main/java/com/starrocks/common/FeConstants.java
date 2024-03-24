@@ -77,8 +77,14 @@ public class FeConstants {
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set this flag true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
+    // set this flag false to skip test view in plan test
+    public static boolean unitTestView = true;
     // Set this flag false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
     public static boolean showScanNodeLocalShuffleColumnsInExplain = true;
+
+    // Set this flag false to suppress showing fragment cost, when running FE unit tests.
+    public static boolean showFragmentCost = true;
+
     // set to true when replay from query dump
     public static boolean isReplayFromQueryDump = false;
     // set false to resolve ut
@@ -93,14 +99,15 @@ public class FeConstants {
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 
     public static final String DOCUMENT_SHOW_ALTER =
-            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER";
     public static final String DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW =
-            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation" +
-                    "/SHOW%20ALTER%20MATERIALIZED%20VIEW";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW";
     public static final String DOCUMENT_SHOW_BACKUP =
-            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_BACKUP";
     public static final String DOCUMENT_SHOW_RESTORE =
-            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20RESTORE";
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_RESTORE";
+    public static final String DOCUMENT_ALTER_ROUTINE_LOAD =
+            "https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD";
 
     public static String getNodeNotFoundError(boolean chooseComputeNode) {
         return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;

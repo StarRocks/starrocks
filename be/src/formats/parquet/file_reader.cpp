@@ -37,6 +37,12 @@
 
 namespace starrocks::parquet {
 
+struct SplitContext : public pipeline::ScanSplitContext {
+    size_t split_start = 0;
+    size_t split_end = 0;
+    FileMetaDataPtr file_metadata;
+};
+
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
                        io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
         : _chunk_size(chunk_size),
@@ -46,16 +52,13 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
           _sb_stream(sb_stream),
           _need_skip_rowids(_need_skip_rowids) {}
 
-FileReader::~FileReader() {
-    if (!_is_metadata_cached && _file_metadata) {
-        delete _file_metadata;
-    }
-}
+FileReader::~FileReader() {}
 
-void FileReader::_build_metacache_key() {
+std::string FileReader::_build_metacache_key() {
     auto& filename = _file->filename();
-    _metacache_key.resize(14);
-    char* data = _metacache_key.data();
+    std::string metacache_key;
+    metacache_key.resize(14);
+    char* data = metacache_key.data();
     const std::string footer_suffix = "ft";
     uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
     memcpy(data, &hash_value, sizeof(hash_value));
@@ -71,6 +74,7 @@ void FileReader::_build_metacache_key() {
         uint32_t size = _file_size;
         memcpy(data + 10, &size, sizeof(size));
     }
+    return metacache_key;
 }
 
 Status FileReader::init(HdfsScannerContext* ctx) {
@@ -78,23 +82,20 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 #ifdef WITH_STARCACHE
     // Only support file metacache in starcache engine
     if (ctx->use_file_metacache && config::datacache_enable) {
-        _build_metacache_key();
         _cache = BlockCache::instance();
     }
 #endif
     RETURN_IF_ERROR(_get_footer());
 
-    if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
-        // If we want read this parquet file with iceberg schema,
-        // we also need to make sure it contains parquet field id.
-        _meta_helper =
-                std::make_shared<IcebergMetaHelper>(_file_metadata, ctx->case_sensitive, _scanner_ctx->iceberg_schema);
-    } else {
-        _meta_helper = std::make_shared<ParquetMetaHelper>(_file_metadata, ctx->case_sensitive);
+    _build_split_tasks();
+    if (_scanner_ctx->split_tasks != nullptr && _scanner_ctx->split_tasks->size() > 0) {
+        _is_file_filtered = true;
+        return Status::OK();
     }
 
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> names;
+    _meta_helper = _build_meta_helper();
     _meta_helper->set_existed_column_names(&names);
     _scanner_ctx->update_materialized_columns(names);
 
@@ -107,11 +108,22 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     return Status::OK();
 }
 
-FileMetaData* FileReader::get_file_metadata() {
-    return _file_metadata;
+std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
+    if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
+        // If we want read this parquet file with iceberg schema,
+        // we also need to make sure it contains parquet field id.
+        return std::make_shared<IcebergMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
+                                                   _scanner_ctx->iceberg_schema);
+    } else {
+        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive);
+    }
 }
 
-Status FileReader::_parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size) {
+FileMetaData* FileReader::get_file_metadata() {
+    return _file_metadata.get();
+}
+
+Status FileReader::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size) {
     std::vector<char> footer_buffer;
     ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
     footer_buffer.resize(footer_read_size);
@@ -136,57 +148,100 @@ Status FileReader::_parse_footer(FileMetaData** file_metadata, int64_t* file_met
         }
     }
 
-    tparquet::FileMetaData t_metadata;
-    // deserialize footer
-    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
-                                                   PARQUET_FOOTER_SIZE - metadata_length,
-                                           &metadata_length, TProtocolType::COMPACT, &t_metadata));
-    int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-    *file_metadata = new FileMetaData();
-    RETURN_IF_ERROR((*file_metadata)->init(t_metadata, _scanner_ctx->case_sensitive));
-    *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
+    // NOTICE: When you need to modify the logic within this scope (including the subfuctions), you should be
+    // particularly careful to ensure that it does not affect the correctness of the footer's memory statistics.
+    {
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        tparquet::FileMetaData t_metadata;
+        // deserialize footer
+        RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) +
+                                                       footer_buffer.size() - PARQUET_FOOTER_SIZE - metadata_length,
+                                               &metadata_length, TProtocolType::COMPACT, &t_metadata));
+
+        *file_metadata_ptr = std::make_shared<FileMetaData>();
+        FileMetaData* file_metadata = file_metadata_ptr->get();
+        RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
+        *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
+    }
 #ifdef BE_TEST
     *file_metadata_size = sizeof(FileMetaData);
 #endif
-
     return Status::OK();
 }
 
 Status FileReader::_get_footer() {
-    _is_metadata_cached = false;
+    if (_scanner_ctx->split_context != nullptr) {
+        auto split_ctx = down_cast<const SplitContext*>(_scanner_ctx->split_context);
+        _file_metadata = split_ctx->file_metadata;
+        return Status::OK();
+    }
+
     if (!_cache) {
         int64_t file_metadata_size = 0;
         return _parse_footer(&_file_metadata, &file_metadata_size);
     }
 
+    BlockCache* cache = _cache;
+    CacheHandle cache_handle;
+    std::string metacache_key = _build_metacache_key();
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
-        Status st = _cache->read_object(_metacache_key, &_cache_handle);
+        Status st = cache->read_object(metacache_key, &cache_handle);
         if (st.ok()) {
-            _file_metadata = (FileMetaData*)_cache_handle.ptr();
+            _file_metadata = *(static_cast<const FileMetaDataPtr*>(cache_handle.ptr()));
             _scanner_ctx->stats->footer_cache_read_count += 1;
-            _is_metadata_cached = true;
             return st;
         }
     }
 
     int64_t file_metadata_size = 0;
-    FileMetaData* file_metadata = nullptr;
-    RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
+    RETURN_IF_ERROR(_parse_footer(&_file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
-        auto deleter = [file_metadata]() { delete file_metadata; };
-        Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle);
+        // cache does not understand shared ptr at all.
+        // so we have to new a object to hold this shared ptr.
+        FileMetaDataPtr* capture = new FileMetaDataPtr(_file_metadata);
+        auto deleter = [capture]() { delete capture; };
+        Status st = cache->write_object(metacache_key, capture, file_metadata_size, deleter, &cache_handle);
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
-            _is_metadata_cached = true;
         }
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
     }
-
-    _file_metadata = file_metadata;
     return Status::OK();
+}
+
+void FileReader::_build_split_tasks() {
+    // dont do split in following cases:
+    // 1. this feature is not enabled
+    // 2. we have already do split before (that's why `split_context` is nullptr)
+    // 3. in unit test case (that's why `split_tasks` is nullptr)
+    if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr ||
+        _scanner_ctx->split_tasks == nullptr) {
+        return;
+    }
+
+    size_t row_group_size = _file_metadata->t_metadata().row_groups.size();
+    for (size_t i = 0; i < row_group_size; i++) {
+        const tparquet::RowGroup& row_group = _file_metadata->t_metadata().row_groups[i];
+        bool selected = _select_row_group(row_group);
+        if (!selected) continue;
+        int64_t start_offset = _get_row_group_start_offset(row_group);
+        int64_t end_offset = _get_row_group_end_offset(row_group);
+        auto split_ctx = std::make_unique<SplitContext>();
+        split_ctx->split_start = start_offset;
+        split_ctx->split_end = end_offset;
+        split_ctx->file_metadata = _file_metadata;
+        _scanner_ctx->split_tasks->emplace_back(std::move(split_ctx));
+    }
+    // if only one split task, clear it, no need to do split work.
+    if (_scanner_ctx->split_tasks->size() <= 1) {
+        _scanner_ctx->split_tasks->clear();
+    }
+
+    VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
+                  << ", size = " << _scanner_ctx->split_tasks->size();
 }
 
 StatusOr<uint32_t> FileReader::_get_footer_read_size() const {
@@ -224,8 +279,15 @@ int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_gr
         return row_group.file_offset;
     }
     const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
-
     return first_column.data_page_offset;
+}
+
+int64_t FileReader::_get_row_group_end_offset(const tparquet::RowGroup& row_group) {
+    if (row_group.__isset.file_offset && row_group.__isset.total_compressed_size) {
+        return row_group.file_offset + row_group.total_compressed_size;
+    }
+    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
+    return last_column.data_page_offset + last_column.total_compressed_size;
 }
 
 StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
@@ -493,6 +555,12 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
+    if (_scanner_ctx->split_context != nullptr) {
+        auto split_context = down_cast<const SplitContext*>(_scanner_ctx->split_context);
+        scan_start = split_context->split_start;
+        scan_end = split_context->split_end;
+    }
+
     if (row_group_start >= scan_start && row_group_start < scan_end) {
         return true;
     }
@@ -510,7 +578,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.sb_stream = nullptr;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
-    _group_reader_param.file_metadata = _file_metadata;
+    _group_reader_param.file_metadata = _file_metadata.get();
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
     // for pageIndex
@@ -613,7 +681,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                _scanner_ctx->update_not_existed_columns_of_chunk(chunk, row_count);
+                _scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count);
                 _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
@@ -642,7 +710,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-        _scanner_ctx->update_not_existed_columns_of_chunk(chunk, read_size);
+        _scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size);
         _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
         _scan_row_count += read_size;
         return Status::OK();

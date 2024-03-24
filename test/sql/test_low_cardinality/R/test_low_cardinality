@@ -1,3 +1,4 @@
+-- name: test_low_cardinality
 -- name: test_split_or
 CREATE TABLE `common_duplicate` (
   `c0` int(11) NOT NULL COMMENT "",
@@ -14,7 +15,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -37,7 +37,6 @@ DISTRIBUTED BY HASH(`c2`, `c1`, `c0`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3, c4",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1332,4 +1331,33 @@ a
 a
 a
 a
+-- !result
+SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
+-- result:
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+-- !result
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS value FROM low_card_duplicate order by value limit 10;
+-- result:
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
+0420a206
 -- !result

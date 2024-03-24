@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 
 import java.util.Collections;
 import java.util.List;
@@ -29,7 +30,8 @@ public class TaskContext {
     private final PhysicalPropertySet requiredProperty;
     private ColumnRefSet requiredColumns;
     private double upperBoundCost;
-    private List<LogicalOlapScanOperator> allScanOperators;
+    private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
+    private List<PhysicalOlapScanOperator> allPhysicalOlapScanOperators;
 
     public TaskContext(OptimizerContext context,
                        PhysicalPropertySet physicalPropertySet,
@@ -39,7 +41,8 @@ public class TaskContext {
         this.requiredProperty = physicalPropertySet;
         this.requiredColumns = requiredColumns;
         this.upperBoundCost = cost;
-        this.allScanOperators = Collections.emptyList();
+        this.allLogicalOlapScanOperators = Collections.emptyList();
+        this.allPhysicalOlapScanOperators = Collections.emptyList();
     }
 
     public OptimizerContext getOptimizerContext() {
@@ -66,11 +69,19 @@ public class TaskContext {
         this.upperBoundCost = upperBoundCost;
     }
 
-    public void setAllScanOperators(List<LogicalOlapScanOperator> allScanOperators) {
-        this.allScanOperators = allScanOperators;
+    public void setAllLogicalOlapScanOperators(List<LogicalOlapScanOperator> allScanOperators) {
+        this.allLogicalOlapScanOperators = allScanOperators;
     }
 
-    public List<LogicalOlapScanOperator> getAllScanOperators() {
-        return allScanOperators;
+    public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
+        return allLogicalOlapScanOperators;
+    }
+
+    public void setAllPhysicalOlapScanOperators(List<PhysicalOlapScanOperator> allScanOperators) {
+        this.allPhysicalOlapScanOperators = allScanOperators;
+    }
+
+    public List<PhysicalOlapScanOperator> getAllPhysicalOlapScanOperators() {
+        return allPhysicalOlapScanOperators;
     }
 }

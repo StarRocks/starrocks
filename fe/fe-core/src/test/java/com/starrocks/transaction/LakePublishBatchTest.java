@@ -21,10 +21,7 @@ import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -37,7 +34,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -273,7 +269,7 @@ public class LakePublishBatchTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transTablets,
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transTablets,
                 Lists.newArrayList(), null);
 
         long transactionId8 = globalTransactionMgr.
@@ -282,7 +278,7 @@ public class LakePublishBatchTest {
                         transactionSource,
                         TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         // commit a transaction
-        globalTransactionMgr.commitTransaction(db.getId(), transactionId8, transTablets,
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId8, transTablets,
                 Lists.newArrayList(), null);
 
         new MockUp<Database>() {
@@ -295,22 +291,15 @@ public class LakePublishBatchTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         publishVersionDaemon.runAfterCatalogReady();
 
+        Assert.assertTrue(waiter1.await(1, TimeUnit.MINUTES));
+        Assert.assertTrue(waiter2.await(1, TimeUnit.MINUTES));
+
         TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId7);
         TransactionState transactionState2 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId8);
-
-        // wait publish complete
-        Thread.sleep(1000);
         Assert.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
         Assert.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
-    }
-
-    @Test
-    public void testPublishLogVersion() throws Exception {
-        List<Tablet> tablets = new ArrayList<>();
-        tablets.add(new LakeTablet(1L));
-        Utils.publishLogVersion(tablets, 1, 1);
     }
 
     @Test

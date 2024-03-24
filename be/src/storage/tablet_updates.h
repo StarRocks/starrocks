@@ -186,6 +186,7 @@ public:
 
     // perform compaction, should only be called by compaction thread
     Status compaction(MemTracker* mem_tracker);
+    Status compaction_for_size_tiered(MemTracker* mem_tracker);
 
     // perform compaction with specified rowsets, this may be a manual compaction invoked by tools or data fixing jobs
     Status compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids);
@@ -332,7 +333,7 @@ public:
 
     Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
 
-    double get_pk_index_write_amp_score();
+    double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
     Status pk_index_major_compaction();
 
@@ -346,6 +347,10 @@ public:
     Status recover();
 
     void set_error(const string& msg) { _set_error(msg); }
+    void reset_error() {
+        _error = false;
+        _error_msg = "";
+    }
 
     Status generate_pk_dump_if_in_error_state();
 
@@ -366,6 +371,7 @@ private:
         size_t byte_size = 0;
         size_t row_size = 0;
         int64_t compaction_score = 0;
+        int32_t compaction_level = -1;
         bool partial_update_by_column = false;
         std::string to_string() const;
     };
@@ -406,6 +412,7 @@ private:
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
+    int32_t _calc_compaction_level(RowsetStats* stats);
     void _calc_compaction_score(RowsetStats* stats);
 
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
@@ -460,6 +467,12 @@ private:
 
     // these functions is only used in ut
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
+    void stop_compaction(bool running) {
+        _compaction_running = running;
+        if (running) {
+            _last_compaction_time_ms = UnixMillis();
+        }
+    }
 
     void check_for_apply() { _check_for_apply(); }
 
@@ -522,6 +535,8 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
+
+    std::atomic<double> _pk_index_write_amp_score{0.0};
 };
 
 } // namespace starrocks

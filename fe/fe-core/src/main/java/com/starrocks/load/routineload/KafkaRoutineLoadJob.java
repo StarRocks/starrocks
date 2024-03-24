@@ -497,8 +497,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         List<Integer> allKafkaPartitions = getAllKafkaPartitions();
         for (Integer customPartition : customKafkaPartitions) {
             if (!allKafkaPartitions.contains(customPartition)) {
-                throw new LoadException("there is a custom kafka partition " + customPartition
-                        + " which is invalid for topic " + topic);
+                throw new LoadException("there is an invalid custom partition: " + customPartition + " for topic: " + topic);
             }
         }
     }

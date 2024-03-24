@@ -55,6 +55,44 @@ inline size_t count_zero(const int8_t* data, size_t size) {
     return count;
 }
 
+inline size_t count_zero(const uint32_t* data, size_t size) {
+    size_t count = 0;
+    const uint32_t* end = data + size;
+
+#if defined(__SSE2__) && defined(__POPCNT__)
+    // count per 16 int
+    const __m128i zero16 = _mm_setzero_si128();
+    const uint32_t* end16 = data + (size / 16 * 16);
+
+    for (; data < end16; data += 16) {
+        count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                              _mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16)))) |
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 4)), zero16))))
+                                       << 4u) |
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 8)), zero16))))
+                                       << 8u) |
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 12)), zero16))))
+                                       << 12u));
+    }
+#endif
+
+    for (; data < end; ++data) {
+        count += (*data == 0);
+    }
+    return count;
+}
+
+inline size_t count_zero(const std::vector<uint32_t>& nums) {
+    return count_zero(nums.data(), nums.size());
+}
+
+inline size_t count_nonzero(const std::vector<uint32_t>& nums) {
+    return nums.size() - count_zero(nums.data(), nums.size());
+}
+
 // Count the number of zeros of 8-bit unsigned integers.
 inline size_t count_zero(const uint8_t* data, size_t size) {
     return count_zero(reinterpret_cast<const int8_t*>(data), size);

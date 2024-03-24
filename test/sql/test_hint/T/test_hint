@@ -11,7 +11,6 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -30,11 +29,26 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4");
+
+CREATE TABLE all_type (
+    date_col DATE,
+    datetime_col DATETIME,
+    int_col int,
+    float_col FLOAT,
+    double_col DOUBLE,
+    decimal_col DECIMAL(10, 2),
+    varchar_col VARCHAR(255),
+    char_col CHAR(10),
+    array_col ARRAY<STRING>
+) ENGINE=OLAP
+  DUPLICATE KEY(date_col)
+  COMMENT "OLAP"
+  DISTRIBUTED BY HASH(date_col) BUCKETS 5
+  PROPERTIES ("replication_num" = "1");
 
 INSERT INTO t1 (c0, c1, c2, c3) VALUES
   (1, 'a', 'Value1', 10),
@@ -43,6 +57,8 @@ INSERT INTO t1 (c0, c1, c2, c3) VALUES
   (4, 'd', 'Value4', 40),
   (5, null, 'Value5', 50),
   (5, 'f', 'Value6', 60);
+
+insert into all_type values('2021-01-01', '2021-01-01 12:00:01.123', 111111, -1.23, 1.54654, 120.26, '测试 test"', '测试\'', ['测试', '测试', 'abc'] );
 
 
 insert /*+ set_user_variable(@a = (select max(c3) from t1)) */ into t2 select /*+ set_user_variable(@b = (select min(c1) from t1)) */
@@ -86,4 +102,43 @@ properties (
 ) as select /*+ set_user_variable(@c = (select min(c3) from t1)) */ * from t1;
 
 
+set @test = (select date_col from all_type);
+select @test;
 
+set @test = (select datetime_col from all_type);
+select @test;
+
+set @test = (select int_col from all_type);
+select @test;
+
+set @test = (select float_col from all_type);
+select @test;
+
+set @test = (select double_col from all_type);
+select @test;
+
+set @test = (select decimal_col from all_type);
+select @test;
+
+set @test = (select varchar_col from all_type);
+select @test;
+
+set @test = (select char_col from all_type);
+select @test;
+
+set @test = (select array_col from all_type);
+select @test;
+
+set @test = (select array_col from all_type where date_col > '2021-01-01');
+select @test;
+
+set @test= (select JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25));
+select @test;
+
+set @test = (select array_agg(c2) from (select t2.c2 from t2 join t2 tt join t2 ttt join t2 tttt) t);
+select array_length(@test);
+
+set @test= (select cast(50 as boolean));
+select @test;
+
+set @test= (select cast(50 as time));

@@ -89,37 +89,37 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 
 ## Options
 
-###  connector
+### connector
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
 **Description**: The connector that you want to use. The value must be "starrocks".
 
-###  jdbc-url
+### jdbc-url
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
 **Description**: The address that is used to connect to the MySQL server of the FE. You can specify multiple addresses, which must be separated by a comma (,). Format: `jdbc:mysql://<fe_host1>:<fe_query_port1>,<fe_host2>:<fe_query_port2>,<fe_host3>:<fe_query_port3>`.
 
-###  load-url
+### load-url
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
 **Description**: The address that is used to connect to the HTTP server of the FE. You can specify multiple addresses, which must be separated by a semicolon (;). Format: `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`.
 
-###  database-name
+### database-name
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
 **Description**: The name of the StarRocks database into which you want to load data.
 
-###  table-name
+### table-name
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
 **Description**: The name of the table that you want to use to load data into StarRocks.
 
-###  username
+### username
 
 **Required**: Yes<br/>
 **Default value**: NONE<br/>
@@ -179,13 +179,13 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: 30000<br/>
 **Description**: The timeout for establishing HTTP connection. Valid values: 100 to 60000. Unit: ms. Before Flink connector v1.2.9, the default value is `1000`.
 
-### sink.wait-for-continue.timeout-ms 
+### sink.wait-for-continue.timeout-ms
 
 **Required**: No<br/>
 **Default value**: 10000<br/>
 **Description**: Supported since 1.2.7. The timeout for waiting response of HTTP 100-continue from the FE. Valid values: `3000` to `60000`. Unit: ms
 
-### sink.ignore.update-before         
+### sink.ignore.update-before
 
 **Required**: No<br/>
 **Default value**: true<br/>
@@ -214,7 +214,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 **Default value**: \t<br/>
 **Description**: The column separator for CSV-formatted data.
 
-### sink.properties.row_delimiter     
+### sink.properties.row_delimiter
 
 **Required**: No<br/>
 **Default value**: \n<br/>
@@ -498,7 +498,7 @@ There are several ways to implement a Flink DataStream job according to the type
                   this.name = name;
                   this.score = score;
               }
-          }
+        }
       ```
 
   - The main program is as follows:
@@ -734,7 +734,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
 
 ### Load data into columns of BITMAP type
 
-[`BITMAP`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/BITMAP) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_bitmap).
+[`BITMAP`](https://docs.starrocks.io/en-us/latest/sql-reference/data-types/other-data-types/BITMAP) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_bitmap).
 Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
 
 1. Create a StarRocks Aggregate table in MySQL client.
@@ -755,7 +755,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
     The column `visit_user_id` in the Flink table is of `BIGINT` type, and we want to load this column to the column `visit_users` of `BITMAP` type in the StarRocks table. So when defining the DDL of the Flink table, note that:
     - Because Flink does not support `BITMAP`, you need to define a column `visit_user_id` as `BIGINT` type to represent the column `visit_users` of `BITMAP` type in the StarRocks table.
-    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=to_bitmap(visit_user_id)`, which tells the connector the column mapping beween the Flink table and StarRocks table. Also you need to use [`to_bitmap`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/bitmap-functions/to_bitmap)
+    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=to_bitmap(visit_user_id)`, which tells the connector the column mapping between the Flink table and StarRocks table. Also you need to use [`to_bitmap`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-functions/bitmap-functions/to_bitmap)
    function to tell the connector to convert the data of `BIGINT` type into `BITMAP` type.
 
     ```SQL
@@ -801,7 +801,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 ### Load data into columns of HLL type
 
-[`HLL`](../sql-reference/sql-statements/data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
+[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
 
 Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.
 

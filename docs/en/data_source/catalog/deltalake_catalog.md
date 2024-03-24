@@ -39,7 +39,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
 
 ### HDFS
 

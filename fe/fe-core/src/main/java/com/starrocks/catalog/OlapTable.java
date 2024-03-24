@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -82,6 +83,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
@@ -1147,54 +1149,44 @@ public class OlapTable extends Table {
     // This is a private method.
     // Call public "dropPartitionAndReserveTablet" and "dropPartition"
     private void dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
-        // 1. If "isForceDrop" is false, the partition will be added to the
-        // GlobalStateMgr Recyle bin, and all tablets of this
-        // partition will not be deleted.
-        // 2. If "ifForceDrop" is true, the partition will be dropped the immediately,
-        // but whether to drop the tablets
-        // of this partition depends on "reserveTablets"
-        // If "reserveTablets" is true, the tablets of this partition will not to
-        // delete.
-        // Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
-        if (partition != null) {
-            if (partitionInfo.isRangePartition()) {
-                idToPartition.remove(partition.getId());
-                nameToPartition.remove(partitionName);
-                physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
-                        .stream().map(PhysicalPartition::getId)
-                        .collect(Collectors.toList()));
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                if (!isForceDrop) {
-                    // recycle range partition
-                    GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(dbId, id, partition,
-                            rangePartitionInfo.getRange(partition.getId()),
-                            rangePartitionInfo.getDataProperty(partition.getId()),
-                            rangePartitionInfo.getReplicationNum(partition.getId()),
-                            rangePartitionInfo.getIsInMemory(partition.getId()),
-                            rangePartitionInfo.getDataCacheInfo(partition.getId()));
-                } else if (!reserveTablets) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
-                }
-                // drop partition info
-                rangePartitionInfo.dropPartition(partition.getId());
-            } else if (partitionInfo.getType() == PartitionType.LIST) {
-                ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
-                if (!isForceDrop) {
-                    throw new SemanticException("List partition does not support recycle bin, " +
-                            "you can use force drop to drop it.");
-                } else if (!reserveTablets) {
-                    idToPartition.remove(partition.getId());
-                    nameToPartition.remove(partitionName);
-                    physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
-                            .stream().map(PhysicalPartition::getId)
-                            .collect(Collectors.toList()));
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
-                }
-                // drop partition info
-                listPartitionInfo.dropPartition(partition.getId());
-            }
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
+        if (partition == null) {
+            return;
+        }
+
+        if (!reserveTablets) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
+            recyclePartitionInfo.setRecoverable(!isForceDrop);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+        }
+
+        partitionInfo.dropPartition(partition.getId());
+        idToPartition.remove(partition.getId());
+        nameToPartition.remove(partitionName);
+        physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
+                .stream().map(PhysicalPartition::getId)
+                .collect(Collectors.toList()));
+
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
+    }
+
+    protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
+        if (partitionInfo.isRangePartition()) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            return new RecycleRangePartitionInfo(dbId, id, partition,
+                    rangePartitionInfo.getRange(partition.getId()),
+                    rangePartitionInfo.getDataProperty(partition.getId()),
+                    rangePartitionInfo.getReplicationNum(partition.getId()),
+                    rangePartitionInfo.getIsInMemory(partition.getId()),
+                    rangePartitionInfo.getDataCacheInfo(partition.getId()));
+        } else if (partitionInfo.isListPartition()) {
+            return new RecycleListPartitionInfo(dbId, id, partition,
+                    partitionInfo.getDataProperty(partition.getId()),
+                    partitionInfo.getReplicationNum(partition.getId()),
+                    partitionInfo.getIsInMemory(partition.getId()),
+                    partitionInfo.getDataCacheInfo(partition.getId()));
+        } else {
+            throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
         }
     }
 
@@ -1203,7 +1195,7 @@ public class OlapTable extends Table {
     }
 
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
-        dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
+        dropPartition(dbId, partitionName, isForceDrop, false);
     }
 
     /*
@@ -2990,16 +2982,138 @@ public class OlapTable extends Table {
 
     @Override
     public Map<String, String> getProperties() {
-        Map<String, String> properties = Maps.newHashMap();
+        // common properties for olap table, cloud native table
+        // use TreeMap to ensure the order of keys, such as for show create table.
+        Map<String, String> properties = Maps.newTreeMap();
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
 
+        // replication num
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
-        properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
 
-        Map<String, String> tableProperty = getTableProperty().getProperties();
-        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        // bloom filter
+        Set<String> bfColumnNames = getCopiedBfColumns();
+        if (bfColumnNames != null && !bfColumnNames.isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
         }
+
+        // colocate group
+        String colocateGroup = getColocateGroup();
+        if (colocateGroup != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
+        }
+
+        // dynamic partition
+        if (dynamicPartitionExists()) {
+            properties.putAll(tableProperty.getDynamicPartitionProperty().getProperties());
+        }
+
+        // automatic bucket
+        Long bucketSize = getAutomaticBucketSize();
+        if (bucketSize > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
+        }
+
+        // locations
+        Multimap<String, String> locationsMap = getLocation();
+        if (locationsMap != null) {
+            String locations = PropertyAnalyzer.convertLocationMapToString(locationsMap);
+            properties.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+
+        // primary key
+        if (keysType == KeysType.PRIMARY_KEYS) {
+            // persistent index
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, enablePersistentIndex().toString());
+
+            // index cache expire
+            int indexCacheExpireSec = primaryIndexCacheExpireSec();
+            if (indexCacheExpireSec > 0) {
+                properties.put(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, String.valueOf(indexCacheExpireSec));
+            }
+        }
+
+        // partition live number
+        String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
+        if (partitionLiveNumber != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
+        }
+
+        // compression type
+        TCompressionType compressionType = getCompressionType();
+        if (compressionType == TCompressionType.LZ4_FRAME) {
+            compressionType = TCompressionType.LZ4;
+        }
+        properties.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionType.name());
+
+        // unique properties
+        properties.putAll(getUniqueProperties());
+
+        return properties;
+    }
+
+    // unique properties for olap table, cloud native table
+    public Map<String, String> getUniqueProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+        Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
+
+        // storage medium
+        String storageMedium = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+        if (storageMedium != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
+        }
+
+        // storage cooldown ttl
+        String storageCooldownTtl = tableProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+        if (storageCooldownTtl != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCooldownTtl);
+        }
+
+        // replicated storage
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, enableReplicatedStorage().toString());
+
+        // binlog
+        if (containsBinlogConfig()) {
+            // binlog_version
+            BinlogConfig binlogConfig = getCurBinlogConfig();
+            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION, String.valueOf(binlogConfig.getVersion()));
+            // binlog_enable
+            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, String.valueOf(binlogConfig.getBinlogEnable()));
+            // binlog_ttl
+            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_TTL, String.valueOf(binlogConfig.getBinlogTtlSecond()));
+            // binlog_max_size
+            properties.put(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, String.valueOf(binlogConfig.getBinlogMaxSize()));
+        }
+
+        // write quorum
+        TWriteQuorumType writeQuorumType = writeQuorum();
+        if (writeQuorumType != TWriteQuorumType.MAJORITY) {
+            properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, WriteQuorum.writeQuorumToName(writeQuorumType));
+        }
+
+        // fast schema evolution only when it is set true
+        boolean useFastSchemaEvolution = getUseFastSchemaEvolution();
+        if (useFastSchemaEvolution) {
+            properties.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "true");
+        }
+
+        // unique constraint
+        String uniqueConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(uniqueConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, uniqueConstraint);
+        }
+
+        // foreign key constraint
+        String foreignKeyConstraint = tableProperties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+        if (!Strings.isNullOrEmpty(foreignKeyConstraint)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT,
+                    ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()));
+        }
+
+        // storage type
+        if (storageType() != null && !PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(storageType())) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType());
+        }
+
         return properties;
     }
 

@@ -494,7 +494,11 @@ public class OlapScanNode extends ScanNode {
             internalRange.setPartition_id(physicalPartition.getId());
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
-                internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                if (withoutColocateRequirement) {
+                    internalRange.setBucket_sequence((int)tabletId);
+                } else {
+                    internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
+                }
             }
 
             // random shuffle List && only collect one copy

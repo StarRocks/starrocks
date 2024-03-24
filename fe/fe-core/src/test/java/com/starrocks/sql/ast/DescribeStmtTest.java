@@ -86,8 +86,8 @@ public class DescribeStmtTest {
         String destTableSql = "desc sales_records";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet execute = showExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -113,8 +113,8 @@ public class DescribeStmtTest {
         String destTableSql = "desc sales_records all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet execute = showExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(8, columns.size());
         Assert.assertEquals("IndexName", columns.get(0).getName());
@@ -141,8 +141,8 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet execute = showExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -167,8 +167,8 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet execute = showExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -193,8 +193,8 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt_async";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet execute = showExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -219,8 +219,8 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt_async all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
-        ShowResultSet execute = showExecutor.execute();
+        ShowExecutor showExecutor = new ShowExecutor();
+        ShowResultSet execute = showExecutor.execute(describeStmt, connectContext);
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(8, columns.size());
         Assert.assertEquals("IndexName", columns.get(0).getName());

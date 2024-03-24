@@ -126,7 +126,9 @@ public class LoadMgr implements Writable, MemoryTrackable {
     public void createLoadJobFromStmt(LoadStmt stmt, ConnectContext context) throws DdlException {
         Database database = checkDb(stmt.getLabel().getDbName());
         long dbId = database.getId();
-        LoadJob loadJob = null;
+        // LoadJob must be created outside LoadMgr's lock because the database lock will be held in fromLoadStmt().
+        // In other functions, such as LeaderImpl.finishRealtimePush, the locking sequence is: db Lock => LoadMgr Lock.
+        LoadJob loadJob = BulkLoadJob.fromLoadStmt(stmt, context);
         writeLock();
         try {
             checkLabelUsed(dbId, stmt.getLabel().getLabelName());
@@ -138,7 +140,6 @@ public class LoadMgr implements Writable, MemoryTrackable {
                         "There are more than " + Config.desired_max_waiting_jobs + " load jobs in waiting queue, "
                                 + "please retry later.");
             }
-            loadJob = BulkLoadJob.fromLoadStmt(stmt, context);
             createLoadJob(loadJob);
         } finally {
             writeUnlock();
@@ -567,13 +568,13 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {
-
         List<LoadJob> loadJobList = Lists.newArrayList();
-        if (dbId != -1 && !dbIdToLabelToLoadJobs.containsKey(dbId)) {
-            return loadJobList;
-        }
         readLock();
         try {
+            if (dbId != -1 && !dbIdToLabelToLoadJobs.containsKey(dbId)) {
+                return loadJobList;
+            }
+
             for (Map<String, List<LoadJob>> dbJobs : dbIdToLabelToLoadJobs.values()) {
                 Map<String, List<LoadJob>> labelToLoadJobs = dbId == -1 ? dbJobs : dbIdToLabelToLoadJobs.get(dbId);
 

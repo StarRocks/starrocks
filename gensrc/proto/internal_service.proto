@@ -580,6 +580,8 @@ message PExecShortCircuitResult {
 }
 
 message PExecShortCircuitRequest {
+    // describe attachment protocol: binary, compact, json
+    optional string attachment_protocol = 1;
 }
 
 enum PProcessDictionaryCacheRequestType {

@@ -34,7 +34,7 @@ public class ShowTransactionStmtAnalyzer {
         new ShowTransactionStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowTransactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ShowTransactionStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         private static final Logger LOG = LogManager.getLogger(ShowTransactionStmtAnalyzerVisitor.class);
 

@@ -127,7 +127,9 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             new_version = (new_rowset == nullptr) ? -1 : new_rowset->end_version();
             old_tablet->release_header_lock();
         }
-        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time);
+        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time) ||
+                           // use for migration of primary key empty tablet
+                           (new_tablet->updates() != nullptr && old_version == 1 && new_version == 1);
 
         if (replace_old) {
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), kMoveFilesToTrash));
@@ -1716,6 +1718,8 @@ Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         return tablet->updates()->clear_meta();
     } else {
+        // for non-primary key tablet, make sure clear the dcg cache
+        tablet->remove_all_delta_column_group_cache();
         return TabletMetaManager::remove(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash());
     }
 }

@@ -79,7 +79,7 @@ public:
     virtual ~StoredColumnReaderImpl() = default;
 
     // Reset internal state and ready for next read_values
-    virtual void reset() = 0;
+    virtual void reset_levels() = 0;
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                       Column* dst) override;
@@ -97,21 +97,16 @@ public:
 
     void set_page_num(size_t page_num) override { _reader->set_page_num(page_num); }
 
-    static size_t get_level_to_decode_batch_size(size_t row, size_t num_values_left_in_cur_page, size_t decoded,
-                                                 size_t parsed);
-
     static size_t count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level);
 
 protected:
     virtual Status _next_page();
     virtual bool _cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read);
 
-    void update_read_context(size_t records_read);
-
     // for RequiredColumn, there is no need to get levels.
     // for RepeatedColumn, there is no possible to get default levels.
     // for OptionalColumn, we will override it.
-    virtual void append_default_levels(size_t row_nums) {}
+    virtual void _append_default_levels(size_t row_nums) {}
 
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;

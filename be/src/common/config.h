@@ -153,7 +153,7 @@ CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
 CONF_mInt32(replication_threads, "0");
-CONF_mInt32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -615,6 +615,8 @@ CONF_mInt32(tablet_meta_checkpoint_min_interval_secs, "600");
 CONF_Int64(brpc_max_body_size, "2147483648");
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
+// brpc connection types, "single", "pooled", "short".
+CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
 
 // Max number of txns for every txn_partition_map in txn manager.
 // this is a self-protection to avoid too many txns saving in manager.
@@ -945,6 +947,7 @@ CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
+CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1114,6 +1117,9 @@ CONF_mInt32(max_bf_read_bytes_percent, "10");
 // If primary compaction pick all rowsets, we could rebuild pindex directly and skip read from index.
 CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 
+// enable read pindex by page
+CONF_mBool(enable_pindex_read_by_page, "false");
+
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
@@ -1141,6 +1147,8 @@ CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 // so large tabletmeta object can fit in block cache. After we optimize PK table's tabletmeta object size, we can
 // revert this config change.
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
+
+CONF_String(rocksdb_db_options_string, "create_if_missing=true;create_missing_column_families=true");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB

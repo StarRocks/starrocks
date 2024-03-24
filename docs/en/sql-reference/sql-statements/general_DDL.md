@@ -16,7 +16,6 @@ displayed_sidebar: "English"
   - [KILL](#kill)
   - [Utility commands](#utility-commands)
 
-
 ## CREATE
 
 - [ANALYZE TABLE](./data-definition/ANALYZE_TABLE.md)
@@ -26,7 +25,7 @@ displayed_sidebar: "English"
 - [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
 - [CREATE IDEX](./data-definition/CREATE_INDEX.md)
 - [CREATE MATERIALIZED VIEW](./data-definition/CREATE_MATERIALIZED_VIEW.md)
-- [CREATE REPOSITORY](./data-definition/CREATE_REPOSITORY.md)
+- [CREATE REPOSITORY](./data-definition/backup_restore/CREATE_REPOSITORY.md)
 - [CREATE RESOURCE](./data-definition/CREATE_RESOURCE.md)
 - [CREATE TABLE](./data-definition/CREATE_TABLE.md)
 - [CREATE TABLE AS SELECT](./data-definition/CREATE_TABLE_AS_SELECT.md)
@@ -48,7 +47,7 @@ displayed_sidebar: "English"
 - [DROP DATABASE](./data-definition/DROP_DATABASE.md)
 - [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
 - [DROP MATERIALIZED VIEW](./data-definition/DROP_MATERIALIZED_VIEW.md)
-- [DROP REPOSITORY](./data-definition/DROP_REPOSITORY.md)
+- [DROP REPOSITORY](./data-definition/backup_restore/DROP_REPOSITORY.md)
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [DROP STATS](./data-definition/DROP_STATS.md)
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
@@ -65,9 +64,9 @@ displayed_sidebar: "English"
 
 ## BACKUP and RESTORE
 
-- [BACKUP](./data-definition/BACKUP.md)
-- [RECOVER](./data-definition/RECOVER.md)
-- [RESTORE](./data-definition/RESTORE.md)
+- [BACKUP](./data-definition/backup_restore/BACKUP.md)
+- [RECOVER](./data-definition/backup_restore/RECOVER.md)
+- [RESTORE](./data-definition/backup_restore/RESTORE.md)
 
 ## SET
 
@@ -76,9 +75,9 @@ displayed_sidebar: "English"
 ## CANCEL
 
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
-- [CANCEL BACKUP](./data-definition/CANCEL_BACKUP.md)
+- [CANCEL BACKUP](./data-definition/backup_restore/CANCEL_BACKUP.md)
 - [CANCEL REFRESH MATERIALIZED VIEW](./data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md)
-- [CANCEL RESTORE](./data-definition/CANCEL_RESTORE.md)
+- [CANCEL RESTORE](./data-definition/backup_restore/CANCEL_RESTORE.md)
 
 ## KILL
 

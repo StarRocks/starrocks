@@ -39,7 +39,7 @@
         {
           "type": "category",
           "label": "Shared-data deployment",
-          "link": {"type": "doc", "id": "cover_pages/shared_data_deployment"},
+          "link": {"type": "doc", "id": "deployment/shared_data/shared_data"},
           "items": ["deployment/shared_data/s3", "deployment/shared_data/gcs", "deployment/shared_data/azure", "deployment/shared_data/minio"]
         },
         {
@@ -60,7 +60,7 @@
           "type": "category",
           "label": "Table types",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
-          "items": ["table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
+          "items": ["table_design/table_types/table_capabilities", "table_design/table_types/primary_key_table","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table" ]
         },
         {
           "type": "category",
@@ -131,7 +131,7 @@
     },
     {
       "type": "category",
-      "label": "Query Data Lakes",
+      "label": "Data Lakes",
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
@@ -315,38 +315,38 @@
         {
           "type": "category",
           "label": "Management",
-          "link": {"type": "doc", "id": "cover_pages/management"},
+          "link": {"type": "doc", "id": "administration/management/management"},
           "items": [
-            "administration/Scale_up_down",
-            "administration/Backup_and_restore",
-            "administration/FE_configuration",
-            "administration/BE_configuration",
+            "administration/management/Scale_up_down",
+            "administration/management/Backup_and_restore",
+            "administration/management/FE_configuration",
+            "administration/management/BE_configuration",
             {
               "type": "category",
               "label": "Monitor and Alert",
-              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "link": {"type": "doc", "id": "administration/management/monitoring/Monitor_and_Alert"},
               "items": [
-                "administration/metrics"
+                "administration/management/monitoring/metrics"
               ]
             },
-            "administration/audit_loader",
-            "administration/enable_fqdn",
-            "administration/timezone",
-            "administration/monitor_manage_big_queries",
+            "administration/management/audit_loader",
+            "administration/management/enable_fqdn",
+            "administration/management/timezone",
+            "administration/management/monitor_manage_big_queries",
             {
               "type": "category",
               "label": "Resource management",
-              "link": {"type": "doc", "id": "cover_pages/resource_management"},
+              "link": {"type": "doc", "id": "administration/management/resource_management/resource_management"},
               "items": [ 
-                "administration/resource_group",
-                "administration/query_queues",
-                "administration/Query_management",
-                "administration/Memory_management",
-                "administration/spill_to_disk",
-                "administration/Load_balance",
-                "administration/Replica",
-                "administration/Blacklist",
-                "administration/filemanager"
+                "administration/management/resource_management/resource_group",
+                "administration/management/resource_management/query_queues",
+                "administration/management/resource_management/Query_management",
+                "administration/management/resource_management/Memory_management",
+                "administration/management/resource_management/spill_to_disk",
+                "administration/management/resource_management/Load_balance",
+                "administration/management/resource_management/Replica",
+                "administration/management/resource_management/Blacklist",
+                "administration/management/resource_management/filemanager"
               ]
 
             }
@@ -357,13 +357,13 @@
         {
           "type": "category",
           "label": "User Privileges and Authentication",
-          "link": {"type": "doc", "id": "administration/privilege_overview"},
+          "link": {"type": "doc", "id": "administration/user_privs/privilege_overview"},
           "items": [
-            "administration/privilege_item",
-            "administration/User_privilege",
-            "administration/ranger_plugin",
-            "administration/Authentication",
-            "administration/privilege_faq"
+            "administration/user_privs/privilege_item",
+            "administration/user_privs/User_privilege",
+            "administration/user_privs/ranger_plugin",
+            "administration/user_privs/Authentication",
+            "administration/user_privs/privilege_faq"
           ]
         },
         {
@@ -394,62 +394,62 @@
         {
           "type": "category",
           "label": "Data Types",
-          "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/data-type-list"},
+          "link": {"type": "doc", "id": "sql-reference/data-types/data-type-list"},
           "items": [
             {
               "type": "category",
               "label": "Numeric",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/numeric"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/numeric/numeric"},
               "items": [
-                "sql-reference/sql-statements/data-types/TINYINT",
-                "sql-reference/sql-statements/data-types/SMALLINT",
-                "sql-reference/sql-statements/data-types/INT",
-                "sql-reference/sql-statements/data-types/BIGINT",
-                "sql-reference/sql-statements/data-types/LARGEINT",
-                "sql-reference/sql-statements/data-types/DECIMAL",
-                "sql-reference/sql-statements/data-types/DOUBLE",
-                "sql-reference/sql-statements/data-types/FLOAT",
-                "sql-reference/sql-statements/data-types/BOOLEAN"
+                "sql-reference/data-types/numeric/TINYINT",
+                "sql-reference/data-types/numeric/SMALLINT",
+                "sql-reference/data-types/numeric/INT",
+                "sql-reference/data-types/numeric/BIGINT",
+                "sql-reference/data-types/numeric/LARGEINT",
+                "sql-reference/data-types/numeric/DECIMAL",
+                "sql-reference/data-types/numeric/DOUBLE",
+                "sql-reference/data-types/numeric/FLOAT",
+                "sql-reference/data-types/numeric/BOOLEAN"
               ]
             },
             {
               "type": "category",
               "label": "String",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/string"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/string-type/string-type"},
               "items": [
-                "sql-reference/sql-statements/data-types/STRING",
-                "sql-reference/sql-statements/data-types/BINARY",
-                "sql-reference/sql-statements/data-types/CHAR",
-                "sql-reference/sql-statements/data-types/VARCHAR"
+                "sql-reference/data-types/string-type/STRING",
+                "sql-reference/data-types/string-type/BINARY",
+                "sql-reference/data-types/string-type/CHAR",
+                "sql-reference/data-types/string-type/VARCHAR"
               ]
             },
             {
               "type": "category",
               "label": "Date",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/date"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/date-types/date-types"},
               "items": [
-                "sql-reference/sql-statements/data-types/DATE",
-                "sql-reference/sql-statements/data-types/DATETIME"
+                "sql-reference/data-types/date-types/DATE",
+                "sql-reference/data-types/date-types/DATETIME"
               ]
             },
             {
               "type": "category",
               "label": "Semi-structured",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/semi_structured/semi_structured"},
               "items": [
-                "sql-reference/sql-statements/data-types/Array",
-                "sql-reference/sql-statements/data-types/JSON",
-                "sql-reference/sql-statements/data-types/Map",
-                "sql-reference/sql-statements/data-types/STRUCT"
+                "sql-reference/data-types/semi_structured/Array",
+                "sql-reference/data-types/semi_structured/JSON",
+                "sql-reference/data-types/semi_structured/Map",
+                "sql-reference/data-types/semi_structured/STRUCT"
               ]
             },
             {
               "type": "category",
               "label": "Other",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/other-data-types/other-data-types"},
               "items": [
-                "sql-reference/sql-statements/data-types/BITMAP",
-                "sql-reference/sql-statements/data-types/HLL"
+                "sql-reference/data-types/other-data-types/BITMAP",
+                "sql-reference/data-types/other-data-types/HLL"
               ]
             }
           ]
@@ -755,16 +755,18 @@
             {
               "type": "category",
               "label": "Backup and restore",
+              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-definition/backup_restore/backup_restore"},
               "items": [
-                "sql-reference/sql-statements/data-definition/BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_RESTORE",
-                "sql-reference/sql-statements/data-definition/CREATE_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/DROP_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/RECOVER",
-                "sql-reference/sql-statements/data-definition/RESTORE",
-                "sql-reference/sql-statements/data-manipulation/SHOW_BACKUP",
-                "sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES"
+                "sql-reference/sql-statements/data-definition/backup_restore/BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_RESTORE",
+                "sql-reference/sql-statements/data-definition/backup_restore/CREATE_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/DROP_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/RECOVER",
+                "sql-reference/sql-statements/data-definition/backup_restore/RESTORE",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_SNAPSHOT"
               ]
             },
             {
@@ -877,7 +879,7 @@
             },
             {
               "type": "category",
-              "label": "Date Functions",
+              "label": "Date and Time Functions",
               "link": {"type": "doc", "id": "cover_pages/functions_date"},
               "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/date-time-functions" } ]
             },
@@ -952,69 +954,6 @@
           ]
         },
         {
-          "type": "category",
-          "label": "Data Types",
-          "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/data-type-list"},
-          "items": [
-            {
-              "type": "category",
-              "label": "Numeric",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/numeric"},
-              "items": [
-                "sql-reference/sql-statements/data-types/TINYINT",
-                "sql-reference/sql-statements/data-types/SMALLINT",
-                "sql-reference/sql-statements/data-types/INT",
-                "sql-reference/sql-statements/data-types/BIGINT",
-                "sql-reference/sql-statements/data-types/LARGEINT",
-                "sql-reference/sql-statements/data-types/DECIMAL",
-                "sql-reference/sql-statements/data-types/DOUBLE",
-                "sql-reference/sql-statements/data-types/FLOAT",
-                "sql-reference/sql-statements/data-types/BOOLEAN"
-              ]
-            },
-            {
-              "type": "category",
-              "label": "String",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/string"},
-              "items": [
-                "sql-reference/sql-statements/data-types/STRING",
-                "sql-reference/sql-statements/data-types/BINARY",
-                "sql-reference/sql-statements/data-types/CHAR",
-                "sql-reference/sql-statements/data-types/VARCHAR"
-              ]
-            },
-            {
-              "type": "category",
-              "label": "Date",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/date"},
-              "items": [
-                "sql-reference/sql-statements/data-types/DATE",
-                "sql-reference/sql-statements/data-types/DATETIME"
-              ]
-            },
-            {
-              "type": "category",
-              "label": "Semi-structured",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
-              "items": [
-                "sql-reference/sql-statements/data-types/Array",
-                "sql-reference/sql-statements/data-types/JSON",
-                "sql-reference/sql-statements/data-types/Map",
-                "sql-reference/sql-statements/data-types/STRUCT"
-              ]
-            },
-            {
-              "type": "category",
-              "label": "Other",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
-              "items": [
-                "sql-reference/sql-statements/data-types/BITMAP",
-                "sql-reference/sql-statements/data-types/HLL"
-              ]
-            }
-          ]
-        },
-        {
         "type": "category",
         "label": "Information Schema",
         "link": {"type": "doc", "id": "reference/overview-pages/information_schema"},
@@ -1069,7 +1008,6 @@
             "faq/Exporting_faq"
           ]
         },
-        "faq/privilege",
         "faq/datalake",
         "faq/Sql_faq",
         "faq/Dump_query",
@@ -1134,7 +1072,7 @@
         {
           "type": "category",
           "label": "存算分离模式部署",
-          "link": {"type": "doc", "id": "cover_pages/shared_data_deployment"},
+          "link": {"type": "doc", "id": "deployment/shared_data/shared_data"},
           "items": ["deployment/shared_data/s3", "deployment/shared_data/gcs", "deployment/shared_data/azure", "deployment/shared_data/minio", "deployment/shared_data/hdfs", "deployment/shared_data/other"]
         },
         {
@@ -1155,7 +1093,7 @@
           "type": "category",
           "label": "表类型",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
-          "items": ["table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
+          "items": ["table_design/table_types/table_capabilities","table_design/table_types/primary_key_table","table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table"]
         },
         {
           "type": "category",
@@ -1228,7 +1166,7 @@
     },
     {
       "type": "category",
-      "label": "查询数据湖",
+      "label": "数据湖",
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
@@ -1417,38 +1355,38 @@
         {
           "type": "category",
           "label": "运维集群",
-          "link": {"type": "doc", "id": "cover_pages/management"},
+          "link": {"type": "doc", "id": "administration/management/management"},
           "items": [
-            "administration/Scale_up_down",
-            "administration/Backup_and_restore",
-            "administration/FE_configuration",
-            "administration/BE_configuration",
+            "administration/management/Scale_up_down",
+            "administration/management/Backup_and_restore",
+            "administration/management/FE_configuration",
+            "administration/management/BE_configuration",
             {
               "type": "category",
               "label": "监控报警",
-              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "link": {"type": "doc", "id": "administration/management/monitoring/Monitor_and_Alert"},
               "items": [
-                "administration/metrics"
+                "administration/management/monitoring/metrics"
               ]
             },
-            "administration/audit_loader",
-            "administration/enable_fqdn",
-            "administration/timezone",
-            "administration/monitor_manage_big_queries",
+            "administration/management/audit_loader",
+            "administration/management/enable_fqdn",
+            "administration/management/timezone",
+            "administration/management/monitor_manage_big_queries",
             {
               "type": "category",
               "label": "管理资源",
-              "link": {"type": "doc", "id": "cover_pages/resource_management"},
+              "link": {"type": "doc", "id": "administration/management/resource_management/resource_management"},
               "items": [ 
-                "administration/resource_group",
-                "administration/query_queues",
-                "administration/Query_management",
-                "administration/Memory_management",
-                "administration/spill_to_disk",
-                "administration/Load_balance",
-                "administration/Replica",
-                "administration/Blacklist",
-                "administration/filemanager"
+                "administration/management/resource_management/resource_group",
+                "administration/management/resource_management/query_queues",
+                "administration/management/resource_management/Query_management",
+                "administration/management/resource_management/Memory_management",
+                "administration/management/resource_management/spill_to_disk",
+                "administration/management/resource_management/Load_balance",
+                "administration/management/resource_management/Replica",
+                "administration/management/resource_management/Blacklist",
+                "administration/management/resource_management/filemanager"
               ]
             }
           ]
@@ -1458,13 +1396,13 @@
         {
           "type": "category",
           "label": "管理用户权限",
-          "link": {"type": "doc", "id": "administration/privilege_overview"},
+          "link": {"type": "doc", "id": "administration/user_privs/privilege_overview"},
           "items": [
-            "administration/privilege_item",
-            "administration/User_privilege",
-            "administration/ranger_plugin",
-            "administration/Authentication",
-            "administration/privilege_faq"
+            "administration/user_privs/privilege_item",
+            "administration/user_privs/User_privilege",
+            "administration/user_privs/ranger_plugin",
+            "administration/user_privs/Authentication",
+            "administration/user_privs/privilege_faq"
           ]
         },
         {
@@ -1495,62 +1433,62 @@
         {
           "type": "category",
           "label": "数据类型",
-          "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/data-type-list"},
+          "link": {"type": "doc", "id": "sql-reference/data-types/data-type-list"},
           "items": [
             {
               "type": "category",
               "label": "数值类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/numeric"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/numeric/numeric"},
               "items": [
-                "sql-reference/sql-statements/data-types/TINYINT",
-                "sql-reference/sql-statements/data-types/SMALLINT",
-                "sql-reference/sql-statements/data-types/INT",
-                "sql-reference/sql-statements/data-types/BIGINT",
-                "sql-reference/sql-statements/data-types/LARGEINT",
-                "sql-reference/sql-statements/data-types/DECIMAL",
-                "sql-reference/sql-statements/data-types/DOUBLE",
-                "sql-reference/sql-statements/data-types/FLOAT",
-                "sql-reference/sql-statements/data-types/BOOLEAN"
+                "sql-reference/data-types/numeric/TINYINT",
+                "sql-reference/data-types/numeric/SMALLINT",
+                "sql-reference/data-types/numeric/INT",
+                "sql-reference/data-types/numeric/BIGINT",
+                "sql-reference/data-types/numeric/LARGEINT",
+                "sql-reference/data-types/numeric/DECIMAL",
+                "sql-reference/data-types/numeric/DOUBLE",
+                "sql-reference/data-types/numeric/FLOAT",
+                "sql-reference/data-types/numeric/BOOLEAN"
               ]
             },
             {
               "type": "category",
               "label": "字符串类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/string"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/string-type/string-type"},
               "items": [
-                "sql-reference/sql-statements/data-types/STRING",
-                "sql-reference/sql-statements/data-types/BINARY",
-                "sql-reference/sql-statements/data-types/CHAR",
-                "sql-reference/sql-statements/data-types/VARCHAR"
+                "sql-reference/data-types/string-type/STRING",
+                "sql-reference/data-types/string-type/BINARY",
+                "sql-reference/data-types/string-type/CHAR",
+                "sql-reference/data-types/string-type/VARCHAR"
               ]
             },
             {
               "type": "category",
               "label": "日期类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/date"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/date-types/date-types"},
               "items": [
-                "sql-reference/sql-statements/data-types/DATE",
-                "sql-reference/sql-statements/data-types/DATETIME"
+                "sql-reference/data-types/date-types/DATE",
+                "sql-reference/data-types/date-types/DATETIME"
               ]
             },
             {
               "type": "category",
               "label": "半结构化类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/semi_structured/semi_structured"},
               "items": [
-                "sql-reference/sql-statements/data-types/Array",
-                "sql-reference/sql-statements/data-types/JSON",
-                "sql-reference/sql-statements/data-types/Map",
-                "sql-reference/sql-statements/data-types/STRUCT"
+                "sql-reference/data-types/semi_structured/Array",
+                "sql-reference/data-types/semi_structured/JSON",
+                "sql-reference/data-types/semi_structured/Map",
+                "sql-reference/data-types/semi_structured/STRUCT"
               ]
             },
             {
               "type": "category",
               "label": "其他类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
+              "link": {"type": "doc", "id": "sql-reference/data-types/other-data-types/other-data-types"},
               "items": [
-                "sql-reference/sql-statements/data-types/BITMAP",
-                "sql-reference/sql-statements/data-types/HLL"
+                "sql-reference/data-types/other-data-types/BITMAP",
+                "sql-reference/data-types/other-data-types/HLL"
               ]
             }
           ]
@@ -1856,16 +1794,18 @@
             {
               "type": "category",
               "label": "备份与恢复",
+              "link": {"type": "doc", "id": "sql-reference/sql-statements/data-definition/backup_restore/backup_restore"},
               "items": [
-                "sql-reference/sql-statements/data-definition/BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_BACKUP",
-                "sql-reference/sql-statements/data-definition/CANCEL_RESTORE",
-                "sql-reference/sql-statements/data-definition/CREATE_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/DROP_REPOSITORY",
-                "sql-reference/sql-statements/data-definition/RECOVER",
-                "sql-reference/sql-statements/data-definition/RESTORE",
-                "sql-reference/sql-statements/data-manipulation/SHOW_BACKUP",
-                "sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES"
+                "sql-reference/sql-statements/data-definition/backup_restore/BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_BACKUP",
+                "sql-reference/sql-statements/data-definition/backup_restore/CANCEL_RESTORE",
+                "sql-reference/sql-statements/data-definition/backup_restore/CREATE_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/DROP_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/backup_restore/RECOVER",
+                "sql-reference/sql-statements/data-definition/backup_restore/RESTORE",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_BACKUP",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_REPOSITORIES",
+                "sql-reference/sql-statements/data-manipulation/backup_restore/SHOW_SNAPSHOT"
               ]
             },
             {
@@ -1978,7 +1918,7 @@
             },
             {
               "type": "category",
-              "label": "日期函数",
+              "label": "时间日期函数",
               "link": {"type": "doc", "id": "cover_pages/functions_date"},
               "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/date-time-functions" } ]
             },
@@ -2053,69 +1993,6 @@
           ]
         },
         {
-          "type": "category",
-          "label": "数据类型",
-          "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/data-type-list"},
-          "items": [
-            {
-              "type": "category",
-              "label": "数值类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/numeric"},
-              "items": [
-                "sql-reference/sql-statements/data-types/TINYINT",
-                "sql-reference/sql-statements/data-types/SMALLINT",
-                "sql-reference/sql-statements/data-types/INT",
-                "sql-reference/sql-statements/data-types/BIGINT",
-                "sql-reference/sql-statements/data-types/LARGEINT",
-                "sql-reference/sql-statements/data-types/DECIMAL",
-                "sql-reference/sql-statements/data-types/DOUBLE",
-                "sql-reference/sql-statements/data-types/FLOAT",
-                "sql-reference/sql-statements/data-types/BOOLEAN"
-              ]
-            },
-            {
-              "type": "category",
-              "label": "字符串类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/string"},
-              "items": [
-                "sql-reference/sql-statements/data-types/STRING",
-                "sql-reference/sql-statements/data-types/BINARY",
-                "sql-reference/sql-statements/data-types/CHAR",
-                "sql-reference/sql-statements/data-types/VARCHAR"
-              ]
-            },
-            {
-              "type": "category",
-              "label": "日期类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/date"},
-              "items": [
-                "sql-reference/sql-statements/data-types/DATE",
-                "sql-reference/sql-statements/data-types/DATETIME"
-              ]
-            },
-            {
-              "type": "category",
-              "label": "半结构化类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
-              "items": [
-                "sql-reference/sql-statements/data-types/Array",
-                "sql-reference/sql-statements/data-types/JSON",
-                "sql-reference/sql-statements/data-types/Map",
-                "sql-reference/sql-statements/data-types/STRUCT"
-              ]
-            },
-            {
-              "type": "category",
-              "label": "其他类型",
-              "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
-              "items": [
-                "sql-reference/sql-statements/data-types/BITMAP",
-                "sql-reference/sql-statements/data-types/HLL"
-              ]
-            }
-          ]
-        },
-        {
         "type": "category",
         "label": "Information Schema",
         "link": {"type": "doc", "id": "reference/overview-pages/information_schema"},
@@ -2170,7 +2047,6 @@
             "faq/Exporting_faq"
           ]
         },
-        "faq/privilege",
         "faq/datalake",
         "faq/Sql_faq",
         "faq/Dump_query",

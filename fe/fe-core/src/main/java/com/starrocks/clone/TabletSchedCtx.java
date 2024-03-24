@@ -49,6 +49,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BalanceType;
 import com.starrocks.clone.SchedException.Status;
@@ -77,6 +78,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchedule;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -834,7 +836,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         // That is, we may need to use 2 clone tasks to create a new replica. It is inefficient,
         // but there is no other way now.
         TBackend tSrcBe = new TBackend(srcBe.getHost(), srcBe.getBePort(), srcBe.getHttpPort());
-        cloneTask = new CloneTask(destBackendId, dbId, tblId, partitionId, indexId,
+        cloneTask = new CloneTask(destBackendId, destBe.getHost(), dbId, tblId, partitionId, indexId,
                 tabletId, schemaHash, Lists.newArrayList(tSrcBe), storageMedium,
                 visibleVersion, (int) (taskTimeoutMs / 1000));
         cloneTask.setPathHash(srcPathHash, destPathHash);
@@ -934,20 +936,38 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (indexMeta == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
             }
-            CreateReplicaTask createReplicaTask = new CreateReplicaTask(destBackendId, dbId,
-                    tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
-                    indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(), visibleVersion,
-                    indexMeta.getKeysType(),
-                    indexMeta.getStorageType(),
-                    TStorageMedium.HDD, indexMeta.getSchema(), olapTable.getCopiedBfColumns(), olapTable.getBfFpp(), null,
-                    olapTable.getCopiedIndexes(),
-                    olapTable.isInMemory(),
-                    olapTable.enablePersistentIndex(),
-                    olapTable.primaryIndexCacheExpireSec(),
-                    olapTable.getPartitionInfo().getTabletType(partitionId),
-                    olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                    indexMeta.getSortKeyUniqueIds());
-            createReplicaTask.setRecoverySource(RecoverySource.SCHEDULER);
+            TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                    .setId(indexMeta.getSchemaId())
+                    .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                    .setSchemaHash(indexMeta.getSchemaHash())
+                    .setKeysType(indexMeta.getKeysType())
+                    .setStorageType(indexMeta.getStorageType())
+                    .setVersion(indexMeta.getSchemaVersion())
+                    .addColumns(indexMeta.getSchema())
+                    .setBloomFilterColumnNames(olapTable.getCopiedBfColumns())
+                    .setBloomFilterFpp(olapTable.getBfFpp())
+                    .setIndexes(olapTable.getCopiedIndexes())
+                    .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                    .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                    .build().toTabletSchema();
+
+            CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                    .setNodeId(destBackendId)
+                    .setDbId(dbId)
+                    .setTableId(tblId)
+                    .setPartitionId(partitionId)
+                    .setIndexId(indexId)
+                    .setTabletId(tabletId)
+                    .setVersion(visibleVersion)
+                    .setStorageMedium(TStorageMedium.HDD)
+                    .setEnablePersistentIndex(olapTable.enablePersistentIndex())
+                    .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
+                    .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
+                    .setCompressionType(olapTable.getCompressionType())
+                    .setRecoverySource(RecoverySource.SCHEDULER)
+                    .setTabletSchema(tabletSchema)
+                    .build();
+
             taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 
             Replica emptyReplica =
@@ -956,7 +976,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             // addReplica() method will add this replica to tablet inverted index too.
             tablet.addReplica(emptyReplica);
             state = State.RUNNING;
-            return createReplicaTask;
+            return task;
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }

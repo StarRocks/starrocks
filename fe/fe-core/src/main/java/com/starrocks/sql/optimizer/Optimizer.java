@@ -18,12 +18,15 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -32,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
@@ -67,6 +71,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTableRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
@@ -103,6 +108,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -139,12 +145,32 @@ public class Optimizer {
         return context;
     }
 
+
     public OptExpression optimize(ConnectContext connectContext,
                                   OptExpression logicOperatorTree,
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
-        prepare(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
+        return optimize(connectContext, logicOperatorTree, null, null, requiredProperty,
+                requiredColumns, columnRefFactory);
+    }
+
+    public OptExpression optimize(ConnectContext connectContext,
+                                  OptExpression logicOperatorTree,
+                                  Map<Operator, ParseNode> optToAstMap,
+                                  StatementBase stmt,
+                                  PhysicalPropertySet requiredProperty,
+                                  ColumnRefSet requiredColumns,
+                                  ColumnRefFactory columnRefFactory) {
+        // prepare for optimizer
+        prepare(connectContext, columnRefFactory);
+
+        // try text based mv rewrite first before mv rewrite prepare so can deduce mv prepare time if it can be rewritten.
+        logicOperatorTree = new TextMatchBasedRewriteRule(connectContext, stmt, optToAstMap)
+                .transform(logicOperatorTree, context).get(0);
+
+        // prepare for mv rewrite
+        prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
         OptExpression result = optimizerConfig.isRuleBased() ?
                 optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
@@ -198,7 +224,7 @@ public class Optimizer {
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
         // collect all olap scan operator
-        collectAllScanOperators(logicOperatorTree, rootTaskContext);
+        collectAllLogicalOlapScanOperators(logicOperatorTree, rootTaskContext);
 
         try (Timer ignored = Tracers.watchScope("RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
@@ -250,6 +276,14 @@ public class Optimizer {
             OptimizerTraceUtil.logOptExpression("final plan after physical rewrite:\n%s", finalPlan);
         }
 
+        // collect all mv scan operator
+        collectAllPhysicalOlapScanOperators(result, rootTaskContext);
+        List<PhysicalOlapScanOperator> mvScan = rootTaskContext.getAllPhysicalOlapScanOperators().stream().
+                filter(scan -> scan.getTable().isMaterializedView()).collect(Collectors.toList());
+        // add mv db id to currentSqlDbIds, the resource group could use this to distinguish sql patterns
+        Set<Long> currentSqlDbIds = rootTaskContext.getOptimizerContext().getCurrentSqlDbIds();
+        mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
+
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
             // valid the final plan
             PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
@@ -269,11 +303,7 @@ public class Optimizer {
         memo.copyIn(memo.getRootGroup(), logicalTreeWithView);
     }
 
-    private void prepare(
-            ConnectContext connectContext,
-            OptExpression logicOperatorTree,
-            ColumnRefFactory columnRefFactory,
-            ColumnRefSet requiredColumns) {
+    private void prepare(ConnectContext connectContext, ColumnRefFactory columnRefFactory) {
         Memo memo = null;
         if (!optimizerConfig.isRuleBased()) {
             memo = new Memo();
@@ -282,7 +312,10 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
         context.setQueryTables(queryTables);
         context.setUpdateTableId(updateTableId);
+    }
 
+    private void prepareMvRewrite(ConnectContext connectContext, OptExpression logicOperatorTree,
+                                  ColumnRefFactory columnRefFactory, ColumnRefSet requiredColumns) {
         // prepare related mvs if needed and initialize mv rewrite strategy
         new MvRewritePreprocessor(connectContext, columnRefFactory, context, requiredColumns)
                 .prepare(logicOperatorTree, mvRewriteStrategy);
@@ -334,9 +367,8 @@ public class Optimizer {
         }
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
-            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_TABLE_MV_REWRITE);
-        }
-        if (mvRewriteStrategy.enableRBOSingleTableRewrite) {
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
+        } else if (mvRewriteStrategy.enableRBOSingleTableRewrite) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
@@ -387,6 +419,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
@@ -769,10 +802,16 @@ public class Optimizer {
         return expression;
     }
 
-    private void collectAllScanOperators(OptExpression tree, TaskContext rootTaskContext) {
+    private void collectAllLogicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOperator(tree, list, op -> op instanceof LogicalOlapScanOperator);
-        rootTaskContext.setAllScanOperators(Collections.unmodifiableList(list));
+        rootTaskContext.setAllLogicalOlapScanOperators(Collections.unmodifiableList(list));
+    }
+
+    private void collectAllPhysicalOlapScanOperators(OptExpression tree, TaskContext rootTaskContext) {
+        List<PhysicalOlapScanOperator> list = Lists.newArrayList();
+        Utils.extractOperator(tree, list, op -> op instanceof PhysicalOlapScanOperator);
+        rootTaskContext.setAllPhysicalOlapScanOperators(Collections.unmodifiableList(list));
     }
 
     private void ruleRewriteIterative(OptExpression tree, TaskContext rootTaskContext, RuleSetType ruleSetType) {

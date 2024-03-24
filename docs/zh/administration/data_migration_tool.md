@@ -59,7 +59,7 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 #### FE 参数
 
-以下 FE 参数为动态参数。修改方式请参考 [配置 FE 动态参数](../administration/FE_configuration.md#配置-fe-动态参数)。
+以下 FE 参数为动态参数。修改方式请参考 [配置 FE 动态参数](../administration/management/FE_configuration.md#配置-fe-动态参数)。
 
 | **参数名**                            | **默认值** | **单位** | **描述**                                                     |
 | ------------------------------------- | ---------- | -------- | ------------------------------------------------------------ |
@@ -69,7 +69,7 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 #### BE 参数
 
-以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/BE_configuration.md#配置-be-动态参数)。
+以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/management/BE_configuration.md#配置-be-动态参数)。
 
 | **参数名**          | **默认值** | **单位** | **描述**                                                     |
 | ------------------- | ---------- | -------- | ------------------------------------------------------------ |

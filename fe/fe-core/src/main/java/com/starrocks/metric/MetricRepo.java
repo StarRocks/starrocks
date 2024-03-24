@@ -54,6 +54,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
@@ -177,7 +178,9 @@ public final class MetricRepo {
         // load jobs
         LoadMgr loadManger = GlobalStateMgr.getCurrentState().getLoadMgr();
         for (EtlJobType jobType : EtlJobType.values()) {
-            if (jobType == EtlJobType.MINI || jobType == EtlJobType.UNKNOWN) {
+            // Only broker/spark/insert loads are stored into LoadManager,
+            // so these 3 types of jobs are displayed, others are always 0.
+            if (!(jobType == EtlJobType.BROKER || jobType == EtlJobType.SPARK || jobType == EtlJobType.INSERT)) {
                 continue;
             }
 
@@ -780,7 +783,8 @@ public final class MetricRepo {
                     return invertedIndex.getTabletNumByBackendId(beId);
                 }
             };
-            tabletNum.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));
+            tabletNum.addLabel(new MetricLabel("backend",
+                    NetUtils.getHostPortInAccessibleFormat(be.getHost(), be.getHeartbeatPort())));
             STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
 
             // max compaction score of tablets on each backend
@@ -795,7 +799,8 @@ public final class MetricRepo {
                     return be.getTabletMaxCompactionScore();
                 }
             };
-            tabletMaxCompactionScore.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));
+            tabletMaxCompactionScore.addLabel(new MetricLabel("backend",
+                    NetUtils.getHostPortInAccessibleFormat(be.getHost(), be.getHeartbeatPort())));
             STARROCKS_METRIC_REGISTER.addMetric(tabletMaxCompactionScore);
 
         } // end for backends

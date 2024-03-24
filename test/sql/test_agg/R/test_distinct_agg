@@ -1,6 +1,6 @@
 -- name: test_distinct_agg
 CREATE TABLE `skew_agg` (
-  `c0` bigint DEFAULT NULL,
+  `c0` int DEFAULT NULL,
   `c1` bigint DEFAULT NULL,
   `c2` bigint DEFAULT NULL,
   `c3` bigint DEFAULT NULL,
@@ -12,7 +12,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 6
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -985,4 +984,24 @@ select array_agg(distinct c2), count(distinct c2), sum(c3) from skew_agg group b
 [3]	1	5000
 [3]	1	5000
 [3]	1	5000
+-- !result
+select count(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+1562500	1	a
+-- !result
+select count(c2), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+1562500	a
+-- !result
+select sum(c2), count(distinct c3), 'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+4687500	1	a
+-- !result
+select sum(c2),  'a' as a from (select t1.* from skew_agg t0 join skew_agg t1 on t0.c4 = t1.c4) t group by a;
+-- result:
+4687500	a
+-- !result
+select sum(c0), count(distinct c2, c3) from skew_agg where c0 = 480816 and c1 = 2 group by c4;
+-- result:
+480816	1
 -- !result

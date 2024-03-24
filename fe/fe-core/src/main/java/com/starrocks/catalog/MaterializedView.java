@@ -27,6 +27,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -70,6 +71,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.PartitionRange;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -77,6 +79,7 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
@@ -438,6 +441,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "queryOutputIndices")
     protected List<Integer> queryOutputIndices = Lists.newArrayList();
 
+    protected volatile ParseNode defineQueryParseNode = null;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -508,18 +513,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * active the materialized again & reload the state.
      */
     public void setActive() {
-        LOG.warn("set {} to active", name);
+        LOG.info("set {} to active", name);
+        // reset mv rewrite cache when it is active again
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, true);
         this.active = true;
         this.inactiveReason = null;
-        // reset mv rewrite cache when it is active again
-        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
     }
 
     public void setInactiveAndReason(String reason) {
         LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
         this.inactiveReason = reason;
-        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, false);
     }
 
     public String getInactiveReason() {
@@ -863,7 +868,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // 1. Remove from plan cache
         MvId mvId = new MvId(db.getId(), getId());
-        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this, false);
 
         // 2. Remove from base tables
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
@@ -1060,6 +1065,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
+    }
+
+    /**
+     * Whether this mv can be used for mv rewrite configured by {@code enable_query_rewrite} table property.
+     * @return: true if it is configured to enable mv rewrite, otherwise false.
+     */
+    public boolean isEnableRewrite() {
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
+            return true;
+        }
+        return tableProperty.getMvQueryRewriteSwitch().isEnable();
     }
 
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
@@ -1339,6 +1356,54 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return tableToJoinExprMap;
     }
 
+    // In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
+    // Only need to check the mv partition existence.
+    public boolean getPartitionNamesToRefreshForMvInLooseMode(Set<String> toRefreshPartitions) {
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            List<Partition> partitions = Lists.newArrayList(getPartitions());
+            if (partitions.size() > 0 && partitions.get(0).getVisibleVersion() <= 1) {
+                // the mv is newly created, can not use it to rewrite query.
+                toRefreshPartitions.addAll(getVisiblePartitionNames());
+            }
+            return true;
+        }
+        Expr partitionExpr = getFirstPartitionRefTableExpr();
+        Map<Table, Column> partitionTableAndColumn = getRelatedPartitionTableAndColumn();
+        Map<String, Range<PartitionKey>> mvRangePartitionMap = getRangePartitionMap();
+        Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
+        RangePartitionDiff rangePartitionDiff = null;
+        try {
+            for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
+                Table refBaseTable = entry.getKey();
+                Column refBaseTablePartitionColumn = entry.getValue();
+                // Collect the ref base table's partition range map.
+                refBaseTablePartitionMap.put(refBaseTable, PartitionUtil.getPartitionKeyRange(
+                        refBaseTable, refBaseTablePartitionColumn, partitionExpr));
+
+            }
+            Table partitionTable = getDirectTableAndPartitionColumn().first;
+            Column partitionColumn = getPartitionInfo().getPartitionColumns().get(0);
+            PartitionDiffer differ = PartitionDiffer.build(this, null);
+            rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
+                    refBaseTablePartitionMap.get(partitionTable), mvRangePartitionMap, differ);
+        } catch (Exception e) {
+            LOG.warn("Materialized view compute partition difference with base table failed.", e);
+            return false;
+        }
+
+        if (rangePartitionDiff == null) {
+            LOG.warn("Materialized view compute partition difference with base table failed, the diff of range partition" +
+                    " is null.");
+            return false;
+        }
+        Map<String, Range<PartitionKey>> adds = rangePartitionDiff.getAdds();
+        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
+            String mvPartitionName = addEntry.getKey();
+            toRefreshPartitions.add(mvPartitionName);
+        }
+        return true;
+    }
+
     /**
      * Once the materialized view's base tables have updated, we need to check correspond materialized views' partitions
      * to be refreshed.
@@ -1355,31 +1420,37 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
 
         // check mv's query rewrite consistency mode property only in query rewrite.
+        TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode =
+                TableProperty.QueryRewriteConsistencyMode.CHECKED;
         if (isQueryRewrite) {
-            TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode
-                    = tableProperty.getQueryRewriteConsistencyMode();
+            mvConsistencyRewriteMode = tableProperty.getQueryRewriteConsistencyMode();
             switch (mvConsistencyRewriteMode) {
                 case DISABLE:
                     return false;
-                case LOOSE:
+                case NOCHECK:
                     return true;
+                case LOOSE:
                 case CHECKED:
                 default:
                     break;
             }
         }
-
-        if (partitionInfo instanceof SinglePartitionInfo) {
-            return getNonPartitionedMVRefreshPartitions(toRefreshPartitions, isQueryRewrite);
-        } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            // partitions to refresh
-            // 1. dropped partitions
-            // 2. newly added partitions
-            // 3. partitions loaded with new data
-            return getPartitionedMVRefreshPartitions(toRefreshPartitions, isQueryRewrite);
+        if (mvConsistencyRewriteMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
+            return getPartitionNamesToRefreshForMvInLooseMode(toRefreshPartitions);
         } else {
-            throw UnsupportedException.unsupportedException("unsupported partition info type:"
-                    + partitionInfo.getClass().getName());
+            // mvConsistencyRewriteMode == TableProperty.QueryRewriteConsistencyMode.CHECKED
+            if (partitionInfo instanceof SinglePartitionInfo) {
+                return getNonPartitionedMVRefreshPartitions(toRefreshPartitions, isQueryRewrite);
+            } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+                // partitions to refresh
+                // 1. dropped partitions
+                // 2. newly added partitions
+                // 3. partitions loaded with new data
+                return getPartitionedMVRefreshPartitions(toRefreshPartitions, isQueryRewrite);
+            } else {
+                throw UnsupportedException.unsupportedException("unsupported partition info type:"
+                        + partitionInfo.getClass().getName());
+            }
         }
     }
 
@@ -1992,5 +2063,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // recheck again
         fixRelationship();
+    }
+
+    /**
+     * Used for text based materialized view rewrite.
+     */
+    public synchronized void initDefineQueryParseNode() {
+        // cache by ast
+        defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql);
+    }
+
+    /**
+     * `defineQueryParseNode` is safe for multi threads since it is only initialized when mv becomes to active.
+     */
+    public synchronized ParseNode getDefineQueryParseNode() {
+        return defineQueryParseNode;
     }
 }

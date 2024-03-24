@@ -19,8 +19,6 @@ keywords: ['fenqu']
 
 ```sql
 PARTITION BY expression
-...
-[ PROPERTIES( 'partition_live_number' = 'xxx' ) ]
 
 expression ::=
     { date_trunc ( <time_unit> , <partition_column> ) |
@@ -34,7 +32,9 @@ expression ::=
 | `expression`            | 是       | 目前仅支持 [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc.md) 和 [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) 函数。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。 |
 | `time_unit`             | 是       | 分区粒度，目前仅支持为 `hour`、`day`、`month` 或 `year`，暂时不支持为 `week`。如果分区粒度为 `hour`，则仅支持分区列为 DATETIME 类型，不支持为 DATE 类型。 |
 | `partition_column`      | 是       | 分区列。  <br /> <ul><li>仅支持为日期类型（DATE 或 DATETIME），不支持为其它类型。如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。分区列的值支持为 `NULL`。</li><li> 如果分区列是 DATE 类型，则范围支持为 [0000-01-01 ~ 9999-12-31]。如果分区列是 DATETIME 类型，则范围支持为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。</li><li> 目前仅支持指定一个分区列，不支持指定多个分区列。</li></ul> |
+<!--
 | `partition_live_number` | 否       | 保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以**当前时间**为基准，然后从后往前数指定个数的分区进行保留，其余（更早的）分区会被删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`，则分区 `p20230403`、`p20230404` 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`、`p20230405`、`p20230406`，则分区 `p20230403`、`p20230404`、`p20230405`、`p20230406` 会保留，其他分区会删除。|
+-->
 
 ### 使用说明
 
@@ -77,7 +77,7 @@ mysql > SHOW PARTITIONS FROM site_access1;
 +-------------+---------------+----------------+---------------------+--------------------+--------+--------------+------------------------------------------------------------------------------------------------------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
 2 rows in set (0.00 sec)
 ```
-
+<!--
 示例二：如果您希望引入分区生命周期管理，即仅保留最近一段时间的分区，删除历史分区，则可以使用 `partition_live_number` 设置只保留最近多少数量的分区。
 
 ```SQL
@@ -95,8 +95,9 @@ PROPERTIES(
     "partition_live_number" = "3" -- 只保留最近 3 个分区
 );
 ```
+-->
 
-示例三：假设您经常按周查询数据，则建表时可以使用分区表达式 `time_slice()`，设置分区列为 `event_day`，分区粒度为七天。将一周的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
+示例二：假设您经常按周查询数据，则建表时可以使用分区表达式 `time_slice()`，设置分区列为 `event_day`，分区粒度为七天。将一周的数据存储在一个分区中，利用分区裁剪可以显著提高查询效率。
 
 ```SQL
 CREATE TABLE site_access3 (
@@ -121,8 +122,6 @@ DISTRIBUTED BY HASH(event_day, site_id);
 
 ```bnf
 PARTITION BY expression
-...
-[ PROPERTIES( 'partition_live_number' = 'xxx' ) ]
 
 expression ::=
     ( <partition_columns> )
@@ -136,7 +135,9 @@ partition_columns ::=
 | 参数                    | 是否必填 | 参数                                                         |
 | ----------------------- | -------- | ------------------------------------------------------------ |
 | `partition_columns`     | 是       | 分区列。<br /><ul><li>支持为字符串（不支持 BINARY）、日期、整数和布尔值。不支持分区列的值为 `NULL`。</li><li> 导入后自动创建的一个分区中只能包含各分区列的一个值，如果需要包含各分区列的多值，请使用 [List 分区](./list_partitioning.md)。</li></ul> |
+<!--
 | `partition_live_number` | 否       | 保留多少数量的分区。比较这些分区包含的值，定期删除值小的分区，保留值大的。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。<br />**说明**<br />如果分区列里是字符串类型的值，则比较分区名称的字典序，定期保留排在前面的分区，删除排在后面的分区。 |
+-->
 
 ### 使用说明
 
@@ -197,6 +198,7 @@ LastConsistencyCheckTime: NULL
 1 row in set (0.00 sec)
 ```
 
+<!--
 示例二：您也可以在建表时配置参数 `partition_live_number` 进行分区生命周期管理，例如指定该表只保留最近 3 个分区。
 
 ```SQL
@@ -214,6 +216,7 @@ PROPERTIES(
     "partition_live_number" = "3" -- 只保留最近 3 个分区。
 );
 ```
+-->
 
 ## 管理分区
 
@@ -254,9 +257,9 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 
 ## 使用限制
 
-- 自 v3.1.0 起，StarRocks [存算分离模式](../deployment/shared_data/s3.md)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
+- 自 v3.1.0 起，StarRocks [存算分离模式](../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
 - 使用 CTAS 建表时暂时不支持表达式分区。
 - 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
 - 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
-- 列表达式分区暂时不支持[备份与恢复](../administration/Backup_and_restore.md)。
+- 列表达式分区暂时不支持[备份与恢复](../administration/management/Backup_and_restore.md)。
 - 如果使用表达式分区，则仅支持回滚到 2.5.4 及以后的版本。

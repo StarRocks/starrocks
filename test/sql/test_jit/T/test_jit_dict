@@ -14,7 +14,6 @@ PARTITION p20220103 VALUES [("2022-01-03"), ("2022-01-05")))
 DISTRIBUTED BY HASH(`region`, `order_date`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -44,7 +43,7 @@ INSERT INTO `t0` (`region`, `order_date`, `income`, `ship_mode`, `ship_code`) VA
 ('CHINA', '2022-01-04', 98765, 150, 15),
 ('JAPAN', '2022-01-01', 23456, 75, null);
 
-set enable_jit = true;
+set jit_level = -1;
 
 select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 when region = 'China' then 2 end) = 2 order by 1,2,3,4,5;
 select * from t0 where (case when region = 'USA' then 1 when region = 'UK' then 2 when region = 'China' then 2 end) = 2 order by 1,2,3,4,5;

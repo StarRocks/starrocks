@@ -34,6 +34,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -64,6 +65,7 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -334,29 +336,50 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         sortKeyIdxes = copiedSortKeyIdxes;
                     }
 
+                    TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                            .setId(shadowIdxId) // For newly create materialized index, schema id equals to index id
+                            .setKeysType(originKeysType)
+                            .setShortKeyColumnCount(shadowShortKeyColumnCount)
+                            .setSortKeyUniqueIds(copiedSortKeyIdxes)
+                            .setSortKeyUniqueIds(null)
+                            .setIndexes(indexes)
+                            .setBloomFilterColumnNames(bfColumns)
+                            .setBloomFilterFpp(bfFpp)
+                            .setStorageType(TStorageType.COLUMN)
+                            .addColumns(shadowSchema)
+                            .setSchemaHash(0)
+                            .build().toTabletSchema();
+
                     boolean createSchemaFile = true;
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
-                        Long backendId = Utils.chooseBackend(lakeTablet);
+                        Long backendId = Utils.chooseNodeId(lakeTablet);
                         if (backendId == null) {
                             throw new AlterCancelException("No alive backend");
                         }
                         countDownLatch.addMark(backendId, shadowTabletId);
-                        // No need to set base tablet id for CreateReplicaTask
-                        CreateReplicaTask createReplicaTask =
-                                new CreateReplicaTask(backendId, dbId, tableId, partitionId,
-                                        shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0,
-                                        Partition.PARTITION_INIT_VERSION,
-                                        originKeysType, TStorageType.COLUMN, storageMedium, shadowSchema,
-                                        bfColumns, bfFpp,
-                                        countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                        table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE,
-                                        table.getCompressionType(),
-                                        copiedSortKeyIdxes, null, createSchemaFile);
+
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                .setNodeId(backendId)
+                                .setDbId(dbId)
+                                .setTableId(tableId)
+                                .setPartitionId(partitionId)
+                                .setIndexId(shadowIdxId)
+                                .setTabletId(shadowTabletId)
+                                .setVersion(Partition.PARTITION_INIT_VERSION)
+                                .setStorageMedium(storageMedium)
+                                .setLatch(countDownLatch)
+                                .setEnablePersistentIndex(table.enablePersistentIndex())
+                                .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                                .setTabletType(TTabletType.TABLET_TYPE_LAKE)
+                                .setCompressionType(table.getCompressionType())
+                                .setCreateSchemaFile(createSchemaFile)
+                                .setTabletSchema(tabletSchema)
+                                .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
-                        batchTask.addTask(createReplicaTask);
+                        batchTask.addTask(task);
                     }
                 }
             }
@@ -430,7 +453,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        Long backendId = Utils.chooseBackend((LakeTablet) shadowTablet);
+                        Long backendId = Utils.chooseNodeId((LakeTablet) shadowTablet);
                         if (backendId == null) {
                             throw new AlterCancelException("No alive backend");
                         }

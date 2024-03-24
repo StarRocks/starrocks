@@ -80,6 +80,7 @@ import com.starrocks.analysis.TaskName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserDesc;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateType;
@@ -122,6 +123,7 @@ import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -283,6 +285,9 @@ import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.PivotAggregation;
+import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
@@ -393,7 +398,6 @@ import com.starrocks.sql.ast.ShowTriggersStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -1792,24 +1796,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AlterCatalogStmt(catalogName, alterClause, createPos(context));
     }
 
-    // ---------------------------------------- Warehouse Statement -----------------------------------------------------
-
-    @Override
-    public ParseNode visitShowWarehousesStatement(StarRocksParser.ShowWarehousesStatementContext context) {
-        String pattern = null;
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            pattern = stringLiteral.getValue();
-        }
-
-        Expr where = null;
-        if (context.expression() != null) {
-            where = (Expr) visit(context.expression());
-        }
-
-        return new ShowWarehousesStmt(pattern, where, createPos(context));
-    }
-
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override
     public ParseNode visitInsertStatement(StarRocksParser.InsertStatementContext context) {
@@ -2146,6 +2132,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(Long::parseLong).collect(toList());
         }
         return new AdminCheckTabletsStmt(tabletIds, (Property) visitProperty(context.property()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminSetPartitionVersion(StarRocksParser.AdminSetPartitionVersionContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        String partitionName = null;
+        if (context.partitionName != null) {
+            partitionName = ((Identifier) visit(context.partitionName)).getValue();
+        }
+        Long partitionId = null;
+        if (context.partitionId != null) {
+            partitionId = Long.parseLong(context.partitionId.getText());
+        }
+        long version = Long.parseLong(context.version.getText());
+        if (partitionName != null) {
+            return new AdminSetPartitionVersionStmt(targetTableName, partitionName, version, createPos(context));
+        } else {
+            return new AdminSetPartitionVersionStmt(targetTableName, partitionId, version, createPos(context));
+        }
     }
 
     @Override
@@ -3356,7 +3362,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSetUserVar(StarRocksParser.SetUserVarContext context) {
-        VariableExpr variableDesc = (VariableExpr) visit(context.userVariable());
+        UserVariableExpr variableDesc = (UserVariableExpr) visit(context.userVariable());
         Expr expr = (Expr) visit(context.expression());
         return new UserVariable(variableDesc.getName(), expr, createPos(context));
     }
@@ -4350,6 +4356,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     relation = new JoinRelation(null, relation, next, null, false);
                 }
                 from = relation;
+            }
+
+            if (fromContext.pivotClause() != null) {
+                PivotRelation pivotRelation = (PivotRelation) visit(fromContext.pivotClause());
+                pivotRelation.setQuery(from);
+                from = pivotRelation;
             }
         }
 
@@ -6545,7 +6557,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUserVariable(StarRocksParser.UserVariableContext context) {
         String variable = ((Identifier) visit(context.identifierOrString())).getValue();
-        return new VariableExpr(variable, SetType.USER, createPos(context));
+        return new UserVariableExpr(variable, createPos(context));
     }
 
     @Override
@@ -6583,6 +6595,65 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDictionaryGetExpr(StarRocksParser.DictionaryGetExprContext context) {
         List<Expr> params = visit(context.expressionList().expression(), Expr.class);
         return new DictionaryGetExpr(params);
+    }
+
+    @Override
+    public ParseNode visitPivotClause(StarRocksParser.PivotClauseContext ctx) {
+        List<PivotAggregation> aggregations = visit(ctx.pivotAggregationExpression(), PivotAggregation.class);
+        List<Identifier> identifiers;
+        if (ctx.identifierList() != null) {
+            identifiers = visit(ctx.identifierList().identifier(), Identifier.class);
+        } else if (ctx.identifier() != null) {
+            identifiers = ImmutableList.of((Identifier) visit(ctx.identifier()));
+        } else {
+            identifiers = ImmutableList.of();
+        }
+        List<SlotRef> columns = identifiers.stream()
+                .map(id -> {
+                    List<String> parts = ImmutableList.of(id.getValue());
+                    return new SlotRef(QualifiedName.of(parts, createPos(ctx)));
+                })
+                .collect(toList());
+
+        List<PivotValue> values = visit(ctx.pivotValue(), PivotValue.class);
+
+        if (columns.size() != values.get(0).getExprs().size()
+                || values.stream().anyMatch(v -> v.getExprs().size() != columns.size())) {
+            throw new ParsingException(
+                    PARSER_ERROR_MSG.pivotValueArityMismatch(columns.size(), values.get(0).getExprs().size()),
+                    createPos(ctx));
+        }
+        return new PivotRelation(null, aggregations, columns, values, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitPivotAggregationExpression(StarRocksParser.PivotAggregationExpressionContext ctx) {
+        String alias = null;
+        if (ctx.identifier() != null) {
+            alias = ((Identifier) visit(ctx.identifier())).getValue();
+        } else if (ctx.string() != null) {
+            alias = ((StringLiteral) visit(ctx.string())).getStringValue();
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(ctx.functionCall());
+        return new PivotAggregation(functionCallExpr, alias, createPos(ctx));
+    }
+
+    @Override
+    public ParseNode visitPivotValue(StarRocksParser.PivotValueContext ctx) {
+        ImmutableList.Builder<LiteralExpr> exprs = new ImmutableList.Builder<>();
+        if (ctx.literalExpression() != null) {
+            exprs.add((LiteralExpr) visit(ctx.literalExpression()));
+        } else if (ctx.literalExpressionList() != null) {
+            exprs.addAll(visit(ctx.literalExpressionList().literalExpression(), LiteralExpr.class));
+        }
+
+        String alias = null;
+        if (ctx.identifier() != null) {
+            alias = ((Identifier) visit(ctx.identifier())).getValue();
+        } else if (ctx.string() != null) {
+            alias = ((StringLiteral) visit(ctx.string())).getStringValue();
+        }
+        return new PivotValue(exprs.build(), alias, createPos(ctx));
     }
 
     // ------------------------------------------- COMMON AST --------------------------------------------------------------
@@ -6968,7 +7039,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.identifierOrString() != null) {
             queryStatementContext.forEach(varNameContext -> {
                 Identifier identifier = (Identifier) visit(varNameContext);
-                variableExprs.add(new VariableExpr(identifier.getValue(), SetType.USER));
+                variableExprs.add(new UserVariableExpr(identifier.getValue(), identifier.getPos()));
             });
         }
         return new ExecuteStmt(stmtName, variableExprs);

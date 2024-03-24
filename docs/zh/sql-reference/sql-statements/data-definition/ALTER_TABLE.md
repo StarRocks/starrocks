@@ -134,7 +134,7 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE];
 注意：
 
 1. 使用分区方式的表至少要保留一个分区。
-2. 执行 DROP PARTITION 一段时间内（默认 1 天），可以通过 RECOVER 语句恢复被删除的分区。详见 [RECOVER](../data-definition/RECOVER.md) 语句。
+2. 执行 DROP PARTITION 一段时间内（默认 1 天），可以通过 RECOVER 语句恢复被删除的分区。详见 [RECOVER](../data-definition/backup_restore/RECOVER.md) 语句。
 3. 如果执行 DROP PARTITION FORCE，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
@@ -401,9 +401,9 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 5. 目前支持以下类型的转换（精度损失由用户保证）：
 
     - TINYINT/SMALLINT/INT/BIGINT 转换成 TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
-    - TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL 转换成 VARCHAR。
+    - TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL 转换成 VARCHAR。
     - VARCHAR 支持修改最大长度。
-    - VARCHAR 转换成 TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
+    - VARCHAR 转换成 TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
     - VARCHAR 转换成 DATE (目前支持 "%Y-%m-%d"，"%y-%m-%d"， "%Y%m%d"，"%y%m%d"，"%Y/%m/%d，"%y/%m/%d " 六种格式化格式)
     DATETIME 转换成 DATE(仅保留年-月-日信息，例如: `2019-12-09 21:47:05` &lt;--&gt; `2019-12-09`)
     DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` &lt;--&gt; `2019-12-09 00:00:00`)

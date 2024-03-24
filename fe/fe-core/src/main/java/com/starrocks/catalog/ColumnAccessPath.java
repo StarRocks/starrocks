@@ -51,7 +51,7 @@ public class ColumnAccessPath {
     // The top one must be ROOT
     private TAccessPathType type;
 
-    private String path;
+    private final String path;
 
     private final List<ColumnAccessPath> children;
 
@@ -113,6 +113,10 @@ public class ColumnAccessPath {
 
     public ColumnAccessPath getChildPath(String path) {
         return children.stream().filter(p -> p.path.equals(path)).findFirst().orElse(null);
+    }
+
+    public List<ColumnAccessPath> getChildren() {
+        return children;
     }
 
     public void clearChildPath() {

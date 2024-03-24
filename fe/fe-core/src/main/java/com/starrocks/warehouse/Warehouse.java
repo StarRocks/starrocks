@@ -15,40 +15,25 @@
 package com.starrocks.warehouse;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Map;
 
 public abstract class Warehouse implements Writable {
-
     @SerializedName(value = "name")
     protected String name;
     @SerializedName(value = "id")
     private long id;
+    @SerializedName(value = "comment")
+    protected String comment;
 
-    public enum WarehouseState {
-        INITIALIZING,
-        RUNNING,
-        SUSPENDED,
-        SCALING
-    }
-
-    @SerializedName(value = "state")
-    protected WarehouseState state = WarehouseState.INITIALIZING;
-
-    private volatile boolean exist = true;
-
-    public Warehouse(long id, String name) {
+    public Warehouse(long id, String name, String comment) {
         this.id = id;
         this.name = name;
+        this.comment = comment;
     }
 
     public long getId() {
@@ -59,36 +44,15 @@ public abstract class Warehouse implements Writable {
         return name;
     }
 
-    public void setState(WarehouseState state) {
-        this.state = state;
+    public String getComment() {
+        return comment;
     }
-
-    public WarehouseState getState() {
-        return state;
-    }
-
-    public void setExist(boolean exist) {
-        this.exist = exist;
-    }
-
-    public abstract void getProcNodeData(BaseProcResult result);
-
-    public abstract Map<Long, Cluster> getClusters() throws DdlException;
 
     public abstract Cluster getAnyAvailableCluster();
-
-    public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
-
-    public abstract ProcResult getClusterProcData();
 
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
-    }
-
-    public static Warehouse read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Warehouse.class);
     }
 }

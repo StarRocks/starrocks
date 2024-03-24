@@ -227,8 +227,8 @@ public class CreateLakeTableTest {
             String sql = "show create table lake_test.table_with_persistent_index";
             ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
-            ShowResultSet resultSet = executor.execute();
+            ShowExecutor executor = new ShowExecutor();
+            ShowResultSet resultSet = executor.execute(showCreateTableStmt, connectContext);
 
             Assert.assertFalse(resultSet.getResultRows().isEmpty());
         }
@@ -257,8 +257,8 @@ public class CreateLakeTableTest {
             String sql = "show create table lake_test.table_in_be_and_cn";
             ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
-            ShowResultSet resultSet = executor.execute();
+            ShowExecutor executor = new ShowExecutor();
+            ShowResultSet resultSet = executor.execute(showCreateTableStmt, connectContext);
 
             Assert.assertNotEquals(0, resultSet.getResultRows().size());
         }
@@ -349,8 +349,8 @@ public class CreateLakeTableTest {
             String sql = "show create table lake_test.table_with_cloud_native_persistent_index";
             ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
-            ShowResultSet resultSet = executor.execute();
+            ShowExecutor executor = new ShowExecutor();
+            ShowResultSet resultSet = executor.execute(showCreateTableStmt, connectContext);
 
             Assert.assertNotEquals(0, resultSet.getResultRows().size());
         }

@@ -11,7 +11,7 @@ This topic describes the rules and limits that apply when you use StarRocks.
 - Naming conventions for objects such as catalogs, databases, tables, views, partitions, columns, indexes, usernames, roles, repositories, resources, storage volumes, and pipes:
 
   - The name can only consist of digits (0-9), letters (a-z or A-Z), and underscores (\_). **Usernames can be all digits.**
-  - The name can start with a letter or an understore (\_).
+  - The name can start with a letter or an underscore (\_).
   - The name cannot exceed 64 characters in length, **among which:**
     - Database name cannot exceed 256 characters.
     - Table name and column name cannot exceed 1024 characters.
