@@ -44,7 +44,7 @@ public:
 
     void flatten(const Column* json_column, std::vector<ColumnPtr>* result);
 
-    void driver_paths(std::vector<ColumnPtr>& json_datas);
+    void derived_paths(std::vector<ColumnPtr>& json_datas);
 
     std::vector<std::string>& get_flat_paths() { return _flat_paths; }
 

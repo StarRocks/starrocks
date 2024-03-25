@@ -105,7 +105,7 @@ Status FlatJsonColumnWriter::append(const Column& column) {
 
 void FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
     JsonFlater flater;
-    flater.driver_paths(json_datas);
+    flater.derived_paths(json_datas);
 
     _flat_paths = flater.get_flat_paths();
     _flat_types = flater.get_flat_types();
@@ -186,7 +186,13 @@ Status FlatJsonColumnWriter::finish() {
             opts.meta->set_column_id(i);
             opts.meta->set_unique_id(i);
             opts.meta->set_type(_flat_types[i]);
-            opts.meta->set_length(get_type_info(_flat_types[i])->size());
+            if (_flat_types[i] == TYPE_VARCHAR) {
+                opts.meta->set_length(config::olap_string_max_length);
+            } else {
+                DCHECK_NE(_flat_types[i], TYPE_CHAR);
+                // set length for non-string type (e.g. int, double, date, etc.
+                opts.meta->set_length(get_type_info(_flat_types[i])->size());
+            }
             opts.meta->set_is_nullable(true);
             opts.meta->set_encoding(DEFAULT_ENCODING);
             opts.meta->set_compression(_json_meta->compression());
