@@ -344,6 +344,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
+    public static final String USE_STATS_TO_OPTIMIZE_SKEW_JOIN = "use_stats_to_optimize_skew_join";
+    public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
+    public static final String SKEW_JOIN_DATA_SKEW_THRESHOLD = "skew_join_data_skew_threshold";
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
@@ -1845,6 +1848,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
+
+    @VarAttr(name = USE_STATS_TO_OPTIMIZE_SKEW_JOIN)
+    private boolean useStatsToOptimizeSkewJoin = true;
+
+    // mcv means most common value in histogram statistics
+    @VarAttr(name = SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT, flag = VariableMgr.INVISIBLE)
+    private int skewJoinOptimizeUseMCVCount = 5;
+
+    @VarAttr(name = SKEW_JOIN_DATA_SKEW_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double skewJoinDataSkewThreshold = 0.2;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
@@ -3501,6 +3514,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSkewJoinRandRange(int skewJoinRandRange) {
         this.skewJoinRandRange = skewJoinRandRange;
+    }
+
+    public boolean isUseStatsToOptimizeSkewJoin() {
+        return useStatsToOptimizeSkewJoin;
+    }
+
+    public int getSkewJoinOptimizeUseMCVCount() {
+        return skewJoinOptimizeUseMCVCount;
+    }
+
+    public void setSkewJoinOptimizeUseMCVCount(int skewJoinOptimizeUseMCVCount) {
+        this.skewJoinOptimizeUseMCVCount = skewJoinOptimizeUseMCVCount;
+    }
+
+    public double getSkewJoinDataSkewThreshold() {
+        return skewJoinDataSkewThreshold;
+    }
+
+    public void setSkewJoinDataSkewThreshold(double skewJoinDataSkewThreshold) {
+        this.skewJoinDataSkewThreshold = skewJoinDataSkewThreshold;
     }
 
     public boolean isEnableStrictOrderBy() {
