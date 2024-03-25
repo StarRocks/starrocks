@@ -31,14 +31,44 @@
 
 namespace starrocks {
 
-struct HdfsOrcScannerSplitContext : public pipeline::ScanSplitContext {
+struct SplitContext : public pipeline::ScanSplitContext {
     size_t split_start = 0;
     size_t split_end = 0;
     std::shared_ptr<std::string> footer;
 };
 
-void merge_split_tasks(std::vector<pipeline::ScanSplitContextPtr>& split_tasks, int64_t max_split_size) {
-    
+static void merge_split_tasks(std::vector<pipeline::ScanSplitContextPtr>& split_tasks, int64_t max_split_size) {
+    std::vector<pipeline::ScanSplitContextPtr> new_split_tasks;
+
+    auto do_merge = [&](size_t start, size_t end) {
+        auto start_ctx = down_cast<const SplitContext*>(split_tasks[start].get());
+        auto end_ctx = down_cast<const SplitContext*>(split_tasks[end].get());
+        auto new_ctx = std::make_unique<SplitContext>();
+        new_ctx->split_start = start_ctx->split_start;
+        new_ctx->split_end = end_ctx->split_end;
+        new_ctx->footer = start_ctx->footer;
+        new_split_tasks.emplace_back(std::move(new_ctx));
+    };
+
+    size_t head = 0;
+    for (size_t i = 1; i < split_tasks.size(); i++) {
+        bool cut = false;
+
+        auto prev_ctx = down_cast<const SplitContext*>(split_tasks[i - 1].get());
+        auto ctx = down_cast<const SplitContext*>(split_tasks[i].get());
+        auto head_ctx = down_cast<const SplitContext*>(split_tasks[head].get());
+
+        if ((ctx->split_start != prev_ctx->split_end) || (ctx->split_end - head_ctx->split_start > max_split_size)) {
+            cut = true;
+        }
+
+        if (cut) {
+            do_merge(head, i - 1);
+            head = i;
+        }
+    }
+    do_merge(head, split_tasks.size() - 1);
+    split_tasks.swap(new_split_tasks);
 }
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
@@ -101,7 +131,7 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     size_t scan_end = scan_range->length + scan_start;
 
     if (_scanner_ctx.split_context != nullptr) {
-        auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
+        auto split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
         scan_start = split_context->split_start;
         scan_end = split_context->split_end;
     }
@@ -348,7 +378,7 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     size_t scan_end = scan_range->length + scan_start;
 
     if (_scanner_ctx.split_context != nullptr) {
-        auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
+        auto split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
         scan_start = split_context->split_start;
         scan_end = split_context->split_end;
     }
@@ -450,7 +480,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
         if (_split_context != nullptr) {
-            auto* split_context = down_cast<const HdfsOrcScannerSplitContext*>(_split_context);
+            auto* split_context = down_cast<const SplitContext*>(_split_context);
             options.setSerializedFileTail(*(split_context->footer.get()));
         }
         reader = orc::createReader(std::move(_input_stream), options);
@@ -475,7 +505,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     if (enable_split_tasks) {
         auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
         for (const auto& info : stripes) {
-            auto ctx = std::make_unique<HdfsOrcScannerSplitContext>();
+            auto ctx = std::make_unique<SplitContext>();
             ctx->footer = footer;
             ctx->split_start = info.offset;
             ctx->split_end = info.offset + info.length;

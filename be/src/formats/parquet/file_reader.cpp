@@ -43,6 +43,40 @@ struct SplitContext : public pipeline::ScanSplitContext {
     FileMetaDataPtr file_metadata;
 };
 
+static void merge_split_tasks(std::vector<pipeline::ScanSplitContextPtr>& split_tasks, int64_t max_split_size) {
+    std::vector<pipeline::ScanSplitContextPtr> new_split_tasks;
+
+    auto do_merge = [&](size_t start, size_t end) {
+        auto start_ctx = down_cast<const SplitContext*>(split_tasks[start].get());
+        auto end_ctx = down_cast<const SplitContext*>(split_tasks[end].get());
+        auto new_ctx = std::make_unique<SplitContext>();
+        new_ctx->split_start = start_ctx->split_start;
+        new_ctx->split_end = end_ctx->split_end;
+        new_ctx->file_metadata = start_ctx->file_metadata;
+        new_split_tasks.emplace_back(std::move(new_ctx));
+    };
+
+    size_t head = 0;
+    for (size_t i = 1; i < split_tasks.size(); i++) {
+        bool cut = false;
+
+        auto prev_ctx = down_cast<const SplitContext*>(split_tasks[i - 1].get());
+        auto ctx = down_cast<const SplitContext*>(split_tasks[i].get());
+        auto head_ctx = down_cast<const SplitContext*>(split_tasks[head].get());
+
+        if ((ctx->split_start != prev_ctx->split_end) || (ctx->split_end - head_ctx->split_start > max_split_size)) {
+            cut = true;
+        }
+
+        if (cut) {
+            do_merge(head, i - 1);
+            head = i;
+        }
+    }
+    do_merge(head, split_tasks.size() - 1);
+    split_tasks.swap(new_split_tasks);
+}
+
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
                        io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
         : _chunk_size(chunk_size),
@@ -235,6 +269,7 @@ void FileReader::_build_split_tasks() {
         split_ctx->file_metadata = _file_metadata;
         _scanner_ctx->split_tasks->emplace_back(std::move(split_ctx));
     }
+    merge_split_tasks(*(_scanner_ctx->split_tasks), _scanner_ctx->connector_max_split_size);
     // if only one split task, clear it, no need to do split work.
     if (_scanner_ctx->split_tasks->size() <= 1) {
         _scanner_ctx->split_tasks->clear();
