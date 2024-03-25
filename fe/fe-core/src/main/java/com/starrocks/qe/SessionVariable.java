@@ -456,6 +456,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
     public static final String CONNECTOR_SINK_COMPRESSION_CODEC = "connector_sink_compression_codec";
+
+    public static final String CONNECTOR_SINK_TARGET_MAX_FILE_SIZE = "connector_sink_target_max_file_size";
     public static final String ENABLE_CONNECTOR_SPLIT_IO_TASKS = "enable_connector_split_io_tasks";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -1519,6 +1521,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getConnectorSinkCompressionCodec() {
         return connectorSinkCompressionCodec;
+    }
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_TARGET_MAX_FILE_SIZE)
+    private long connectorSinkTargetMaxFileSize = 1024L * 1024 * 1024;
+
+    public long getConnectorSinkTargetMaxFileSize() {
+        return connectorSinkTargetMaxFileSize;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)

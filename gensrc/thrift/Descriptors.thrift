@@ -453,6 +453,8 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
+
+    7: optional i64 target_max_file_size
 }
 
 struct TIcebergSchema {
