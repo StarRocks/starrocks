@@ -135,6 +135,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected static final String STAR_STRING = "*";
 
+    private Map<String, Long> rowNumConsumeLags = Maps.newHashMap();
+
     /*
                      +-----------------+
     fe schedule job  |  NEED_SCHEDULE  |  user resume job
@@ -675,6 +677,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
+    public Map<String, Long> getRowNumConsumeLags() {
+        return rowNumConsumeLags;
+    }
+
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
     public void processTimeoutTasks() {
         writeLock();
@@ -1064,7 +1070,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
             // isProgressKeepUp returns false means there is too much data in kafka/pulsar stream,
             // we set timeToExecuteMs to now, so that data not accumulated in kafka/pulsar
-            if (!routineLoadTaskInfo.isProgressKeepUp(rlTaskTxnCommitAttachment.getProgress())) {
+            if (!routineLoadTaskInfo.isProgressKeepUp(rlTaskTxnCommitAttachment.getProgress(), rowNumConsumeLags)) {
                 timeToExecuteMs = System.currentTimeMillis();
             } else {
                 timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;

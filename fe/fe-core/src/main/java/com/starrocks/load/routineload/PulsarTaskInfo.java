@@ -95,7 +95,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     // TODO(chen9t) there's no way to find out how many backlogs have been consumed in this round,
     // the bellowing method will preempt the slots of BEs. So return ture until we find a better way.
     @Override
-    public boolean isProgressKeepUp(RoutineLoadProgress progress) {
+    public boolean isProgressKeepUp(RoutineLoadProgress progress, Map<String, Long> consumeLagsRowNum) {
         // PulsarProgress pProgress = (PulsarProgress) progress;
         // for (Long backLogNum : pProgress.getBacklogNums()) {
         //     if (backLogNum > 0) {
