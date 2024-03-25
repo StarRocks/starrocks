@@ -361,6 +361,10 @@ public class TabletStatMgr extends FrontendDaemon {
         }
 
         private void waitResponse() {
+            // responseList may be null if there aren't any alive node.
+            if (responseList == null) {
+                return;
+            }
             for (Future<TabletStatResponse> responseFuture : responseList) {
                 try {
                     TabletStatResponse response = responseFuture.get();
