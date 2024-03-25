@@ -110,9 +110,9 @@ using JsonFlatAppendFunc = void (*)(const vpack::Slice* json, NullableColumn* re
 static const uint8_t JSON_BASE_TYPE_BITS = 0; // least flat to JSON type
 
 // clang-format off
+// boolean is hard to keep same as JSON, so we don't flat boolean
 static const std::unordered_map<vpack::ValueType, uint8_t> JSON_TYPE_BITS{
         {vpack::ValueType::Null, 0xFC | 1},          // 111111 01, 253
-        {vpack::ValueType::Bool, 0xFC << 1 | 1},     // 111110 01, 249
         {vpack::ValueType::SmallInt, 0xFC << 2 | 1}, // 111100 01, 241
         {vpack::ValueType::UInt, 0xFC << 3},         // 111000 00, 224
         {vpack::ValueType::Int, 0xFC << 3 | 1},      // 111000 01, 225
@@ -122,7 +122,6 @@ static const std::unordered_map<vpack::ValueType, uint8_t> JSON_TYPE_BITS{
 
 static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE {
     {JSON_TYPE_BITS.at(vpack::ValueType::Null),        LogicalType::TYPE_BOOLEAN},
-    {JSON_TYPE_BITS.at(vpack::ValueType::Bool),        LogicalType::TYPE_BOOLEAN},
     {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    LogicalType::TYPE_SMALLINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::Int),         LogicalType::TYPE_BIGINT},
     {JSON_TYPE_BITS.at(vpack::ValueType::UInt),        LogicalType::TYPE_BIGINT},
@@ -133,7 +132,6 @@ static const std::unordered_map<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE 
 
 static const std::unordered_map<uint8_t, JsonFlatAppendFunc> JSON_BITS_FUNC {
     {JSON_TYPE_BITS.at(vpack::ValueType::Null),        &append_to_bool},
-    {JSON_TYPE_BITS.at(vpack::ValueType::Bool),        &append_to_bool},
     {JSON_TYPE_BITS.at(vpack::ValueType::SmallInt),    &append_to_number<LogicalType::TYPE_SMALLINT>},
     {JSON_TYPE_BITS.at(vpack::ValueType::Int),         &append_to_number<LogicalType::TYPE_BIGINT>},
     {JSON_TYPE_BITS.at(vpack::ValueType::UInt),        &append_to_number<LogicalType::TYPE_BIGINT>},
