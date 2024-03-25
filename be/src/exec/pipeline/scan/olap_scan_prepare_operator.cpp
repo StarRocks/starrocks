@@ -51,9 +51,7 @@ StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState*
     _morsel_queue->set_tablets(_ctx->tablets());
     _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
 
-    DeferOp defer([&]() {
-        _ctx->set_prepare_finished();
-    });
+    DeferOp defer([&]() { _ctx->set_prepare_finished(); });
 
     if (!status.ok()) {
         // OlapScanOperator::has_output() will `use !_ctx->is_prepare_finished() || _ctx->is_finished()` to
