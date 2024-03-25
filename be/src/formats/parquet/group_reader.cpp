@@ -219,13 +219,32 @@ vectorized::ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& col
     return chunk;
 }
 
-void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
+Status GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                      int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
+<<<<<<< HEAD
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
         _collect_field_io_range(*schema_node, column.col_type_in_chunk, ranges, &end);
+=======
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
+
+        // We will only set a complex type in ParquetField
+        if ((schema_node->type.is_complex_type() || column.slot_type().is_complex_type()) &&
+            (schema_node->type.type != column.slot_type().type)) {
+            return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
+                                                             schema_node->type.type, column.slot_type().type));
+        }
+
+        if (column.t_iceberg_schema_field == nullptr) {
+            _collect_field_io_range(*schema_node, column.slot_type(), ranges, &end);
+        } else {
+            _collect_field_io_range(*schema_node, column.slot_type(), column.t_iceberg_schema_field, ranges, &end);
+        }
+>>>>>>> e765d4d1b2 ([BugFix] Fix nullptr when parquet file's type is mismatched with table's type (#43014))
     }
     *end_offset = end;
+    return Status::OK();
 }
 
 void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
