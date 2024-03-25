@@ -10,13 +10,7 @@ import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note
 
 # FE Configuration
 
-<<<<<<< HEAD:docs/en/administration/FE_configuration.md
-Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md). `TRUE` indicates a dynamic parameter.
-
-Note that both dynamic and static FE parameters can be configured in the **fe.conf** file.
-=======
 <FEConfigMethod />
->>>>>>> ae2fb40f1f ([Doc] deployment-specific stuff moved (#42881)):docs/en/administration/management/FE_configuration.md
 
 ## View FE configuration items
 
