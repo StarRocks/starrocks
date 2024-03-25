@@ -27,6 +27,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "testutil/sync_point.h"
 #include "util/debug/query_trace.h"
 #include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
@@ -570,6 +571,8 @@ ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
           _scan_task_group(std::make_shared<workgroup::ScanTaskGroup>()) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
+    TEST_SUCC_POINT("ScanOperatorFactory::prepare");
+
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(do_prepare(state));
 
