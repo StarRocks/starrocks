@@ -43,7 +43,6 @@ import java.util.Set;
 public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
     Map<String, String> properties;
 
-
     public static final String KEY_FOR_TABLE_NAME_FOR_PARTITION_INFO = "table_name_for_partition_info";
     public static final String KEY_FOR_TABLE_NAME_FOR_TABLE_INFO = "table_name_for_table_info";
     private static final String DEFAULT_TABLE_NAME_FOR_PARTITION_INFO = "system.parts";
@@ -363,19 +362,20 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
      */
     @NotNull
     private String getPartitionQuery(Table table) {
-        if(table.isPartitioned()){
+        if (table.isPartitioned()) {
             String tableNameForPartInfo = getTableNameForPartInfo();
             final String partitionQuery =
                     "SELECT  partition AS NAME, max(modification_time) AS MODIFIED_TIME FROM " + tableNameForPartInfo +
-                    " WHERE database = ? " + "AND table = ? AND name IS NOT NULL" +
-                    " GROUP BY partition ORDER BY partition";
+                            " WHERE database = ? " + "AND table = ? AND name IS NOT NULL" +
+                            " GROUP BY partition ORDER BY partition";
             return partitionQuery;
-        }else{
+        } else {
             String tableNameForTableInfo = getTableNameForTableInfo();
             final String nonPartitionQuery =
-                " SELECT  name AS NAME, max(metadata_modification_time) AS MODIFIED_TIME FROM " + tableNameForTableInfo +
-                " WHERE database = ? AND name = ? AND name IS NOT NULL GROUP BY name";
-                return nonPartitionQuery;
+                    " SELECT  name AS NAME, max(metadata_modification_time) AS MODIFIED_TIME FROM " +
+                            tableNameForTableInfo +
+                            " WHERE database = ? AND name = ? AND name IS NOT NULL GROUP BY name";
+            return nonPartitionQuery;
         }
     }
 
