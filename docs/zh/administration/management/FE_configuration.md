@@ -1343,15 +1343,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：批量创建分区时，分区数目的最大值。
 - 引入版本：-
 
-##### max_partitions_in_one_batch
-
-- 默认值：4096
-- 类型：Long
-- 单位：-
-- 是否动态：是
-- 描述：批量创建分区时，分区数目的最大值。
-- 引入版本：-
-
 ##### max_running_rollup_job_num_per_table
 
 - 默认值：1
