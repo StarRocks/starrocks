@@ -27,6 +27,7 @@
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
 #include "util/runtime_profile.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::pipeline {
 
