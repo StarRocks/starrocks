@@ -176,7 +176,7 @@ private:
         starrocks::SyncPoint::GetInstance()->Process(x, &st); \
         if (!st.ok()) return st;                              \
     } while (0)
-#define t TEST_SUCC_POINT(x)                                    \
+#define TEST_SUCC_POINT(x)                                    \
     do {                                                      \
         Status st;                                            \
         starrocks::SyncPoint::GetInstance()->Process(x, &st); \
