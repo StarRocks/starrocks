@@ -1358,7 +1358,7 @@ WHERE database_name = 'test_db' and label = 'label_brokerload_unqualifiedtest_82
 REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
 ```
 
-有关返回字段的说明，参见 [Information Schema > loads](../administration/information_schema.md#loads)。
+有关返回字段的说明，参见 [Information Schema > loads](../sql-reference/information_schema.md#loads)。
 
 ## 取消导入作业
 
@@ -1380,7 +1380,7 @@ WHERE LABEL = "label";
 
 - 如果声明多个 `data_desc` 参数对应导入同一张表的不同分区，则每个分区数据的导入会拆分成一个子任务。
 
-每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/FE_configuration.md#配置-fe-动态参数)决定：
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/management/FE_configuration.md)决定：
 
 - `min_bytes_per_broker_scanner`：单个实例处理的最小数据量，默认为 64 MB。
 

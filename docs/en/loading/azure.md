@@ -113,7 +113,7 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 ### Check load progress
 
-You can query the progress of Broker Load jobs from the [`loads`](../administration/information_schema.md#loads) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards.
+You can query the progress of Broker Load jobs from the [`loads`](../sql-reference/information_schema.md#loads) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards.
 
 ```SQL
 SELECT * FROM information_schema.loads \G
@@ -149,7 +149,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior' \G
 REJECTED_RECORD_PATH: NULL
 ```
 
-For information about the fields provided in the `loads` view, see see [Information Schema](../administration/information_schema.md#loads).
+For information about the fields provided in the `loads` view, see see [Information Schema](../sql-reference/information_schema.md#loads).
 
 After you confirm that the load job has finished, you can check a subset of the destination table to see if the data has been successfully loaded. Example:
 

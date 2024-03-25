@@ -113,7 +113,7 @@ PROPERTIES
 
 ### 查看导入进度
 
-通过 StarRocks Information Schema 库中的 [`loads`](../administration/information_schema.md#loads) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
+通过 StarRocks Information Schema 库中的 [`loads`](../sql-reference/information_schema.md#loads) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
 
 ```SQL
 SELECT * FROM information_schema.loads \G
@@ -149,7 +149,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior' \G
 REJECTED_RECORD_PATH: NULL
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../administration/information_schema.md#loads)。
+有关 `loads` 视图提供的字段详情，参见 [Information Schema](../sql-reference/information_schema.md#loads)。
 
 导入作业完成后，您可以从表内查询数据，验证数据是否已成功导入。例如：
 

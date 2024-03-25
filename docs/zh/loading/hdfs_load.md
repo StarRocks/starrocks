@@ -111,7 +111,7 @@ PROPERTIES
 SELECT * FROM information_schema.loads;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../administration/information_schema.md#loads)。
+有关 `loads` 视图提供的字段详情，参见 [Information Schema](../sql-reference/information_schema.md#loads)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 

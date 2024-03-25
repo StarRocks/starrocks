@@ -67,7 +67,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 
 - **如果您启用了 FQDN 访问**
 
-如果您启用了 FQDN 访问（自 v2.4 起支持），需要降级至 v2.4 之前版本，则必须在降级之前切换到 IP 地址访问。有关详细说明，请参考 [回滚 FQDN](../administration/enable_fqdn.md#回滚)。
+如果您启用了 FQDN 访问（自 v2.4 起支持），需要降级至 v2.4 之前版本，则必须在降级之前切换到 IP 地址访问。有关详细说明，请参考 [回滚 FQDN](../administration/management/enable_fqdn.md#回滚)。
 
 ## 降级 FE
 
