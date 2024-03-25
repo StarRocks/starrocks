@@ -779,6 +779,7 @@ struct TMasterOpRequest {
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
+    35: optional string session_id
 }
 
 struct TColumnDefinition {
@@ -1428,6 +1429,14 @@ struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
+struct TGetTemporaryTablesInfoRequest {
+    1: optional TAuthInfo auth_info
+}
+
+struct TGetTemporaryTablesInfoResponse {
+    1: optional list<TTableInfo> tables_infos
+}
+
 struct TTabletSchedule {
     1: optional i64 table_id
     2: optional i64 partition_id
@@ -1549,6 +1558,8 @@ struct TTableInfo {
     19: optional i64 checksum
     20: optional string create_options
     21: optional string table_comment
+    22: optional string session_id
+    23: optional i64 table_id
 }
 
 struct TAllocateAutoIncrementIdParam {
@@ -1715,6 +1726,22 @@ struct TTableReplicationResponse {
     1: optional Status.TStatus status
 }
 
+struct TListSessionOptions {
+    1: optional bool temporary_table_only;
+}
+
+struct TListSessionRequest {
+    1: optional TListSessionOptions options;
+}
+
+struct TSessionInfo {
+    1: optional string session_id;
+}
+
+struct TListSessionResponse {
+    1: optional list<TSessionInfo> sessions;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1817,5 +1844,9 @@ service FrontendService {
     TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
 
     TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
+
+    TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
+
+    TListSessionResponse listSessions(1: TListSessionRequest request)
 }
 

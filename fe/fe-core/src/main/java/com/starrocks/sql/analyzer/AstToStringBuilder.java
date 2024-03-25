@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -382,6 +383,13 @@ public class AstToStringBuilder {
             }
 
             sb.append(stmt.getMvName());
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCleanTemporaryTableStatement(CleanTemporaryTableStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("clean temporary table on session '").append(stmt.getSessionId()).append("'");
             return sb.toString();
         }
 
@@ -1418,12 +1426,14 @@ public class AstToStringBuilder {
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
-        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition, hidePassword);
+        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition,
+                hidePassword, table.isTemporaryTable());
     }
 
     public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
                                   List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
+                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword,
+                                  boolean isTemporary) {
         // 1. create table
         // 1.1 materialized view
         if (table.isMaterializedView()) {
@@ -1463,6 +1473,10 @@ public class AstToStringBuilder {
                 || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
                 || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
+        }
+        // @TODO
+        if (isTemporary) {
+            sb.append("TEMPORARY ");
         }
         sb.append("TABLE ");
         if (!Strings.isNullOrEmpty(dbName)) {

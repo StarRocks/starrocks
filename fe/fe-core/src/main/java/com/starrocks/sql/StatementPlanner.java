@@ -428,9 +428,8 @@ public class StatementPlanner {
         MetaUtils.normalizationTableName(session, stmt.getTableName());
         String catalogName = stmt.getTableName().getCatalog();
         String dbName = stmt.getTableName().getDb();
-        String tableName = stmt.getTableName().getTbl();
         Database db = MetaUtils.getDatabase(catalogName, dbName);
-        Table targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+        Table targetTable = MetaUtils.getTable(session, db, stmt.getTableName());
         if (stmt instanceof DeleteStmt && targetTable instanceof OlapTable &&
                 ((OlapTable) targetTable).getKeysType() != KeysType.PRIMARY_KEYS) {
             return;

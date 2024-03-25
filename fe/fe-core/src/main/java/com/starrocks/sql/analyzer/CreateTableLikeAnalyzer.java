@@ -17,12 +17,15 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -43,7 +46,14 @@ public class CreateTableLikeAnalyzer {
         Table table = MetaUtils.getTable(existedDbTbl);
 
         List<String> createTableStmt = Lists.newArrayList();
-        AstToStringBuilder.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
+
+        if (stmt instanceof CreateTemporaryTableLikeStmt) {
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("temporary table only support olap engine");
+            }
+        }
+        AstToStringBuilder.getDdlStmt(stmt.getDbName(), table, createTableStmt, null,
+                null, false, false, stmt instanceof CreateTemporaryTableLikeStmt);
         if (createTableStmt.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
         }
@@ -52,6 +62,10 @@ public class CreateTableLikeAnalyzer {
                 SqlParser.parseOneWithStarRocksDialect(createTableStmt.get(0), context.getSessionVariable());
         if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
+            if (statementBase instanceof CreateTemporaryTableStmt) {
+                parsedCreateTableStmt = (CreateTemporaryTableStmt) statementBase;
+            }
+            // CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
             parsedCreateTableStmt.setTableName(stmt.getTableName());
             if (stmt.isSetIfNotExists()) {
                 parsedCreateTableStmt.setIfNotExists();
@@ -67,6 +81,7 @@ public class CreateTableLikeAnalyzer {
             }
 
             com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
+            // @TODO temporary
             stmt.setCreateTableStmt(parsedCreateTableStmt);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);

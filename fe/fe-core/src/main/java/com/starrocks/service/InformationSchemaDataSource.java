@@ -48,6 +48,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -59,6 +60,8 @@ import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
+import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -73,6 +76,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 public class InformationSchemaDataSource {
 
@@ -157,6 +161,7 @@ public class InformationSchemaDataSource {
                 locker.lockDatabase(db, LockType.READ);
                 try {
                     List<Table> allTables = db.getTables();
+                    allTables.addAll(db.getTemporaryTables());
                     for (Table table : allTables) {
                         try {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
@@ -533,6 +538,63 @@ public class InformationSchemaDataSource {
         response.setTables_infos(infos);
         return response;
     }
+
+    public static TGetTemporaryTablesInfoResponse generateTemporaryTablesInfoResponse(TGetTemporaryTablesInfoRequest request)
+            throws TException {
+        // @TODO check auth
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        // list all
+        List<TTableInfo> tableInfos = new ArrayList<>();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Map<Long, Map<UUID, Long>> allTables = temporaryTableMgr.getAllTemporaryTables();
+        allTables.forEach((databaseId, tableMap) -> {
+            Database db = metadataMgr.getDb(databaseId);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                try {
+                    tableMap.forEach((sessionId, tableId) -> {
+                        Table table = db.getTemporaryTable(tableId);
+                        if (table != null) {
+                            TTableInfo info = new TTableInfo();
+
+                            // the catalog name is always `def`
+                            info.setTable_catalog(DEF);
+                            info.setTable_schema(db.getFullName());
+                            info.setTable_name(table.getName());
+                            info.setTable_type(table.getMysqlType());
+                            info.setEngine(table.getEngine());
+                            info.setVersion(DEFAULT_EMPTY_NUM);
+                            // TABLE_ROWS (depend on the table type)
+                            // AVG_ROW_LENGTH (depend on the table type)
+                            // DATA_LENGTH (depend on the table type)
+                            info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                            info.setIndex_length(DEFAULT_EMPTY_NUM);
+                            info.setData_free(DEFAULT_EMPTY_NUM);
+                            info.setAuto_increment(DEFAULT_EMPTY_NUM);
+                            info.setCreate_time(table.getCreateTime());
+                            // UPDATE_TIME (depend on the table type)
+                            info.setCheck_time(table.getLastCheckTime() / 1000);
+                            info.setTable_collation(UTF8_GENERAL_CI);
+                            info.setChecksum(DEFAULT_EMPTY_NUM);
+                            info.setTable_comment(table.getComment());
+                            info.setSession_id(sessionId.toString());
+                            info.setTable_id(table.getId());
+                            genNormalTableInfo(table, info);
+                            tableInfos.add(info);
+                        }
+                    });
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+            }
+        });
+
+        TGetTemporaryTablesInfoResponse response = new TGetTemporaryTablesInfoResponse();
+        response.setTables_infos(tableInfos);
+        return response;
+    }
+
 
     public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 

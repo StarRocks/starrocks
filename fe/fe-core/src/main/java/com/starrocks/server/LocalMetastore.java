@@ -127,6 +127,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -211,6 +212,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -241,6 +243,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -278,6 +281,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -463,6 +467,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new MetaNotFoundException("Database not found");
             }
             db = this.fullNameToDb.get(dbName);
+            if (!isForceDrop && db.getTemporaryTableNumber() > 0) {
+                throw new DdlException("The database [" + dbName + "] " +
+                        "cannot be dropped because there are still some temporary tables in it. " +
+                        "If you want to forcibly drop, please use \"DROP DATABASE <database> FORCE.\"");
+            }
         } finally {
             unlock();
         }
@@ -804,17 +813,17 @@ public class LocalMetastore implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDbName());
         }
 
+        boolean isTemporaryTable = (stmt instanceof CreateTemporaryTableStmt);
         // perform the existence check which is cheap before any further heavy operations.
         // NOTE: don't even check the quota if already exists.
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
             String tableName = stmt.getTableName();
-            if (db.getTable(tableName) != null) {
+            if (!isTemporaryTable && db.getTable(tableName) != null) {
                 if (!stmt.isSetIfNotExists()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
                 }
-                LOG.info("create table[{}] which already exists", tableName);
                 return false;
             }
         } finally {
@@ -2262,14 +2271,28 @@ public class LocalMetastore implements ConnectorMetadata {
             if (!db.isExist()) {
                 throw new DdlException("Database has been dropped when creating table/mv/view");
             }
-            if (!db.registerTableUnlocked(table)) {
-                if (!isSetIfNotExists) {
-                    table.delete(db.getId(), false);
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                            "table already exists");
-                } else {
-                    LOG.info("Create table[{}] which already exists", table.getName());
-                    return;
+
+            if (table.isTemporaryTable()) {
+                if (!db.registerTemporaryTableUnlocked(table)) {
+                    if (!isSetIfNotExists) {
+                        table.delete(db.getId(), false);
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                                "table already exists");
+                    } else {
+                        LOG.info("Create temporary table[{}] which already exists", table.getName());
+                        return;
+                    }
+                }
+            } else {
+                if (!db.registerTableUnlocked(table)) {
+                    if (!isSetIfNotExists) {
+                        table.delete(db.getId(), false);
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                                "table already exists");
+                    } else {
+                        LOG.info("Create table[{}] which already exists", table.getName());
+                        return;
+                    }
                 }
             }
 
@@ -2277,6 +2300,7 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("Successfully create table: {}-{}, in database: {}-{}",
                     table.getName(), table.getId(), db.getFullName(), db.getId());
 
+            // @TODO consider temp table?
             CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
             table.onCreate(db);
@@ -2291,7 +2315,15 @@ public class LocalMetastore implements ConnectorMetadata {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            db.registerTableUnlocked(table);
+            if (table.isTemporaryTable()) {
+                db.registerTemporaryTableUnlocked(table);
+                // register it on temp table mgr
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                UUID sessionId = ((OlapTable) table).getSessionId();
+                temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), table.getName(), table.getId());
+            } else {
+                db.registerTableUnlocked(table);
+            }
             table.onReload();
         } catch (Throwable e) {
             LOG.error("replay create table failed: {}", table, e);
@@ -2549,6 +2581,15 @@ public class LocalMetastore implements ConnectorMetadata {
         db.dropTable(tableName, stmt.isSetIfExists(), stmt.isForceDrop());
     }
 
+    public void dropTemporaryTable(String dbName, long tableId, String tableName,
+                                   boolean isSetIfExsists, boolean isForce) throws DdlException {
+        Database db = getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        db.dropTemporaryTable(tableId, tableName, isSetIfExsists, isForce);
+    }
+
     public void sendDropTabletTasks(HashMap<Long, AgentBatchTask> batchTaskMap) {
         int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
         for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
@@ -2580,7 +2621,15 @@ public class LocalMetastore implements ConnectorMetadata {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            table = db.unprotectDropTable(tableId, isForceDrop, true);
+            table = db.getTable(tableId);
+            if (table.isTemporaryTable()) {
+                table = db.unprotectDropTemporaryTable(tableId, isForceDrop, false);
+                UUID sessionId = ((OlapTable) table).getSessionId();
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                temporaryTableMgr.dropTemporaryTable(sessionId, db.getId(), table.getName());
+            } else {
+                table = db.unprotectDropTable(tableId, isForceDrop, true);
+            }
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
@@ -3070,6 +3119,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
+
         // check if table exists in db
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
@@ -4617,7 +4667,6 @@ public class LocalMetastore implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-
         // check if table exists in db
         boolean existed = false;
         Locker locker = new Locker();
@@ -4682,10 +4731,10 @@ public class LocalMetastore implements ConnectorMetadata {
      *
      */
     @Override
-    public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
         TableRef tblRef = truncateTableStmt.getTblRef();
         TableName dbTbl = tblRef.getName();
-
+        // @TODO consider temporary table
         // check, and save some info which need to be checked again later
         Map<String, Partition> origPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         OlapTable copiedTbl;
@@ -4698,7 +4747,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Table table = db.getTable(dbTbl.getTbl());
+            Table table = MetaUtils.getTable(context, db, dbTbl);
             if (table == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTbl.getTbl());
             }
@@ -5441,20 +5490,26 @@ public class LocalMetastore implements ConnectorMetadata {
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         int totalTableNum = 0;
         for (Database database : idToDbNormal.values()) {
-            totalTableNum += database.getTableNumber();
+            totalTableNum += database.getTableNumber() + database.getTemporaryTableNumber();
         }
         int cnt = 1 + idToDbNormal.size() + idToDbNormal.size() /* record database table size */ + totalTableNum + 1;
-
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
 
         writer.writeJson(idToDbNormal.size());
         for (Database database : idToDbNormal.values()) {
             writer.writeJson(database);
-            writer.writeJson(database.getTables().size());
+            int totalTableNumber = database.getTables().size() + database.getTemporaryTables().size();
+            writer.writeJson(totalTableNumber);
             List<Table> tables = database.getTables();
             for (Table table : tables) {
                 writer.writeJson(table);
             }
+
+            List<Table> tempTables = database.getTemporaryTables();
+            for (Table table : tempTables) {
+                writer.writeJson(table);
+            }
+
         }
 
         AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
@@ -5470,7 +5525,11 @@ public class LocalMetastore implements ConnectorMetadata {
             int tableSize = reader.readInt();
             for (int j = 0; j < tableSize; ++j) {
                 Table table = reader.readJson(Table.class);
-                db.registerTableUnlocked(table);
+                if (table.isTemporaryTable()) {
+                    db.registerTemporaryTableUnlocked(table);
+                } else {
+                    db.registerTableUnlocked(table);
+                }
             }
 
             idToDb.put(db.getId(), db);
@@ -5480,7 +5539,16 @@ public class LocalMetastore implements ConnectorMetadata {
                 try {
                     tbl.onReload();
                 } catch (Throwable e) {
-                    LOG.error("reload table failed: {}", tbl, e);
+                    LOG.error("reload table failed: {} {}", tbl, e);
+                }
+            });
+            db.getTemporaryTables().forEach(tbl -> {
+                try {
+                    tbl.onReload();
+                    TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                    temporaryTableMgr.addTemporaryTable(UUIDUtil.genUUID(), db.getId(), tbl.getName(), tbl.getId());
+                } catch (Throwable e) {
+                    LOG.error("reload temporary table failed: {} {}", tbl, e);
                 }
             });
         }

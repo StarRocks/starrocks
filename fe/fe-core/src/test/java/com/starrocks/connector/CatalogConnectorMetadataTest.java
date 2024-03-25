@@ -21,6 +21,7 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import mockit.Expectations;
@@ -176,7 +177,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.cancelRefreshMaterializedView("test_db", "test_mv");
                 connectorMetadata.createView(null);
                 connectorMetadata.alterView(null);
-                connectorMetadata.truncateTable(null);
+                connectorMetadata.truncateTable(null, new ConnectContext());
                 connectorMetadata.alterTableComment(null, null, null);
                 connectorMetadata.finishSink("test_db", "test_tbl", null);
                 connectorMetadata.abortSink("test_db", "test_tbl", null);
@@ -212,7 +213,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.cancelRefreshMaterializedView("test_db", "test_mv");
         catalogConnectorMetadata.createView(null);
         catalogConnectorMetadata.alterView(null);
-        catalogConnectorMetadata.truncateTable(null);
+        catalogConnectorMetadata.truncateTable(null, new ConnectContext());
         catalogConnectorMetadata.alterTableComment(null, null, null);
         catalogConnectorMetadata.finishSink("test_db", "test_tbl", null);
         catalogConnectorMetadata.abortSink("test_db", "test_tbl", null);
