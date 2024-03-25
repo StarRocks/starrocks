@@ -1474,7 +1474,6 @@ public class AstToStringBuilder {
                 || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
         }
-        // @TODO
         if (isTemporary) {
             sb.append("TEMPORARY ");
         }
