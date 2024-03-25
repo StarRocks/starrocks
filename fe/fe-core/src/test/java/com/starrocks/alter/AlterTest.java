@@ -1769,7 +1769,6 @@ public class AlterTest {
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(testUser));
         starRocksAssert.getCtx().setRemoteIP("%");
 
-
         starRocksAssert.withDatabase("test_to_rename");
         String renameDb = "alter database test_to_rename rename test_to_rename_2";
         AlterDatabaseRenameStatement renameDbStmt =

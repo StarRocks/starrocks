@@ -69,10 +69,10 @@ public class KafkaUtilTest {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
+
                 globalStateMgr.getWarehouseMgr();
                 result = warehouseManager;
-                warehouseManager.getDefaultWarehouse();
-                result = warehouse;
+
                 BackendServiceClient.getInstance();
                 minTimes = 0;
                 result = client;
@@ -129,8 +129,10 @@ public class KafkaUtilTest {
             {
                 cluster.getComputeNodeIds();
                 result = Lists.newArrayList(1L);
+
                 service.getBackendOrComputeNode(anyLong);
                 result = backend;
+
                 client.getInfo((TNetworkAddress) any, (PProxyRequest) any);
                 result = new InterruptedException("interrupted");
             }

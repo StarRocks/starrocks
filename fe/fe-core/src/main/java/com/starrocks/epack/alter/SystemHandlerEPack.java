@@ -51,6 +51,11 @@ public class SystemHandlerEPack extends SystemHandler {
     }
 
     protected static class Visitor extends SystemHandler.Visitor implements AstVisitorEPack<Void, Void> {
+        private static final SystemHandlerEPack.Visitor INSTANCE = new SystemHandlerEPack.Visitor();
+
+        public static SystemHandlerEPack.Visitor getInstance() {
+            return INSTANCE;
+        }
 
         @Override
         public Void visitAddBackendClause(AddBackendClauseEPack alterClause, Void context) {

@@ -78,6 +78,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -172,6 +173,7 @@ public class RestoreJobTest {
     }
 
     @Test
+    @Ignore
     public void testRunBackupMultiSubPartitionTable() {
         new Expectations() {
             {

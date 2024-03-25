@@ -35,9 +35,24 @@ import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerVisitor;
+import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 
 public class AnalyzerVisitorEPack extends AnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
+    // ------------------------------------------- Cluster Management Statement ----------------------------------------
+
+    @Override
+    public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
+        new AlterSystemStmtAnalyzerEPack().analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
+        new AlterSystemStmtAnalyzerEPack().analyze(statement, context);
+        return null;
+    }
 
     // ---------------------------------------- Privilege Statement ------------------------------------------------
 

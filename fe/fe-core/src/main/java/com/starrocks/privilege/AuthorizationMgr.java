@@ -84,7 +84,7 @@ public class AuthorizationMgr {
 
     protected AuthorizationProvider provider;
 
-    private GlobalStateMgr globalStateMgr;
+    protected GlobalStateMgr globalStateMgr;
 
     protected Map<UserIdentity, UserPrivilegeCollectionV2> userToPrivilegeCollection;
     protected Map<Long, RolePrivilegeCollectionV2> roleIdToPrivilegeCollection;
@@ -150,7 +150,22 @@ public class AuthorizationMgr {
                             PrivilegeBuiltinConstants.ROOT_ROLE_NAME,
                             "built-in root role which has all privileges on all objects");
             // GRANT ALL ON ALL
-            for (ObjectType objectType : provider.getAllPrivObjectTypes()) {
+            List<ObjectType> objectTypes = Lists.newArrayList(ObjectType.TABLE,
+                    ObjectType.DATABASE,
+                    ObjectType.SYSTEM,
+                    ObjectType.USER,
+                    ObjectType.RESOURCE,
+                    ObjectType.VIEW,
+                    ObjectType.CATALOG,
+                    ObjectType.MATERIALIZED_VIEW,
+                    ObjectType.FUNCTION,
+                    ObjectType.RESOURCE_GROUP,
+                    ObjectType.PIPE,
+                    ObjectType.GLOBAL_FUNCTION,
+                    ObjectType.STORAGE_VOLUME,
+                    ObjectTypeEPack.MASKING_POLICY,
+                    ObjectTypeEPack.ROW_ACCESS_POLICY);
+            for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
                         provider.getAvailablePrivType(objectType));
             }
@@ -202,6 +217,7 @@ public class AuthorizationMgr {
                     List.of(PrivilegeType.NODE),
                     null,
                     false);
+            rolePrivilegeCollection.disableMutable();
 
             // 4. user_admin
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID,

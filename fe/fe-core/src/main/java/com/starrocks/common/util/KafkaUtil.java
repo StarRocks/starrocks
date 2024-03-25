@@ -197,7 +197,7 @@ public class KafkaUtil {
                     warehouseId = request.kafkaMetaRequest.kafkaInfo.warehouseId;
                 } else if (request.kafkaOffsetRequest != null) {
                     warehouseId = request.kafkaOffsetRequest.kafkaInfo.warehouseId;
-                } else if (request.kafkaOffsetBatchRequest != null) {
+                } else if (request.kafkaOffsetBatchRequest != null && request.kafkaOffsetBatchRequest.requests != null) {
                     // contain kafkaOffsetBatchRequest
                     PKafkaOffsetProxyRequest req = request.kafkaOffsetBatchRequest.requests.get(0);
                     warehouseId = req.kafkaInfo.warehouseId;

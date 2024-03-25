@@ -23,8 +23,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.hive.HiveMetastore;
+import com.starrocks.epack.privilege.AuthorizationMgrEpack;
+import com.starrocks.epack.privilege.AuthorizationProviderEPack;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.qe.ConnectContext;
@@ -83,8 +84,8 @@ public class InfoSchemaDbTest {
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
-        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(GlobalStateMgr.getCurrentState(),
-                new DefaultAuthorizationProvider()));
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(),
+                new AuthorizationProviderEPack()));
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
@@ -275,7 +276,6 @@ public class InfoSchemaDbTest {
         Assert.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
     }
 
-
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
         new MockUp<CreateFunctionStmt>() {
@@ -401,8 +401,9 @@ public class InfoSchemaDbTest {
         item3.setObject_database("db");
         item3.setObject_type("DATABASE");
         item3.setPrivilege_type("CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, CREATE MATERIALIZED VIEW, " +
-                "CREATE MASKING POLICY, CREATE ROW ACCESS POLICY, CREATE PIPE");
+                "CREATE PIPE, CREATE MASKING POLICY, CREATE ROW ACCESS POLICY");
         item3.setIs_grantable(false);
+        System.out.println(GrantsTo.getGrantsTo(request));
         Assert.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item3));
 
         Config.enable_show_external_catalog_privilege = false;
@@ -457,7 +458,6 @@ public class InfoSchemaDbTest {
         sql = "revoke select on all tables in database db from test_user";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.revoke(revokePrivilegeStmt);
-
 
         sql = "grant select on all views in database db to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

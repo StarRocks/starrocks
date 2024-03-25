@@ -125,7 +125,7 @@ CREATE ROW ACCESS POLICY sales_policy
     )
 ;
 -- result:
-E: (1051, "Getting analyzing error. Detail message: Unknown table 'test_create_policy_3.sales_manager'.")
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_create_policy_3.sales_manager'.")
 -- !result
 CREATE ROW ACCESS POLICY sales_policy
     AS (sales_region varchar) RETURNS BOOLEAN -> EXISTS (

@@ -20,9 +20,9 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.epack.privilege.AuthorizationMgrEpack;
+import com.starrocks.epack.privilege.AuthorizationProviderEPack;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -75,7 +75,7 @@ public class RBACExecutorTest {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
 
         GlobalStateMgr.getCurrentState()
-                .setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, new DefaultAuthorizationProvider()));
+                .setAuthorizationMgr(new AuthorizationMgrEpack(globalStateMgr, new AuthorizationProviderEPack()));
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
 
         for (int i = 0; i < 5; i++) {

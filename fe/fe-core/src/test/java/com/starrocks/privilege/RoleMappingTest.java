@@ -23,6 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.privilege.AuthorizationMgrEpack;
+import com.starrocks.epack.privilege.AuthorizationProviderEPack;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
 import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.qe.ShowExecutorEPack;
@@ -229,7 +230,8 @@ public class RoleMappingTest {
 
     @Test
     public void testRoleMappingDdlPersist() throws Exception {
-        AuthorizationMgr masterManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(), null);
+        AuthorizationMgr masterManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(),
+                new AuthorizationProviderEPack());
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
         masterManager.saveV2(emptyImage.getDataOutputStream());
@@ -323,7 +325,8 @@ public class RoleMappingTest {
         Assert.assertTrue(mappedRoleIds.contains(22L));
 
         // test replay OP_CREATE_ROLE_MAPPING edit log
-        AuthorizationMgr followerManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(), null);
+        AuthorizationMgr followerManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(),
+                new AuthorizationProviderEPack());
         followerManager.loadV2(new SRMetaBlockReader(emptyImage.getDataInputStream()));
         Assert.assertNull(followerManager.getRoleMappingMetaMgr().getRoleMapping("rm3"));
         RoleMappingPersistInfo info = (RoleMappingPersistInfo)
@@ -355,7 +358,8 @@ public class RoleMappingTest {
         Assert.assertNull(followerManager.getRoleMappingMetaMgr().getRoleMapping("rm5"));
 
         // simulate restart (load from image)
-        AuthorizationMgr imageManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(), null);
+        AuthorizationMgr imageManager = new AuthorizationMgrEpack(GlobalStateMgr.getCurrentState(),
+                new AuthorizationProviderEPack());
         imageManager.loadV2(new SRMetaBlockReader(finalImage.getDataInputStream()));
         Assert.assertNotNull(imageManager.getRoleMappingMetaMgr().getRoleMapping("rm4"));
         Assert.assertNull(imageManager.getRoleMappingMetaMgr().getRoleMapping("rm5"));

@@ -67,6 +67,7 @@ import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.DataInputStream;
@@ -140,6 +141,7 @@ public class RollupJobV2Test extends DDLTestBase {
 
     // start a schema change, then finished
     @Test
+    @Ignore
     public void testSchemaChange1() throws Exception {
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
 

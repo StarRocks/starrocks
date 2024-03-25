@@ -14,15 +14,17 @@
 package com.starrocks.epack.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.parser.NodePosition;
 
-public class DropBackendClauseEPack implements ParseNode {
+public class DropBackendClauseEPack extends AlterClause implements ParseNode {
     private final DropBackendClause dropBackendClause;
     public String warehouse;
 
     public DropBackendClauseEPack(DropBackendClause dropBackendClause, String warehouse) {
+        super(dropBackendClause.getOpType(), dropBackendClause.getPos());
         this.dropBackendClause = dropBackendClause;
         this.warehouse = warehouse;
     }
@@ -42,6 +44,10 @@ public class DropBackendClauseEPack implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorEPack<R, C>) visitor).visitDropBackendClause(this, context);
+        if (visitor instanceof AstVisitorEPack) {
+            return ((AstVisitorEPack<R, C>) visitor).visitDropBackendClause(this, context);
+        } else {
+            return null;
+        }
     }
 }

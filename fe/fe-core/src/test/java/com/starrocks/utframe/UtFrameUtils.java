@@ -633,7 +633,7 @@ public class UtFrameUtils {
                     com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
                 } catch (Exception e) {
                     System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
-                            + "\nError msg:"  + e.getMessage());
+                            + "\nError msg:" + e.getMessage());
                     throw e;
                 }
             } catch (SemanticException | AnalysisException e) {
@@ -850,6 +850,7 @@ public class UtFrameUtils {
         }
         return optimizedPlan;
     }
+
     public static OptExpression getQueryOptExpression(ConnectContext connectContext,
                                                       ColumnRefFactory columnRefFactory,
                                                       LogicalPlan logicalPlan) {
@@ -1303,7 +1304,6 @@ public class UtFrameUtils {
         }
         context.getUserVariables().putAll(userVariablesFromHint);
     }
-
 
     private static void clearQueryScopeHintContext(ConnectContext context, SessionVariable sessionVariableBackup) {
         context.setSessionVariable(sessionVariableBackup);

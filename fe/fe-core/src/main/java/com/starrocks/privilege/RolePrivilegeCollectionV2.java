@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
@@ -134,6 +133,11 @@ public class RolePrivilegeCollectionV2 extends PrivilegeCollectionV2 {
     public void grant(ObjectType type, List<PrivilegeType> privilegeTypes, List<PEntryObject> objects, boolean isGrant)
             throws PrivilegeException {
         assertMutable();
+        super.grant(type, privilegeTypes, objects, isGrant);
+    }
+
+    public void grantWithoutAssertMutable(ObjectType type, List<PrivilegeType> privilegeTypes,
+                                          List<PEntryObject> objects, boolean isGrant) throws PrivilegeException {
         super.grant(type, privilegeTypes, objects, isGrant);
     }
 

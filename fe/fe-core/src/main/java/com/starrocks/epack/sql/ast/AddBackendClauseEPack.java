@@ -15,14 +15,16 @@ package com.starrocks.epack.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
-public class AddBackendClauseEPack implements ParseNode {
+public class AddBackendClauseEPack extends AlterClause implements ParseNode {
     private final AddBackendClause addBackendClause;
     public String warehouse;
 
     public AddBackendClauseEPack(AddBackendClause addBackendClause, String warehouse) {
+        super(addBackendClause.getOpType(), addBackendClause.getPos());
         this.addBackendClause = addBackendClause;
         this.warehouse = warehouse;
     }
@@ -42,6 +44,10 @@ public class AddBackendClauseEPack implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorEPack<R, C>) visitor).visitAddBackendClause(this, context);
+        if (visitor instanceof AstVisitorEPack) {
+            return ((AstVisitorEPack<R, C>) visitor).visitAddBackendClause(this, context);
+        } else {
+            return null;
+        }
     }
 }

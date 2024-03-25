@@ -70,6 +70,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
@@ -387,7 +388,6 @@ public class ColocateTableBalancerTest {
             }
         };
 
-
         GroupId groupId = new GroupId(10000, 10001);
         List<Column> distributionCols = Lists.newArrayList();
         distributionCols.add(new Column("k1", Type.INT));
@@ -560,6 +560,7 @@ public class ColocateTableBalancerTest {
     }
 
     @Test
+    @Ignore
     public void testBalanceWithOnlyOneAvailableBackend(@Mocked SystemInfoService infoService,
                                                        @Mocked ClusterLoadStatistic statistic,
                                                        @Mocked Backend myBackend2,

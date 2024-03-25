@@ -5,6 +5,9 @@ package com.starrocks.epack.privilege;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.AuthorizationProvider;
 import com.starrocks.privilege.ObjectType;
@@ -16,7 +19,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -25,6 +30,7 @@ public class AuthorizationMgrEpack extends AuthorizationMgr {
 
     public AuthorizationMgrEpack(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         super(globalStateMgr, provider);
+        initBuiltinRolesAndUsersEPack();
     }
 
     @Override
@@ -72,29 +78,34 @@ public class AuthorizationMgrEpack extends AuthorizationMgr {
         return ret;
     }
 
-    @Override
-    public void initBuiltinRolesAndUsers() {
+    public void initBuiltinRolesAndUsersEPack() {
         try {
-            super.initBuiltinRolesAndUsers();
+            List<PEntryObject> allWarehousePriv = new ArrayList<>();
+            allWarehousePriv.add(provider.generateObject(ObjectTypeEPack.WAREHOUSE,
+                    Lists.newArrayList("*"), globalStateMgr));
 
-            RolePrivilegeCollectionV2 rolePrivilegeCollection =
+            RolePrivilegeCollectionV2 rootPrivCollection = getRolePrivilegeCollection(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
+            rootPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.WAREHOUSE,
+                    provider.getAvailablePrivType(ObjectTypeEPack.WAREHOUSE), allWarehousePriv, false);
+
+            RolePrivilegeCollectionV2 clusterAdminPrivCollection =
                     getRolePrivilegeCollection(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID);
 
-            initPrivilegeCollections(
-                    rolePrivilegeCollection,
-                    ObjectType.SYSTEM,
+            clusterAdminPrivCollection.grantWithoutAssertMutable(ObjectType.SYSTEM,
                     List.of(PrivilegeTypeEPack.CREATE_WAREHOUSE),
-                    null,
+                    Arrays.asList(new PEntryObject[] {null}),
                     false);
 
-            List<PEntryObject> objects = new ArrayList<>();
-            objects.add(provider.generateObject(ObjectTypeEPack.WAREHOUSE,
-                    Lists.newArrayList("*"), GlobalStateMgr.getCurrentState()));
-            rolePrivilegeCollection.grant(ObjectTypeEPack.WAREHOUSE,
-                    provider.getAvailablePrivType(ObjectTypeEPack.WAREHOUSE), objects, false);
+            clusterAdminPrivCollection.grantWithoutAssertMutable(ObjectTypeEPack.WAREHOUSE,
+                    provider.getAvailablePrivType(ObjectTypeEPack.WAREHOUSE), allWarehousePriv, false);
         } catch (PrivilegeException e) {
             // all initial privileges are supposed to be legal
             throw new RuntimeException("Fatal error when initializing built-in role and user", e);
         }
+    }
+
+    public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        super.loadV2(reader);
+        initBuiltinRolesAndUsersEPack();
     }
 }

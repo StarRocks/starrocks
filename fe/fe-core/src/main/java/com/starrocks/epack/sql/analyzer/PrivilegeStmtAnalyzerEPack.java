@@ -54,7 +54,7 @@ public class PrivilegeStmtAnalyzerEPack extends PrivilegeStmtAnalyzer {
                         throw new SemanticException(
                                 "Invalid grant statement with error privilege object " + tokens);
                     }
-                    objectTokenList.add(Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0), tokens.get(1)));
+                    objectTokenList.add(tokens);
                 } else if (ObjectTypeEPack.MASKING_POLICY.equals(objectType)) {
                     objectTokenList.add(Lists.newArrayList("*", "*", "*"));
                 } else if (ObjectTypeEPack.ROW_ACCESS_POLICY.equals(objectType)) {

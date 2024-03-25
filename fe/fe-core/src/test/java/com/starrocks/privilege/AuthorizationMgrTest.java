@@ -27,6 +27,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.hive.HiveMetastore;
+import com.starrocks.epack.privilege.AuthorizationMgrEpack;
+import com.starrocks.epack.privilege.AuthorizationProviderEPack;
 import com.starrocks.epack.privilege.PrivilegeTypeEPack;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.OperationType;
@@ -111,7 +113,7 @@ public class AuthorizationMgrTest {
         globalStateMgr.setMetadataMgr(metadataMgr);
 
         globalStateMgr.setAuthenticationMgr(new AuthenticationMgr());
-        globalStateMgr.setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, new DefaultAuthorizationProvider()));
+        globalStateMgr.setAuthorizationMgr(new AuthorizationMgrEpack(globalStateMgr, new AuthorizationProviderEPack()));
 
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
