@@ -14,23 +14,33 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 public class RewriteEquivalent {
-    public static final List<IRewriteEquivalent> EQUIVALENTS = Lists.newArrayList(
-            TimeSliceRewriteEquivalent.INSTANCE,
-            DateTruncEquivalent.INSTANCE,
+    public static final List<IAggregateRewriteEquivalent> AGGREGATE_EQUIVALENTS = Lists.newArrayList(
             CountRewriteEquivalent.INSTANCE,
             BitmapRewriteEquivalent.INSTANCE,
-            ArrayRewriteEquivalent.INSTANCE);
+            ArrayRewriteEquivalent.INSTANCE,
+            HLLRewriteEquivalent.INSTANCE,
+            PercentileRewriteEquivalent.INSTANCE
+    );
+    public static final List<IRewriteEquivalent> PREDICATE_EQUIVALENTS = Lists.newArrayList(
+            TimeSliceRewriteEquivalent.INSTANCE,
+            DateTruncEquivalent.INSTANCE);
+    public static final List<IRewriteEquivalent> EQUIVALENTS = Stream.concat(
+            AGGREGATE_EQUIVALENTS.stream(),
+            PREDICATE_EQUIVALENTS.stream()
+    ).collect(ImmutableList.toImmutableList());
+
     private final IRewriteEquivalent.RewriteEquivalentContext rewriteEquivalentContext;
     private final IRewriteEquivalent iRewriteEquivalent;
-
 
     public RewriteEquivalent(IRewriteEquivalent.RewriteEquivalentContext rewriteEquivalentContext,
                              IRewriteEquivalent iRewriteEquivalent,

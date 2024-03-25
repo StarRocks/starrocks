@@ -13,12 +13,15 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
 
 import java.util.Arrays;
 
@@ -31,7 +34,7 @@ import static com.starrocks.catalog.FunctionSet.MULTI_DISTINCT_COUNT;
 import static com.starrocks.catalog.FunctionSet.TO_BITMAP;
 
 public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
-    public static IRewriteEquivalent INSTANCE = new BitmapRewriteEquivalent();
+    public static IAggregateRewriteEquivalent INSTANCE = new BitmapRewriteEquivalent();
 
     public BitmapRewriteEquivalent() {}
 
@@ -73,22 +76,65 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         return null;
     }
 
-    private ScalarOperator rewriteImpl(CallOperator aggFunc,
+    private CallOperator makeBitmapUnionCountFunc(ScalarOperator arg0, CallOperator aggFunc) {
+        return new CallOperator(BITMAP_UNION_COUNT, aggFunc.getType(),
+                Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                        IS_IDENTICAL));
+    }
+
+    private CallOperator makeBitmapUnionFunc(ScalarOperator arg0, CallOperator aggFunc) {
+        return new CallOperator(BITMAP_UNION, aggFunc.getType(),
+                Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
+                        IS_IDENTICAL));
+    }
+
+    private CallOperator makeBitmapCountFunc(ScalarOperator arg0, CallOperator aggFunc) {
+        return new CallOperator(FunctionSet.BITMAP_COUNT, aggFunc.getType(),
+                Arrays.asList(arg0), Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
+                        IS_IDENTICAL));
+    }
+
+    private ScalarOperator rewriteImpl(EquivalentShuttleContext shuttleContext,
+                                       CallOperator aggFunc,
                                        ScalarOperator replace,
                                        boolean isRollup) {
+        RewriteContext rewriteContext = shuttleContext.getRewriteContext();
         if (isRollup) {
-            return new CallOperator(BITMAP_UNION_COUNT,
-                    aggFunc.getType(),
-                    Arrays.asList(replace),
-                    Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
-                            IS_IDENTICAL));
+            if (rewriteContext != null && rewriteContext.getAggregatePushDownContext() != null) {
+                // final agg is used to rewrite query which will be remapping in the final stage.
+                CallOperator partialFn = makeBitmapUnionFunc(replace, aggFunc);
+                CallOperator finalFn = makeBitmapUnionCountFunc(replace, aggFunc);
+                rewriteContext.getAggregatePushDownContext().registerAggRewriteInfo(aggFunc, partialFn, finalFn);
+                return partialFn;
+            } else {
+                return makeBitmapUnionCountFunc(replace, aggFunc);
+            }
         } else {
-            return new CallOperator(FunctionSet.BITMAP_COUNT,
-                    aggFunc.getType(),
-                    Arrays.asList(replace),
-                    Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] { Type.BITMAP },
-                            IS_IDENTICAL));
+            return makeBitmapCountFunc(replace, aggFunc);
         }
+    }
+
+
+    public static final ImmutableSet<String> SUPPORT_AGG_FUNC = ImmutableSet.of(
+            MULTI_DISTINCT_COUNT,
+            BITMAP_UNION_COUNT,
+            BITMAP_AGG
+    );
+
+    @Override
+    public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
+        if (aggFunc == null) {
+            return false;
+        }
+
+        String aggFuncName = aggFunc.getFnName();
+        if (SUPPORT_AGG_FUNC.contains(aggFuncName)) {
+            return true;
+        }
+        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -109,34 +155,38 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
         } else if (aggFuncName.equals(BITMAP_UNION_COUNT)) {
-            ScalarOperator arg0 = aggFunc.getChild(0);
-            if (arg0 == null) {
+            ScalarOperator eqArg = aggFunc.getChild(0);
+            if (eqArg == null) {
                 return null;
             }
-            if (arg0 instanceof CallOperator) {
-                CallOperator arg00 = (CallOperator) arg0;
+            if (eqArg instanceof CallOperator) {
+                CallOperator arg00 = (CallOperator) eqArg;
                 if (!arg00.getFnName().equals(TO_BITMAP) && !arg00.getFnName().equals(BITMAP_HASH)) {
                     return null;
                 }
-                if (!arg00.getChild(0).equals(eqChild)) {
-                    return null;
-                }
-            } else if (!arg0.equals(eqChild)) {
+                eqArg = arg00.getChild(0);
+            }
+            if (!eqArg.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
         } else if (aggFuncName.equals(BITMAP_AGG)) {
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
                 return null;
             }
-            return new CallOperator(BITMAP_UNION,
-                    aggFunc.getType(),
-                    Arrays.asList(replace),
-                    Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
-                            IS_IDENTICAL));
+            RewriteContext rewriteContext = shuttleContext.getRewriteContext();
+            if (isRollup && rewriteContext != null) {
+                CallOperator partialFn = makeBitmapUnionFunc(replace, aggFunc);
+                CallOperator finalFn = makeBitmapUnionFunc(eqChild, aggFunc);
+                Preconditions.checkState(shuttleContext.getRewriteContext().getAggregatePushDownContext() != null);
+                rewriteContext.getAggregatePushDownContext().registerAggRewriteInfo(aggFunc, partialFn, finalFn);
+                return partialFn;
+            } else {
+                return makeBitmapUnionFunc(replace, aggFunc);
+            }
         }
         return null;
     }
