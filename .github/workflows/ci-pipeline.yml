@@ -186,7 +186,7 @@ jobs:
     steps:
       - name: Check Result
         run: |
-          if [[ "${{ needs.thirdparty-update.result }} == 'failure' ]]; then
+          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
             echo "::error:: Thirdparty Update Error!"
             exit 1
           fi
