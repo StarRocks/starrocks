@@ -74,6 +74,7 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         }
     }
 
+
     @Override
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
         String tableTypes = properties.get("table_types");
@@ -91,10 +92,15 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                             ",Currently supported table types includes:" + String.join(",", SUPPORTED_TABLE_TYPES));
                 }
             }
-            return connection.getMetaData().getTables(dbName, null, null, tableTypesArray);
+            return connection.getMetaData().getTables(connection.getCatalog(), dbName, null, tableTypesArray);
         }
-        return connection.getMetaData().getTables(dbName, null, null, new String[] {"TABLE", "VIEW"});
+        return connection.getMetaData().getTables(connection.getCatalog(), dbName, null, new String[] {"TABLE", "VIEW"});
 
+    }
+
+    @Override
+    public ResultSet getColumns(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getColumns(connection.getCatalog(), dbName, tblName, "%");
     }
 
     @Override
