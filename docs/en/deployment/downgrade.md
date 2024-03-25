@@ -81,7 +81,7 @@ After the compatibility configuration and the availability test, you can downgra
 
    > **CAUTION**
    >
-   > The ALTER SYSTEM CREATE IMAGE statement is supported in v2.5.3 and later. In ealrier versions, you need to create a meatadata snapshot by restarting the Leader FE.
+   > The ALTER SYSTEM CREATE IMAGE statement is supported in v2.5.3 and later. In earlier versions, you need to create a meatadata snapshot by restarting the Leader FE.
 
 2. Navigate to the working directory of the FE node and stop the node.
 
