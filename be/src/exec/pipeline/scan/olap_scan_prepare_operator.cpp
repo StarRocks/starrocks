@@ -4,6 +4,7 @@
 
 #include "exec/vectorized/olap_scan_node.h"
 #include "storage/storage_engine.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::pipeline {
 
@@ -53,18 +54,10 @@ StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState*
     _morsel_queue->set_tablets(_ctx->tablets());
     _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
 
-<<<<<<< HEAD
-    _ctx->set_prepare_finished();
-    if (!status.ok()) {
-        _ctx->set_finished();
-        return status;
-    }
-=======
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();
         TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
     });
->>>>>>> d9d9c70453 ([BugFix] Fix the has_output check bug of scan operator (#42994))
 
     if (!status.ok()) {
         TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::before_set_finished");
