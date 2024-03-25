@@ -47,7 +47,6 @@ set(EXEC_FILES
         ./exec/vectorized/agg_hash_map_test.cpp
         ./exec/vectorized/analytor_test.cpp
         ./exec/vectorized/analytor_test.cpp
-        ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/chunks_sorter_heap_sort_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp

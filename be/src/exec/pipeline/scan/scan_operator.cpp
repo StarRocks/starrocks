@@ -14,7 +14,6 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "testutil/sync_point.h"
 #include "util/debug/query_trace.h"
 #include "util/runtime_profile.h"
 
@@ -520,8 +519,6 @@ ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
         : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
-    TEST_SUCC_POINT("ScanOperatorFactory::prepare");
-
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(do_prepare(state));
 

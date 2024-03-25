@@ -4,7 +4,6 @@
 
 #include "exec/vectorized/olap_scan_node.h"
 #include "storage/storage_engine.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks::pipeline {
 
@@ -25,8 +24,6 @@ OlapScanPrepareOperator::~OlapScanPrepareOperator() {
 }
 
 Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
-    TEST_SUCC_POINT("OlapScanPrepareOperator::prepare");
-
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     RETURN_IF_ERROR(_ctx->prepare(state));
@@ -56,11 +53,9 @@ StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState*
 
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();
-        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
     });
 
     if (!status.ok()) {
-        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::before_set_finished");
         // OlapScanOperator::has_output() will `use !_ctx->is_prepare_finished() || _ctx->is_finished()` to
         // determine whether OlapScanOperator::pull_chunk() needs to be executed.
         // When _ctx->parse_conjuncts returns EOF, if set_prepare_finished first, and then set_finished.
@@ -68,7 +63,6 @@ StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState*
         // causing OlapScanOperator::pull_chunk to be executed, which is invalid, maybe cause crash.
         // So we will set_finished first and set_prepare_finished()
         static_cast<void>(_ctx->set_finished());
-        TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_finished");
         return status;
     } else {
         return nullptr;
