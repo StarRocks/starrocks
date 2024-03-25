@@ -30,8 +30,9 @@ const config = {
   // needed for hosting in S3:
   trailingSlash: true,
 
-  onBrokenLinks: 'ignore',
-  onBrokenMarkdownLinks: 'ignore',
+  onBrokenAnchors: 'ignore',
+  onBrokenLinks: 'throw',
+  onBrokenMarkdownLinks: 'throw',
 
   i18n: {
     defaultLocale: 'en',

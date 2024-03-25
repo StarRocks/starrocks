@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 > **注意**
 >
-> 只有拥有 default_catalog 下 [CREATE DATABASE](../administration/privilege_item.md) 权限的用户才可以创建数据库。只有拥有该数据库 CREATE TABLE 权限的用户才可以在该数据库下创建表。
+> 只有拥有 default_catalog 下 [CREATE DATABASE](../administration/user_privs/privilege_item.md) 权限的用户才可以创建数据库。只有拥有该数据库 CREATE TABLE 权限的用户才可以在该数据库下创建表。
 
 ## 连接 StarRocks
 

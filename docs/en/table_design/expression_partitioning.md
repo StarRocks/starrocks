@@ -260,4 +260,4 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 - Currently, using CTAS to create tables configured expression partitioning is not supported.
 - Currently, using Spark Load to load data to tables that use expression partitioning is not supported.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>` statement is used to delete a partition created by using the column expression, data in the partition is directly removed and cannot be recovered.
-- Currently you cannot [backup and restore](../administration/Backup_and_restore.md) partitions created by the expression partitioning.
+- Currently you cannot [backup and restore](../administration/management/Backup_and_restore.md) partitions created by the expression partitioning.

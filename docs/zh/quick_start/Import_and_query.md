@@ -109,7 +109,7 @@ StarRocks 支持通过多种方式分析查询瓶颈以及优化查询效率。
 
 ### 通过调整并行度优化查询效率
 
-我们推荐您通过设置 Pipeline 执行引擎变量。您也可以通过调整一个 [Fragment](../introduction/Features.md#mpp-分布式执行框架) 实例的并行数量 `set  parallel_fragment_exec_instance_num = 8;` 来设置查询并行度，从而提高 CPU 资源利用率和查询效率。详细的参数介绍及设置，参考 [查询并行度相关参数](../administration/Query_management.md)。
+我们推荐您通过设置 Pipeline 执行引擎变量。您也可以通过调整一个 [Fragment](../introduction/Features.md#mpp-分布式执行框架) 实例的并行数量 `set  parallel_fragment_exec_instance_num = 8;` 来设置查询并行度，从而提高 CPU 资源利用率和查询效率。详细的参数介绍及设置，参考 [查询并行度相关参数](../administration/management/resource_management/Query_management.md)。
 
 ### 查看 Profile 并分析查询瓶颈
 

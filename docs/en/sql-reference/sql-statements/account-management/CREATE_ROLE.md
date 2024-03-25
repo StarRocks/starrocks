@@ -25,7 +25,7 @@ CREATE ROLE <role_name>
 - It can only contain digits (0-9), letters, or underscores (_) and must start with a letter.
 - It cannot exceed 64 characters in length.
 
-Note that the created role name cannot be the same as [system-defined roles](../../../administration/privilege_overview.md#system-defined-roles).
+Note that the created role name cannot be the same as [system-defined roles](../../../administration/user_privs/privilege_overview.md#system-defined-roles).
 
 ## Limits
 

@@ -59,7 +59,7 @@ Please note that increasing the values of the following configuration items can 
 
 #### FE Parameters
 
-The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](../administration/FE_configuration.md#configure-fe-dynamic-parameters) on how to modify them.
+The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) on how to modify them.
 
 | **Parameter**                         | **Default** | **Unit** | **Description**                                              |
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -69,7 +69,7 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 
 #### BE Parameters
 
-The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/BE_configuration.md#configure-be-dynamic-parameters) on how to modify it.
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md#configure-be-dynamic-parameters) on how to modify it.
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |

@@ -119,13 +119,13 @@ PROPERTIES
 
 ### 查看导入进度
 
-通过 StarRocks Information Schema 库中的 [`loads`](../administration/information_schema.md#loads) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
+通过 StarRocks Information Schema 库中的 [`loads`](../sql-reference/information_schema.md#loads) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
 
 ```SQL
 SELECT * FROM information_schema.loads;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../administration/information_schema.md#loads)。
+有关 `loads` 视图提供的字段详情，参见 [Information Schema](../sql-reference/information_schema.md#loads)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
