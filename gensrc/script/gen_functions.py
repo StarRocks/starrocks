@@ -128,7 +128,7 @@ def add_function(fn_data):
         exit(1)
     function_signature_set.add(function_signature)
 
-    if "..." in fn_data[6]:
+    if "..." in fn_data[5]:
         assert 2 <= len(fn_data[5]), "Invalid arguments in functions.py:\n\t" + repr(fn_data)
         assert "..." == fn_data[5][-1], "variadic parameter must at the end:\n\t" + repr(fn_data)
 
