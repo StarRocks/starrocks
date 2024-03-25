@@ -1612,7 +1612,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMaterializedViewViewDeltaRewrite = true;
 
     @VarAttr(name = MATERIALIZED_VIEW_VIEW_DELTA_REWRITE_MAX_RETRIES)
-    private int materializedViewViewDeltaRewriteMaxRetries = 5;
+    private int materializedViewViewDeltaRewriteMaxRetries = 10;
 
     @VarAttr(name = MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT, flag = VariableMgr.INVISIBLE)
     private int materializedViewJoinSameTablePermutationLimit = 5;
