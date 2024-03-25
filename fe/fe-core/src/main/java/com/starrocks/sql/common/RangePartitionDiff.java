@@ -63,7 +63,17 @@ public class RangePartitionDiff {
         this.deletes = deletes;
     }
 
+    /**
+     * Merge multiple-diff into one diff for multi-basetable MV
+     * T1: [p0, p1, p2]
+     * T2: [p1, p2, p3]
+     * Merged => [p0, p1, p2, p3]
+     * NOTE: for intersected partitions, they must be identical
+     */
     public static RangePartitionDiff merge(List<RangePartitionDiff> diffList) {
+        if (diffList.size() == 1) {
+            return diffList.get(0);
+        }
         RangePartitionDiff result = new RangePartitionDiff();
         RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
         for (RangePartitionDiff diff : diffList) {
@@ -77,7 +87,7 @@ public class RangePartitionDiff {
                             !existingRange.equals(add.getValue()) ||
                             !addRanges.getEntry(existingRange.lowerEndpoint()).getKey().equals(add.getValue())) {
                         throw new IllegalArgumentException(
-                                "Partition is intersected: " + existingRange + " and " + add);
+                                "partitions are intersected: " + existingRange + " and " + add);
                     }
                 }
 

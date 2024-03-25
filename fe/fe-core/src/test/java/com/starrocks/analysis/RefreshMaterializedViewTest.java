@@ -838,7 +838,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
         {
             Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
                     starRocksAssert.refreshMvPartition("refresh materialized view mv1"));
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partition is intersected"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }
 
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
@@ -853,7 +853,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
         {
             Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
                     starRocksAssert.refreshMvPartition("refresh materialized view mv2"));
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partition is intersected"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }
 
         // cleanup
