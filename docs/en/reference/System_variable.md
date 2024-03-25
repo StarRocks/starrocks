@@ -186,11 +186,23 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 ### disable_streaming_preaggregations
 
+<<<<<<< HEAD
   Used to enable the streaming pre-aggregations. The default value is `false`, meaning  it is enabled.
+=======
+Used to enable the streaming pre-aggregations. The default value is `false`, meaning it is enabled.
+>>>>>>> 1d1e030796 ([Doc] add a stats session variable and update desc of wait_timeout (#42931))
 
 ### div_precision_increment
 
   Used for MySQL client compatibility. No practical usage.
+
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+This variable is introduced to solve compatibility issues.
+
+Default value: `true`.
+-->
 
 ### enable_connector_adaptive_io_tasks (2.5 and later)
 
@@ -635,4 +647,10 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### wait_timeout
 
+<<<<<<< HEAD
   Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
+=======
+The number of seconds the server waits for activity on a noninteractive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
+
+Unit: seconds. Default value: 28800 (8 hours).
+>>>>>>> 1d1e030796 ([Doc] add a stats session variable and update desc of wait_timeout (#42931))
