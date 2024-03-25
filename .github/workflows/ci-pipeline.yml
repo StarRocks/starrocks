@@ -201,9 +201,9 @@ jobs:
         id: info
         if: needs.thirdparty-update.result == 'success'
         run: |
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
           echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
           echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
 
   be-ut:
