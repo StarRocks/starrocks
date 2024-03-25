@@ -185,6 +185,8 @@ public enum RuleType {
 
     TF_FINE_GRAINED_RANGE_PREDICATE_WITH_PROJECTION,
 
+    TF_MERGE_CONSTANT_UNION,
+
     TF_ELIMINATE_GROUP_BY_CONSTANT,
 
     // The following are implementation rules:

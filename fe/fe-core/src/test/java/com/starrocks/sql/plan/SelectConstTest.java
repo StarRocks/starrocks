@@ -91,12 +91,12 @@ public class SelectConstTest extends PlanTestBase {
     public void testAggWithConstant() throws Exception {
         assertPlanContains("select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a " +
                         "group by rollup(case  when c1=1 then 1 end, 1 + 1)",
-                "<slot 4> : '2'",
-                "<slot 2> : '1'",
-                "  8:REPEAT_NODE\n" +
+                "<slot 6> : if(5: expr = '1', 1, NULL)",
+                "<slot 7> : 2",
+                "  2:REPEAT_NODE\n" +
                         "  |  repeat: repeat 2 lines [[], [6], [6, 7]]\n" +
                         "  |  \n" +
-                        "  7:Project\n" +
+                        "  1:Project\n" +
                         "  |  <slot 6> : if(5: expr = '1', 1, NULL)\n" +
                         "  |  <slot 7> : 2");
     }
