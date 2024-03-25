@@ -36,10 +36,12 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DynamicPartitionProperty;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
@@ -225,7 +227,7 @@ public class DynamicPartitionUtil {
                 && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end)
                 && Strings.isNullOrEmpty(buckets))) {
 
-            if (partitionInfo.getType() != PartitionType.RANGE || partitionInfo.isMultiColumnPartition()) {
+            if (!partitionInfo.isRangePartition() || partitionInfo.isMultiColumnPartition()) {
                 throw new DdlException("Dynamic partition only support single-column range partition");
             }
 
@@ -465,12 +467,14 @@ public class DynamicPartitionUtil {
         }
     }
 
-    public static void checkIfAutomaticPartitionAllowed(Map<String, String> properties) throws DdlException {
+    public static void checkIfExpressionPartitionAllowed(Map<String, String> properties, Expr expr) throws DdlException {
         if (properties == null || properties.isEmpty()) {
             return;
         }
-        if (!Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))) {
-            throw new DdlException("Automatic partitioning does not support properties of dynamic partitioning");
+
+        if (!Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))
+                && !ExpressionRangePartitionInfoV2.supportedDynamicPartition(expr)) {
+            throw new DdlException("Expression partitioning does not support properties of dynamic partitioning");
         }
     }
 
