@@ -173,15 +173,13 @@ private:
 #define TEST_IDX_SYNC_POINT(x, index) starrocks::SyncPoint::GetInstance()->Process(x + std::to_string(index))
 #define TEST_SYNC_POINT_CALLBACK(x, y) starrocks::SyncPoint::GetInstance()->Process(x, y)
 #define INIT_SYNC_POINT_SINGLETONS() (void)starrocks::SyncPoint::GetInstance();
-<<<<<<< HEAD
-=======
 #define TEST_ERROR_POINT(x)                                   \
     do {                                                      \
         Status st;                                            \
         starrocks::SyncPoint::GetInstance()->Process(x, &st); \
         if (!st.ok()) return st;                              \
     } while (0)
-#define TEST_SUCC_POINT(x)                                    \
+#define t TEST_SUCC_POINT(x)                                    \
     do {                                                      \
         Status st;                                            \
         starrocks::SyncPoint::GetInstance()->Process(x, &st); \
@@ -190,7 +188,6 @@ private:
 #define TEST_ENABLE_ERROR_POINT(x, y) \
     starrocks::SyncPoint::GetInstance()->SetCallBack(x, [&](void* arg) { *(Status*)arg = y; })
 #define TEST_DISABLE_ERROR_POINT(x) starrocks::SyncPoint::GetInstance()->ClearCallBack(x)
->>>>>>> d9d9c70453 ([BugFix] Fix the has_output check bug of scan operator (#42994))
 #endif // NDEBUG
 
 // Callback sync point for any read IO errors that should be ignored by
