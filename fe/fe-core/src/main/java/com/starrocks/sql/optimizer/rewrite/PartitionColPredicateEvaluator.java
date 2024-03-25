@@ -25,7 +25,6 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionKeyDiscreteDomain;
@@ -43,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.HivePartitionEvaluatorVisitor.ColumnRefReplacer;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -373,26 +373,5 @@ public class PartitionColPredicateEvaluator {
             upperKey.pushColumn(MaxLiteral.MAX_VALUE, type);
             return Range.lessThan(upperKey);
         }
-    }
-
-    private class ColumnRefReplacer extends BaseScalarOperatorShuttle {
-
-        private final LiteralExpr literalExpr;
-
-        public ColumnRefReplacer(LiteralExpr literalExpr) {
-            this.literalExpr = literalExpr;
-        }
-
-        @Override
-        public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-            if (literalExpr instanceof NullLiteral) {
-                return ConstantOperator.createNull(literalExpr.getType());
-            } else if (literalExpr instanceof MaxLiteral) {
-                return variable;
-            } else {
-                return ConstantOperator.createObject(literalExpr.getRealObjectValue(), literalExpr.getType());
-            }
-        }
-
     }
 }
