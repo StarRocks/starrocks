@@ -81,7 +81,7 @@ public:
     Status init();
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
-    void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    Status collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void set_end_offset(int64_t value) { _end_offset = value; }
 
 private:
