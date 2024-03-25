@@ -49,7 +49,7 @@ OutPut Exchange Id: 25
 
 24:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([52: expr, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([52: expr, DECIMAL128(32,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [48: n_name, VARCHAR, true], [51: year, SMALLINT, true]
 |  cardinality: 98
 |  column statistics:
@@ -61,7 +61,7 @@ OutPut Exchange Id: 25
 |  output columns:
 |  48 <-> [48: n_name, VARCHAR, true]
 |  51 <-> year[([42: o_orderdate, DATE, true]); args: DATE; result: SMALLINT; args nullable: true; result nullable: true]
-|  52 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [23: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2)) - cast([36: ps_supplycost, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast([21: l_quantity, DECIMAL64(15,2), true] as DECIMAL128(15,2))
+|  52 <-> cast([22: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [23: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2)) - cast([36: ps_supplycost, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast([21: l_quantity, DECIMAL64(15,2), true] as DECIMAL128(15,2))
 |  cardinality: 540034112
 |  column statistics:
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
@@ -359,4 +359,3 @@ column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
 * p_name-->[-Infinity, Infinity, 0.0, 55.0, 5000000.0] ESTIMATE
 [end]
-

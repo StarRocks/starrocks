@@ -193,8 +193,8 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select cast(v1 as decimal128(27,2)) - cast(v2 as decimal64(10,3)) from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - " +
-                "CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n"));
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(29,2)) - " +
+                "CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(29,3))\n"));
     }
 
     @Test
