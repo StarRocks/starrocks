@@ -2186,18 +2186,6 @@ You can only set the static parameters of a FE by changing them in the correspon
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition.
 - Introduced in: v2.5.7
 
-<<<<<<< HEAD:docs/en/administration/FE_configuration.md
-=======
-##### enable_experimental_rowstore
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md).
-- Introduced in: v3.2.3
-
->>>>>>> 27c574aa60 ([Doc] Remove excess doc links (#42813)):docs/en/administration/management/FE_configuration.md
 ##### storage_usage_soft_limit_percent
 
 - Default: 90
@@ -2247,23 +2235,6 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Description: The timeout duration for the schema change operation (ALTER TABLE).
 - Introduced in: -
 
-<<<<<<< HEAD:docs/en/administration/FE_configuration.md
-=======
-##### enable_fast_schema_evolution
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
-- Introduced in: v3.2.0
-
-> **NOTE**
->
-> - StarRocks shared-data clusters do not support this parameter.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
-
->>>>>>> 27c574aa60 ([Doc] Remove excess doc links (#42813)):docs/en/administration/management/FE_configuration.md
 ##### recover_with_empty_tablet
 
 - Default: false

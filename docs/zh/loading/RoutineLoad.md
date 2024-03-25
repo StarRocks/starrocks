@@ -185,11 +185,7 @@ FROM KAFKA
 
   当分区数量较多，并且 BE 节点数量充足时，如果您期望加快导入速度，则可以增加实际任务并行度，将一个导入作业分成尽可能多的导入任务并行执行。
 
-<<<<<<< HEAD
-  实际任务并行度由如下多个参数组成的公式决定。如果需要增加实际任务并行度，您可以在创建Routine Load 导入作业时为单个导入作业设置较高的期望任务并行度 `desired_concurrent_number` ，以及设置较高的  Routine Load 导入作业的默认最大任务并行度的`max_routine_load_task_concurrent_num` ，该参数为 FE 动态参数，详细说明，请参见 [配置参数](../administration/FE_configuration.md#导入和导出)。此时实际任务并行度上限为存活 BE 节点数量或者指定分区数量。
-=======
   实际任务并行度由如下多个参数组成的公式决定。如果需要增加实际任务并行度，您可以在创建Routine Load 导入作业时为单个导入作业设置较高的期望任务并行度 `desired_concurrent_number`，以及设置较高的  Routine Load 导入作业的默认最大任务并行度的 `max_routine_load_task_concurrent_num`，该参数为 FE 动态参数，详细说明，请参见 [配置参数](../administration/management/FE_configuration.md#导入导出)。此时实际任务并行度上限为存活 BE 节点数量或者指定分区数量。
->>>>>>> 27c574aa60 ([Doc] Remove excess doc links (#42813))
 
   本示例中存活 BE 数量为 5， 指定分区数量为 5，`max_routine_load_task_concurrent_num` 为默认值 `5`，如果需要增加实际任务并发度至上限，则需要将 `desired_concurrent_number` 为 `5`（默认值为 3），计算出实际任务并行度为 5。
 

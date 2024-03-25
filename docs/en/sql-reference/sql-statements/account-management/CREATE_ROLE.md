@@ -22,14 +22,10 @@ CREATE ROLE <role_name>
 
 `role_name`: the name of the role. Naming conventions:
 
-<<<<<<< HEAD
 - It can only contain digits (0-9), letters, or underscores (_) and must start with a letter.
 - It cannot exceed 64 characters in length.
 
-Note that the created role name cannot be the same as [system-defined roles](../../../administration/privilege_overview.md#system-defined-roles).
-=======
-Note that the created role name cannot be the same as [system-defined roles](../../../administration/user_privs/privilege_overview.md#system-defined-roles): `root`, `cluster_admin`, `db_admin`, `user_admin`, and `public`.
->>>>>>> 27c574aa60 ([Doc] Remove excess doc links (#42813))
+Note that the created role name cannot be the same as [system-defined roles](../../../administration/user_privs/privilege_overview.md#system-defined-roles).
 
 ## Limits
 

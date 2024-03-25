@@ -2186,18 +2186,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
   - 新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。
 - 引入版本：v2.5.7
 
-<<<<<<< HEAD:docs/zh/administration/FE_configuration.md
-=======
-##### enable_experimental_rowstore
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启[行列混存表](../../table_design/hybrid_table.md)功能。
-- 引入版本：-
-
->>>>>>> 27c574aa60 ([Doc] Remove excess doc links (#42813)):docs/zh/administration/management/FE_configuration.md
 ##### storage_usage_soft_limit_percent
 
 - 默认值：90
@@ -2247,23 +2235,6 @@ FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启
 - 描述：Schema Change 超时时间。
 - 引入版本：-
 
-<<<<<<< HEAD:docs/zh/administration/FE_configuration.md
-=======
-##### enable_fast_schema_evolution
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`。开启后增删列时可以提高 Schema Change 速度并降低资源使用。
-- 引入版本：v3.2.0
-
-> **说明**
->
-> - StarRocks 存算分离集群不支持该参数。
-> - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
-
->>>>>>> 27c574aa60 ([Doc] Remove excess doc links (#42813)):docs/zh/administration/management/FE_configuration.md
 ##### recover_with_empty_tablet
 
 - 默认值：false

@@ -142,11 +142,7 @@ To improve efficiency, add the `-A` parameter when you connect to MySQL's client
 
 ## How to reduce the disk space occupied by the BE log and the FE log?
 
-<<<<<<< HEAD
-Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/FE_configuration.md).
-=======
 Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/management/BE_configuration.md).
->>>>>>> 27c574aa60 ([Doc] Remove excess doc links (#42813))
 
 ## This error "table *** is colocate table, cannot change replicationNum" occurs when I modify the replication number
 
