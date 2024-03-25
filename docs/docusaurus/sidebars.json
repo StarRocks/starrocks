@@ -148,7 +148,7 @@
             "label": "Data Loading",
             "link": {
                 "type": "doc",
-                "id": "loading/Loading_intro"
+                "id": "loading/loading_introduction/Loading_intro"
             },
             "items": [
                 {
@@ -1383,7 +1383,7 @@
             "label": "导入数据",
             "link": {
                 "type": "doc",
-                "id": "loading/Loading_intro"
+                "id": "loading/loading_introduction/Loading_intro"
             },
             "items": [
                 {

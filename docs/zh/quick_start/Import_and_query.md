@@ -38,7 +38,7 @@ Stream Load 模式适用于导入本地文件，或通过程序导入数据流�
 
 [Insert Into](../loading/InsertInto.md) 导入模式是一种同步数据导入模式，类似 MySQL 中的 Insert 语句，StarRocks 支持通过 `INSERT INTO tbl SELECT ...;` 的方式从 StarRocks 的表中读取数据并导入到另一张表。您也可以通过 `INSERT INTO tbl VALUES(...);` 插入单条数据。该导入方式支持的数据源有 DataX/DTS、Kettle/Informatic、以及 StarRocks 本身。
 
-具体导入方式详情请参考 [数据导入](../loading/Loading_intro.md)。
+具体导入方式详情请参考 [数据导入](../loading/loading_introduction/Loading_intro.md)。
 
 ### 通过 Stream Load 导入数据
 

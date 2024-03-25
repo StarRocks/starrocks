@@ -54,5 +54,5 @@ DISTRIBUTED BY HASH(user_id);
 
 ## What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Overview of data loading](../../loading/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Overview of data loading](../../loading/loading_introduction/Loading_intro.md).
 > Note: When you load data into a table that uses the Duplicate Key table, you can only append data to the table. You cannot modify the existing data in the table.
