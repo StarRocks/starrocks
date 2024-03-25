@@ -55,7 +55,7 @@ public class TableFunction extends Function {
     // only used for serialization
 
     // not serialized
-    private boolean leftJoinFlag = false;
+    private boolean isLeftJoin = false;
 
     protected TableFunction() {
     }
@@ -150,8 +150,8 @@ public class TableFunction extends Function {
         this.symbolName = symbolName;
     }
 
-    public void setLeftJoin() {
-        this.leftJoinFlag = true;
+    public void setIsLeftJoin(boolean isLeftJoin) {
+        this.isLeftJoin = isLeftJoin;
     }
 
     @Override
@@ -178,7 +178,7 @@ public class TableFunction extends Function {
         TTableFunction tableFn = new TTableFunction();
         tableFn.setSymbol(symbolName);
         tableFn.setRet_types(tableFnReturnTypes.stream().map(Type::toThrift).collect(Collectors.toList()));
-        tableFn.setLeft_join_flag(leftJoinFlag);
+        tableFn.setIs_left_join(isLeftJoin);
         fn.setTable_fn(tableFn);
         return fn;
     }

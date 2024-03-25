@@ -38,7 +38,7 @@ public:
         auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
         state->set_processed_rows(arg0->size());
         Columns result;
-        if (arg0->has_null() || state->get_left_join_flag()) {
+        if (arg0->has_null() || state->get_is_left_join()) {
             auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
 
             auto offset_column = col_array->offsets_column();
@@ -50,7 +50,7 @@ public:
 
             for (int row_idx = 0; row_idx < nullable_array_column->size(); ++row_idx) {
                 if (nullable_array_column->is_null(row_idx)) {
-                    if (state->get_left_join_flag()) {
+                    if (state->get_is_left_join()) {
                         // to support unnest with null.
                         compact_offset -= 1;
                         compacted_array_elements->append_nulls(1);
@@ -61,7 +61,7 @@ public:
                     compacted_offset_column->append_datum(offset - compact_offset);
                 } else {
                     if (offset_column->get(row_idx + 1).get_int32() == offset_column->get(row_idx).get_int32() &&
-                        state->get_left_join_flag()) {
+                        state->get_is_left_join()) {
                         // to support unnest with null.
                         compact_offset -= 1;
                         compacted_array_elements->append_nulls(1);
@@ -93,8 +93,8 @@ public:
     [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
         const auto& table_fn = fn.table_fn;
-        if (table_fn.__isset.left_join_flag) {
-            (*state)->set_left_join_flag(table_fn.left_join_flag);
+        if (table_fn.__isset.is_left_join) {
+            (*state)->set_is_left_join(table_fn.is_left_join);
         }
         return Status::OK();
     }

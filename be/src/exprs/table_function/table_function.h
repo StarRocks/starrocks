@@ -39,9 +39,9 @@ public:
 
     int64_t get_offset() { return _offset; }
 
-    void set_left_join_flag(bool left_join_flag) { this->_left_join_flag = left_join_flag; }
+    void set_is_left_join(bool is_left_join) { this->_is_left_join = is_left_join; }
 
-    bool get_left_join_flag() { return _left_join_flag; }
+    bool get_is_left_join() { return _is_left_join; }
 
     // How many rows of `get_columns()` have been processed/consumed by the table function.
     //
@@ -78,7 +78,7 @@ private:
     Status _status;
 
     // used to identify left join for table function
-    bool _left_join_flag = false;
+    bool _is_left_join = false;
 };
 
 class TableFunction {

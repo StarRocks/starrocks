@@ -509,7 +509,7 @@ public class QueryAnalyzer {
                         if (join.getOnPredicate() instanceof BoolLiteral &&
                                 ((BoolLiteral) join.getOnPredicate()).getValue()) {
                             // left join on true
-                            ((TableFunctionRelation) join.getRight()).setLeftJoinFlag();
+                            ((TableFunctionRelation) join.getRight()).setIsLeftJoin(true);
                         } else {
                             throw new SemanticException("left join unnest only support on true");
                         }
@@ -1053,9 +1053,7 @@ public class QueryAnalyzer {
             }
 
             TableFunction tableFunction = (TableFunction) fn;
-            if (node.getLeftJoinFlag()) {
-                tableFunction.setLeftJoin();
-            }
+            tableFunction.setIsLeftJoin(node.getIsLeftJoin());
             node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
