@@ -147,12 +147,18 @@ import java.util.Map;
 
 public class DDLStmtExecutor {
 
+    private final StmtExecutorVisitor stmtExecutorVisitor;
+
+    public DDLStmtExecutor(StmtExecutorVisitor stmtExecutorVisitor) {
+        this.stmtExecutorVisitor = stmtExecutorVisitor;
+    }
+
     /**
      * Execute various ddl statement
      */
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
         try {
-            return stmt.accept(StmtExecutorVisitor.getInstance(), context);
+            return GlobalStateMgr.getCurrentState().getDdlStmtExecutor().stmtExecutorVisitor.visit(stmt, context);
         } catch (RuntimeException re) {
             if (re.getCause() instanceof DdlException) {
                 throw (DdlException) re.getCause();
@@ -166,14 +172,14 @@ public class DDLStmtExecutor {
         }
     }
 
-    static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
-
+    public static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
-
         private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();
-
         public static StmtExecutorVisitor getInstance() {
             return INSTANCE;
+        }
+
+        protected StmtExecutorVisitor() {
         }
 
         @Override

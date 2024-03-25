@@ -81,15 +81,13 @@ public class ShowStreamLoadTest {
 
         String sql = "show all stream load";
         ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(showStreamLoadStmt, connectContext);
+        ShowResultSet resultSet = ShowExecutor.execute(showStreamLoadStmt, connectContext);
         Assert.assertEquals(resultSet.getResultRows().size(), 2);
 
         String sqlWithWhere = "show all stream load where Type = \"ROUTINE_LOAD\"";
         ShowStreamLoadStmt showStreamLoadStmtWithWhere = (ShowStreamLoadStmt) UtFrameUtils.
                 parseStmtWithNewParser(sqlWithWhere, connectContext);
-        executor = new ShowExecutor();
-        ShowResultSet resultSetWithWhere = executor.execute(showStreamLoadStmtWithWhere, connectContext);
+        ShowResultSet resultSetWithWhere = ShowExecutor.execute(showStreamLoadStmtWithWhere, connectContext);
         Assert.assertEquals(resultSetWithWhere.getResultRows().size(), 1);
     }
 }

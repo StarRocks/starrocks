@@ -22,7 +22,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
@@ -143,7 +142,7 @@ public class AnalyzeMgrTest {
         JournalEntity journalEntity = new JournalEntity();
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS);
         journalEntity.setData(externalAnalyzeStatus);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().size());
 
         analyzeMgr.dropExternalAnalyzeStatus(table.getUUID());
@@ -156,7 +155,7 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS);
         journalEntity.setData(removeExternalAnalyzeStatus);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().size());
 
         // test analyze job
@@ -192,7 +191,7 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_ADD_ANALYZER_JOB);
         journalEntity.setData(nativeAnalyzeJob);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         ExternalAnalyzeJob externalAnalyzeJob1 = (ExternalAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
@@ -203,7 +202,7 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB);
         journalEntity.setData(externalAnalyzeJob1);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(2, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         analyzeMgr.removeAnalyzeJob(nativeAnalyzeJob.getId());
@@ -214,7 +213,7 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_ANALYZER_JOB);
         journalEntity.setData(nativeAnalyzeJob);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
 
         analyzeMgr.removeAnalyzeJob(externalAnalyzeJob.getId());
         ExternalAnalyzeJob externalAnalyzeJob2 = (ExternalAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
@@ -225,7 +224,7 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB);
         journalEntity.setData(externalAnalyzeJob2);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
 
         // test analyze basic stats
@@ -252,7 +251,7 @@ public class AnalyzeMgrTest {
         };
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META);
         journalEntity.setData(externalBasicStatsMeta);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
 
         analyzeMgr.removeExternalBasicStatsMeta(externalBasicStatsMeta.getCatalogName(),
@@ -265,7 +264,7 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META);
         journalEntity.setData(externalBasicStatsMeta);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
     }
 
@@ -294,7 +293,7 @@ public class AnalyzeMgrTest {
         JournalEntity journalEntity = new JournalEntity();
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META);
         journalEntity.setData(externalHistogramStatsMeta);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(1,
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
 
@@ -318,7 +317,7 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META);
         journalEntity.setData(externalHistogramStatsMeta);
-        EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0,
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
     }

@@ -193,7 +193,7 @@ public class BDBJEJournalSystem implements JournalSystem {
                 break;
             }
 
-            EditLog.loadJournal(null /* GlobalStateMgr */, entity);
+            editLog.loadJournal(null /* GlobalStateMgr */, entity);
             replayedJournalId.incrementAndGet();
 
             LOG.debug("star mgr journal {} replayed.", replayedJournalId);

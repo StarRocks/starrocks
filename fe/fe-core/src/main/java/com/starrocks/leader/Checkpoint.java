@@ -40,6 +40,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.Journal;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
@@ -211,6 +212,7 @@ public class Checkpoint extends FrontendDaemon {
         // generate new image file
         LOG.info("begin to generate new image: image.{}", checkPointVersion);
         globalStateMgr = GlobalStateMgr.getCurrentState();
+        globalStateMgr.setEditLog(new EditLog(null));
         globalStateMgr.setJournal(journal);
         try {
             globalStateMgr.loadImage(imageDir);
