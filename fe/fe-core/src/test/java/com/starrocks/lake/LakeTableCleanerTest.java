@@ -21,6 +21,7 @@ import com.staros.proto.StatusCode;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.DropTableResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.system.ComputeNode;
@@ -30,7 +31,10 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.assertj.core.util.Lists;
+import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.concurrent.CompletableFuture;
 
 
 public class LakeTableCleanerTest {
@@ -86,21 +90,21 @@ public class LakeTableCleanerTest {
                 maxTimes = 1;
 
                 lakeService.dropTable((DropTableRequest) any);
-                result = null; // unused
+                result = CompletableFuture.completedFuture(new DropTableResponse());
                 minTimes = 1;
                 maxTimes = 1;
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertTrue(cleaner.cleanTable());
     }
 
     @Test
     public void testNoTablet(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
-                     @Mocked MaterializedIndex index,
-                     @Mocked LakeTablet tablet,
-                     @Mocked LakeService lakeService) {
+                             @Mocked PhysicalPartition partition,
+                             @Mocked MaterializedIndex index,
+                             @Mocked LakeTablet tablet,
+                             @Mocked LakeService lakeService) {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new Expectations() {
@@ -123,15 +127,15 @@ public class LakeTableCleanerTest {
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertTrue(cleaner.cleanTable());
     }
 
     @Test
     public void testNoAliveNode(@Mocked LakeTable table,
-                               @Mocked PhysicalPartition partition,
-                               @Mocked MaterializedIndex index,
-                               @Mocked LakeTablet tablet,
-                               @Mocked LakeService lakeService) throws StarClientException {
+                                @Mocked PhysicalPartition partition,
+                                @Mocked MaterializedIndex index,
+                                @Mocked LakeTablet tablet,
+                                @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new MockUp<Utils>() {
@@ -166,15 +170,15 @@ public class LakeTableCleanerTest {
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertFalse(cleaner.cleanTable());
     }
 
     @Test
     public void testGetShardInfoFailed(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
-                     @Mocked MaterializedIndex index,
-                     @Mocked LakeTablet tablet,
-                     @Mocked LakeService lakeService) throws StarClientException {
+                                       @Mocked PhysicalPartition partition,
+                                       @Mocked MaterializedIndex index,
+                                       @Mocked LakeTablet tablet,
+                                       @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new Expectations() {
@@ -202,15 +206,15 @@ public class LakeTableCleanerTest {
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertFalse(cleaner.cleanTable());
     }
 
     @Test
     public void testRPCFailed(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
-                     @Mocked MaterializedIndex index,
-                     @Mocked LakeTablet tablet,
-                     @Mocked LakeService lakeService) throws StarClientException {
+                              @Mocked PhysicalPartition partition,
+                              @Mocked MaterializedIndex index,
+                              @Mocked LakeTablet tablet,
+                              @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new MockUp<Utils>() {
@@ -257,6 +261,42 @@ public class LakeTableCleanerTest {
             }
         };
 
-        cleaner.cleanTable();
+        Assert.assertFalse(cleaner.cleanTable());
+    }
+
+    @Test
+    public void testShardNotFound(@Mocked LakeTable table,
+                                  @Mocked PhysicalPartition partition,
+                                  @Mocked MaterializedIndex index,
+                                  @Mocked LakeTablet tablet,
+                                  @Mocked LakeService lakeService) throws StarClientException {
+        LakeTableCleaner cleaner = new LakeTableCleaner(table);
+
+        new Expectations() {
+            {
+                table.getAllPhysicalPartitions();
+                result = Lists.newArrayList(partition);
+                minTimes = 1;
+                maxTimes = 1;
+
+
+                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                result = Lists.newArrayList(index);
+                minTimes = 1;
+                maxTimes = 1;
+
+                index.getTablets();
+                result = Lists.newArrayList(tablet);
+                minTimes = 1;
+                maxTimes = 1;
+
+                tablet.getShardInfo();
+                result = new StarClientException(StatusCode.NOT_EXIST, "injected error");
+                minTimes = 1;
+                maxTimes = 1;
+            }
+        };
+
+        Assert.assertTrue(cleaner.cleanTable());
     }
 }
