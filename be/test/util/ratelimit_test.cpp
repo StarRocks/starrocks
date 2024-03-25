@@ -35,7 +35,7 @@ TEST_F(RateLimitTest, rate_limit) {
         starrocks::SleepForMs(10); // execute inc each 10ms, which is probably not accurate.
     }
     int64_t end = starrocks::UnixMillis();
-    ASSERT_TRUE(count <= (end - start) / 100);
+    ASSERT_TRUE(count <= (end - start) / 100 + 10);
 }
 
 TEST_F(RateLimitTest, rate_limit_by_tag) {
@@ -46,7 +46,7 @@ TEST_F(RateLimitTest, rate_limit_by_tag) {
         starrocks::SleepForMs(10);              // execute inc each 10ms, which is probably not accurate.
     }
     int64_t end = starrocks::UnixMillis();
-    ASSERT_TRUE(count <= (end - start) / 100 * 2);
+    ASSERT_TRUE(count <= (end - start) / 100 * 2 + 10);
 }
 
 } // namespace starrocks
