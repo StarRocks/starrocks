@@ -356,7 +356,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNode(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) shadowTablet);
+                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME,
+                                        (LakeTablet) shadowTablet);
                         if (computeNode == null) {
                             throw new AlterCancelException("No alive backend");
                         }
@@ -456,7 +457,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getComputeNode(WarehouseManager.DEFAULT_WAREHOUSE_ID, (LakeTablet) shadowTablet);
+                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, (LakeTablet) shadowTablet);
                         if (computeNode == null) {
                             throw new AlterCancelException("No alive backend");
                         }

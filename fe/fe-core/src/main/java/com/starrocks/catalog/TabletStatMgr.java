@@ -338,7 +338,7 @@ public class TabletStatMgr extends FrontendDaemon {
             Map<ComputeNode, List<TabletInfo>> beToTabletInfos = new HashMap<>();
             for (Tablet tablet : tablets.values()) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNode(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+                        .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
 
                 if (node == null) {
                     LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());

@@ -1890,8 +1890,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (RunMode.isSharedDataMode()) {
             numAliveNodes = 0;
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long nodeId : computeNodeIds) {
                 if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId).isAlive()) {
                     ++numAliveNodes;
                 }
@@ -2073,7 +2073,7 @@ public class LocalMetastore implements ConnectorMetadata {
             List<Long> nodeIdsOfReplicas = new ArrayList<>();
             if (isCloudNativeTable) {
                 long nodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNode(warehouseId, (LakeTablet) tablet).getId();
+                        .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet).getId();
 
                 nodeIdsOfReplicas.add(nodeId);
             } else {

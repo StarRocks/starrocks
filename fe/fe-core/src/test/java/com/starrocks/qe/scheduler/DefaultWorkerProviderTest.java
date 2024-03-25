@@ -27,13 +27,12 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -181,14 +180,20 @@ public class DefaultWorkerProviderTest {
 
             new MockUp<WarehouseManager>() {
                 @Mock
-                public Warehouse getWarehouse(long warehouseId) {
-                    return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
+                    return id2ComputeNode;
                 }
 
                 @Mock
-                public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                    return id2ComputeNode;
+                public List<Long> getAllComputeNodeIds(long warehouseId) {
+                    return new ArrayList<>(id2ComputeNode.keySet());
+                }
+            };
+
+            new MockUp<SystemInfoService>() {
+                @Mock
+                public ComputeNode getBackendOrComputeNode(long nodeId) {
+                    return id2ComputeNode.get(nodeId);
                 }
             };
 

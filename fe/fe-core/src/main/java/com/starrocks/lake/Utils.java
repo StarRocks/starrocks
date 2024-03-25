@@ -49,17 +49,6 @@ public class Utils {
     private Utils() {
     }
 
-    // Returns null if no backend available.
-    public static Long chooseNodeId(LakeTablet tablet) {
-        try {
-            ShardInfo shardInfo = tablet.getShardInfo();
-            return chooseNodeId(shardInfo);
-        } catch (Exception e) {
-            LOG.error(e);
-            return null;
-        }
-    }
-
     public static Long chooseNodeId(ShardInfo shardInfo) {
         Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllBackendIdsByShard(shardInfo, true);
         if (!ids.isEmpty()) {
@@ -71,14 +60,6 @@ public class Utils {
         } catch (UserException e) {
             return null;
         }
-    }
-
-    public static ComputeNode chooseNode(LakeTablet tablet) {
-        Long nodeId = chooseNodeId(tablet);
-        if (nodeId == null) {
-            return null;
-        }
-        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
     }
 
     public static ComputeNode chooseNode(ShardInfo shardInfo) {
@@ -99,7 +80,7 @@ public class Utils {
         for (Partition partition : partitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
                 for (Tablet tablet : index.getTablets()) {
-                    ComputeNode computeNode = warehouseManager.getComputeNode(warehouseId, (LakeTablet) tablet);
+                    ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                     if (computeNode == null) {
                         throw new NoAliveBackendException("no alive backend");
                     }
@@ -127,7 +108,7 @@ public class Utils {
 
         for (Tablet tablet : tablets) {
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNode(warehouseId, (LakeTablet) tablet);
+                    .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {
                 throw new NoAliveBackendException("No alive node for handle publish version request");
             }
@@ -190,7 +171,7 @@ public class Utils {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNode(warehouseId, (LakeTablet) tablet);
+                    .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
             if (computeNode == null) {
                 throw new NoAliveBackendException("No alive node for handle publish version request");
             }

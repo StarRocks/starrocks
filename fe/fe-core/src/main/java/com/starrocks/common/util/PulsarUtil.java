@@ -35,7 +35,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.DefaultWarehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -158,9 +157,7 @@ public class PulsarUtil {
                         warehouseId = req.pulsarInfo.warehouseId;
                     }
 
-                    DefaultWarehouse warehouse = (DefaultWarehouse) GlobalStateMgr.getCurrentState()
-                            .getWarehouseMgr().getWarehouse(warehouseId);
-                    nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+                    nodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
                     if (nodeIds.isEmpty()) {
                         throw new LoadException("Failed to send proxy request. No alive backends or computeNodes");
                     }

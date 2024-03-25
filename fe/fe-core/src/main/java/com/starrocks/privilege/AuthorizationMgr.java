@@ -78,7 +78,7 @@ public class AuthorizationMgr {
 
     protected AuthorizationProvider provider;
 
-    private GlobalStateMgr globalStateMgr;
+    protected GlobalStateMgr globalStateMgr;
 
     protected Map<UserIdentity, UserPrivilegeCollectionV2> userToPrivilegeCollection;
     protected Map<Long, RolePrivilegeCollectionV2> roleIdToPrivilegeCollection;

@@ -122,21 +122,21 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
 
             @Mock
-            public ComputeNode getComputeNode(LakeTablet tablet) {
+            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return new ComputeNode(1L, "127.0.0.1", 9030);
             }
 
             @Mock
-            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(String warehouseName, LakeTablet tablet) {
+            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
                 return new ComputeNode(1L, "127.0.0.1", 9030);
             }
 
@@ -279,21 +279,26 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
 
             @Mock
-            public ComputeNode getComputeNode(LakeTablet tablet) {
+            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
                 return new ComputeNode(1L, "127.0.0.1", 9030);
             }
 
             @Mock
-            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(String warehouseName, LakeTablet tablet) {
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
                 return null;
             }
 

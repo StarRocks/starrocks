@@ -307,7 +307,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
                                                                         int numUsedComputeNodes,
                                                                         long warehouseId) {
         if (RunMode.isSharedDataMode()) {
-            return GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodesFromWarehouse(warehouseId);
+            ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            computeNodeIds.forEach(nodeId -> builder.put(nodeId,
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
+            return builder.build();
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode

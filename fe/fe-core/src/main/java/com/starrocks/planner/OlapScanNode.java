@@ -78,6 +78,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -410,8 +411,13 @@ public class OlapScanNode extends ScanNode {
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
-            selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    expectedVersion, -1, schemaHash);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        expectedVersion, -1, schemaHash, warehouseId);
+            } else {
+                selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        expectedVersion, -1, schemaHash);
+            }
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
                 String message = String.format("Failed to get scan range, no queryable replica found in " +
@@ -510,8 +516,19 @@ public class OlapScanNode extends ScanNode {
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
-            tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                    visibleVersion, localBeId, schemaHash);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                if (computeNodeIds.isEmpty()) {
+                    throw new UserException(" no backend or compute node in warehouse " + warehouseId);
+                }
+
+                tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        visibleVersion, localBeId, schemaHash, warehouseId);
+            } else {
+                tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
+                        visibleVersion, localBeId, schemaHash);
+            }
+
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = "";
                 if (tablet instanceof LocalTablet) {

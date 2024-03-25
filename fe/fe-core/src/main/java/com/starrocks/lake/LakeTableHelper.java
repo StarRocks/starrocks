@@ -106,7 +106,14 @@ public class LakeTableHelper {
                 continue;
             }
             LakeTablet tablet = (LakeTablet) tablets.get(0);
-            return Optional.of(tablet.getShardInfo());
+
+            if (GlobalStateMgr.isCheckpointThread()) {
+                throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
+            }
+            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
+                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+
+            return Optional.of(shardInfo);
         }
         return Optional.empty();
     }

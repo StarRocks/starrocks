@@ -151,6 +151,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -2112,9 +2113,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 for (Tablet tablet : index.getTablets()) {
                     try {
                         // use default warehouse nodes
-                        long primaryId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
-                        tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(primaryId)));
-                    } catch (UserException exception) {
+                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+                        tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
+                    } catch (Exception exception) {
                         throw new UserException("Check if any backend is down or not. tablet_id: " + tablet.getId());
                     }
                 }
@@ -2339,12 +2341,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
                         try {
                             // use default warehouse nodes
-                            long primaryId = cloudNativeTablet.getPrimaryComputeNodeId();
+                            long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeId(
+                                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, cloudNativeTablet);
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
-                                    Collections.singletonList(primaryId));
+                                    Collections.singletonList(computeNodeId));
                             tablets.add(tabletLocation);
                             txnState.getTabletIdToTTabletLocation().put(tablet.getId(), tabletLocation);
-                        } catch (UserException exception) {
+                        } catch (Exception exception) {
                             errorStatus.setError_msgs(Lists.newArrayList(
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
                                             + tablet.getId() + ", backends: none(cloud native table)"));

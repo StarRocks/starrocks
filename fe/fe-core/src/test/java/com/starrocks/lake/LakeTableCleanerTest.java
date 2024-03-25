@@ -17,12 +17,12 @@ package com.starrocks.lake;
 import com.staros.client.StarClientException;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.StatusCode;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
@@ -30,14 +30,34 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.assertj.core.util.Lists;
+import org.junit.Before;
 import org.junit.Test;
-
 
 public class LakeTableCleanerTest {
     private final ShardInfo shardInfo;
 
+    @Mocked
+    private StarOSAgent starOSAgent;
+
     public LakeTableCleanerTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
+    }
+
+    @Before
+    public void setup() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent> () {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                return shardInfo;
+            }
+        };
     }
 
     @Test
@@ -77,11 +97,6 @@ public class LakeTableCleanerTest {
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
-                minTimes = 1;
-                maxTimes = 1;
-
-                tablet.getShardInfo();
-                result = shardInfo;
                 minTimes = 1;
                 maxTimes = 1;
 
@@ -132,6 +147,8 @@ public class LakeTableCleanerTest {
                                @Mocked MaterializedIndex index,
                                @Mocked LakeTablet tablet,
                                @Mocked LakeService lakeService) throws StarClientException {
+
+
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new MockUp<Utils>() {
@@ -156,11 +173,6 @@ public class LakeTableCleanerTest {
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
-                minTimes = 1;
-                maxTimes = 1;
-
-                tablet.getShardInfo();
-                result = shardInfo;
                 minTimes = 1;
                 maxTimes = 1;
             }
@@ -192,11 +204,6 @@ public class LakeTableCleanerTest {
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
-                minTimes = 1;
-                maxTimes = 1;
-
-                tablet.getShardInfo();
-                result = new StarClientException(StatusCode.IO, "injected error");
                 minTimes = 1;
                 maxTimes = 1;
             }
@@ -242,11 +249,6 @@ public class LakeTableCleanerTest {
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
-                minTimes = 1;
-                maxTimes = 1;
-
-                tablet.getShardInfo();
-                result = shardInfo;
                 minTimes = 1;
                 maxTimes = 1;
 

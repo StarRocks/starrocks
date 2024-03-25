@@ -50,7 +50,6 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections.CollectionUtils;
@@ -119,11 +118,8 @@ public class LoadAction extends RestBaseAction {
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-            if (warehouse == null) {
-                throw new DdlException("Warehouse " + warehouseName + " not exists.");
-            }
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            for (long nodeId : computeIds) {
                 ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAvailable()) {
                     nodeIds.add(nodeId);

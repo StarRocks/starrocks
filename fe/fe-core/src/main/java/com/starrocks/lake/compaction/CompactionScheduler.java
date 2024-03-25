@@ -357,7 +357,7 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNode(
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeAssignedToTablet(
                         Config.lake_compaction_warehouse, (LakeTablet) tablet);
                 if (computeNode == null) {
                     beToTablets.clear();

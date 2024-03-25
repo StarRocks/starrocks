@@ -146,7 +146,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         for (Tablet tablet : tablets) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            ComputeNode node = warehouseManager.getComputeNode((LakeTablet) tablet);
+            ComputeNode node = warehouseManager
+                    .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, (LakeTablet) tablet);
 
             if (node == null) {
                 return;
