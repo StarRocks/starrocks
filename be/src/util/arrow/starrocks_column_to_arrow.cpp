@@ -443,9 +443,9 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
         auto& key_context = column_context->child_columns[0];
         auto key_convert_func = column_context->child_columns[0].convert_func;
         auto key_builder = builder->key_builder();
-        auto& value_context = column_context->child_columns[1];
-        auto value_convert_func = column_context->child_columns[1].convert_func;
-        auto value_builder = builder->value_builder();
+        auto& item_context = column_context->child_columns[1];
+        auto item_convert_func = column_context->child_columns[1].convert_func;
+        auto item_builder = builder->item_builder();
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
             const auto* data_column = down_cast<MapColumn*>(nullable_column->data_column().get());
@@ -459,8 +459,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
                     ARROW_RETURN_NOT_OK(builder->Append());
                     ARROW_RETURN_NOT_OK(
                             key_convert_func(key_column, offsets[i], offsets[i + 1] - 1, &key_context, key_builder));
-                    ARROW_RETURN_NOT_OK(value_convert_func(value_column, offsets[i], offsets[i + 1] - 1, &value_context,
-                                                           value_builder));
+                    ARROW_RETURN_NOT_OK(item_convert_func(value_column, offsets[i], offsets[i + 1] - 1, &item_context,
+                                                          item_builder));
                 }
             }
         } else {
@@ -472,8 +472,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
                 ARROW_RETURN_NOT_OK(builder->Append());
                 ARROW_RETURN_NOT_OK(
                         key_convert_func(key_column, offsets[i], offsets[i + 1] - 1, &key_context, key_builder));
-                ARROW_RETURN_NOT_OK(value_convert_func(value_column, offsets[i], offsets[i + 1] - 1, &value_context,
-                                                       value_builder));
+                ARROW_RETURN_NOT_OK(
+                        item_convert_func(value_column, offsets[i], offsets[i + 1] - 1, &item_context, item_builder));
             }
         }
         return arrow::Status::OK();
