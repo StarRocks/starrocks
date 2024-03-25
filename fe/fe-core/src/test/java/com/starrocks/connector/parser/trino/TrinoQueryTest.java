@@ -752,6 +752,18 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testOffsetLimit() throws Exception {
+        String sql = "select * from t0 offset 1 limit 10";
+        assertPlanContains(sql, "offset: 1", "limit: 10");
+
+        sql = "select v1 from t0 order by v1 offset 2 limit 20";
+        assertPlanContains(sql, "offset: 2", "limit: 20");
+
+        sql = "select v1 from t0 order by v1 offset 2";
+        analyzeFail(sql);
+    }
+
+    @Test
     public void testHaving() throws Exception {
         String sql = "select sum(v1) from t0 having sum(v1) > 0";
         assertPlanContains(sql, "having: 4: sum > 0");
