@@ -17,6 +17,7 @@ package com.starrocks.lake;
 import com.google.common.base.Preconditions;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.catalog.MaterializedIndex;
@@ -106,7 +107,14 @@ public class LakeTableHelper {
                 continue;
             }
             LakeTablet tablet = (LakeTablet) tablets.get(0);
-            return Optional.of(tablet.getShardInfo());
+            try {
+                return Optional.of(tablet.getShardInfo());
+            } catch (StarClientException e) {
+                if (e.getCode() != StatusCode.NOT_EXIST) {
+                    throw e;
+                }
+                // Shard does not exist, ignore this shard
+            }
         }
         return Optional.empty();
     }
