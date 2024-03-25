@@ -230,7 +230,7 @@ jobs:
     needs:
       - restart-fe
       - restart-be
-    if: always() && env.INCLUDE_ADMIT == 'true' && env.BUILD_TYPE == 'Release' && needs.restart-be.result == 'success' && needs.restart-fe.result == 'success'
+    if: always() && inputs.INCLUDE_ADMIT == 'true' && inputs.BUILD_TYPE == 'Release' && needs.restart-be.result == 'success' && needs.restart-fe.result == 'success'
     timeout-minutes: 40
     env:
       FE_NODE: ${{ needs.restart-be.outputs.FE_NODE }}
