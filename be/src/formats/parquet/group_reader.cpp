@@ -251,10 +251,10 @@ Status GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream:
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
 
         // We will only set a complex type in ParquetField
-        if ((schema_node->type.is_complex_type() || column.slot_type().is_complex_type()) &&
-            (schema_node->type.type != column.slot_type().type)) {
+        if ((schema_node->type.is_complex_type() || column.col_type_in_chunk.is_complex_type()) &&
+            (schema_node->type.type != column.col_type_in_chunk.type)) {
             return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
-                                                             schema_node->type.type, column.slot_type().type));
+                                                             schema_node->type.type, column.col_type_in_chunk.type));
         }
 
         if (column.t_iceberg_schema_field == nullptr) {
