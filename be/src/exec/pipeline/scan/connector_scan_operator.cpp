@@ -521,26 +521,26 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     io_tasks = std::min(io_tasks, max_io_tasks);
     io_tasks = std::max(io_tasks, min_io_tasks);
 
-    [[maybe_unused]] auto build_debug_string = [&]() {
-        auto doround = [](double x) { return round(x * 100.0) / 100.0; };
-        std::stringstream ss;
-        ss << "available_pickup_morsel_count. id = " << _plan_node_id << ", seq = " << _driver_sequence;
-        ss << ", cs = " << doround(source_speed) << "(" << _op_pull_chunks << "/" << (P.cs_gen_chunks_time * 1e-4)
-           << ")";
-        ss << ", op = " << doround(operator_speed) << "(" << _op_pull_chunks << "/" << (_op_running_time_ns * 1e-7)
-           << ")";
+    // [[maybe_unused]] auto build_debug_string = [&]() {
+    //     auto doround = [](double x) { return round(x * 100.0) / 100.0; };
+    //     std::stringstream ss;
+    //     ss << "available_pickup_morsel_count. id = " << _plan_node_id << ", seq = " << _driver_sequence;
+    //     ss << ", cs = " << doround(source_speed) << "(" << _op_pull_chunks << "/" << (P.cs_gen_chunks_time * 1e-4)
+    //        << ")";
+    //     ss << ", op = " << doround(operator_speed) << "(" << _op_pull_chunks << "/" << (_op_running_time_ns * 1e-7)
+    //        << ")";
 
-        ss << ", cs/op = " << doround(source_speed) << "/" << doround(operator_speed) << "("
-           << doround(source_speed / operator_speed) << ")";
+    //     ss << ", cs/op = " << doround(source_speed) << "/" << doround(operator_speed) << "("
+    //        << doround(source_speed / operator_speed) << ")";
 
-        ss << ", proposal = " << io_tasks << ", current = " << _num_running_io_tasks;
+    //     ss << ", proposal = " << io_tasks << ", current = " << _num_running_io_tasks;
 
-        ss << ", iolatency = " << cs_total_io_time << "/" << cs_total_scan_bytes << "(" << doround(io_latency)
-           << "ms/MB)";
-        return ss.str();
-    };
+    //     ss << ", iolatency = " << cs_total_io_time << "/" << cs_total_scan_bytes << "(" << doround(io_latency)
+    //        << "ms/MB)";
+    //     return ss.str();
+    // };
 
-    VLOG_OPERATOR << build_debug_string();
+    // VLOG_OPERATOR << build_debug_string();
     return io_tasks;
 }
 
