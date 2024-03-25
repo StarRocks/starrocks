@@ -833,10 +833,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        long count = 0;
-        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            count += databaseTransactionMgr.getTransactionNum();
-        }
-        return ImmutableMap.of("Transaction", count);
+        return ImmutableMap.of("Txn", (long) getFinishedTransactionNum(),
+                               "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
     }
 }
