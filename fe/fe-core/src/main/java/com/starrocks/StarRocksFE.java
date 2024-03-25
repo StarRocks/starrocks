@@ -54,7 +54,7 @@ import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.service.FeServer;
+import com.starrocks.service.FrontendThriftServer;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.staros.StarMgrServer;
 import org.apache.commons.cli.BasicParser;
@@ -161,15 +161,15 @@ public class StarRocksFE {
 
             // init and start:
             // 1. QeService for MySQL Server
-            // 2. FeServer for Thrift Server
+            // 2. FrontendThriftServer for Thrift Server
             // 3. HttpServer for HTTP Server
             QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
                     ExecuteEnv.getInstance().getScheduler());
-            FeServer feServer = new FeServer(Config.rpc_port);
+            FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);
             httpServer.setup();
 
-            feServer.start();
+            frontendThriftServer.start();
             httpServer.start();
             qeService.start();
 
