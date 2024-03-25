@@ -159,7 +159,8 @@ public class TaskRunManager implements MemoryTrackable {
 
                     // Update follower's state to SUCCESS, otherwise the merged task run will always be PENDING.
                     // TODO: 1. add a MERGED state later. 2. support batch update to reduce the number of edit logs.
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
+                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
+                    TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
                             taskRun.getStatus().getState(), Constants.TaskRunState.SUCCESS);
                     GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
                 }
