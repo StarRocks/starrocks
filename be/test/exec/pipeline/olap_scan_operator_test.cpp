@@ -18,6 +18,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::pipeline {
 
