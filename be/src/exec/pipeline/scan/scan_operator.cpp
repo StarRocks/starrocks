@@ -25,6 +25,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "testutil/sync_point.h"
 #include "util/debug/query_trace.h"
 #include "util/runtime_profile.h"
 
