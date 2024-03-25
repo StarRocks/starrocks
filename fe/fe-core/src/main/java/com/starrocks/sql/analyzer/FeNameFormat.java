@@ -37,8 +37,7 @@ public class FeNameFormat {
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
 
     // The length of db name is 256
-    public static final String DB_NAME_REGEX = "^[a-zA-Z]\\w{0,255}$|^_[a-zA-Z0-9]\\w{0,254}$";
-
+    public static String DB_NAME_REGEX = "";
     public static final String TABLE_NAME_REGEX = "^[^\0]{1,1024}$";
 
     // Now we can not accept all characters because current design of delete save delete cond contains column name,
@@ -61,6 +60,14 @@ public class FeNameFormat {
         FORBIDDEN_COLUMN_NAMES = new HashSet<>();
         FORBIDDEN_COLUMN_NAMES.add("__op");
         FORBIDDEN_COLUMN_NAMES.add("__row");
+        String allowedSpecialCharacters = "";
+        for (Character c : SPECIAL_CHARACTERS_IN_DB_NAME) {
+            allowedSpecialCharacters += c;
+        }
+
+        DB_NAME_REGEX = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
+                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
+
     }
 
     // The length of db name is 256.
@@ -69,14 +76,7 @@ public class FeNameFormat {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
 
-        String allowedSpecialCharacters = "";
-        for (Character c : SPECIAL_CHARACTERS_IN_DB_NAME) {
-            allowedSpecialCharacters += c;
-        }
-        
-        String pattern = "^[a-zA-Z][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,255}$|" +
-                "^_[a-zA-Z0-9][\\w" + Pattern.quote(allowedSpecialCharacters) + "]{0,254}$";
-        if (!dbName.matches(pattern)) {
+        if (!dbName.matches(DB_NAME_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
     }
