@@ -220,7 +220,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToRecycleTime.put(partitionId, recycleTime);
         idToPartition.put(partitionId, recyclePartitionInfo);
         LOG.info("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
-                partitionName, dbId, tableId, partitionName, recyclePartitionInfo.isRecoverable());
+                partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
     }
 
     public synchronized Partition getPartition(long partitionId) {
