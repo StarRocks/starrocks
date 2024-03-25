@@ -567,7 +567,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
+<<<<<<< HEAD
         Assert.assertEquals(27, jobs.size());
+=======
+        Assert.assertEquals(31, jobs.size());
+>>>>>>> d5338c5832 ([BugFix] Fixed external catalog's PartitionKey being deduplicated (#42893))
     }
 
     @Test
@@ -584,7 +588,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(11, jobs.size());
+        Assert.assertEquals(12, jobs.size());
     }
 
     @Test
