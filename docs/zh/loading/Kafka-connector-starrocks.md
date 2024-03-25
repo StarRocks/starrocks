@@ -65,6 +65,11 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 1. 配置 Kafka connector。在 Kafka 安装目录下的 **config** 目录，创建 Kafka connector 的配置文件 **connect-StarRocks-sink.properties**，并配置对应参数。参数和相关说明，参见[参数说明](#参数说明)。
 
+  :::note
+
+  Kafka connector 是 sink connector。
+
+  :::
       ```yaml
       name=starrocks-kafka-connector
       connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
@@ -115,7 +120,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 #### 通过 Distributed 模式启动 Kafka Connect
 
 1. 配置并启动 Kafka Connect。
-   1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-distributed.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。     
+   1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-distributed.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
         # 注意本示例使用 PLAINTEXT  安全协议访问 Kafka 集群，如果使用其他安全协议访问 Kafka 集群，则您需要在本文件中配置相关信息。        bootstrap.servers=<kafka_broker_ip>:9092
@@ -136,6 +141,12 @@ CREATE TABLE test_tbl (id INT, city STRING);
         ```
 
 2. 配置并创建 Kafka connector。注意，在 Distributed 模式下您需要通过 REST API 来配置并创建 Kafka connector。参数和相关说明，参见[参数说明](#参数说明)。
+  
+      :::note
+
+      Kafka connector 是 sink connector。
+
+      :::
 
       ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
@@ -210,6 +221,11 @@ MySQL [example_db]> select * from test_tbl;
 ### 导入 Debezium CDC 格式数据
 
 如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键表，则在 Kafka connector 配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#使用示例)外，还需要配置 `transforms` 以及相关参数。
+  :::note
+
+  Kafka connector 是 sink connector。
+
+  :::
 
 ```Properties
 transforms=addfield,unwrap
@@ -221,5 +237,5 @@ transforms.unwrap.delete.handling.mode=rewrite
 
 在上述配置中，我们指定 `transforms=addfield,unwrap`。
 
-- addfield transform 用于向 Debezium CDC 格式数据的每个记录添加一个__op字段，以支持 [主键表](../table_design/table_types/primary_key_table.md)，。如果 StarRocks 表不是主键表，则无需指定 addfield 转换。addfield transform 的类是 com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
+- 如果 StarRocks 表是主键表，则需要指定 addfield transform，用于向 Debezium CDC 格式数据的每个记录添加一个 `op` 字段。如果 StarRocks 表不是主键表，则无需指定 addfield transform。transform 的类是 com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
 - unwrap transform 是指由 Debezium 提供的 unwrap，可以根据操作类型 unwrap Debezium 复杂的数据结构。更多信息，参见 [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html)。
