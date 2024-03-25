@@ -39,6 +39,19 @@ public class JDBCTableTest {
         properties.put("resource", resourceName);
     }
 
+    private Map<String, String> getMockedJDBCProperties(String uri) throws Exception {
+        FeConstants.runningUnitTest = true;
+        Map<String, String> jdbcProperties = Maps.newHashMap();
+        jdbcProperties.put(JDBCResource.URI, uri);
+        jdbcProperties.put(JDBCResource.DRIVER_URL, "driver_url0");
+        jdbcProperties.put(JDBCResource.CHECK_SUM, "check_sum0");
+        jdbcProperties.put(JDBCResource.DRIVER_CLASS, "driver_class0");
+        jdbcProperties.put(JDBCResource.USER, "user0");
+        jdbcProperties.put(JDBCResource.PASSWORD, "password0");
+        FeConstants.runningUnitTest = false;
+        return jdbcProperties;
+    }
+
     private Resource getMockedJDBCResource(String name) throws Exception {
         FeConstants.runningUnitTest = true;
         Resource jdbcResource = new JDBCResource(name);
@@ -107,6 +120,38 @@ public class JDBCTableTest {
         expectedDesc.setJdbcTable(expectedTable);
 
         Assert.assertEquals(tableDescriptor, expectedDesc);
+    }
+
+    @Test
+    public void testToThriftWithoutResource(@Mocked GlobalStateMgr globalStateMgr,
+                             @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:mysql://127.0.0.1:3306";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", jdbcProperties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assert.assertEquals(jdbcTable.getJdbc_url(), "jdbc:mysql://127.0.0.1:3306/db0");
+        Assert.assertEquals(jdbcTable.getJdbc_driver_url(), jdbcProperties.get(JDBCResource.DRIVER_URL));
+        Assert.assertEquals(jdbcTable.getJdbc_driver_class(), jdbcProperties.get(JDBCResource.DRIVER_CLASS));
+        Assert.assertEquals(jdbcTable.getJdbc_user(), jdbcProperties.get(JDBCResource.USER));
+        Assert.assertEquals(jdbcTable.getJdbc_passwd(), jdbcProperties.get(JDBCResource.PASSWORD));
+    }
+
+    @Test
+    public void testToThriftWithJdbcParam(@Mocked GlobalStateMgr globalStateMgr,
+                             @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:mysql://127.0.0.1:3306?key=value";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", jdbcProperties);
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assert.assertEquals(jdbcTable.getJdbc_url(), "jdbc:mysql://127.0.0.1:3306/db0?key=value");
+        Assert.assertEquals(jdbcTable.getJdbc_driver_url(), jdbcProperties.get(JDBCResource.DRIVER_URL));
+        Assert.assertEquals(jdbcTable.getJdbc_driver_class(), jdbcProperties.get(JDBCResource.DRIVER_CLASS));
+        Assert.assertEquals(jdbcTable.getJdbc_user(), jdbcProperties.get(JDBCResource.USER));
+        Assert.assertEquals(jdbcTable.getJdbc_passwd(), jdbcProperties.get(JDBCResource.PASSWORD));
     }
 
     @Test(expected = DdlException.class)
