@@ -2208,16 +2208,28 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
+    private List<Expr> getAnalyzeColumns(List<QualifiedName> qualifiedNames) {
+        List<Expr> columns = Lists.newArrayList();
+        for (QualifiedName qualifiedName : qualifiedNames) {
+            if (qualifiedName.getParts().size() == 1) {
+                columns.add(new SlotRef(null, qualifiedName.getParts().get(0)));
+            } else {
+                Expr base = new SlotRef(null, qualifiedName.getParts().get(0));
+                for (int i = 1; i < qualifiedName.getParts().size(); i++) {
+                    base = new SubfieldExpr(base, List.of(qualifiedName.getParts().get(i)));
+                }
+                columns.add(base);
+            }
+        }
+        return columns;
+    }
+
     @Override
     public ParseNode visitAnalyzeStatement(StarRocksParser.AnalyzeStatementContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName tableName = qualifiedNameToTableName(qualifiedName);
-
-        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
-        List<String> columnNames = null;
-        if (columns != null) {
-            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
-        }
+        List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
+                collect(toList());
+        TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
+        List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2227,7 +2239,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties,
+        return new AnalyzeStmt(tableName, columns, properties,
                 context.SAMPLE() != null,
                 context.ASYNC() != null,
                 new AnalyzeBasicDesc(), createPos(context));
@@ -2255,14 +2267,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new CreateAnalyzeJobStmt(((Identifier) visit(context.db)).getValue(), context.FULL() == null,
                     properties, pos);
         } else if (context.TABLE() != null) {
-            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            TableName tableName = qualifiedNameToTableName(qualifiedName);
-            List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
-            List<String> columnNames = null;
-            if (columns != null) {
-                columnNames = columns.stream().map(Identifier::getValue).collect(toList());
-            }
-            return new CreateAnalyzeJobStmt(tableName, columnNames, context.SAMPLE() != null, properties, pos);
+            List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
+                    collect(toList());
+            TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
+            List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
+            return new CreateAnalyzeJobStmt(tableName, columns, context.SAMPLE() != null, properties, pos);
         } else {
             return new CreateAnalyzeJobStmt(context.FULL() == null, properties, pos);
         }
@@ -2312,14 +2321,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAnalyzeHistogramStatement(StarRocksParser.AnalyzeHistogramStatementContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName tableName = qualifiedNameToTableName(qualifiedName);
-
-        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
-        List<String> columnNames = null;
-        if (columns != null) {
-            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
-        }
+        List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
+                collect(toList());
+        TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
+        List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2336,22 +2341,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             bucket = Config.histogram_buckets_size;
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, true,
+        return new AnalyzeStmt(tableName, columns, properties, true,
                 context.ASYNC() != null, new AnalyzeHistogramDesc(bucket), createPos(context));
     }
 
     @Override
     public ParseNode visitDropHistogramStatement(StarRocksParser.DropHistogramStatementContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
+                collect(toList());
+        TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
+        List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
 
-        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
-        List<String> columnNames = null;
-        if (columns != null) {
-            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
-        }
-
-        return new DropHistogramStmt(tableName, columnNames, createPos(context));
+        return new DropHistogramStmt(tableName, columns, createPos(context));
     }
 
     @Override

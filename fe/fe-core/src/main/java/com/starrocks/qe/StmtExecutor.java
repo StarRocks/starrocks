@@ -1240,7 +1240,7 @@ public class StmtExecutor {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                     new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
-                            db, table, analyzeStmt.getColumnNames(),
+                            db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                             analyzeStmt.getProperties()),
                         analyzeStatus,
@@ -1248,12 +1248,12 @@ public class StmtExecutor {
             } else {
                 StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                         StatsConstants.AnalyzeType.FULL;
-                // TODO: we should check old statistic and confirm paritionlist
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
                                 analyzeStmt.getTableName().getCatalog(),
                                 db, table, null,
                                 analyzeStmt.getColumnNames(),
+                                analyzeStmt.getColumnTypes(),
                                 analyzeType,
                                 StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
                         analyzeStatus,
@@ -1263,6 +1263,7 @@ public class StmtExecutor {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                                analyzeStmt.getColumnTypes(),
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
@@ -1274,6 +1275,7 @@ public class StmtExecutor {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                                 analyzeStmt.getColumnNames(),
+                                analyzeStmt.getColumnTypes(),
                                 analyzeType,
                                 StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
                         analyzeStatus,

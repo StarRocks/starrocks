@@ -1234,7 +1234,7 @@ showStreamLoadStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')?
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')?
         (WITH (SYNC | ASYNC) MODE)?
         properties?
     ;
@@ -1244,20 +1244,20 @@ dropStatsStatement
     ;
 
 analyzeHistogramStatement
-    : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
+    : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON qualifiedName (',' qualifiedName)*
         (WITH (SYNC | ASYNC) MODE)?
         (WITH bucket=INTEGER_VALUE BUCKETS)?
         properties?
     ;
 
 dropHistogramStatement
-    : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
+    : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON qualifiedName (',' qualifiedName)*
     ;
 
 createAnalyzeStatement
     : CREATE ANALYZE (FULL | SAMPLE)? ALL properties?
     | CREATE ANALYZE (FULL | SAMPLE)? DATABASE db=identifier properties?
-    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName (',' qualifiedName)* ')')? properties?
     ;
 
 dropAnalyzeJobStatement

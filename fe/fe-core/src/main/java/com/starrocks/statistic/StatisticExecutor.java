@@ -304,7 +304,7 @@ public class StatisticExecutor {
         statsConnectCtx.setStatisticsConnection(false);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             if (table.isNativeTableOrMaterializedView()) {
-                for (String columnName : statsJob.getColumns()) {
+                for (String columnName : statsJob.getColumnNames()) {
                     HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
                             table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
                             statsJob.getProperties());
@@ -314,7 +314,7 @@ public class StatisticExecutor {
                             Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
                 }
             } else {
-                for (String columnName : statsJob.getColumns()) {
+                for (String columnName : statsJob.getColumnNames()) {
                     ExternalHistogramStatsMeta histogramStatsMeta = new ExternalHistogramStatsMeta(
                             statsJob.getCatalogName(), db.getFullName(), table.getName(), columnName,
                             statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
@@ -329,7 +329,7 @@ public class StatisticExecutor {
             if (table.isNativeTableOrMaterializedView()) {
                 long existUpdateRows = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExistUpdateRows(table.getId());
                 BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
-                        statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(),
+                        statsJob.getColumnNames(), statsJob.getType(), analyzeStatus.getEndTime(),
                         statsJob.getProperties(), existUpdateRows);
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshBasicStatisticsCache(
@@ -338,12 +338,12 @@ public class StatisticExecutor {
             } else {
                 // for external table
                 ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(),
-                        db.getFullName(), table.getName(), statsJob.getColumns(), statsJob.getType(),
+                        db.getFullName(), table.getName(), statsJob.getColumnNames(), statsJob.getType(),
                         analyzeStatus.getStartTime(), statsJob.getProperties());
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                         .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
-                                db.getFullName(), table.getName(), statsJob.getColumns(), refreshAsync);
+                                db.getFullName(), table.getName(), statsJob.getColumnNames(), refreshAsync);
             }
         }
         return analyzeStatus;
