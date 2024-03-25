@@ -268,13 +268,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: add feature label
+        id: add
         if: startsWith(github.event.pull_request.title, '[Feature]')
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: 'feature'
 
       - name: remove feature label
-        if: !startsWith(github.event.pull_request.title, '[Feature]')
+        if: always() && steps.add.outcome == 'skipped'
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: 'feature'
