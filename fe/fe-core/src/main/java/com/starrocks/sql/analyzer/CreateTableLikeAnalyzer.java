@@ -25,7 +25,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
-import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -62,10 +61,6 @@ public class CreateTableLikeAnalyzer {
                 SqlParser.parseOneWithStarRocksDialect(createTableStmt.get(0), context.getSessionVariable());
         if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
-            if (statementBase instanceof CreateTemporaryTableStmt) {
-                parsedCreateTableStmt = (CreateTemporaryTableStmt) statementBase;
-            }
-            // CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
             parsedCreateTableStmt.setTableName(stmt.getTableName());
             if (stmt.isSetIfNotExists()) {
                 parsedCreateTableStmt.setIfNotExists();
@@ -81,7 +76,6 @@ public class CreateTableLikeAnalyzer {
             }
 
             com.starrocks.sql.analyzer.Analyzer.analyze(parsedCreateTableStmt, context);
-            // @TODO temporary
             stmt.setCreateTableStmt(parsedCreateTableStmt);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);

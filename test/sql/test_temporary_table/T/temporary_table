@@ -58,7 +58,6 @@ insert into `t1` values (4,4),(5,5);
 select * from `t1` order by `c1`,`c2`;
 
 -- name: test_truncate_table 
--- TODO: pending fix
 create temporary table `t0` (
     `c1` int,
     `c2` int

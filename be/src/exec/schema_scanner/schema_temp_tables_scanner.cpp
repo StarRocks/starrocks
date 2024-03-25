@@ -91,8 +91,6 @@ Status SchemaTempTablesScanner::start(RuntimeState* state) {
 Status SchemaTempTablesScanner::get_next(ChunkPtr* chunk, bool* eos) {
     DCHECK(_is_init) << "call init() before get_next()";
     DCHECK(chunk != nullptr && eos != nullptr) << "input should not be nullptr";
-    LOG(INFO) << "get_next, total size: " << _temp_tables_info_response.tables_infos.size()
-              << ", index: " << _temp_tables_info_index;
 
     if (_temp_tables_info_index >= _temp_tables_info_response.tables_infos.size()) {
         *eos = true;

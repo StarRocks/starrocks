@@ -73,6 +73,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -543,10 +544,27 @@ public class InformationSchemaDataSource {
             throws TException {
         // @TODO check auth
         TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-        // list all
-        List<TTableInfo> tableInfos = new ArrayList<>();
+        TAuthInfo authInfo = request.getAuth_info();
+        AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        if (authInfo.isSetCatalog_name()) {
+            catalogName = authInfo.getCatalog_name();
+        }
+
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Map<Long, Map<UUID, Long>> allTables = temporaryTableMgr.getAllTemporaryTables();
+
+        Set<Long> requiredDbIds = new HashSet<>();
+        for (String dbName : result.authorizedDbs) {
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            if (db != null) {
+                requiredDbIds.add(db.getId());
+            }
+        }
+
+        Map<Long, Map<UUID, Long>> allTables = temporaryTableMgr.getAllTemporaryTables(requiredDbIds);
+
+        List<TTableInfo> tableInfos = new ArrayList<>();
         allTables.forEach((databaseId, tableMap) -> {
             Database db = metadataMgr.getDb(databaseId);
             if (db != null) {

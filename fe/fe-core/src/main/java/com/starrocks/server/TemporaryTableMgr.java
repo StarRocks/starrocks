@@ -80,12 +80,15 @@ public class TemporaryTableMgr {
     }
 
     // db -> session -> table
-    public Map<Long, Map<UUID, Long>> getAllTemporaryTables() {
+    public Map<Long, Map<UUID, Long>> getAllTemporaryTables(Set<Long> requiredDbIds) {
         Map<Long, Map<UUID, Long>> result = Maps.newHashMap();
         sessionMap.values().forEach(session -> {
             UUID sessionId = session.getId();
             Map<Long, Map<String, Long>> allTables = session.getAllTemporaryTables();
             allTables.forEach((databaseId, tableMap) -> {
+                if (!requiredDbIds.contains(databaseId)) {
+                    return;
+                }
                 if (!result.containsKey(databaseId)) {
                     result.put(databaseId, Maps.newHashMap());
                 }

@@ -60,7 +60,6 @@ public class CTASAnalyzer {
         if (createTableStmt.isExternal()) {
             throw new SemanticException("CTAS does not support create external table");
         }
-        // @TODO consider temporary table
 
         Analyzer.analyze(queryStatement, session);
 
@@ -138,7 +137,6 @@ public class CTASAnalyzer {
         if (null == createTableStmt.getDistributionDesc()) {
             if ((createTableStmt.getKeysDesc() != null && createTableStmt.getKeysDesc().getKeysType() != KeysType.DUP_KEYS)
                     || createTableStmt.getProperties().containsKey("colocate_with")) {
-                // @TODO temporary table not support colocate_with
                 // For HashDistributionDesc key
                 // If we have statistics cache, we pick the column with the highest cardinality in the statistics,
                 // if we don't, we pick the first column

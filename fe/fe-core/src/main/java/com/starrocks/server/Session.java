@@ -69,7 +69,7 @@ public class Session {
         LOG.info("remove temporary table, db id[{}], table name[{}], session[{}]", databaseId, tblName, id);
     }
 
-    // get a deep copy of tempTables
+    // get a deep copy of temporaryTables
     public Map<Long, Map<String, Long>> getAllTemporaryTables() {
         Map<Long, Map<String, Long>> deepCopy = Maps.newHashMap();
         temporaryTables.forEach((databaseId, table) -> {

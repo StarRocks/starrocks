@@ -824,6 +824,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (!stmt.isSetIfNotExists()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
                 }
+                LOG.info("create table[{}] which already exists", tableName);
                 return false;
             }
         } finally {
@@ -2300,7 +2301,6 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("Successfully create table: {}-{}, in database: {}-{}",
                     table.getName(), table.getId(), db.getFullName(), db.getId());
 
-            // @TODO consider temp table?
             CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo);
             table.onCreate(db);
@@ -2317,7 +2317,6 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             if (table.isTemporaryTable()) {
                 db.registerTemporaryTableUnlocked(table);
-                // register it on temp table mgr
                 TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
                 UUID sessionId = ((OlapTable) table).getSessionId();
                 temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), table.getName(), table.getId());
@@ -4734,7 +4733,6 @@ public class LocalMetastore implements ConnectorMetadata {
     public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
         TableRef tblRef = truncateTableStmt.getTblRef();
         TableName dbTbl = tblRef.getName();
-        // @TODO consider temporary table
         // check, and save some info which need to be checked again later
         Map<String, Partition> origPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         OlapTable copiedTbl;

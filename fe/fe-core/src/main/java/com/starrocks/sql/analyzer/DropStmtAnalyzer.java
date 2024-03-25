@@ -126,8 +126,7 @@ public class DropStmtAnalyzer {
             // check catalog
             String catalogName = statement.getCatalogName();
             if (!CatalogMgr.isInternalCatalog(catalogName)) {
-                // @TODO fix error msg
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+                throw new SemanticException("drop temporary table can only be execute under default catalog");
             }
             try {
                 MetaUtils.checkCatalogExistAndReport(catalogName);

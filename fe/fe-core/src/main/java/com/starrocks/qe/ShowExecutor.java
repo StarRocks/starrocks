@@ -1687,7 +1687,7 @@ public class ShowExecutor {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
-                    Table table = db.getTable(statement.getTableName());
+                    Table table = MetaUtils.getTable(context, db, new TableName(statement.getDbName(), statement.getTableName()));
                     if (table == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getTableName());
                     }
@@ -2189,7 +2189,7 @@ public class ShowExecutor {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
-                Table table = db.getTable(statement.getTableName().getTbl());
+                Table table = MetaUtils.getTable(context, db, statement.getTableName());
                 if (table == null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR,
                             db.getOriginName() + "." + statement.getTableName().toString());

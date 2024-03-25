@@ -186,7 +186,6 @@ public class CreateTableAnalyzer {
         }
 
         final String engineName = analyzeEngineName(statement.getEngineName(), catalogName).toLowerCase();
-        // @TODO how about cloud table
         if (isCreateTemporaryTable && !engineName.equalsIgnoreCase("olap")) {
             throw new SemanticException("temporary table only support olap engine");
         }

@@ -399,8 +399,6 @@ public class MetadataMgr {
     }
 
     public void dropTemporaryTable(DropTemporaryTableStmt stmt) {
-        // @TODO maybe not need this interface
-        // @TODO handle something
         Preconditions.checkArgument(stmt.getSessionId() != null,
                 "session id should not be null in DropTemporaryTableStmt");
         String catalogName = stmt.getCatalogName();
