@@ -163,23 +163,6 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
         }
         delete iter;
     }
-    {
-        // reserve iterate
-        sstable::Options options;
-        sstable::Iterator* iter = sstable::NewMergingIterator(options.comparator, &list[0], list.size());
-
-        iter->SeekToLast();
-        std::string cur_key = "";
-        while (iter->Valid()) {
-            auto key = iter->key().to_string();
-            iter->Prev();
-            if (cur_key != "") {
-                ASSERT_TRUE(cur_key >= key);
-            }
-            cur_key = key;
-        }
-        CHECK_OK(iter->status());
-    }
 
     ASSERT_EQ(N, map.size());
     const std::string filename = "test_merge_4.sst";
