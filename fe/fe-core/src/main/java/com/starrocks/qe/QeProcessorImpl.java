@@ -298,7 +298,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryInfo", (long) coordinatorMap.size());
+        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
     }
 
     public static final class QueryInfo {

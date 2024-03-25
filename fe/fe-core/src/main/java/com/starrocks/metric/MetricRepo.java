@@ -45,8 +45,6 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
@@ -54,7 +52,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
+<<<<<<< HEAD
 import com.starrocks.common.util.ProfileManager;
+=======
+import com.starrocks.common.util.NetUtils;
+>>>>>>> 218f400fc7 ([Feature] Metrics that support memory and object statistics (#41397))
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
@@ -64,24 +66,20 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
-import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.AgentTaskQueue;
-import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -159,6 +157,9 @@ public final class MetricRepo {
 
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
+    public static List<GaugeMetricImpl<Long>> GAUGE_MEMORY_USAGE_STATS;
+    public static List<GaugeMetricImpl<Long>> GAUGE_OBJECT_COUNT_STATS;
+
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
@@ -172,6 +173,8 @@ public final class MetricRepo {
         }
 
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
+        GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
+        GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
 
         // 1. gauge
         // load jobs
@@ -471,8 +474,6 @@ public final class MetricRepo {
         // init system metrics
         initSystemMetrics();
 
-        initMemoryMetrics();
-
         updateMetrics();
         hasInit = true;
 
@@ -527,6 +528,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(tpcOutSegs);
     }
 
+<<<<<<< HEAD
     public static void initMemoryMetrics() {
         GaugeMetric<Long> tabletCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
                 "The count of tablets") {
@@ -752,6 +754,8 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(agentTaskCount);
     }
 
+=======
+>>>>>>> 218f400fc7 ([Feature] Metrics that support memory and object statistics (#41397))
     // to generate the metrics related to tablets of each backend
     // this metric is reentrant, so that we can add or remove metric along with the backend add or remove
     // at runtime.
@@ -801,6 +805,44 @@ public final class MetricRepo {
         } // end for backends
     }
 
+    public static void updateMemoryUsageMetrics() {
+        if (GAUGE_MEMORY_USAGE_STATS.size() ==
+                MemoryUsageTracker.MEMORY_USAGE.values().stream().mapToInt(Map::size).sum()) {
+            return;
+        }
+
+        List<GaugeMetricImpl<Long>> memoryUsageGauges = new ArrayList<>();
+        List<GaugeMetricImpl<Long>> objectCountGauges = new ArrayList<>();
+        MemoryUsageTracker.MEMORY_USAGE.forEach((moduleName, module) -> {
+            if (module != null) {
+                module.forEach((className, memoryState) -> {
+                    GaugeMetricImpl<Long> metricBytes =
+                            new GaugeMetricImpl<>("memory_usage", MetricUnit.BYTES,
+                                    "The bytes of module");
+                    metricBytes.addLabel(new MetricLabel("module", moduleName));
+                    metricBytes.addLabel(new MetricLabel("className", className));
+                    metricBytes.setValue(memoryState.getCurrentConsumption());
+                    memoryUsageGauges.add(metricBytes);
+
+                    Map<String, Long> counterMap = memoryState.getCounterMap();
+                    counterMap.forEach((name, value) -> {
+                        GaugeMetricImpl<Long> metricCount =
+                                new GaugeMetricImpl<>("object_count", MetricUnit.NOUNIT,
+                                        "The count of object");
+                        metricCount.addLabel(new MetricLabel("module", moduleName));
+                        metricCount.addLabel(new MetricLabel("className", className));
+                        metricCount.addLabel(new MetricLabel("objectName", name));
+                        metricCount.setValue(value);
+                        objectCountGauges.add(metricCount);
+                    });
+                });
+
+            }
+        });
+
+        GAUGE_MEMORY_USAGE_STATS = memoryUsageGauges;
+        GAUGE_OBJECT_COUNT_STATS = objectCountGauges;
+    }
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
@@ -921,6 +963,10 @@ public final class MetricRepo {
             collectRoutineLoadProcessMetrics(visitor);
         }
 
+        if (Config.memory_tracker_enable) {
+            collectMemoryUsageMetrics(visitor);
+        }
+
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
 
@@ -990,6 +1036,15 @@ public final class MetricRepo {
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
         for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
+            visitor.visit(metric);
+        }
+    }
+
+    private static void collectMemoryUsageMetrics(MetricVisitor visitor) {
+        for (GaugeMetricImpl<Long> metric : GAUGE_MEMORY_USAGE_STATS) {
+            visitor.visit(metric);
+        }
+        for (GaugeMetricImpl<Long> metric : GAUGE_OBJECT_COUNT_STATS) {
             visitor.visit(metric);
         }
     }

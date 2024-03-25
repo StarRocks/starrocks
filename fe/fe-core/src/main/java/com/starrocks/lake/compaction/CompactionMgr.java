@@ -14,9 +14,15 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
+=======
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
+>>>>>>> 218f400fc7 ([Feature] Metrics that support memory and object statistics (#41397))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -36,13 +42,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class CompactionMgr {
+public class CompactionMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CompactionMgr.class);
 
     @SerializedName(value = "partitionStatisticsHashMap")
@@ -210,4 +217,24 @@ public class CompactionMgr {
     public long getPartitionStatsCount() {
         return partitionStatisticsHashMap.size();
     }
+<<<<<<< HEAD
+=======
+
+    public PartitionStatistics triggerManualCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            return v;
+        });
+        LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("PartitionStats", (long) partitionStatisticsHashMap.size());
+    }
+>>>>>>> 218f400fc7 ([Feature] Metrics that support memory and object statistics (#41397))
 }

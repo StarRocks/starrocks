@@ -869,7 +869,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         for (List<MultiDeleteInfo> value : dbToDeleteInfos.values()) {
             count += value.size();
         }
-        return ImmutableMap.of("DeleteInfo", count);
+        return ImmutableMap.of("DeleteInfo", getDeleteInfoCount(),
+                               "DeleteJob", (long) idToDeleteJob.size());
     }
 
 }
