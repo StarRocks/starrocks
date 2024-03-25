@@ -91,6 +91,7 @@ set(EXPR_FILES
   vectorized/lambda_function.cpp
   vectorized/array_map_expr.cpp
   vectorized/subfield_expr.cpp
+  fpe.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})
