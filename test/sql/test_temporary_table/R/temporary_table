@@ -16,7 +16,7 @@ create temporary table `t0` (
     `c2` int
 ) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Table 't0' already exists.")
+E: (1050, "Getting analyzing error. Detail message: Table 't0' already exists.")
 -- !result
 show create table `t0`;
 -- result:
@@ -27,12 +27,11 @@ t0	CREATE TEMPORARY TABLE `t0` (
 PRIMARY KEY(`c1`)
 DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 desc `t0`;
@@ -51,21 +50,18 @@ select * from `t0` order by `c1`,`c2`;
 -- !result
 update `t0` set `c2`=`c2`+1 where `c1`=1;
 -- result:
-E: (1064, 'USER_CANCEL')
 -- !result
 select * from `t0` order by `c1`,`c2`;
 -- result:
-1	1
+1	2
 2	2
 3	3
 -- !result
 delete from `t0` where `c1` = 1;
 -- result:
-E: (1064, 'USER_CANCEL')
 -- !result
 select * from `t0` order by `c1`, `c2`;
 -- result:
-1	1
 2	2
 3	3
 -- !result
@@ -94,12 +90,11 @@ t1	CREATE TEMPORARY TABLE `t1` (
 PRIMARY KEY(`c1`)
 DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from `t1`;
@@ -135,13 +130,11 @@ t1	CREATE TEMPORARY TABLE `t1` (
 DUPLICATE KEY(`c1`, `c2`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"replication_num" = "3",
 "bucket_size" = "4294967296",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "3"
 );
 -- !result
 select * from `t1` order by `c1`,`c2`;
@@ -305,5 +298,5 @@ WITH BROKER
     "fs.oss.endpoint" = "${oss_endpoint}"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Do not support exporting temporary table.')
+E: (5064, 'Getting analyzing error. Detail message: Do not support exporting temporary table.')
 -- !result

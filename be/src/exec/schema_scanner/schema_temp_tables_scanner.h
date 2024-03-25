@@ -34,4 +34,4 @@ private:
     TGetTemporaryTablesInfoResponse _temp_tables_info_response;
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
-}
+} // namespace starrocks

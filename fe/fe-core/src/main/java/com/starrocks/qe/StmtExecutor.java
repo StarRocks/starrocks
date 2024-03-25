@@ -1941,9 +1941,7 @@ public class StmtExecutor {
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
-            // @TODO what???
-            // @TODO should consider temp table
-            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            targetTable = MetaUtils.getTable(context, database, stmt.getTableName());
         }
 
         if (isExplainAnalyze) {

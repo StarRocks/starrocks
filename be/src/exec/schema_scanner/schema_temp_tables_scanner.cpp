@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exec/schema_scanner/schema_temp_tables_scanner.h"
+
 #include <protocol/TDebugProtocol.h>
 
 #include "exec/schema_scanner/schema_helper.h"
@@ -48,10 +49,10 @@ SchemaScanner::ColumnDesc SchemaTempTablesScanner::_s_tbls_columns[] = {
         {"CREATE_OPTIONS", TYPE_VARCHAR, sizeof(StringValue), true},
         {"TABLE_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
         {"SESSION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), true}
-};
+        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), true}};
 
-SchemaTempTablesScanner::SchemaTempTablesScanner(): SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
+SchemaTempTablesScanner::SchemaTempTablesScanner()
+        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaTempTablesScanner::~SchemaTempTablesScanner() = default;
 
@@ -79,7 +80,8 @@ Status SchemaTempTablesScanner::start(RuntimeState* state) {
     request.__set_auth_info(auth_info);
     if (nullptr != _param->ip && 0 != _param->port) {
         int timeout_ms = state->query_options().query_timeout * 1000;
-        RETURN_IF_ERROR(SchemaHelper::get_temporary_tables_info(*(_param->ip), _param->port, request, &_temp_tables_info_response, timeout_ms));
+        RETURN_IF_ERROR(SchemaHelper::get_temporary_tables_info(*(_param->ip), _param->port, request,
+                                                                &_temp_tables_info_response, timeout_ms));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
@@ -89,7 +91,8 @@ Status SchemaTempTablesScanner::start(RuntimeState* state) {
 Status SchemaTempTablesScanner::get_next(ChunkPtr* chunk, bool* eos) {
     DCHECK(_is_init) << "call init() before get_next()";
     DCHECK(chunk != nullptr && eos != nullptr) << "input should not be nullptr";
-    LOG(INFO) << "get_next, total size: " << _temp_tables_info_response.tables_infos.size() << ", index: " << _temp_tables_info_index;
+    LOG(INFO) << "get_next, total size: " << _temp_tables_info_response.tables_infos.size()
+              << ", index: " << _temp_tables_info_index;
 
     if (_temp_tables_info_index >= _temp_tables_info_response.tables_infos.size()) {
         *eos = true;
@@ -387,4 +390,4 @@ Status SchemaTempTablesScanner::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-}
+} // namespace starrocks

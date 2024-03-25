@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exec/schema_scanner.h"
+
 #include <protocol/TDebugProtocol.h>
 
 #include "column/type_traits.h"
@@ -51,7 +52,6 @@
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/schema_scanner/schema_variables_scanner.h"
 #include "exec/schema_scanner/schema_views_scanner.h"
-#include "exec/schema_scanner/schema_temp_tables_scanner.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
 #include "exec/schema_scanner/sys_fe_locks.h"
