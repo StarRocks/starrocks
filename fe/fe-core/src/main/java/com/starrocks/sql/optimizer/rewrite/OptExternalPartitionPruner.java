@@ -28,8 +28,16 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.external.elasticsearch.EsShardPartitions;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
+>>>>>>> d5338c5832 ([BugFix] Fixed external catalog's PartitionKey being deduplicated (#42893))
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
@@ -117,7 +125,7 @@ public class OptExternalPartitionPruner {
             try {
                 initPartitionInfo(logicalScanOperator, context, columnToPartitionValuesMap, columnToNullPartitions);
                 classifyConjuncts(logicalScanOperator, columnToPartitionValuesMap);
-                computePartitionInfo(logicalScanOperator, columnToPartitionValuesMap, columnToNullPartitions);
+                computePartitionInfo(logicalScanOperator, context, columnToPartitionValuesMap, columnToNullPartitions);
             } catch (Exception e) {
                 LOG.warn("HMS table partition prune failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
@@ -159,21 +167,52 @@ public class OptExternalPartitionPruner {
                         hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
             }
 
-            Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
+            List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
             if (!hmsTable.isUnPartitioned()) {
+<<<<<<< HEAD
                 long partitionId = 0;
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
                     PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
                     partitionKeys.put(partitionKey, partitionId++);
+=======
+                // get partition names
+                List<String> partitionNames;
+                // check if the partition predicate could be used for filter partition names
+                List<Optional<ScalarOperator>> effectivePartitionPredicate =
+                        getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
+                if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
+                    List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
+                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
+                                    hmsTable.getTableName(), partitionValues);
+                } else {
+                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(),
+                                    hmsTable.getTableName());
+                }
+
+                List<PartitionKey> keys = new ArrayList<>();
+                List<Long> ids = new ArrayList<>();
+                for (String partName : partitionNames) {
+                    List<String> values = toPartitionValues(partName);
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
+                    keys.add(partitionKey);
+                    ids.add(context.getNextUniquePartitionId());
+                }
+                for (int i = 0; i < keys.size(); i++) {
+                    partitionKeys.add(new Pair<>(keys.get(i), ids.get(i)));
+>>>>>>> d5338c5832 ([BugFix] Fixed external catalog's PartitionKey being deduplicated (#42893))
                 }
             } else {
-                partitionKeys.put(new PartitionKey(), 0L);
+                partitionKeys.add(new Pair<>(new PartitionKey(), 0L));
             }
 
-            partitionKeys.entrySet().stream().parallel().forEach(entry -> {
-                PartitionKey key = entry.getKey();
-                long partitionId = entry.getValue();
+
+
+            partitionKeys.stream().parallel().forEach(entry -> {
+                PartitionKey key = entry.first;
+                long partitionId = entry.second;
                 List<LiteralExpr> literals = key.getKeys();
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
@@ -189,9 +228,9 @@ public class OptExternalPartitionPruner {
                 }
             });
 
-            for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
-                PartitionKey key = entry.getKey();
-                long partitionId = entry.getValue();
+            for (Pair<PartitionKey, Long> entry : partitionKeys) {
+                PartitionKey key = entry.first;
+                long partitionId = entry.second;
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
             }
         }
@@ -212,7 +251,7 @@ public class OptExternalPartitionPruner {
         }
     }
 
-    private static void computePartitionInfo(LogicalScanOperator operator,
+    private static void computePartitionInfo(LogicalScanOperator operator, OptimizerContext context,
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
             throws AnalysisException {
@@ -228,6 +267,55 @@ public class OptExternalPartitionPruner {
             }
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
+<<<<<<< HEAD
+=======
+        } else if (table instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (!icebergTable.getSnapshot().isPresent()) {
+                // TODO: for iceberg table, it cannot decide whether it's pruned or not when `selectedPartitionIds`
+                //  is empty. It's expensive to set all partitions here.
+                return;
+            }
+
+            ImmutableMap.Builder<Long, PartitionKey> idToPartitionKey = ImmutableMap.builder();
+            if (table.isUnPartitioned()) {
+                idToPartitionKey.put(0L, new PartitionKey());
+            } else {
+                String catalogName = icebergTable.getCatalogName();
+                List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
+                for (PartitionKey partitionKey : partitionKeys) {
+                    idToPartitionKey.put(context.getNextUniquePartitionId(), partitionKey);
+                }
+            }
+
+            Map<Long, PartitionKey> partitionKeyMap = idToPartitionKey.build();
+            scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
+            scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
+        } else if (table instanceof PaimonTable) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
+                    .map(ColumnRefOperator::getName)
+                    .collect(Collectors.toList());
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                    paimonTable.getCatalogName(), table, null, -1, operator.getPredicate(), fieldNames, -1);
+            if (fileInfos.isEmpty()) {
+                return;
+            }
+
+            RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+            if (remoteFileDesc == null) {
+                return;
+            }
+            List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
+            if (splits.isEmpty()) {
+                return;
+            }
+            long rowCount = getRowCount(splits);
+            if (rowCount > 0) {
+                scanOperatorPredicates.getSelectedPartitionIds().add(1L);
+            }
+>>>>>>> d5338c5832 ([BugFix] Fixed external catalog's PartitionKey being deduplicated (#42893))
         }
     }
 

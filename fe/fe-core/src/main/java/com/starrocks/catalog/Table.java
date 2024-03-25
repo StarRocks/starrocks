@@ -718,4 +718,18 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean hasForeignKeyConstraints() {
+        return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
+    }
+
+    public boolean isTable() {
+        return !type.equals(TableType.MATERIALIZED_VIEW) &&
+                !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
+                !type.equals(TableType.VIEW) &&
+                !type.equals(TableType.HIVE_VIEW);
+    }
+>>>>>>> d5338c5832 ([BugFix] Fixed external catalog's PartitionKey being deduplicated (#42893))
 }
