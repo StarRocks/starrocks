@@ -43,6 +43,9 @@ import java.util.Set;
 public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
     Map<String, String> properties;
 
+
+    public static final String KEY_FOR_TABLE_NAME_FOR_PARTITION_INFO = "table_name_for_partition_info";
+    public static final String KEY_FOR_TABLE_NAME_FOR_TABLE_INFO = "table_name_for_table_info";
     private static final String DEFAULT_TABLE_NAME_FOR_PARTITION_INFO = "system.parts";
     private static final String DEFAULT_TABLE_NAME_FOR_TABLE_INFO = "system.tables";
     private static final Set<String> SUPPORTED_TABLE_TYPES = new HashSet<>(
@@ -100,23 +103,41 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         // The architecture of user's clickhouse is undermined, so we allow user to specify <part_into_table>
         // and fall back to clickhouse's default system table for partition information, i.e. `system.parts`.
         String tableNameForPartInfo = getTableNameForPartInfo();
-        try (Statement statement = connection.createStatement();
-                ResultSet resultSet = statement.executeQuery("DESC" + tableNameForPartInfo)) {
-            return this.supportPartitionInformation = true;
-        } catch (SQLException e) {
-            if (e.getMessage().toLowerCase().contains("doesn't exist")) {
-                return this.supportPartitionInformation = false;
+        String[] schemaAndTable = tableNameForPartInfo.split("\\.");
+        if (schemaAndTable.length != 2) {
+            throw new StarRocksConnectorException(String.format("Invalid table name for partition information: %s," +
+                    "Please specify the full table name  <schema>.<table_name>", tableNameForPartInfo));
+        }
+        String catalogSchema = schemaAndTable[0];
+        String partitionInfoTable = schemaAndTable[1];
+        // Different types of MySQL protocol databases have different case names for schema and table names,
+        // which need to be converted to lowercase for comparison
+        try (ResultSet catalogSet = connection.getMetaData().getCatalogs()) {
+            while (catalogSet.next()) {
+                String schemaName = catalogSet.getString("TABLE_CAT");
+                if (schemaName.equalsIgnoreCase(catalogSchema)) {
+                    try (ResultSet tableSet = connection.getMetaData().getTables(catalogSchema, null, null, null)) {
+                        while (tableSet.next()) {
+                            String tableName = tableSet.getString("TABLE_NAME");
+                            if (tableName.equalsIgnoreCase(partitionInfoTable)) {
+                                return this.supportPartitionInformation = true;
+                            }
+                        }
+                    }
+                }
             }
+        } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
+        return this.supportPartitionInformation = false;
     }
 
     private String getTableNameForPartInfo() {
-        return properties.getOrDefault("table_name_for_partition_info", DEFAULT_TABLE_NAME_FOR_PARTITION_INFO);
+        return properties.getOrDefault(KEY_FOR_TABLE_NAME_FOR_PARTITION_INFO, DEFAULT_TABLE_NAME_FOR_PARTITION_INFO);
     }
 
     private String getTableNameForTableInfo() {
-        return properties.getOrDefault("table_name_for_table_info", DEFAULT_TABLE_NAME_FOR_TABLE_INFO);
+        return properties.getOrDefault(KEY_FOR_TABLE_NAME_FOR_TABLE_INFO, DEFAULT_TABLE_NAME_FOR_TABLE_INFO);
     }
 
     @Override
@@ -190,7 +211,6 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
 
     @Override
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
-        // todo listPartitionNames是想要干什么？
         String tableNameForPartInfo = getTableNameForPartInfo();
         String partitionNamesQuery = "SELECT DISTINCT partition FROM " + tableNameForPartInfo + " WHERE database = ? " +
                 "AND table = ? AND name IS NOT NULL " + "ORDER BY name";
@@ -343,15 +363,19 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
      */
     @NotNull
     private String getPartitionQuery(Table table) {
-        String tableNameForPartInfo = getTableNameForPartInfo();
-        final String partitionQuery =
-                "SELECT  partition AS NAME, max(modification_time) AS MODIFIED_TIME FROM " + tableNameForPartInfo +
-                        " WHERE database = ? " + "AND table = ? AND name IS NOT NULL " +
-                        "GROUP BY partition ORDER BY partition";
-        if (table.isUnPartitioned()) {
-            throw new StarRocksConnectorException("GetPartitionQuery for unpartitioned table is not implemented");
-        } else {
+        if(table.isPartitioned()){
+            String tableNameForPartInfo = getTableNameForPartInfo();
+            final String partitionQuery =
+                    "SELECT  partition AS NAME, max(modification_time) AS MODIFIED_TIME FROM " + tableNameForPartInfo +
+                    " WHERE database = ? " + "AND table = ? AND name IS NOT NULL" +
+                    " GROUP BY partition ORDER BY partition";
             return partitionQuery;
+        }else{
+            String tableNameForTableInfo = getTableNameForTableInfo();
+            final String nonPartitionQuery =
+                " SELECT  name AS NAME, max(metadata_modification_time) AS MODIFIED_TIME FROM " + tableNameForTableInfo +
+                " WHERE database = ? AND name = ? AND name IS NOT NULL GROUP BY name";
+                return nonPartitionQuery;
         }
     }
 
