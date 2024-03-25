@@ -849,6 +849,8 @@ CONF_Int32(connector_io_tasks_slow_io_latency_ms, "50");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 
+// hdfs client socket timeout, default value is 60000ms
+CONF_Int32(hdfs_client_socket_timeout, "60000");
 // hdfs hedged read
 CONF_Bool(hdfs_client_enable_hedged_read, "false");
 // dfs.client.hedged.read.threadpool.size
