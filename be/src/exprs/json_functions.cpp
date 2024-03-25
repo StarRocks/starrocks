@@ -454,6 +454,7 @@ StatusOr<ColumnPtr> JsonFunctions::_get_json_value(FunctionContext* context, con
 struct NativeJsonState {
 public:
     JsonPath json_path;
+    bool invaild_path = false;
 
     // flat json used
     std::once_flag init_flat_once;
@@ -536,7 +537,7 @@ static Status _convert_json_slice(const vpack::Slice& slice, ColumnBuilder<Resul
                 result.append(Slice(str));
             }
         } else if constexpr (ResultType == TYPE_BOOLEAN) {
-            slice.isBool() ? result.append(slice.getBool()) : result.append(slice.getNumber<int64_t>() != 0);
+            slice.isBool() ? result.append(slice.getBool()) : result.append(slice.getNumber<double>() != 0);
         } else if constexpr (ResultType == TYPE_INT || ResultType == TYPE_BIGINT) {
             slice.isBool() ? result.append(slice.getBool()) : result.append(slice.getNumber<int64_t>());
         } else if constexpr (ResultType == TYPE_DOUBLE) {
@@ -569,6 +570,7 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
 
     auto* state = get_native_json_state(context);
     if (state == nullptr) {
+        // ut test may be hit here, the json path is invaild
         return Status::JsonFormatError("flat json required prepare status");
     }
     if (state->init_flat) {
@@ -589,7 +591,10 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
 
     // flat json path must be constant
     std::string path;
-    if (LIKELY(columns[1]->is_constant())) {
+    if (columns[1]->only_null()) {
+        // only null path, return null
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    } else if (LIKELY(columns[1]->is_constant())) {
         path = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[1].get()).to_string();
     } else {
         // just for compatible
@@ -649,6 +654,7 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
         }
     }
 
+    // not found, only should hit here in ut test
     return Status::JsonFormatError(fmt::format("flat json not found json path: {}", path));
 }
 
@@ -1024,7 +1030,7 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_length(FunctionContext* context, c
 }
 
 StatusOr<ColumnPtr> JsonFunctions::json_keys(FunctionContext* context, const Columns& columns) {
-    if (columns.size() <= 2) {
+    if (columns.size() < 2) {
         return _json_keys_without_path(context, columns);
     }
 

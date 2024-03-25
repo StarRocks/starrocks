@@ -221,17 +221,35 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
             RunTimeCppType<ToType> cpp_value{};
             bool ok = true;
             if constexpr (lt_is_integer<ToType>) {
-                auto res = json->get_int();
-                ok = res.ok() && min <= res.value() && res.value() <= max;
-                cpp_value = ok ? res.value() : cpp_value;
+                if (json->to_vslice().isBool()) {
+                    auto res = json->get_bool();
+                    ok = res.ok();
+                    cpp_value = ok ? res.value() : cpp_value;
+                } else {
+                    auto res = json->get_int();
+                    ok = res.ok() && min <= res.value() && res.value() <= max;
+                    cpp_value = ok ? res.value() : cpp_value;
+                }
             } else if constexpr (lt_is_float<ToType>) {
-                auto res = json->get_double();
-                ok = res.ok() && min <= res.value() && res.value() <= max;
-                cpp_value = ok ? res.value() : cpp_value;
+                if (json->to_vslice().isBool()) {
+                    auto res = json->get_bool();
+                    ok = res.ok();
+                    cpp_value = ok ? res.value() : cpp_value;
+                } else {
+                    auto res = json->get_double();
+                    ok = res.ok() && min <= res.value() && res.value() <= max;
+                    cpp_value = ok ? res.value() : cpp_value;
+                }
             } else if constexpr (lt_is_boolean<ToType>) {
-                auto res = json->get_bool();
-                ok = res.ok();
-                cpp_value = ok ? res.value() : cpp_value;
+                if (json->to_vslice().isNumber()) {
+                    auto res = json->get_double();
+                    ok = res.ok();
+                    cpp_value = ok ? res.value() != 0 : cpp_value;
+                } else {
+                    auto res = json->get_bool();
+                    ok = res.ok();
+                    cpp_value = ok ? res.value() : cpp_value;
+                }
             } else {
                 if constexpr (AllowThrowException) {
                     THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
@@ -1100,10 +1118,12 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 
-#define DEFINE_CAST_CONSTRUCT(CLASS)             \
-    CLASS(const TExprNode& node) : Expr(node) {} \
-    virtual ~CLASS(){};                          \
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
+#define DEFINE_CAST_CONSTRUCT(CLASS)                       \
+    CLASS(const TExprNode& node) : Expr(node) {}           \
+    virtual ~CLASS(){};                                    \
+    virtual Expr* clone(ObjectPool* pool) const override { \
+        return pool->add(new CLASS(*this));                \
+    }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 class VectorizedCastExpr final : public Expr {

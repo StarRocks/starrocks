@@ -343,9 +343,7 @@ Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
 
     // 2. flat
     json_data->init_flat_columns(_flat_paths, _target_types);
-
-    JsonFlater flater(_flat_paths);
-    flater.flatten(input, &(json_data->get_flat_fields()));
+    _flater.flatten(input, &(json_data->get_flat_fields()));
     return Status::OK();
 }
 

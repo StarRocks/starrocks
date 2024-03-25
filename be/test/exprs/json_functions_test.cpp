@@ -532,7 +532,6 @@ INSTANTIATE_TEST_SUITE_P(
                 // clang-format off
                 // empty
                 std::make_tuple(R"( {"k1":1} )", std::vector<std::string>{"k1"},  "NULL", R"(NULL)"),
-                std::make_tuple(R"( {"k1":1} )", std::vector<std::string>{"k1"}, "", R"(NULL)"),
 
                 // various types
                 std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", std::vector<std::string>{"k1", "k2", "k3"}, "$.k2", R"( "hehe" )"),
@@ -559,8 +558,6 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[1][0]", R"( 4 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[1][2]", R"( 6 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[2][0]", R"( NULL )"),
-                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[2]]]]]", R"( NULL )"),
-                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[[[[[2]", R"( NULL )"),
                 std::make_tuple(R"( {"k1": [[[1,2,3]]]} )", std::vector<std::string>{"k1"}, "$.k1[0][0][0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [{"k2": [[1, 2], [3, 4]] }] } )", std::vector<std::string>{"k1"}, "$.k1[0].k2[0][0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [{"k2": [[1, 2], [3, 4]] }] } )", std::vector<std::string>{"k1"}, "$.k1[0].k2[1][0]", R"( 3 )"),

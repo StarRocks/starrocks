@@ -18,6 +18,7 @@
 #include "util/json_flater.h"
 
 #include <cstdint>
+#include <string_view>
 #include <unordered_map>
 
 #include "column/column_helper.h"
@@ -26,6 +27,7 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
@@ -41,6 +43,10 @@ void append_to_bool(const vpack::Slice* json, NullableColumn* result) {
             result->null_column()->append(0);
             auto res = json->getBool();
             down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+        } else if (json->isNumber()) {
+            result->null_column()->append(0);
+            auto res = json->getNumber<double>();
+            down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res != 0);
         } else {
             result->append_nulls(1);
         }
@@ -57,6 +63,10 @@ void append_to_number(const vpack::Slice* json, NullableColumn* result) {
         } else if (json->isNumber()) {
             result->null_column()->append(0);
             RunTimeCppType<TYPE> res = json->getNumber<RunTimeCppType<TYPE>>();
+            down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(res);
+        } else if (json->isBool()) {
+            result->null_column()->append(0);
+            RunTimeCppType<TYPE> res = json->getBool();
             down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(res);
         } else {
             result->append_nulls(1);
@@ -157,6 +167,7 @@ JsonFlater::JsonFlater(std::vector<std::string>& paths, const std::vector<Logica
             }
         }
     }
+    DCHECK_EQ(_flat_types.size(), types.size());
     for (int i = 0; i < _flat_paths.size(); i++) {
         _flat_index[_flat_paths[i]] = i;
     }
@@ -177,7 +188,7 @@ public:
     uint16_t casts = 0;
 };
 
-void JsonFlater::driver_paths(std::vector<ColumnPtr>& json_datas) {
+void JsonFlater::derived_paths(std::vector<ColumnPtr>& json_datas) {
     _flat_paths.clear();
     _flat_types.clear();
 
@@ -255,8 +266,13 @@ void JsonFlater::driver_paths(std::vector<ColumnPtr>& json_datas) {
                   if (a.second.type != b.second.type) {
                       return a.second.type > b.second.type;
                   }
-                  // check casts, the fewer the types of derived cast, the higher the priority.
-                  return a.second.casts < b.second.casts;
+                  // check casts, the fewer the types of inference cast, the higher the priority.
+                  if (a.second.casts != b.second.casts) {
+                      return a.second.casts < b.second.casts;
+                  }
+
+                  // sort by name, just for stable order
+                  return a.first < b.first;
               });
 
     for (int i = 0; i < top_hits.size() && i < config::json_flat_column_max; i++) {
@@ -294,17 +310,18 @@ void JsonFlater::flatten(const Column* json_column, std::vector<ColumnPtr>* resu
     }
 
     // output
-    for (size_t i = 0; i < json_column->size(); i++) {
-        if (json_column->is_null(i)) {
+    std::vector<int> flat_hit(_flat_paths.size(), -1);
+    for (size_t row = 0; row < json_column->size(); row++) {
+        if (json_column->is_null(row)) {
             for (size_t k = 0; k < result->size(); k++) {
                 (*result)[k]->append_nulls(1);
             }
             continue;
         }
 
-        auto* obj = json_data->get_object(i);
+        auto* obj = json_data->get_object(row);
         auto vslice = obj->to_vslice();
-        if (vslice.isNone()) {
+        if (vslice.isNone() || vslice.isNull() || vslice.isEmptyObject() || !vslice.isObject()) {
             for (size_t k = 0; k < result->size(); k++) {
                 (*result)[k]->append_nulls(1);
             }
@@ -321,11 +338,23 @@ void JsonFlater::flatten(const Column* json_column, std::vector<ColumnPtr>* resu
                 uint8_t type = _flat_types[index];
                 auto func = JSON_BITS_FUNC.at(type);
                 func(&it.value, flat_jsons[index]);
+                flat_hit[index]++;
                 hit--;
             }
 
             if (hit == 0) {
                 break;
+            }
+        }
+
+        if (UNLIKELY(hit > 0)) {
+            for (size_t k = 0; k < flat_hit.size() && hit > 0; k++) {
+                if (flat_hit[k] != row) {
+                    flat_jsons[k]->append_nulls(1);
+                    flat_hit[k]++;
+                    hit--;
+                    DCHECK_EQ(flat_hit[k], row);
+                }
             }
         }
     }
