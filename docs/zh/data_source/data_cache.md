@@ -158,3 +158,22 @@ datacache_disk_size = 1288490188800
  - __MAX_OF_BytesRead: 194.99 MB
  - __MIN_OF_BytesRead: 81.25 MB
 ```
+
+您也可以在使用 RESTful API操作查看 Data Cache相关的指标，如下所示：
+
+```shell
+curl -s  http://<be_host>:<be_http_port>/metrics |grep data_cache
+
+# TYPE starrocks_be_data_cache_hit_count counter
+starrocks_be_data_cache_hit_count 3
+# TYPE starrocks_be_data_cache_miss_count counter
+starrocks_be_data_cache_miss_count 15
+# TYPE starrocks_be_data_cache_read_bytes counter
+starrocks_be_data_cache_read_bytes 786432
+# TYPE starrocks_be_data_cache_skip_read_bytes counter
+starrocks_be_data_cache_skip_read_bytes 0
+# TYPE starrocks_be_data_cache_skip_read_count counter
+starrocks_be_data_cache_skip_read_count 0
+# TYPE starrocks_be_data_cache_write_bytes counter
+starrocks_be_data_cache_write_bytes 54783366
+```
