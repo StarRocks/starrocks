@@ -248,15 +248,12 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
-            // only support olap table use light schema change optimization
             table.setUseFastSchemaEvolution(useFastSchemaEvolution);
+            for (Column column : baseSchema) {
+                column.setUniqueId(table.incAndGetMaxColUniqueId());
+            }
             List<Integer> sortKeyUniqueIds = new ArrayList<>();
             if (useFastSchemaEvolution) {
-                for (Column column : baseSchema) {
-                    column.setUniqueId(table.incAndGetMaxColUniqueId());
-                    LOG.debug("table: {}, newColumn: {}, uniqueId: {}", table.getName(), column.getName(),
-                            column.getUniqueId());
-                }
                 for (Integer idx : sortKeyIdxes) {
                     sortKeyUniqueIds.add(baseSchema.get(idx).getUniqueId());
                 }
