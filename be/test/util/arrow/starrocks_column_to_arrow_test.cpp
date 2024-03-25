@@ -780,9 +780,9 @@ TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
     // {1:"test1"},{2,"test2"}
     column->append_datum(DatumMap{{1, (Slice) "test1"}, {2, (Slice) "test2"}});
 
-    // {3:"test3"},{NULL,"test4"}
+    // {3:"test3"},{4,"test4"}
     column->keys_column()->append_datum(3);
-    column->keys_column()->append_nulls(1);
+    column->keys_column()->append_datum(4);
     column->values_column()->append_datum(Datum((Slice) "test3"));
     column->values_column()->append_datum(Datum((Slice) "test4"));
     column->offsets_column()->append(column->keys_column()->size());
@@ -825,7 +825,7 @@ TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
     ASSERT_OK(value_builder->AppendValues({"test1", "test2"}));
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(3));
-    ASSERT_OK(key_builder->AppendNull());
+    ASSERT_OK(key_builder->Append(4));
     ASSERT_OK(value_builder->AppendValues({"test3", "test4"}));
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(5));
@@ -848,10 +848,10 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
     // {1:"test1"},{2,"test2"}
     nullable_column->append_datum(DatumMap{{1, (Slice) "test1"}, {2, (Slice) "test2"}});
 
-    // {3:"test3"},{NULL,"test4"}
+    // {3:"test3"},{4,"test4"}
     nullable_column->null_column()->append(0);
     column->keys_column()->append_datum(3);
-    column->keys_column()->append_nulls(1);
+    column->keys_column()->append_datum(4);
     column->values_column()->append_datum(Datum((Slice) "test3"));
     column->values_column()->append_datum(Datum((Slice) "test4"));
     column->offsets_column()->append(column->keys_column()->size());
@@ -898,7 +898,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
     ASSERT_OK(value_builder->AppendValues({"test1", "test2"}));
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(3));
-    ASSERT_OK(key_builder->AppendNull());
+    ASSERT_OK(key_builder->Append(4));
     ASSERT_OK(value_builder->AppendValues({"test3", "test4"}));
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(5));
