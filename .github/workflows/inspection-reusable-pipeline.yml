@@ -33,6 +33,10 @@ on:
         description: 'IS SELF BUILD'
         type: string
         default: 'false'
+      INCLUDE_ADMIT:
+        description: 'RUN ADMIT?'
+        type: string
+        default: 'true'
 
     outputs:
       CONF_FILE:
@@ -65,6 +69,7 @@ env:
   LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
   CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
   IS_SELF_BUILD: ${{ inputs.IS_SELF_BUILD }}
+  INCLUDE_ADMIT: ${{ inputs.INCLUDE_ADMIT }}
 
 jobs:
   deploy:
@@ -145,7 +150,7 @@ jobs:
         uses: ./.actions/nose-report-action
         if: always() && steps.prepare-tools.outcome == 'success'
         with:
-          check_name: SQL-Tester Report (${{ env.BUILD_TYPE }})
+          check_name: SQL-Tester Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -155,7 +160,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: SQL-Tester Log (${{ env.BUILD_TYPE }})
+          name: SQL-Tester Log (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
           path: test/log/
           retention-days: 1
           overwrite: true
@@ -225,7 +230,7 @@ jobs:
     needs:
       - restart-fe
       - restart-be
-    if: always() && needs.restart-be.result == 'success' && needs.restart-fe.result == 'success'
+    if: always() && env.INCLUDE_ADMIT == 'true' && env.BUILD_TYPE == 'Release' && needs.restart-be.result == 'success' && needs.restart-fe.result == 'success'
     timeout-minutes: 40
     env:
       FE_NODE: ${{ needs.restart-be.outputs.FE_NODE }}
@@ -266,7 +271,7 @@ jobs:
         uses: ./.actions/nose-report-action
         if: always() && steps.prepare-tools.outcome == 'success'
         with:
-          check_name: Admit Report (${{ env.BUILD_TYPE }})
+          check_name: Admit Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
