@@ -421,7 +421,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
             auto index_id_iter = properties.find("indexId");
             if (index_id_iter != properties.end()) {
                 auto index_id = std::atol(index_id_iter->second.data());
-                auto res = get_tablet_schema_by_index_id(tablet_id, index_id);
+                auto res = get_tablet_schema_by_id(tablet_id, index_id);
                 if (res.ok()) {
                     return res;
                 } else if (res.status().is_not_found()) {
@@ -468,17 +468,17 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     return schema;
 }
 
-StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t tablet_id, int64_t index_id) {
+StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_id, int64_t index_id) {
     auto global_cache_key = global_schema_cache_key(index_id);
     auto schema = _metacache->lookup_tablet_schema(global_cache_key);
-    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.1", &schema);
+    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_id.1", &schema);
     if (schema != nullptr) {
         return schema;
     }
     // else: Cache miss, read the schema file
     auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(index_id));
     auto schema_or = load_and_parse_schema_file(schema_file_path);
-    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.2", &schema_or);
+    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_id.2", &schema_or);
     if (schema_or.ok()) {
         VLOG(3) << "Got tablet schema of id " << index_id << " for tablet " << tablet_id;
         schema = std::move(schema_or).value();

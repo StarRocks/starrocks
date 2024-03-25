@@ -76,13 +76,13 @@ public:
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                              const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
                              bool miss_auto_increment_column, int64_t table_id, int64_t immutable_tablet_size,
-                             MemTracker* mem_tracker, int64_t max_buffer_size, int64_t index_id)
+                             MemTracker* mem_tracker, int64_t max_buffer_size, int64_t schema_id)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
               _table_id(table_id),
               _partition_id(partition_id),
-              _index_id(index_id),
+              _schema_id(schema_id),
               _mem_tracker(mem_tracker),
               _slots(slots),
               _max_buffer_size(max_buffer_size > 0 ? max_buffer_size : config::write_buffer_size),
@@ -94,11 +94,11 @@ public:
 
     DISALLOW_COPY_AND_MOVE(DeltaWriterImpl);
 
-    [[nodiscard]] Status open();
+    Status open();
 
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
-    [[nodiscard]] Status finish(DeltaWriter::FinishMode mode);
+    Status finish(DeltaWriter::FinishMode mode);
 
     void close();
 
@@ -110,9 +110,9 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker; }
 
-    [[nodiscard]] Status flush();
+    Status flush();
 
-    [[nodiscard]] Status flush_async();
+    Status flush_async();
 
     int64_t queueing_memtable_num() const;
 
@@ -146,7 +146,7 @@ private:
     const int64_t _txn_id;
     const int64_t _table_id;
     const int64_t _partition_id;
-    const int64_t _index_id;
+    const int64_t _schema_id;
     MemTracker* const _mem_tracker;
 
     const std::vector<SlotDescriptor*>* const _slots;
@@ -291,7 +291,7 @@ inline Status DeltaWriterImpl::init_tablet_schema() {
         return Status::OK();
     }
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
-    auto res = tablet.get_schema_by_index_id(_index_id);
+    auto res = tablet.get_schema_by_id(_schema_id);
     if (res.ok()) {
         _tablet_schema = std::move(res).value();
         return Status::OK();
@@ -722,12 +722,12 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     if (UNLIKELY(_miss_auto_increment_column && _table_id == 0)) {
         return Status::InvalidArgument("must set table_id when miss_auto_increment_column is true");
     }
-    if (UNLIKELY(_index_id == 0)) {
-        return Status::InvalidArgument("index_id not set");
+    if (UNLIKELY(_schema_id == 0)) {
+        return Status::InvalidArgument("schema_id not set");
     }
     auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
                                     _miss_auto_increment_column, _table_id, _immutable_tablet_size, _mem_tracker,
-                                    _max_buffer_size, _index_id);
+                                    _max_buffer_size, _schema_id);
     return std::make_unique<DeltaWriter>(impl);
 }
 

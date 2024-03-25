@@ -245,7 +245,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
                                           .set_txn_id(_txn_id)
                                           .set_max_buffer_size(_max_buffer_size)
                                           .set_mem_tracker(CurrentThread::mem_tracker())
-                                          .set_index_id(_new_tablet_schema->id()) // TODO: pass tablet schema directly
+                                          .set_schema_id(_new_tablet_schema->id()) // TODO: pass tablet schema directly
                                           .build());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });

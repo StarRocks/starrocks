@@ -96,8 +96,8 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
-StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_index_id(int64_t index_id) {
-    return _mgr->get_tablet_schema_by_index_id(_id, index_id);
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t index_id) {
+    return _mgr->get_tablet_schema_by_id(_id, index_id);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
