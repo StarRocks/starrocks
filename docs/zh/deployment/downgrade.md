@@ -73,8 +73,10 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 
 通过降级正确性测试后，您可以先降级 FE 节点。您必须先降级 Follower FE 节点，然后再降级 Leader FE 节点。
 
-1. 生成新的元数据快照
+1. 生成新的元数据快照。
+
    a. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+
    b. 通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成：
 
    ```
@@ -82,7 +84,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    ```
 
    > **注意**
-   > CREATE IMAGE 语法只在2.5.3及以上版本支持，低版本需要通过重启leader的方式触发新快照。
+   >
+   > ALTER SYSTEM CREATE IMAGE 语法只在 v2.5.3 及以上版本支持，低版本需要通过重启 Leader FE 的方式触发新的元数据快照。
 
 2. 进入 FE 节点工作路径，并停止该节点。
 
@@ -122,10 +125,11 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    ps aux | grep StarRocksFE
    ```
 
-6. 重复2~5步骤降级其他 Follower FE 节点，最后降级 Leader FE 节点。
+6. 重复以上步骤 2~5 降级其他 Follower FE 节点，最后降级 Leader FE 节点。
 
    > **注意**
-   > 如果您在升级之后进行了回滚，之后有计划再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免第二次升级时，部分 FE 节点元数据升级失败，建议您在降级完成后再次执行步骤1，生成新的元数据快照。
+   >
+   > 如果您在升级之后进行了回滚，之后有计划再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免第二次升级时，部分 FE 节点元数据升级失败，建议您在降级完成后再次执行步骤 1，生成新的元数据快照。
 
 ## 降级 BE
 
