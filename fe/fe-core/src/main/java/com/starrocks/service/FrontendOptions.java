@@ -256,7 +256,14 @@ public class FrontendOptions {
                 }
                 LOG.info("skip ip not belonged to priority networks: {}", addr);
             }
-        } else if (localAddr == null) {
+            // If all ips not match the priority_networks then print the warning log
+            if (!hasMatchedIp) {
+                LOG.warn("ip address range configured for priority_networks does not include the current IP address, " +
+                        "will try other usable ip");
+            }
+        }
+
+        if (localAddr == null) {
             for (InetAddress addr : hosts) {
                 LOG.info("check ip address: {}", addr);
                 if (addr.isLoopbackAddress()) {
@@ -277,10 +284,6 @@ public class FrontendOptions {
             }
         }
 
-        // If all ips not match the priority_networks then print the warning log
-        if (!PRIORITY_CIDRS.isEmpty() && !hasMatchedIp) {
-            LOG.warn("ip address range configured for priority_networks does not include the current IP address");
-        }
         // nothing found, use loopback addr
         if (localAddr == null) {
             localAddr = loopBack;

@@ -70,7 +70,13 @@ bool BackendOptions::init() {
             }
             LOG(INFO) << "skip ip not belonged to priority networks: " << addr_it->get_host_address();
         }
-    } else if (_s_localhost.empty()) {
+        if (_s_localhost.empty()) {
+            LOG(WARNING) << "ip address range configured for priority_networks does not include the current IP address,"
+                         << " will try other usable ip";
+        }
+    }
+
+    if (_s_localhost.empty()) {
         for (; addr_it != hosts.end(); ++addr_it) {
             LOG(INFO) << "check ip = " << addr_it->get_host_address();
             if (addr_it->is_loopback()) {
