@@ -51,8 +51,6 @@ public:
 
     Status next_record(Record* record);
 
-    size_t get_offset();
-
 protected:
     Status _fill_buffer() override;
 
@@ -66,10 +64,6 @@ private:
     bool _should_stop_scan = false;
     bool _should_stop_next = false;
 };
-
-size_t HdfsScannerCSVReader::get_offset() {
-    return _offset;
-}
 
 Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
     RETURN_IF_ERROR(_file->seek(offset));
@@ -192,7 +186,6 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         }
     }
     RETURN_IF_ERROR(open_random_access_file());
-    RETURN_IF_ERROR(_setup_io_ranges());
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
@@ -237,12 +230,6 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 }
 
 Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
-    if (_shared_buffered_input_stream != nullptr) {
-        // we need to release previous shared buffers to save memory
-        const size_t reader_offset = down_cast<HdfsScannerCSVReader*>(_reader.get())->get_offset();
-        _shared_buffered_input_stream->release_to_offset(reader_offset);
-    }
-
     DCHECK_EQ(0, chunk->get()->num_rows());
 
     int num_columns = chunk->get()->num_columns();
@@ -401,6 +388,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status HdfsTextScanner::_setup_io_ranges() const {
     if (_shared_buffered_input_stream != nullptr) {
         std::vector<io::SharedBufferedInputStream::IORange> ranges{};
@@ -415,6 +403,8 @@ Status HdfsTextScanner::_setup_io_ranges() const {
     return Status::OK();
 }
 
+=======
+>>>>>>> 02d2673786 ([Enhancement] Merge multiply blocks into one io request in CacheInputStream (#38882))
 Status HdfsTextScanner::_build_hive_column_name_2_index() {
     // For some table like file table, there is no hive_column_names at all.
     // So we use slot order defined in table schema.

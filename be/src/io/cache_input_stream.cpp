@@ -57,10 +57,24 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
         uint32_t file_size = _size;
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
-    _buffer.reserve(_block_size);
+    // default _buffer size is 4MB = (16 * 256KB)
+    _buffer_size = 16 * _block_size;
+    _buffer.reserve(_buffer_size);
 }
 
+<<<<<<< HEAD
 Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bool can_zero_copy) {
+=======
+CacheInputStream::~CacheInputStream() {
+    int64_t io_bytes = _sb_stream->shared_io_bytes();
+    if (io_bytes > 0) {
+        int64_t latency_us_per_block = (_sb_stream->shared_io_timer() / 1000 * _block_size / io_bytes);
+        _cache->record_read_remote(io_bytes, latency_us_per_block);
+    }
+}
+
+Status CacheInputStream::_read_block_from_local(const int64_t offset, const int64_t size, char* out) {
+>>>>>>> 02d2673786 ([Enhancement] Merge multiply blocks into one io request in CacheInputStream (#38882))
     if (UNLIKELY(size == 0)) {
         return Status::OK();
     }
@@ -127,30 +141,12 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     if (!res.is_not_found()) return res;
     DCHECK(res.is_not_found());
 
-    // read remote
-    char* src = nullptr;
     if (sb) {
         // Duplicate the block ranges to avoid saving the same data both in cache and shared buffer.
         _deduplicate_shared_buffer(sb);
-        const uint8_t* buffer = nullptr;
-        RETURN_IF_ERROR(_sb_stream->get_bytes(&buffer, block_offset, load_size));
-        strings::memcpy_inlined(out, buffer + shift, size);
-        src = (char*)buffer;
-    } else {
-        if (!can_zero_copy || (shift != 0)) {
-            can_zero_copy = false;
-            src = _buffer.data();
-        } else {
-            src = out;
-        }
-
-        // if not found, read from stream and write back to cache.
-        RETURN_IF_ERROR(_sb_stream->read_at_fully(block_offset, src, load_size));
-        if (!can_zero_copy) {
-            strings::memcpy_inlined(out, src + shift, size);
-        }
     }
 
+<<<<<<< HEAD
     if (_enable_populate_cache) {
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         Status r = cache->write_cache(_cache_key, block_offset, load_size, src);
@@ -161,6 +157,89 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
             _stats.write_cache_fail_count += 1;
             _stats.write_cache_fail_bytes += load_size;
             LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
+=======
+    return Status::NotFound("Not Found");
+}
+
+Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const int64_t size, char* out) {
+    const int64_t start_block_id = offset / _block_size;
+    const int64_t end_block_id = (offset + size - 1) / _block_size;
+
+    // We will load range=[read_start_offset, read_end_offset) from remote
+    const int64_t block_start_offset = start_block_id * _block_size;
+    const int64_t block_end_offset = std::min(end_block_id * _block_size + _block_size, _size);
+
+    // cursors for `out`
+    int64_t out_offset_cursor = offset;
+    int64_t out_remain_size = size;
+    char* out_pointer_cursor = out;
+
+    for (int64_t read_offset_cursor = block_start_offset; read_offset_cursor < block_end_offset;) {
+        // Everytime read at most one buffer size
+        const int64_t read_size = std::min(_buffer_size, block_end_offset - read_offset_cursor);
+        char* src = nullptr;
+
+        // check [read_offset_cursor, read_size) is already in SharedBuffer
+        // If existed, we can use zero copy to avoid copy data from SharedBuffer to _buffer
+        auto ret = _sb_stream->find_shared_buffer(read_offset_cursor, read_size);
+        if (ret.ok()) {
+            const uint8_t* buffer = nullptr;
+            RETURN_IF_ERROR(_sb_stream->get_bytes(&buffer, read_offset_cursor, read_size));
+            src = (char*)buffer;
+        } else {
+            RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
+            src = _buffer.data();
+        }
+
+        // write _buffer's data into `out`
+        const int64_t shift = out_offset_cursor - read_offset_cursor;
+        const int64_t out_size = std::min(read_size - shift, out_remain_size);
+        if (out_size > 0) {
+            strings::memcpy_inlined(out_pointer_cursor, src + shift, out_size);
+
+            // cursor for `out`
+            out_offset_cursor += out_size;
+            out_pointer_cursor += out_size;
+            out_remain_size -= out_size;
+        }
+
+        if (_enable_populate_cache) {
+            RETURN_IF_ERROR(_populate_to_cache(read_offset_cursor, read_size, src));
+        }
+
+        read_offset_cursor += read_size;
+    }
+    DCHECK_EQ(0, out_remain_size);
+    DCHECK_EQ(offset + size, out_offset_cursor);
+    DCHECK_EQ(out + size, out_pointer_cursor);
+
+    return Status::OK();
+}
+
+Status CacheInputStream::_populate_to_cache(const int64_t offset, const int64_t size, char* src) {
+    SCOPED_RAW_TIMER(&_stats.write_cache_ns);
+    const int64_t write_end_offset = offset + size;
+    char* src_cursor = src;
+
+    for (int64_t write_offset_cursor = offset; write_offset_cursor < write_end_offset;) {
+        DCHECK(write_offset_cursor % _block_size == 0);
+        WriteCacheOptions options{};
+        const int64_t write_size = std::min(_block_size, write_end_offset - write_offset_cursor);
+        Status r = _cache->write_buffer(_cache_key, write_offset_cursor, write_size, src_cursor, &options);
+
+        src_cursor += write_size;
+        write_offset_cursor += write_size;
+
+        if (r.ok()) {
+            _stats.write_cache_count += 1;
+            _stats.write_cache_bytes += write_size;
+            _stats.write_mem_cache_bytes += options.stats.write_mem_bytes;
+            _stats.write_disk_cache_bytes += options.stats.write_disk_bytes;
+        } else if (!r.is_already_exist()) {
+            _stats.write_cache_fail_count += 1;
+            _stats.write_cache_fail_bytes += write_size;
+            LOG(WARNING) << "write block cache failed, errmsg: " << r.message();
+>>>>>>> 02d2673786 ([Enhancement] Merge multiply blocks into one io request in CacheInputStream (#38882))
             // Failed to write cache, but we can keep processing query.
         }
     }
@@ -197,30 +276,93 @@ void CacheInputStream::_deduplicate_shared_buffer(SharedBufferedInputStream::Sha
     sb->size = end - sb->offset;
 }
 
+struct ReadFromRemoteIORange {
+    ReadFromRemoteIORange(const int64_t offset, char* write_pointer, const int64_t size)
+            : offset(offset), write_pointer(write_pointer), size(size) {}
+    const int64_t offset;
+    char* write_pointer;
+    const int64_t size;
+};
+
 Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
-    BlockCache* cache = BlockCache::instance();
+    const int64_t origin_offset = offset;
     count = std::min(_size - offset, count);
     if (count < 0) {
         return Status::EndOfFile("");
     }
-    const int64_t _block_size = cache->block_size();
+    const int64_t end_offset = offset + count;
+
     char* p = static_cast<char*>(out);
     char* pe = p + count;
 
-    int64_t end_offset = offset + count;
-    int64_t start_block_id = offset / _block_size;
-    int64_t end_block_id = (end_offset - 1) / _block_size;
+    const int64_t _block_size = _cache->block_size();
+    const int64_t start_block_id = offset / _block_size;
+    const int64_t end_block_id = (end_offset - 1) / _block_size;
+
+    std::vector<ReadFromRemoteIORange> need_read_from_remote{};
+
     for (int64_t i = start_block_id; i <= end_block_id; i++) {
         size_t off = std::max(offset, i * _block_size);
         size_t end = std::min((i + 1) * _block_size, end_offset);
         size_t size = end - off;
+<<<<<<< HEAD
         bool can_zero_copy = p + _block_size <= pe;
         Status st = _read_block(off, size, p, can_zero_copy);
         if (!st.ok()) return st;
+=======
+        Status st = _read_block_from_local(off, size, p);
+        if (st.is_not_found()) {
+            // Not found block from local, we need to load it from remote
+            need_read_from_remote.emplace_back(off, p, size);
+        } else if (!st.ok()) {
+            return st;
+        }
+>>>>>>> 02d2673786 ([Enhancement] Merge multiply blocks into one io request in CacheInputStream (#38882))
         offset += size;
         p += size;
     }
     DCHECK(p == pe);
+
+    if (need_read_from_remote.size() == 0) {
+        return Status::OK();
+    }
+
+    // Merged multiple continous io range into one big io range
+    std::vector<ReadFromRemoteIORange> merged_need_read_from_remote{};
+    auto do_merge = [&](const size_t from, const size_t to) {
+        // merge range = [from, to]
+        ReadFromRemoteIORange& from_io_range = need_read_from_remote[from];
+        ReadFromRemoteIORange& to_io_range = need_read_from_remote[to];
+        int64_t start_offset = from_io_range.offset;
+        int64_t merged_size = to_io_range.offset + to_io_range.size - from_io_range.offset;
+        // check write pointer is continous
+        DCHECK(from_io_range.write_pointer + merged_size == to_io_range.write_pointer + to_io_range.size);
+        merged_need_read_from_remote.emplace_back(start_offset, from_io_range.write_pointer, merged_size);
+    };
+
+    size_t unmerge = 0;
+    for (size_t i = 1; i < need_read_from_remote.size(); i++) {
+        const auto& prev = need_read_from_remote[i - 1];
+        const auto& now = need_read_from_remote[i];
+        size_t prev_end = prev.offset + prev.size;
+        size_t now_start = now.offset;
+        if (now_start != prev_end) {
+            // offset not matched, start to merge from [unmerge, i - 1]
+            do_merge(unmerge, i - 1);
+            unmerge = i;
+        }
+    }
+    do_merge(unmerge, need_read_from_remote.size() - 1);
+
+    // Don't need it anymore
+    need_read_from_remote.clear();
+
+    for (const auto& io_range : merged_need_read_from_remote) {
+        DCHECK(io_range.offset >= origin_offset);
+        DCHECK(io_range.offset + io_range.size <= origin_offset + count);
+        RETURN_IF_ERROR(_read_blocks_from_remote(io_range.offset, io_range.size, io_range.write_pointer));
+    }
+
     return Status::OK();
 }
 
