@@ -427,6 +427,8 @@ DISTRIBUTED BY HASH(id);
 
 快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html)。
 
+建议您使用 StarRocks v3.2.1 及以后的版本，以开启 [fast_schema_evolution](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)，来提高加减列的速度并降低资源使用。
+
 ## 最佳实践
 
 ### 导入至主键表
