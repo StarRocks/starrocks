@@ -32,8 +32,7 @@ public class TableFunctionTableSinkTest {
     @Test
     public void testTableFunctionTableSink() {
         TableFunctionTable tableFunctionTable = new TableFunctionTable("s3://path/to/directory/", "parquet",
-                "uncompressed", ImmutableList.of(new Column("k1", Type.INT)), null, false,
-                ImmutableMap.of());
+                "uncompressed", ImmutableList.of(new Column("k1", Type.INT)), null, false, 100, ImmutableMap.of());
 
         TableFunctionTableSink tableFunctionTableSink = new TableFunctionTableSink(tableFunctionTable);
 

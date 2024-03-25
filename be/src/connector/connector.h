@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "connector_sink/connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
@@ -169,6 +170,7 @@ enum ConnectorType {
     FILE = 4,
     LAKE = 5,
     BINLOG = 6,
+    ICEBERG = 7,
 };
 
 class Connector {
@@ -181,16 +183,25 @@ public:
     static const std::string FILE;
     static const std::string LAKE;
     static const std::string BINLOG;
+    static const std::string ICEBERG;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
     // Later version we could use user-defined data.
 
     virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
-                                                              const TPlanNode& plan_node) const = 0;
+                                                              const TPlanNode& plan_node) const {
+        CHECK(false) << connector_type() << " connector does not implement chunk source yet";
+        __builtin_unreachable();
+    }
 
     // virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
     //                                                         const std::string& table_handle) const;
+
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
+        __builtin_unreachable();
+    }
 
     virtual ConnectorType connector_type() const = 0;
 };

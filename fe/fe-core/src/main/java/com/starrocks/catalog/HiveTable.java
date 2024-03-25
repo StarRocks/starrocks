@@ -275,6 +275,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return hiveProperties == null ? new HashMap<>() : hiveProperties;
     }
 
+    public Map<String, String> getSerdeProperties() {
+        return serdeProperties;
+    }
+
     public boolean hasBooleanTypePartitionColumn() {
         return getPartitionColumns().stream().anyMatch(column -> column.getType().isBoolean());
     }

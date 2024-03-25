@@ -132,7 +132,7 @@ public class FileTableTest {
             FileTable fileTable = (FileTable) table;
             Assert.assertEquals("file_tbl", fileTable.getName());
             Assert.assertEquals(hdfsPath, fileTable.getTableLocation());
-            Assert.assertEquals(RemoteFileInputFormat.TEXT, fileTable.getFileFormat());
+            Assert.assertEquals(RemoteFileInputFormat.TEXTFILE, fileTable.getFileFormat());
             Assert.assertEquals(hdfsPath, fileTable.getFileProperties().get("path"));
             Assert.assertEquals("text", fileTable.getFileProperties().get("format"));
         }

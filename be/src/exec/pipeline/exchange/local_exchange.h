@@ -236,6 +236,9 @@ public:
                           LocalExchangeSourceOperatorFactory* source, std::vector<ExprContext*> _partition_expr_ctxs,
                           size_t num_sinks);
 
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
     Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
 
 private:

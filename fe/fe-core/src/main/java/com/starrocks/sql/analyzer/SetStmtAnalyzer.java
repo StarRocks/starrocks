@@ -285,6 +285,14 @@ public class SetStmtAnalyzer {
                 throw new SemanticException(String.format("Unknown catalog %s", catalog));
             }
         }
+        // connector sink compression codec
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_COMPRESSION_CODEC)) {
+            String codec = resolvedExpression.getStringValue();
+            if (CompressionUtils.getConnectorSinkCompressionType(codec).isEmpty()) {
+                throw new SemanticException(String.format("Unsupported compression codec %s." +
+                        " Use any of (uncompressed, snappy, lz4, zstd, gzip)", codec));
+            }
+        }
 
         var.setResolvedExpression(resolvedExpression);
     }

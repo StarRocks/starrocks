@@ -912,7 +912,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  TABLE FUNCTION TABLE SINK\n" +
-                "    PATH: hdfs://127.0.0.1:9000/files/data_\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/\n" +
                 "    FORMAT: parquet\n" +
                 "    PARTITION BY: []\n" +
                 "    SINGLE: false\n" +

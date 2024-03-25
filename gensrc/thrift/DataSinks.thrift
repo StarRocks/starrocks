@@ -241,6 +241,7 @@ struct TIcebergTableSink {
     4: optional Types.TCompressionType compression_type
     5: optional bool is_static_partition_sink
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    7: optional i64 target_max_file_size
 }
 
 struct THiveTableSink {
@@ -251,6 +252,8 @@ struct THiveTableSink {
     5: optional Types.TCompressionType compression_type
     6: optional bool is_static_partition_sink
     7: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    8: optional i64 target_max_file_size
+    9: optional Descriptors.TTextFileDesc text_file_desc // for textfile format
 }
 
 struct TTableFunctionTableSink {
