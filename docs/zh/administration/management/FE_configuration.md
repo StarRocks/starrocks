@@ -3,15 +3,15 @@ displayed_sidebar: "Chinese"
 keywords: ['Canshu']
 ---
 
+import FEConfigMethod from '../../assets/commonMarkdown/FE_config_method.md'
+
+import AdminSetFrontendNote from '../../assets/commonMarkdown/FE_config_note.md'
+
+import StaticFEConfigNote from '../../assets/commonMarkdown/StaticFE_config_note.md'
+
 # FE 配置项
 
-FE 参数分为动态参数和静态参数。动态参数可通过 SQL 命令进行在线配置和调整，方便快捷。**需要注意通过 SQL 命令所做的动态设置在重启 FE 后会失效。如果想让设置长期生效，建议同时修改 fe.conf 文件。**
-
-静态参数必须在 FE 配置文件 **fe.conf** 中进行配置和调整。**调整完成后，需要重启 FE 使变更生效。**
-
-参数是否为动态参数可通过 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md) 返回结果中的 `IsMutable` 列查看。`TRUE` 表示动态参数。
-
-静态和动态参数均可通过 **fe.conf** 文件进行修改。
+<FEConfigMethod />
 
 ## 查看 FE 配置项
 
@@ -23,9 +23,9 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 
 详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md)。
 
-> **注意**
->
-> 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
+:::note
+只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
+:::
 
 ## 配置 FE 参数
 
@@ -37,13 +37,11 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
 
-> **注意**
->
-> 动态设置的配置项，在 FE 重启之后会恢复成 **fe.conf** 文件中的配置或者默认值。如果需要让配置长期生效，建议设置完之后同时修改 **fe.conf** 文件，防止重启后修改失效。
+<AdminSetFrontendNote />
 
 ### 配置 FE 静态参数
 
-FE 静态参数不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。
+<StaticFEConfigNote />
 
 ## FE 参数描述
 
