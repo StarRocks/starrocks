@@ -11,11 +11,22 @@ TB_IN_BYTES=$((1024 * 1024 * 1024 * 1024))
 # Set COREDUMP_PATH if hasn't been set in environment variable
 COREDUMP_PATH=${COREDUMP_PATH:-$STARROCKS_HOME/storage/coredumps}
 
+# Default minimal interval in 600 seconds
+COREDUMP_COLLECT_MINIMUM_INTERVAL=${COREDUMP_COLLECT_MINIMUM_INTERVAL:-600}
+
+
 if [ ! -d ${COREDUMP_PATH} ]; then
     mkdir -p ${COREDUMP_PATH}
 fi
 
+# log all the core dump setup
+COREDUMP_VARIABLES=$(declare -p |awk '$3 ~ /^COREDUMP_/ {print $3}')
+coredump_log $COREDUMP_VARIABLES
+
+
 cd $COREDUMP_PATH
+
+previousFileTimestamp=0
 
 while true; do
 
@@ -48,6 +59,17 @@ while true; do
       continue
   fi
 
+  # Check if the creation time of the file is more than 10 minutes later than the file handles in the previous loop iteration
+  currentFileTimestamp=$(stat -c %Y "${latestCoreFile}")
+  timeDifference=$((currentFileTimestamp - previousFileTimestamp))
+
+  if (( timeDifference < $COREDUMP_COLLECT_MINIMUM_INTERVAL )); then
+    coredump_log "File was created less than ${COREDUMP_COLLECT_MINIMUM_INTERVAL} seconds after the previous crash, removing file and continuing loop"
+    rm "${latestCoreFile}"
+    continue
+  fi
+
+  previousFileTimestamp=$currentFileTimestamp
 
   DATESTR=`date +"%m-%d-%y.%H-%M-%S.%Z"`
   COREDUMP_FILE_ZIP=${KUBE_CLUSTER_NAME}.${POD_NAMESPACE}.${POD_NAME}.${SR_IMAGE_TAG}.${DATESTR}.gz
@@ -65,7 +87,8 @@ while true; do
 
   coredump_log "Upload complete: ${latestCoreFile}"
 
-  # Only clean the uploaded core dump file
-  rm $latestCoreFile $COREDUMP_FILE_ZIP
+  # Only clean the core dump files
+  # Note: it's intentially avoid using * for all files to minimize the accidentialy deletion of other useful files
+  rm $COREDUMP_PATH/core.* &&  rm $COREDUMP_PATH/*.gz
 
 done
