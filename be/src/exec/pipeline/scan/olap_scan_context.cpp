@@ -5,6 +5,7 @@
 #include "exec/vectorized/olap_scan_node.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "storage/tablet.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::pipeline {
 
