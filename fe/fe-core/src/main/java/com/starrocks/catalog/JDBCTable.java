@@ -208,9 +208,16 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_driver_class(properties.get(JDBCResource.DRIVER_CLASS));
 
             if (properties.get(JDBC_TABLENAME) != null) {
-                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI));
+                tJDBCTable.setJdbc_url(uri);
             } else {
-                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI) + "/" + dbName);
+                int delimiterIndex = uri.indexOf("?");
+                if (delimiterIndex > 0) {
+                    String urlPrefix = uri.substring(0, delimiterIndex);
+                    String urlSuffix = uri.substring(delimiterIndex + 1);
+                    tJDBCTable.setJdbc_url(urlPrefix + "/" + dbName + "?" + urlSuffix);
+                } else {
+                    tJDBCTable.setJdbc_url(uri + "/" + dbName);
+                }
             }
             tJDBCTable.setJdbc_table(jdbcTable);
             tJDBCTable.setJdbc_user(properties.get(JDBCResource.USER));
