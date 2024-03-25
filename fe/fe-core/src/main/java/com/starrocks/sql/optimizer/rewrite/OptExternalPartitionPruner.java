@@ -204,7 +204,7 @@ public class OptExternalPartitionPruner {
             throws AnalysisException {
         for (ScalarOperator scalarOperator : Utils.extractConjuncts(operator.getPredicate())) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
-            if (!columnRefOperatorList.retainAll(columnToPartitionValuesMap.keySet())) {
+            if (!columnRefOperatorList.isEmpty() && !columnRefOperatorList.retainAll(columnToPartitionValuesMap.keySet())) {
                 operator.getScanOperatorPredicates().getPartitionConjuncts().add(scalarOperator);
             } else {
                 operator.getScanOperatorPredicates().getNonPartitionConjuncts().add(scalarOperator);
