@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 创建物化视图。关于物化视图适用的场景请参考[同步物化视图](../../../using_starrocks/Materialized_view-single_table.md)和[异步物化视图](../../../using_starrocks/Materialized_view.md)。
 
-创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../../administration/information_schema.md) 中的元数据表 `tasks` 和 `task_runs` 来查看异步物化视图的构建状态。
+创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../../sql-reference/information_schema.md) 中的元数据表 `tasks` 和 `task_runs` 来查看异步物化视图的构建状态。
 
 > **注意**
 >

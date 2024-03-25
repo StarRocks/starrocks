@@ -1540,7 +1540,7 @@
                                 {
                                     "type": "link",
                                     "label": "Information schema",
-                                    "href": "/docs/administration/information_schema#materialized_views"
+                                    "href": "/docs/sql-reference/information_schema#materialized_views"
                                 },
                                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
                             ]

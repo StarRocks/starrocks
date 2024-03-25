@@ -261,6 +261,6 @@ StarRocks 支持以下粒度的备份还原操作：
 - 您无需在恢复作业前在新集群中创建需要被恢复表。恢复作业将自动创建该表。
 - 如果被恢复表与已有表重名，StarRocks 会首先识别已有表的 Schema。如果 Schema 相同，StarRocks 会覆盖写入已有表。如果 Schema 不同，恢复作业失败。您可以通过 `AS` 关键字重新命名被恢复表，或者删除已有表后重新发起恢复作业。
 - 如果恢复作业是一次覆盖操作（指定恢复数据到已经存在的表或分区中），那么从恢复作业的 COMMIT 阶段开始，当前集群上被覆盖的数据有可能不能再被还原。此时如果恢复作业失败或被取消，有可能造成之前的数据损坏且无法访问。这种情况下，只能通过再次执行恢复操作，并等待作业完成。因此，我们建议您，如无必要，不要使用覆盖的方式恢复数据，除非确认当前数据已不再使用。覆盖操作会检查快照和已存在的表或分区的元数据是否相同，包括 Schema 和 Rollup 等信息，如果不同则无法执行恢复操作。
-- 在备份或恢复作业中，StarRocks 自动备份或恢复表的 [同步物化视图](../using_starrocks/Materialized_view-single_table.md)。目前 StarRocks 暂不支持备份恢复视图和[异步物化视图](../using_starrocks/Materialized_view.md)。您只能手动备份异步物化视图所对应的实体表，且该实体表无法作为物化视图加速或改写查询。
+- 在备份或恢复作业中，StarRocks 自动备份或恢复表的 [同步物化视图](../../using_starrocks/Materialized_view-single_table.md)。目前 StarRocks 暂不支持备份恢复视图和[异步物化视图](../../using_starrocks/Materialized_view.md)。您只能手动备份异步物化视图所对应的实体表，且该实体表无法作为物化视图加速或改写查询。
 - 目前 StarRocks 暂不支持备份恢复用户、权限以及资源组配置相关数据。
 - StarRocks 不支持备份恢复表之间的 Colocate Join 关系。

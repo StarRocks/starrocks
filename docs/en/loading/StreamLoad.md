@@ -396,7 +396,7 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) statement or the curl command to view the progress of Broker Load jobs.
 
-In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../administration/information_schema.md#loads) view:
+In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../sql-reference/information_schema.md#loads) view:
 
 ```SQL
 SELECT * FROM information_schema.loads;

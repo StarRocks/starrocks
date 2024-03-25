@@ -488,7 +488,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-For information about the fields in the return results, see [Information Schema > loads](../administration/information_schema.md#loads).
+For information about the fields in the return results, see [Information Schema > loads](../sql-reference/information_schema.md#loads).
 
 ### Check via curl command
 

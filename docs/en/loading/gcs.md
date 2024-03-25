@@ -119,13 +119,13 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 ### Check load progress
 
-You can query the progress of Broker Load jobs from the [`loads`](../administration/information_schema.md#loads) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards.
+You can query the progress of Broker Load jobs from the [`loads`](../sql-reference/information_schema.md#loads) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards.
 
 ```SQL
 SELECT * FROM information_schema.loads;
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema.md#loads).
+For information about the fields provided in the `loads` view, see [Information Schema](../sql-reference/information_schema.md#loads).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
