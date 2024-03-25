@@ -819,17 +819,17 @@ TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
     ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
     arrow::MapBuilder* map_builder = down_cast<arrow::MapBuilder*>(builder.get());
     arrow::Int32Builder* key_builder = down_cast<arrow::Int32Builder*>(map_builder->key_builder());
-    arrow::StringBuilder* value_builder = down_cast<arrow::StringBuilder*>(map_builder->value_builder());
+    arrow::StringBuilder* item_builder = down_cast<arrow::StringBuilder*>(map_builder->item_builder());
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->AppendValues({1, 2}));
-    ASSERT_OK(value_builder->AppendValues({"test1", "test2"}));
+    ASSERT_OK(item_builder->AppendValues({"test1", "test2"}));
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(3));
     ASSERT_OK(key_builder->Append(4));
-    ASSERT_OK(value_builder->AppendValues({"test3", "test4"}));
+    ASSERT_OK(item_builder->AppendValues({"test3", "test4"}));
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(5));
-    ASSERT_OK(value_builder->AppendNull());
+    ASSERT_OK(item_builder->AppendNull());
     ASSERT_OK(map_builder->Append());
     std::shared_ptr<arrow::Array> expect_array;
     ASSERT_OK(map_builder->Finish(&expect_array));
@@ -869,7 +869,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
     nullable_column->append_nulls(1);
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(0));
+    chunk->append_column(nullable_column, SlotId(0));
     std::vector<const TypeDescriptor*> slot_types{&map_type_desc};
     std::vector<SlotId> slot_ids{SlotId(0)};
 
@@ -892,17 +892,17 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
     ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
     arrow::MapBuilder* map_builder = down_cast<arrow::MapBuilder*>(builder.get());
     arrow::Int32Builder* key_builder = down_cast<arrow::Int32Builder*>(map_builder->key_builder());
-    arrow::StringBuilder* value_builder = down_cast<arrow::StringBuilder*>(map_builder->value_builder());
+    arrow::StringBuilder* item_builder = down_cast<arrow::StringBuilder*>(map_builder->item_builder());
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->AppendValues({1, 2}));
-    ASSERT_OK(value_builder->AppendValues({"test1", "test2"}));
+    ASSERT_OK(item_builder->AppendValues({"test1", "test2"}));
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(3));
     ASSERT_OK(key_builder->Append(4));
-    ASSERT_OK(value_builder->AppendValues({"test3", "test4"}));
+    ASSERT_OK(item_builder->AppendValues({"test3", "test4"}));
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(5));
-    ASSERT_OK(value_builder->AppendNull());
+    ASSERT_OK(item_builder->AppendNull());
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(map_builder->AppendNull());
     std::shared_ptr<arrow::Array> expect_array;
