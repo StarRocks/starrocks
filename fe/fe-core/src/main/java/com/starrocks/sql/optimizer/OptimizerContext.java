@@ -73,6 +73,9 @@ public class OptimizerContext {
     // which should be kept to be used to convert outer join into inner join.
     private List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
 
+    // uniquePartitionIdGenerator for external catalog
+    private long uniquePartitionIdGenerator = 0L;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -284,5 +287,9 @@ public class OptimizerContext {
     // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
     public void clearNotNullPredicates() {
         pushdownNotNullPredicates.clear();
+    }
+
+    public long getNextUniquePartitionId() {
+        return uniquePartitionIdGenerator++;
     }
 }

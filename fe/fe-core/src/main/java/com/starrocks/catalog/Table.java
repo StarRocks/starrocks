@@ -201,9 +201,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     // foreign key constraint for mv rewrite
     protected List<ForeignKeyConstraint> foreignKeyConstraints;
 
-    // uniquePartitionIdGenerator for external catalog
-    private Long uniquePartitionIdGenerator = 0L;
-
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
@@ -828,17 +825,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean hasForeignKeyConstraints() {
         return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
-    }
-
-    public synchronized List<Long> allocateUniquePartitionIdByPartitionKey(List<PartitionKey> keys) {
-        List<Long> res = new ArrayList<>(keys.size());
-        for (PartitionKey ignored : keys) {
-            if (uniquePartitionIdGenerator == Long.MAX_VALUE) {
-                uniquePartitionIdGenerator = 0L;
-            }
-            res.add(uniquePartitionIdGenerator++);
-        }
-        return res;
     }
 
     public boolean isTable() {

@@ -122,7 +122,7 @@ public class OptExternalPartitionPruner {
             try {
                 initPartitionInfo(logicalScanOperator, context, columnToPartitionValuesMap, columnToNullPartitions);
                 classifyConjuncts(logicalScanOperator, columnToPartitionValuesMap);
-                computePartitionInfo(logicalScanOperator, columnToPartitionValuesMap, columnToNullPartitions);
+                computePartitionInfo(logicalScanOperator, context, columnToPartitionValuesMap, columnToNullPartitions);
             } catch (Exception e) {
                 LOG.warn("HMS table partition prune failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
@@ -237,12 +237,13 @@ public class OptExternalPartitionPruner {
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
+                List<Long> ids = new ArrayList<>();
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
                     PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
                     keys.add(partitionKey);
+                    ids.add(context.getNextUniquePartitionId());
                 }
-                List<Long> ids = table.allocateUniquePartitionIdByPartitionKey(keys);
                 for (int i = 0; i < keys.size(); i++) {
                     partitionKeys.add(new Pair<>(keys.get(i), ids.get(i)));
                 }
@@ -293,7 +294,7 @@ public class OptExternalPartitionPruner {
         }
     }
 
-    private static void computePartitionInfo(LogicalScanOperator operator,
+    private static void computePartitionInfo(LogicalScanOperator operator, OptimizerContext context,
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
@@ -323,9 +324,8 @@ public class OptExternalPartitionPruner {
                 String catalogName = icebergTable.getCatalogName();
                 List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
-                List<Long> ids = table.allocateUniquePartitionIdByPartitionKey(partitionKeys);
-                for (int i = 0; i < partitionKeys.size(); i++) {
-                    idToPartitionKey.put(ids.get(i), partitionKeys.get(i));
+                for (PartitionKey partitionKey : partitionKeys) {
+                    idToPartitionKey.put(context.getNextUniquePartitionId(), partitionKey);
                 }
             }
 
