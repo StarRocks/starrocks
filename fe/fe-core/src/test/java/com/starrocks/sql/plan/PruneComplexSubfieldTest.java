@@ -872,7 +872,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "get_json_int(j1, 'asd') " +
                 "from js0;";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/a/b(json), /j1/asd(int(11))]");
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b(json), /j1/asd(bigint(20))]");
     }
 
     @Test
@@ -993,7 +993,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "get_json_int(j1, 'asd') " +
                 "from js0;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/asd(int(11))]");
+        assertContains(plan, "ColumnAccessPath: [/j1/asd(bigint(20))]");
 
         sql = "select " +
                 "get_json_int(j1, 'a.b.c.d') " +
@@ -1094,7 +1094,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select cast(j1->'a' as bigint) from js0";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(get_json_double(2: j1, 'a') AS BIGINT)");
+        assertContains(plan, "get_json_int(2: j1, 'a')");
     }
 
     @Test

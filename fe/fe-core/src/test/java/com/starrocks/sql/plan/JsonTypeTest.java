@@ -94,7 +94,7 @@ public class JsonTypeTest extends PlanTestBase {
         assertPlanContains("select cast(parse_json('1') -> '$.k1' as int) ",
                 "json_query(parse_json('1'), '$.k1')");
         assertPlanContains("select cast(v_json -> '$.k1' as int) from tjson_test",
-                "json_query(2: v_json, '$.k1')");
+                "CAST(get_json_int(2: v_json, '$.k1') AS INT)");
     }
 
     @Test
