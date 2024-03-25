@@ -34,6 +34,9 @@
 
 #pragma once
 
+#include <sys/un.h>
+
+#include <string>
 #include <vector>
 
 #include "common/status.h"
@@ -41,26 +44,29 @@
 
 namespace starrocks {
 
-//TODO: ipv6
 class InetAddress {
 public:
-    InetAddress(struct sockaddr* addr);
-    bool is_address_v4() const;
-    bool is_loopback_v4();
-    std::string get_host_address_v4();
+    InetAddress(std::string ip, sa_family_t family, bool is_loopback);
+    bool is_loopback() const;
+    std::string get_host_address() const;
+    bool is_ipv6() const;
 
 private:
-    struct sockaddr_in addr;
+    std::string _ip_addr;
+    sa_family_t _family;
+    bool _is_loopback;
 };
 
 // Looks up all IP addresses associated with a given hostname. Returns
 // an error status if any system call failed, otherwise OK. Even if OK
 // is returned, addresses may still be of zero length.
-Status hostname_to_ip_addrs(const std::string& name, std::vector<std::string>* addresses);
+std::string hostname_to_ip(const std::string& host);
+
+Status hostname_to_ip_addrs_v4(const std::string& name, std::vector<std::string>* addresses);
+
+Status hostname_to_ip_addrs_v6(const std::string& name, std::vector<std::string>* addresses);
 
 bool is_valid_ip(const std::string& ip);
-
-std::string hostname_to_ip(const std::string& host);
 
 // Finds the first non-localhost IP address in the given list. Returns
 // true if such an address was found, false otherwise.
@@ -70,11 +76,15 @@ bool find_first_non_localhost(const std::vector<std::string>& addresses, std::st
 // Returns OK if a hostname can be found, false otherwise.
 Status get_hostname(std::string* hostname);
 
-Status get_hosts_v4(std::vector<InetAddress>* hosts);
+Status get_hosts(std::vector<InetAddress>* hosts);
 
 // Utility method because Thrift does not supply useful constructors
 TNetworkAddress make_network_address(const std::string& hostname, int port);
 
 Status get_inet_interfaces(std::vector<std::string>* interfaces, bool include_ipv6 = false);
+
+std::string get_host_port(const std::string& host, int port);
+
+std::string get_brpc_http_url(const std::string& host, int port);
 
 } // namespace starrocks
