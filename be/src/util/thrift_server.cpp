@@ -51,6 +51,7 @@
 #include <utility>
 
 #include "common/config.h"
+#include "service/backend_options.h"
 #include "util/thread.h"
 
 namespace starrocks {
@@ -338,7 +339,8 @@ Status ThriftServer::start() {
     }
 
     case THREAD_POOL:
-        fe_server_transport.reset(new apache::thrift::transport::TServerSocket(_port));
+        fe_server_transport.reset(new apache::thrift::transport::TServerSocket(
+                BackendOptions::get_service_bind_address_without_bracket(), _port));
 
         if (transport_factory == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
@@ -349,7 +351,8 @@ Status ThriftServer::start() {
         break;
 
     case THREADED:
-        server_socket = new apache::thrift::transport::TServerSocket(_port);
+        server_socket = new apache::thrift::transport::TServerSocket(
+                BackendOptions::get_service_bind_address_without_bracket(), _port);
         //      server_socket->setAcceptTimeout(500);
         fe_server_transport.reset(server_socket);
 
