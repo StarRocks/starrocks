@@ -323,6 +323,9 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
                         Config.min_load_timeout_second);
                 break;
+            case REPLICATION:
+                // skip transaction timeout range check for replication
+                break;
             default:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
         }
