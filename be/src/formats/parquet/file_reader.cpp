@@ -477,7 +477,7 @@ Status FileReader::_init_group_readers() {
         std::vector<io::SharedBufferedInputStream::IORange> ranges;
         for (auto& r : _row_group_readers) {
             int64_t end_offset = 0;
-            r->collect_io_ranges(&ranges, &end_offset);
+            RETURN_IF_ERROR(r->collect_io_ranges(&ranges, &end_offset));
             r->set_end_offset(end_offset);
         }
         _sb_stream->set_io_ranges(ranges);
