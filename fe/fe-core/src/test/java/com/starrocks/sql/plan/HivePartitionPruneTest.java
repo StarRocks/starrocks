@@ -168,4 +168,30 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testLikeInPartitionColumn() throws Exception {
+        String sql = "select * from hive0.datacache_db.single_partition_table where l_shipdate LIKE '1998-01-03'";
+        assertPlanContains(sql, "partitions=1/1");
+    }
+
+    @Test
+    public void testWithDuplicatePartition() throws Exception {
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition", "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01'",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour=6",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour>0",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour=0",
+                "partitions=0/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour > 10",
+                "partitions=0/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour < 10",
+                "partitions=2/2");
+    }
+>>>>>>> d5338c5832 ([BugFix] Fixed external catalog's PartitionKey being deduplicated (#42893))
 }
