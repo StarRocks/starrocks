@@ -30,7 +30,7 @@
 namespace starrocks {
 
 const std::string_view FPE::DEFAULT_KEY = "abcdefghijk12345abcdefghijk12345";
-static constexpr int DEC_MAX_SIZE = 14;
+static constexpr int DEC_MAX_SIZE = 15;
 
 void FPE::trim_leading_zeros(const std::string& result, size_t num_flag_pos, std::string& value) {
     size_t start = num_flag_pos;
@@ -218,10 +218,10 @@ Status FPE::decrypt_num(std::string_view num_str, const std::vector<uint8_t>& ke
     if (dot_pos != std::string_view::npos) {
         int_part = num_str.substr(num_flag_pos + 1, dot_pos - num_flag_pos - 1);
         dec_part = num_str.substr(dot_pos + 1, num_str.length() - dot_pos - 1);
-        // only keep the first 14 digits
-        if (LIKELY(dec_part.size() > DEC_MAX_SIZE)) {
-            dec_part = dec_part.substr(0, DEC_MAX_SIZE);
-        }
+        // only keep the first 15 digits
+        dec_part = dec_part.substr(0, DEC_MAX_SIZE);
+        // remove the tailing zero if exsit
+        dec_part = dec_part.substr(0, dec_part.find_last_not_of('0') + 1);
         // remove the last "1" which is the FIXED_NUM
         dec_part = dec_part.substr(0, dec_part.size() - 1);
     } else {
