@@ -272,6 +272,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
                 ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET;
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
@@ -290,6 +291,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
                 ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::ORC;
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
@@ -308,6 +310,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
                 ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->executor = nullptr;
         sink_ctx->format = "unknown";
+        sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();

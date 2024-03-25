@@ -282,7 +282,7 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         shortCircuitExecutor = ShortCircuitExecutor.create(context, fragments, scanNodes, descTable,
-                isBinaryRow, jobSpec.isNeedReport());
+                isBinaryRow, jobSpec.isNeedReport(), jobSpec.getPlanProtocol());
 
         if (null != shortCircuitExecutor) {
             isShortCircuit = true;

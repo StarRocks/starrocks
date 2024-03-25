@@ -25,18 +25,6 @@
 
 namespace starrocks {
 
-const std::string DEFAULT_FIELD_DELIM = "\001";
-const std::string DEFAULT_COLLECTION_DELIM = "\002";
-const std::string DEFAULT_MAPKEY_DELIM = "\003";
-// LF = Line Feed = '\n'
-const std::string LINE_DELIM_LF = "\n";
-// Most hive TextFile using LF as line delimiter
-const std::string DEFAULT_LINE_DELIM = LINE_DELIM_LF;
-// CR = Carriage Return = '\r'
-const std::string LINE_DELIM_CR = "\r";
-// TODO(SmithCruise) CR + LF, but we don't support it yet, because our code only support single char as line delimiter
-const std::string LINE_DELIM_CR_LF = "\r\n";
-
 static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
     ssize_t end = filename.size() - 1;
     while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;

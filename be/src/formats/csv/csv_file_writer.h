@@ -23,6 +23,9 @@ namespace starrocks::formats {
 struct CSVWriterOptions : FileWriterOptions {
     std::string column_terminated_by = ",";
     std::string line_terminated_by = "\n";
+
+    inline static std::string COLUMN_TERMINATED_BY = "column_terminated_by";
+    inline static std::string LINE_TERMINATED_BY = "line_terminated_by";
 };
 
 // The primary purpose of this class is to support hive + csv. Use with caution in other cases.
@@ -32,8 +35,9 @@ public:
     CSVFileWriter(std::string location, std::unique_ptr<csv::OutputStream> output_stream,
                   const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& types,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                  const std::shared_ptr<CSVWriterOptions>& writer_options, const std::function<void()> rollback_action,
-                  PriorityThreadPool* executors);
+                  TCompressionType::type compression_type, const std::shared_ptr<CSVWriterOptions>& writer_options,
+                  const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                  RuntimeState* runtime_state);
 
     ~CSVFileWriter() override;
 
@@ -51,9 +55,11 @@ private:
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _types;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<CSVWriterOptions> _writer_options;
     const std::function<void()> _rollback_action;
-    PriorityThreadPool* _executors;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 
     int64_t _num_rows = 0;
     // (nullable converter, not-null converter)
@@ -62,10 +68,11 @@ private:
 
 class CSVFileWriterFactory : public FileWriterFactory {
 public:
-    CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::map<std::string, std::string>& options,
+    CSVFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
+                         const std::map<std::string, std::string>& options,
                          const std::vector<std::string>& column_names,
                          std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                         PriorityThreadPool* executors = nullptr);
+                         PriorityThreadPool* executors, RuntimeState* runtime_state);
 
     Status init() override;
 
@@ -73,12 +80,14 @@ public:
 
 private:
     std::shared_ptr<FileSystem> _fs;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::map<std::string, std::string> _options;
     std::shared_ptr<CSVWriterOptions> _parsed_options;
 
     std::vector<std::string> _column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
-    PriorityThreadPool* _executors;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::formats

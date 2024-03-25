@@ -18,6 +18,7 @@
 #include "connector/es_connector.h"
 #include "connector/file_connector.h"
 #include "connector/hive_connector.h"
+#include "connector/iceberg_connector.h"
 #include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
@@ -47,6 +48,7 @@ const std::string Connector::MYSQL = "mysql";
 const std::string Connector::FILE = "file";
 const std::string Connector::LAKE = "lake";
 const std::string Connector::BINLOG = "binlog";
+const std::string Connector::ICEBERG = "iceberg";
 
 class ConnectorManagerInit {
 public:
@@ -59,6 +61,7 @@ public:
         cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
         cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
+        cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
     }
 };
 
