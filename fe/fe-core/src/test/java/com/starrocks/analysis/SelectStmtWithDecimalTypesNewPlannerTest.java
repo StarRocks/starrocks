@@ -329,7 +329,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalSubNULL() throws Exception {
         String sql = "select col_decimal32p9s2 - NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) - NULL";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(10,2)) - NULL";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -436,7 +436,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalSubZero() throws Exception {
         String sql = "select col_decimal32p9s2 - 0.0 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) - 0";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(10,2)) - 0";
         Assert.assertTrue(plan.contains(snippet));
     }
 
