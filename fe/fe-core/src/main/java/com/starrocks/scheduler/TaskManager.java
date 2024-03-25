@@ -701,7 +701,9 @@ public class TaskManager implements MemoryTrackable {
                 }
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                taskRunManager.arrangeTaskRun(taskRun);
+                if (!taskRunManager.arrangeTaskRun(taskRun)) {
+                    LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
+                }
                 break;
             // this will happen in build image
             case RUNNING:
