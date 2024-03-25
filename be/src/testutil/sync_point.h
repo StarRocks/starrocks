@@ -71,13 +71,10 @@ public:
 #define TEST_IDX_SYNC_POINT(x, index)
 #define TEST_SYNC_POINT_CALLBACK(x, y)
 #define INIT_SYNC_POINT_SINGLETONS()
-<<<<<<< HEAD
-=======
 #define TEST_ERROR_POINT(x)
 #define TEST_SUCC_POINT(x)
 #define TEST_ENABLE_ERROR_POINT(x, y)
 #define TEST_DISABLE_ERROR_POINT(x)
->>>>>>> d9d9c70453 ([BugFix] Fix the has_output check bug of scan operator (#42994))
 #else
 
 namespace starrocks {
