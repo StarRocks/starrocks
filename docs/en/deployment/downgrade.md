@@ -73,12 +73,15 @@ If you have enabled FQDN access (supported from v2.4 onwards) and need to downgr
 
 After the compatibility configuration and the availability test, you can downgrade the FE nodes. You must first downgrade the Follower FE nodes and then the Leader FE node.
 
-1. Create a new snapshot.
-   a. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new snapshot.
+1. Create a metadata snapshot.
+
+   a. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a meatedata snapshot.
+
    b. You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized. 
-   -> **CAUTION**
-   ->
-   -> The CREATE IMAGE syntax is only supported in versions 2.5.3 and above. Lower versions need to trigger a new snapshot by restarting the leader.
+
+   > **CAUTION**
+   >
+   > The ALTER SYSTEM CREATE IMAGE statement is only supported in from v2.5.3 and later. On ealrier versions, you need to create a meatadata snapshot by restarting the Leader FE.
 
 2. Navigate to the working directory of the FE node and stop the node.
 
@@ -118,11 +121,11 @@ After the compatibility configuration and the availability test, you can downgra
    ps aux | grep StarRocksFE
    ```
 
-6. Repeat the above 2~5 procedures to downgrade other Follower FE nodes, and finally the Leader FE node.
+6. Repeat the above Step 2 to Step 5 to downgrade other Follower FE nodes, and finally the Leader FE node.
 
-   -> **CAUTION**
-   ->
-   -> Suppose you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, repeat the 1st step to trigger a new snapshot.
+   > **CAUTION**
+   >
+   > Suppose you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, repeat Step 1 to trigger a new snapshot before upgrading.
 
 ## Downgrade BE
 
