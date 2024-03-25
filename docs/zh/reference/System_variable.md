@@ -167,6 +167,14 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于兼容 MySQL 客户端，无实际作用。
 
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+解决升级中的兼容问题，用户不可见。
+
+默认值：`true`。
+-->
+
 ### enable_connector_adaptive_io_tasks（2.5 及以后）
 
 外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。
@@ -577,4 +585,6 @@ MySQL 服务器的版本。
 
 ### wait_timeout
 
-用于设置空闲连接的连接时长，单位为秒。当一个空闲连接在该时长内与 StarRocks 没有任何交互，则 StarRocks 会主动断开这个链接。默认为 8 小时。
+用于设置客户端与 StarRocks 数据库交互时的最大空闲时长。如果一个空闲连接在该时长内与 StarRocks 数据库没有任何交互，StarRocks 会主动断开这个连接。
+
+单位：秒。默认值：28800（即 8 小时）。
