@@ -403,6 +403,8 @@ public class ReplicationJob implements GsonPostProcessable {
                 }
             }
         } catch (Exception e) {
+            LOG.warn("Replication job exception, state: {}, database id: {}, table id: {}, transaction id: {}, ",
+                    state, databaseId, tableId, transactionId, e);
             abortTransaction(e.getMessage());
             setState(ReplicationJobState.ABORTED);
         }

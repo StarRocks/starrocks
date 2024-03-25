@@ -320,8 +320,16 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
 
         switch (sourceType) {
             case BACKEND_STREAMING:
+<<<<<<< HEAD
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
                         Config.min_load_timeout_second);
+=======
+                checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second, Config.min_load_timeout_second);
+                break;
+            case LAKE_COMPACTION:
+            case REPLICATION:
+                // skip transaction timeout range check for lake compaction and replication
+>>>>>>> 2d138fe256 ([Enhancement] Remove replication transaction timeout checking (#42990))
                 break;
             default:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_load_timeout_second, Config.min_load_timeout_second);
