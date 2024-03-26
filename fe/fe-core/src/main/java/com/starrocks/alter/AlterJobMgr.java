@@ -470,7 +470,8 @@ public class AlterJobMgr {
             Column existed = existedColumns.get(i);
             Column created = newColumns.get(i);
             if (!existed.isSchemaCompatible(created)) {
-                String message = String.format("Column schema not compatible: (%s) and (%s)", existed, created);
+                String message = MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
+                        existed.toString(), created.toString());
                 materializedView.setInactiveAndReason(message);
                 throw new SemanticException(message);
             }

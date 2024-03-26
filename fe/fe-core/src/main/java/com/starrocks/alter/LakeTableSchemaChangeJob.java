@@ -42,6 +42,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.journal.JournalTask;
@@ -65,7 +66,6 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import io.opentelemetry.api.trace.StatusCode;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -678,7 +678,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                     "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                             mvColumn.getName(), tbl.getName());
                     mv.setInactiveAndReason(
-                            "base table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
+                            MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
                     return;
                 }
             }
