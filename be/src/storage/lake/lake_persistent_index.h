@@ -15,10 +15,8 @@
 #pragma once
 
 #include "storage/persistent_index.h"
-#include "storage/sstable/persistent_index_sstable.h"
 
 namespace starrocks {
-struct KeyIndexesInfo;
 
 namespace sstable {
 class PersistentIndexSstable;
@@ -26,6 +24,7 @@ class PersistentIndexSstable;
 
 namespace lake {
 
+using KeyIndex = uint32_t;
 class PersistentIndexMemtable;
 class TabletManager;
 
@@ -79,21 +78,36 @@ public:
     Status major_compact(int64_t min_retain_version);
 
 private:
-    void flush_to_immutable_memtable();
+    Status flush_memtable();
 
     bool is_memtable_full();
 
-    Status get_from_immutable_memtable(size_t n, const Slice* keys, IndexValue* values,
-                                       KeyIndexesInfo* key_indexes_info, int64_t version);
+    // batch get
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |key_indexes|: the indexes of keys. If a key is found, its index will be erased.
+    // |version|: version of values
+    Status get_from_immutable_memtable(const Slice* keys, IndexValue* values, std::set<KeyIndex>* key_indexes,
+                                       int64_t version);
 
-    Status get_from_sstables(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* key_indexes_info,
+    // batch get
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |key_indexes|: the indexes of keys. If a key is found, its index will be erased.
+    // |version|: version of values
+    Status get_from_sstables(size_t n, const Slice* keys, IndexValue* values, std::set<KeyIndex>* key_indexes,
                              int64_t version);
+
+    static void set_difference(std::set<KeyIndex>* key_indexes, const std::set<KeyIndex>& found_key_indexes);
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
-    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable;
+    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
+    // The size of sstables is not expected to be too large.
+    // In major compaction, some sstables will be picked to be merged into one.
     std::vector<std::unique_ptr<sstable::PersistentIndexSstable>> _sstables;
 };
 
