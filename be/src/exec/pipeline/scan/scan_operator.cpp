@@ -299,15 +299,15 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     int size = 0;
 
     {
-        bool skip[_io_tasks_per_scan_operator] = {false};
+        bool skip[_io_tasks_per_scan_operator];
         // check if we can return earlier.
         for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
             if (!_is_io_task_running[i] && _chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
                 return Status::OK();
             }
         }
-        // update skip vector.
-        for (int i = 0; i < _io_tasks_per_scan_operator && total_cnt; i++) {
+        // update skip vector, and pick up already started chunk source.
+        for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
             if (_is_io_task_running[i]) {
                 skip[i] = true;
                 total_cnt -= 1;
@@ -315,10 +315,13 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
                 RETURN_IF_ERROR(_trigger_next_scan(state, i));
                 skip[i] = true;
                 total_cnt -= 1;
+            } else {
+                skip[i] = false;
             }
         }
 
-        // pick up already started chunk source.
+        // now skip vector includes already started chunk source
+        // we are going to pick up `total_cnt` new chunk source to start.
         while (size < total_cnt) {
             _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
             int i = _chunk_source_idx;
