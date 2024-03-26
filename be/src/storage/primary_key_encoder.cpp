@@ -376,7 +376,6 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
     for (int j = 0; j < ncol; j++) {
         LOG(INFO) << "prepare_ops for idx:" << j << " col idx:" << sort_key_idxes[j];
         datas[j] = chunk.get_column_by_index(sort_key_idxes[j])->raw_data();
-        CHECK(datas[j] != nullptr) << "col:" << j << " sort_key_idx:" << sort_key_idxes[j] << " return nullptr";
         switch (schema.field(sort_key_idxes[j])->type()->type()) {
         case TYPE_BOOLEAN:
             ops[j] = [](const void* data, int idx, std::string* buff) {
@@ -521,6 +520,7 @@ void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk
             break;
         }
     }
+    LOG(INFO) << "has nullable sort key:" << has_nullable_sort_key;
     if (dest->is_binary()) {
         LOG(INFO) << "encode binary column";
         auto& bdest = down_cast<BinaryColumn&>(*dest);
@@ -530,6 +530,7 @@ void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk
             for (size_t i = 0; i < len; i++) {
                 buff.clear();
                 for (int j = 0; j < ncol; j++) {
+                    LOG(INFO) << "encode row:" << i << "col:" << j;
                     ops[j](datas[j], offset + i, &buff);
                 }
                 bdest.append(buff);
@@ -538,6 +539,7 @@ void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk
             for (size_t i = 0; i < len; i++) {
                 buff.clear();
                 for (int j = 0; j < ncol; j++) {
+                    LOG(INFO) << "encode row:" << i << "col:" << j << " is_null:" << cols[j]->is_null(i);
                     if (cols[j]->is_null(i)) {
                         buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
                     } else {
