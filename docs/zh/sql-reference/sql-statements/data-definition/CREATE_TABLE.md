@@ -503,9 +503,10 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 >
 > 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
 
-自 3.3 版本起，非主键表也支持了排序键， 排序键通过 `ORDER BY` 指定，对不同类型的表有如下限制：
-- DUPLICATE表的排序键可以为任意列的排列组合
-- AGGREDATE和UNIQUE表的排序键需要和维度列相同，但可以和建表时维度列的顺序不一致
+自 3.3 版本起，非主键表也支持了排序键，排序键通过 `ORDER BY` 指定，对不同类型的表有如下限制：
+
+- 明细表 (Duplicate Key) 的排序键可以为任意列的排列组合。
+- 聚合表 (Aggregate) 和更新表 (Unique Key) 的排序键需要和维度列相同，但可以和建表时维度列的顺序不一致。
 
 
 ### **PROPERTIES**
@@ -1082,9 +1083,9 @@ PROPERTIES(
 );
 ```
 
-### 创建一张聚合表并且指定排序键
+### 创建一张聚合表并指定排序键
 
-假设维度列的顺序为`site_id`, `date`, `city_code`，但是希望按照`date`, `city_code`, `site_id`的顺序组织数据排序，则可以用 `ORDER BY` 指定排序键的顺序
+假设维度列的顺序为 `site_id`, `date`, `city_code`，但是希望按照 `date`, `city_code`, `site_id` 的顺序组织数据排序，则可以用 `ORDER BY` 指定排序键的顺序：
 
 ```SQL
 create table IF aggregate_tbl (
