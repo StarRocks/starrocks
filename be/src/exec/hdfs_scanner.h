@@ -255,6 +255,7 @@ struct HdfsScannerContext {
     const HdfsSplitContext* split_context = nullptr;
     std::vector<HdfsSplitContextPtr> split_tasks;
     bool has_split_tasks = false;
+    size_t estimated_mem_usage_per_split_task = 0;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -341,14 +342,7 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
-    void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
-        for (auto& t : _scanner_ctx.split_tasks) {
-            split_tasks->emplace_back(std::move(t));
-        }
-        if (split_tasks->size() > 0) {
-            _scanner_ctx.has_split_tasks = true;
-        }
-    }
+    void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
 protected:

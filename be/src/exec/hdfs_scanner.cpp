@@ -268,6 +268,9 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
+    if (_scanner_ctx.has_split_tasks) {
+        return _scanner_ctx.estimated_mem_usage_per_split_task;
+    }
     if (_shared_buffered_input_stream != nullptr) {
         return _shared_buffered_input_stream->estimated_mem_usage();
     }
@@ -522,6 +525,18 @@ void HdfsScannerContext::merge_split_tasks() {
     }
 
     split_tasks.swap(new_split_tasks);
+}
+void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+    size_t max_split_size = 0;
+    for (auto& t : _scanner_ctx.split_tasks) {
+        size_t size = (t->split_end - t->split_start);
+        max_split_size = std::max(max_split_size, size);
+        split_tasks->emplace_back(std::move(t));
+    }
+    if (split_tasks->size() > 0) {
+        _scanner_ctx.has_split_tasks = true;
+        _scanner_ctx.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
+    }
 }
 
 } // namespace starrocks

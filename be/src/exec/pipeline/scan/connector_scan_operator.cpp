@@ -762,7 +762,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
                 mem_tracker->consume(_request_mem_tracker_bytes);
             } else {
                 limiter->update_running_chunk_source_count(-1);
-                // VLOG_OPERATOR << build_debug_string("alloc failed");
+                VLOG_OPERATOR << build_debug_string("alloc failed");
                 _request_mem_tracker_bytes = 0;
                 return Status::OK();
             }
