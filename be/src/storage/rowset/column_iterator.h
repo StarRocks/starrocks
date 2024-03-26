@@ -108,7 +108,6 @@ public:
     Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
         if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
             sharedBufferStream == nullptr) {
-            //LOG(INFO) << "not sharedBufferStream, filename: " << _opts.read_file->filename();
             return Status::OK();
         }
 
