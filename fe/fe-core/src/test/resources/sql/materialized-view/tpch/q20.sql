@@ -1,3 +1,4 @@
+
 [result]
 TOP-N (order by [[2: s_name ASC NULLS FIRST]])
     TOP-N (order by [[2: s_name ASC NULLS FIRST]])
@@ -8,13 +9,13 @@ TOP-N (order by [[2: s_name ASC NULLS FIRST]])
                     SCAN (table[nation] columns[8: n_nationkey, 9: n_name] predicate[9: n_name = ARGENTINA])
             EXCHANGE SHUFFLE[13]
                 INNER JOIN (join-predicate [30: l_partkey = 12: ps_partkey AND 31: l_suppkey = 13: ps_suppkey AND cast(14: ps_availqty as DECIMAL128(38,3)) > multiply(0.5, 43: sum)] post-join-predicate [null])
-                    AGGREGATE ([GLOBAL] aggregate [{144: sum=sum(144: sum)}] group by [[112: l_partkey, 110: l_suppkey]] having [null]
-                        EXCHANGE SHUFFLE[112, 110]
-                            AGGREGATE ([LOCAL] aggregate [{144: sum=sum(113: sum_qty)}] group by [[112: l_partkey, 110: l_suppkey]] having [null]
-                                SCAN (mv[lineitem_agg_mv2] columns[110: l_suppkey, 111: l_shipdate, 112: l_partkey, 113: sum_qty] predicate[111: l_shipdate >= 1993-01-01 AND 111: l_shipdate < 1994-01-01])
+                    EXCHANGE SHUFFLE[30, 31]
+                        AGGREGATE ([GLOBAL] aggregate [{144: sum=sum(124: sum_qty)}] group by [[123: l_partkey, 121: l_suppkey]] having [null]
+                            SCAN (mv[lineitem_agg_mv2] columns[121: l_suppkey, 122: l_shipdate, 123: l_partkey, 124: sum_qty] predicate[122: l_shipdate >= 1993-01-01 AND 122: l_shipdate < 1994-01-01])
                     EXCHANGE SHUFFLE[12, 13]
                         LEFT SEMI JOIN (join-predicate [12: ps_partkey = 17: p_partkey] post-join-predicate [null])
                             SCAN (table[partsupp] columns[12: ps_partkey, 13: ps_suppkey, 14: ps_availqty] predicate[null])
                             EXCHANGE SHUFFLE[17]
                                 SCAN (table[part] columns[17: p_partkey, 18: p_name] predicate[18: p_name LIKE sienna%])
 [end]
+
