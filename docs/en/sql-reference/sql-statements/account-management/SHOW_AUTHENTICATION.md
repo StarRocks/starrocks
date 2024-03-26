@@ -33,7 +33,7 @@ SHOW [ALL] AUTHENTICATION [FOR USERNAME]
 | ----------------- | ------------------------------------------------------------ |
 | UserIdentity      | The user identity.                                           |
 | Password          | Whether a password is used to log in to the StarRocks cluster.<ul><li>`Yes`: A password is used.</li><li>`No`: No password is used.</li></ul> |
-| AuthPlugin        | The interface that is used for authentication. Valid values: `MYSQL_NATIVE_PASSWORD`,  `AUTHENTICATION_LDAP_SIMPLE`, or `AUTHENTICATION_KERBEROS`. If no interface is used, `NULL` is returned. |
+| AuthPlugin        | The interface that is used for authentication. Valid values: `MYSQL_NATIVE_PASSWORD` and `AUTHENTICATION_LDAP_SIMPLE`. If no interface is used, `NULL` is returned. |
 | UserForAuthPlugin | The name of the user using the LDAP or Kerberos authentication. If no authentication is used, `NULL` is returned. |
 
 ## Examples
@@ -53,12 +53,12 @@ Example 2: Display the authentication information of all users in the current cl
 
 ```Plain
 SHOW ALL AUTHENTICATION;
-+---------------+----------+-------------------------+-------------------+
-| UserIdentity  | Password | AuthPlugin              | UserForAuthPlugin |
-+---------------+----------+-------------------------+-------------------+
-| 'root'@'%'    | Yes      | NULL                    | NULL              |
-| 'chelsea'@'%' | No       | AUTHENTICATION_KERBEROS | HADOOP.COM        |
-+---------------+----------+-------------------------+-------------------+
++---------------+----------+----------------------------+-------------------+
+| UserIdentity  | Password | AuthPlugin                 | UserForAuthPlugin |
++---------------+----------+----------------------------+-------------------+
+| 'root'@'%'    | Yes      | NULL                       | NULL              |
+| 'chelsea'@'%' | No       | AUTHENTICATION_LDAP_SIMPLE | NULL              |
++---------------+----------+----------------------------+-------------------+
 ```
 
 Example 3: Display the authentication information of a specified user.
