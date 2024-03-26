@@ -515,7 +515,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             if (node.getTable() instanceof OlapTable) {
                 for (Index index : ((OlapTable) node.getTable()).getIndexes()) {
                     if (index.getIndexType() == IndexDef.IndexType.GIN &&
-                            index.getColumns().contains(column.getKey().getName())) {
+                            index.isNoTokenization() && index.getColumns().contains(column.getKey().getName())) {
                         columnRef.setHasGinIndex(true);
                         break;
                     }

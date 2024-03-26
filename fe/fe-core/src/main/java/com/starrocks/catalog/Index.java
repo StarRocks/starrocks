@@ -34,9 +34,11 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.IndexDef.IndexType;
+import com.starrocks.analysis.InvertedIndexUtil;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
@@ -152,6 +154,12 @@ public class Index implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public boolean isNoTokenization() {
+        Preconditions.checkState(indexType == IndexDef.IndexType.GIN);
+        return !(properties.get(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY) ==
+            InvertedIndexUtil.INVERTED_INDEX_PARSER_NONE);
     }
 
     public void setProperties(Map<String, String> properties) {
