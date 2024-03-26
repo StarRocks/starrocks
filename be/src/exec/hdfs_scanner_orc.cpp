@@ -437,8 +437,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         errno = 0;
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
-        if (_split_context != nullptr) {
-            auto* split_context = down_cast<const SplitContext*>(_split_context);
+        if (_scanner_ctx.split_context != nullptr) {
+            auto* split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
+            VLOG_FILE << "[xxx] orc set footer. size = " << split_context->footer->size();
             options.setSerializedFileTail(*(split_context->footer.get()));
         }
         reader = orc::createReader(std::move(_input_stream), options);
@@ -458,22 +459,23 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     // we can split task if we enable split tasks feature and have >= 2 stripes.
     // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
-    bool enable_split_tasks = _scanner_ctx.enable_split_tasks && stripes.size() >= 2 &&
-                              (_scanner_ctx.split_context == nullptr) && (_scanner_ctx.split_tasks != nullptr);
+    bool enable_split_tasks =
+            (_scanner_ctx.enable_split_tasks && stripes.size() >= 2) && (_scanner_ctx.split_context == nullptr);
     if (enable_split_tasks) {
         auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
+        VLOG_FILE << "[xxx] orc get footer. size = " << footer->size();
         for (const auto& info : stripes) {
             auto ctx = std::make_unique<SplitContext>();
             ctx->footer = footer;
             ctx->split_start = info.offset;
             ctx->split_end = info.offset + info.length;
-            _scanner_ctx.split_tasks->emplace_back(std::move(ctx));
+            _scanner_ctx.split_tasks.emplace_back(std::move(ctx));
         }
         _scanner_ctx.merge_split_tasks();
         VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                      << ", split_tasks.size = " << _scanner_ctx.split_tasks->size();
-        if (_scanner_ctx.split_tasks->size() <= 1) {
-            _scanner_ctx.split_tasks->clear();
+                      << ", split_tasks.size = " << _scanner_ctx.split_tasks.size();
+        if (_scanner_ctx.split_tasks.size() <= 1) {
+            _scanner_ctx.split_tasks.clear();
         } else {
             _should_skip_file = true;
             return Status::OK();
@@ -661,7 +663,7 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
-    if (_has_split_tasks) {
+    if (has_split_tasks()) {
         return;
     }
     const std::string orcProfileSectionPrefix = "ORC";

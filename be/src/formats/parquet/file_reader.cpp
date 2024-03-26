@@ -92,7 +92,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     RETURN_IF_ERROR(_get_footer());
 
     _build_split_tasks();
-    if (_scanner_ctx->split_tasks != nullptr && _scanner_ctx->split_tasks->size() > 0) {
+    if (_scanner_ctx->split_tasks.size() > 0) {
         _is_file_filtered = true;
         return Status::OK();
     }
@@ -220,9 +220,7 @@ void FileReader::_build_split_tasks() {
     // dont do split in following cases:
     // 1. this feature is not enabled
     // 2. we have already do split before (that's why `split_context` is nullptr)
-    // 3. in unit test case (that's why `split_tasks` is nullptr)
-    if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr ||
-        _scanner_ctx->split_tasks == nullptr) {
+    if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr) {
         return;
     }
 
@@ -237,16 +235,16 @@ void FileReader::_build_split_tasks() {
         split_ctx->split_start = start_offset;
         split_ctx->split_end = end_offset;
         split_ctx->file_metadata = _file_metadata;
-        _scanner_ctx->split_tasks->emplace_back(std::move(split_ctx));
+        _scanner_ctx->split_tasks.emplace_back(std::move(split_ctx));
     }
     _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->split_tasks->size() <= 1) {
-        _scanner_ctx->split_tasks->clear();
+    if (_scanner_ctx->split_tasks.size() <= 1) {
+        _scanner_ctx->split_tasks.clear();
     }
 
     VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
-                  << ", split_tasks.size = " << _scanner_ctx->split_tasks->size();
+                  << ", split_tasks.size = " << _scanner_ctx->split_tasks.size();
 }
 
 StatusOr<uint32_t> FileReader::_get_footer_read_size() const {

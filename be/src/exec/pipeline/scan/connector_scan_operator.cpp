@@ -860,10 +860,11 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     {
         std::vector<ScanSplitContextPtr> split_tasks;
         _data_source->get_split_tasks(&split_tasks);
-        VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
-                      << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
-                      << ", split_tasks = " << split_tasks.size();
         if (split_tasks.size() != 0) {
+            VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
+                          << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
+                          << ", split_tasks = " << split_tasks.size();
+
             std::vector<MorselPtr> split_morsels;
             ScanMorsel* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
 

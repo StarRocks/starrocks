@@ -140,7 +140,6 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.stats = &_app_stats;
     ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
     ctx.split_context = _scanner_params.split_context;
-    ctx.split_tasks = &_split_tasks;
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
     return Status::OK();
@@ -477,15 +476,13 @@ bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const
 }
 
 void HdfsScannerContext::merge_split_tasks() {
-    if (split_tasks == nullptr) return;
-
-    std::vector<HdfsSplitContextPtr>& old_split_tasks = *(split_tasks);
+    if (split_tasks.size() < 2) return;
 
     std::vector<HdfsSplitContextPtr> new_split_tasks;
 
     auto do_merge = [&](size_t start, size_t end) {
-        auto start_ctx = old_split_tasks[start].get();
-        auto end_ctx = old_split_tasks[end].get();
+        auto start_ctx = split_tasks[start].get();
+        auto end_ctx = split_tasks[end].get();
         auto new_ctx = start_ctx->clone();
         new_ctx->split_start = start_ctx->split_start;
         new_ctx->split_end = end_ctx->split_end;
@@ -493,12 +490,12 @@ void HdfsScannerContext::merge_split_tasks() {
     };
 
     size_t head = 0;
-    for (size_t i = 1; i < old_split_tasks.size(); i++) {
+    for (size_t i = 1; i < split_tasks.size(); i++) {
         bool cut = false;
 
-        auto prev_ctx = old_split_tasks[i - 1].get();
-        auto ctx = old_split_tasks[i].get();
-        auto head_ctx = old_split_tasks[head].get();
+        auto prev_ctx = split_tasks[i - 1].get();
+        auto ctx = split_tasks[i].get();
+        auto head_ctx = split_tasks[head].get();
 
         if ((ctx->split_start != prev_ctx->split_end) ||
             (ctx->split_end - head_ctx->split_start > connector_max_split_size)) {
@@ -510,8 +507,8 @@ void HdfsScannerContext::merge_split_tasks() {
             head = i;
         }
     }
-    do_merge(head, old_split_tasks.size() - 1);
-    old_split_tasks.swap(new_split_tasks);
+    do_merge(head, split_tasks.size() - 1);
+    split_tasks.swap(new_split_tasks);
 }
 
 } // namespace starrocks

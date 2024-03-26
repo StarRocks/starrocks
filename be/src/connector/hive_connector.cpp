@@ -875,7 +875,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
 void HiveDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
-        if (!_scanner->get_has_split_tasks()) {
+        if (!_scanner->has_split_tasks()) {
             COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
             COUNTER_UPDATE(_profile.scan_ranges_size, _scan_range.length);
         }
@@ -977,9 +977,6 @@ void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, i
 void HiveDataSource::get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
     if (_scanner == nullptr) return;
     _scanner->move_split_tasks(split_tasks);
-    if (split_tasks->size() > 0) {
-        _scanner->set_has_split_tasks(true);
-    }
 }
 
 } // namespace starrocks::connector

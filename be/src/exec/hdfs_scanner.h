@@ -253,7 +253,8 @@ struct HdfsScannerContext {
     const THdfsScanRange* scan_range = nullptr;
     bool enable_split_tasks = false;
     const HdfsSplitContext* split_context = nullptr;
-    std::vector<HdfsSplitContextPtr>* split_tasks = nullptr;
+    std::vector<HdfsSplitContextPtr> split_tasks;
+    bool has_split_tasks = false;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -341,12 +342,14 @@ public:
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
-        for (auto& t : _split_tasks) {
+        for (auto& t : _scanner_ctx.split_tasks) {
             split_tasks->emplace_back(std::move(t));
         }
+        if (split_tasks->size() > 0) {
+            _scanner_ctx.has_split_tasks = true;
+        }
     }
-    void set_has_split_tasks(bool v) { _has_split_tasks = v; }
-    bool get_has_split_tasks() const { return _has_split_tasks; }
+    bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
 protected:
     Status open_random_access_file();
@@ -374,10 +377,6 @@ protected:
     int64_t _total_running_time = 0;
 
     std::shared_ptr<DefaultMORProcessor> _mor_processor;
-
-    const HdfsSplitContext* _split_context = nullptr;
-    std::vector<HdfsSplitContextPtr> _split_tasks;
-    bool _has_split_tasks = false;
 };
 
 } // namespace starrocks
