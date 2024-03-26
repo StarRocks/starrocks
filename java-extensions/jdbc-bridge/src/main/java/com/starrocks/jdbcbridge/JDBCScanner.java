@@ -161,8 +161,6 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = ((Number) resultObject).intValue();
                 } else if (dataColumn instanceof Long[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).longValue();
-                } else if (dataColumn instanceof BigInteger[]) {
-                    dataColumn[resultNumRows] = ((Number) resultObject).longValue();
                 } else if (dataColumn instanceof Float[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
                 } else if (dataColumn instanceof Double[]) {
