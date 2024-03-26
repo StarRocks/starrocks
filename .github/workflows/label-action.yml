@@ -39,7 +39,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/pulls/${PR_NUMBER}/requested_reviewers \
-            -f "team_reviewers[]=\"${TEAM}\""
+            -f "team_reviewers[]=${TEAM}"
 
       - name: REMOVE REVIEWER
         if: github.event.action == 'unlabeled'
@@ -49,4 +49,4 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /repos/${{ github.repository }}/pulls/${PR_NUMBER}/requested_reviewers \
-            -f "team_reviewers[]=\"${TEAM}\""
+            -f "team_reviewers[]=${TEAM}"
