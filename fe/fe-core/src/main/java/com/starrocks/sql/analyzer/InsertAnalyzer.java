@@ -299,6 +299,7 @@ public class InsertAnalyzer {
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
         String catalogName = insertStmt.getTableName().getCatalog();
         String dbName = insertStmt.getTableName().getDb();
+        String tableName = insertStmt.getTableName().getTbl();
 
         try {
             MetaUtils.checkCatalogExistAndReport(catalogName);
@@ -308,6 +309,9 @@ public class InsertAnalyzer {
 
         Database database = MetaUtils.getDatabase(catalogName, dbName);
         Table table = MetaUtils.getTable(session, database, insertStmt.getTableName());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
