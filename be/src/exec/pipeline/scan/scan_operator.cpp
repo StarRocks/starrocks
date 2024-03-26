@@ -295,25 +295,34 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
 
-    int cnt = _io_tasks_per_scan_operator;
     int to_sched[_io_tasks_per_scan_operator];
     int size = 0;
 
-    // pick up already started chunk source.
-    while (--cnt >= 0 && size < total_cnt) {
-        _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
-        int i = _chunk_source_idx;
-        if (_is_io_task_running[i]) {
-            total_cnt -= 1;
-            continue;
+    {
+        bool skip[_io_tasks_per_scan_operator] = {false};
+        // check if we can return earlier.
+        for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
+            if (!_is_io_task_running[i] && _chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+                return Status::OK();
+            }
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
-            return Status::OK();
+        // update skip vector.
+        for (int i = 0; i < _io_tasks_per_scan_operator && total_cnt; i++) {
+            if (_is_io_task_running[i]) {
+                skip[i] = true;
+                total_cnt -= 1;
+            } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
+                RETURN_IF_ERROR(_trigger_next_scan(state, i));
+                skip[i] = true;
+                total_cnt -= 1;
+            }
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
-            RETURN_IF_ERROR(_trigger_next_scan(state, i));
-            total_cnt -= 1;
-        } else {
+
+        // pick up already started chunk source.
+        while (size < total_cnt) {
+            _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
+            int i = _chunk_source_idx;
+            if (skip[i]) continue;
             to_sched[size++] = i;
         }
     }
