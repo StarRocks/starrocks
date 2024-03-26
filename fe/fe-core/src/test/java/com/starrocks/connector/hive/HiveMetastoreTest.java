@@ -22,9 +22,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -48,6 +50,7 @@ import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
 import static org.apache.hadoop.hive.common.StatsSetupConst.NUM_FILES;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
+import static org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.SCHEMA_URL;
 
 public class HiveMetastoreTest {
     @Test
@@ -95,6 +98,65 @@ public class HiveMetastoreTest {
         Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
         Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
+    }
+
+    @Test
+    public void testGetAvroTable() {
+        // get mocked Avro table
+        class MockedTestMetaClient extends MockedHiveMetaClient {
+            public Table getTable(String dbName, String tblName) {
+                List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
+                List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+                String hdfsPath = "hdfs://127.0.0.1:10000/hive";
+                StorageDescriptor sd = new StorageDescriptor();
+                sd.setCols(unPartKeys);
+                sd.setLocation(hdfsPath);
+                sd.setInputFormat("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat");
+                SerDeInfo serDeInfo = new SerDeInfo();
+                serDeInfo.setParameters(ImmutableMap.of(SCHEMA_URL,
+                        "src/test/resources/data/avro/avro-test.avsc"));
+                serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.avro.AvroSerDe");
+                sd.setSerdeInfo(serDeInfo);
+                Table msTable1 = new Table();
+                msTable1.setDbName(dbName);
+                msTable1.setTableName(tblName);
+
+                msTable1.setSd(sd);
+                msTable1.setTableType("MANAGED_TABLE");
+                msTable1.setParameters(ImmutableMap.of(ROW_COUNT, "50", TOTAL_SIZE, "100",
+                        SCHEMA_URL, "src/test/resources/data/avro/avro-test.avsc"));
+
+                if (!tblName.equals("unpartitioned_table")) {
+                    msTable1.setPartitionKeys(partKeys);
+                } else {
+                    msTable1.setPartitionKeys(new ArrayList<>());
+                }
+
+                return msTable1;
+            }
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "hive");
+        properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+        ConnectorContext context = new ConnectorContext("hive_catalog", "hive", properties);
+        GlobalStateMgr.getCurrentState().getConnectorMgr().createConnector(context);
+
+        HiveMetaClient client = new MockedTestMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        com.starrocks.catalog.Table table = metastore.getTable("db1", "tbl1");
+        HiveTable hiveTable = (HiveTable) table;
+        Assert.assertEquals("db1", hiveTable.getDbName());
+        Assert.assertEquals("tbl1", hiveTable.getTableName());
+        Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
+        Assert.assertEquals(Lists.newArrayList("col2", "col3"), hiveTable.getDataColumnNames());
+        Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
+        Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assert.assertEquals(ScalarType.createVarcharType(1073741824), hiveTable.getBaseSchema().get(1).getType());
+        Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
+
+        GlobalStateMgr.getCurrentState().getConnectorMgr().removeConnector("hive_catalog");
     }
 
     @Test

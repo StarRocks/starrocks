@@ -1,0 +1,9 @@
+{
+     "type": "record",
+     "namespace": "com.example",
+     "name": "FullName",
+     "fields": [
+       { "name": "col2", "type": "int" },
+       { "name": "col3", "type": "string" }
+     ]
+}

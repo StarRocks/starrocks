@@ -91,6 +91,8 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_INPUT_FOAMT;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
+import static com.starrocks.connector.AvroUtils.getAvroFields;
+import static com.starrocks.connector.AvroUtils.isHiveTableWithAvroSchemas;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiTypeToHiveTypeString;
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
@@ -141,8 +143,31 @@ public class HiveMetastoreApiConverter {
         return result;
     }
 
+    /**
+     * Convert org.apache.hadoop.hive.metastore.api.table to internal representation
+     * @param table org.apache.hadoop.hive.metastore.api.table
+     * @param catalogName catalog name
+     * @param schemas we use it to represent fieldSchemas fetched from avro_schema_url other than HMS only when it is
+     *                an Avro table, and isAvroTableWithSchemas returns True as Avro schemas provides more accurate
+     *                column info.
+     * @return HiveTable
+     */
     public static HiveTable toHiveTable(Table table, String catalogName) {
         validateHiveTableType(table.getTableType());
+
+        List<FieldSchema> fieldSchemas = table.getSd().getCols();
+
+        if (isHiveTableWithAvroSchemas(table)) {
+            HashMap<String, String> tableProperties = new HashMap<>();
+            table.getSd().getSerdeInfo().getParameters().forEach((key, value) ->
+                    tableProperties.put(key, value != null ? value : ""));
+            tableProperties.putAll(table.getParameters());
+            List<FieldSchema> avroFields = getAvroFields(catalogName, table.getDbName(), table.getTableName(),
+                    tableProperties);
+            if (!avroFields.isEmpty()) {
+                fieldSchemas = avroFields;
+            }
+        }
 
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
@@ -154,13 +179,14 @@ public class HiveMetastoreApiConverter {
                 .setPartitionColumnNames(table.getPartitionKeys().stream()
                         .map(FieldSchema::getName)
                         .collect(Collectors.toList()))
-                .setDataColumnNames(table.getSd().getCols().stream()
+                .setDataColumnNames(fieldSchemas.stream()
                         .map(FieldSchema::getName)
                         .collect(Collectors.toList()))
-                .setFullSchema(toFullSchemasForHiveTable(table))
+                .setFullSchema(toFullSchemasForHiveTable(table, fieldSchemas))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setProperties(toHiveProperties(table,
-                        HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name())))
+                        HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()),
+                        fieldSchemas))
                 .setSerdeProperties(toSerDeProperties(table))
                 .setStorageFormat(
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
@@ -344,7 +370,8 @@ public class HiveMetastoreApiConverter {
         return result;
     }
 
-    public static Map<String, String> toHiveProperties(Table metastoreTable, HiveStorageFormat storageFormat) {
+    public static Map<String, String> toHiveProperties(Table metastoreTable, HiveStorageFormat storageFormat,
+                                                       List<FieldSchema> fieldSchemas) {
         Map<String, String> hiveProperties = Maps.newHashMap();
 
         String serdeLib = storageFormat.getSerde();
@@ -362,14 +389,14 @@ public class HiveMetastoreApiConverter {
             hiveProperties.put(HIVE_TABLE_INPUT_FORMAT, inputFormat);
         }
 
-        String dataColumnNames = metastoreTable.getSd().getCols().stream()
+        String dataColumnNames = fieldSchemas.stream()
                 .map(FieldSchema::getName).collect(Collectors.joining(","));
 
         if (!Strings.isNullOrEmpty(dataColumnNames)) {
             hiveProperties.put(HIVE_TABLE_COLUMN_NAMES, dataColumnNames);
         }
 
-        String dataColumnTypes = metastoreTable.getSd().getCols().stream()
+        String dataColumnTypes = fieldSchemas.stream()
                 .map(FieldSchema::getType).collect(Collectors.joining("#"));
 
         if (!Strings.isNullOrEmpty(dataColumnTypes)) {
@@ -393,9 +420,17 @@ public class HiveMetastoreApiConverter {
     }
 
     public static List<Column> toFullSchemasForHiveTable(Table table) {
-        List<FieldSchema> fieldSchemas = getAllFieldSchemas(table);
+        return toFullSchemasForHiveTable(table, ImmutableList.of());
+    }
+
+    public static List<Column> toFullSchemasForHiveTable(Table table, List<FieldSchema> schemas) {
+        ImmutableList.Builder<FieldSchema> allColumns = ImmutableList.builder();
+        List<FieldSchema> unHivePartColumns = schemas.isEmpty() ? table.getSd().getCols() : schemas;
+        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
+        ImmutableList<FieldSchema> allFieldSchemas = allColumns.addAll(unHivePartColumns).addAll(partHiveColumns).build();
+
         List<Column> fullSchema = Lists.newArrayList();
-        for (FieldSchema fieldSchema : fieldSchemas) {
+        for (FieldSchema fieldSchema : allFieldSchemas) {
             Type type;
             String comment = "";
             try {
@@ -443,13 +478,6 @@ public class HiveMetastoreApiConverter {
             fullSchema.add(column);
         }
         return fullSchema;
-    }
-
-    public static List<FieldSchema> getAllFieldSchemas(Table table) {
-        ImmutableList.Builder<FieldSchema> allColumns = ImmutableList.builder();
-        List<FieldSchema> unHivePartColumns = table.getSd().getCols();
-        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
-        return allColumns.addAll(unHivePartColumns).addAll(partHiveColumns).build();
     }
 
     public static List<String> toPartitionColumnNamesForHudiTable(Table table, HoodieTableConfig tableConfig) {
