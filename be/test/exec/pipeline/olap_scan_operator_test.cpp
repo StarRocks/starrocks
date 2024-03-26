@@ -62,9 +62,8 @@ void OlapScanOperatorTest::SetUp() {
 
 TEST_F(OlapScanOperatorTest, test_finish_sequence) {
     SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("OlapScanPrepareOperator::prepare", [](void* arg) {
-        *(Status*)arg = Status::OK();
-    });
+    SyncPoint::GetInstance()->SetCallBack("OlapScanPrepareOperator::prepare",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
     SyncPoint::GetInstance()->SetCallBack("ScanOperatorFactory::prepare", [](void* arg) {});
     SyncPoint::GetInstance()->SetCallBack("OlapScanContext::parse_conjuncts",
                                           [](void* arg) { *(Status*)arg = Status::EndOfFile(""); });
