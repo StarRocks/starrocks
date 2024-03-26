@@ -105,25 +105,9 @@ def add_function(fn_data):
     entry["ret"] = fn_data[4]
     entry["args"] = fn_data[5]
 
-<<<<<<< HEAD:gensrc/script/vectorized/gen_vectorized_functions.py
-    if "..." in fn_data[3]:
-        assert 2 <= len(fn_data[3]), "Invalid arguments in vectorized_functions.py:\n\t" + repr(fn_data)
-        assert "..." == fn_data[3][-1], "variadic parameter must at the end:\n\t" + repr(fn_data)
-=======
-    function_signature = "%s#%s#(%s)" % (entry["ret"], entry["name"], ", ".join(entry["args"]))
-
-    if function_signature in function_signature_set:
-        print("=================================================================")
-        print("Duplicated function signature: " + function_signature)
-        print("=================================================================")
-        exit(1)
-    function_signature_set.add(function_signature)
-
     if "..." in fn_data[5]:
-        assert 2 <= len(fn_data[5]), "Invalid arguments in functions.py:\n\t" + repr(fn_data)
+        assert 2 <= len(fn_data[5]), "Invalid arguments in vectorized_functions.py:\n\t" + repr(fn_data)
         assert "..." == fn_data[5][-1], "variadic parameter must at the end:\n\t" + repr(fn_data)
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065)):gensrc/script/gen_functions.py
-
         entry["args_nums"] = len(fn_data[5]) - 1
     else:
         entry["args_nums"] = len(fn_data[5])
@@ -193,13 +177,8 @@ if __name__ == '__main__':
     if not os.path.exists(FE_PATH):
         os.makedirs(FE_PATH)
 
-<<<<<<< HEAD:gensrc/script/vectorized/gen_vectorized_functions.py
     if not os.path.exists(BE_PATH):
         os.makedirs(BE_PATH)
 
     generate_fe(FE_PATH + "VectorizedBuiltinFunctions.java")
     generate_cpp(BE_PATH + "builtin_functions.cpp")
-=======
-    generate_fe(fe_functions_dir + "/VectorizedBuiltinFunctions.java")
-    generate_cpp(be_functions_dir + "/builtin_functions.cpp")
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065)):gensrc/script/gen_functions.py
