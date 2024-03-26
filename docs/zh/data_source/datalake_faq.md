@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 ### 问题描述
 
-在访问 HDFS 上存储的数据文件时，如果发现 SQL 查询的 Profile 中 `__MAX_OF_FSIOTime` 和 `__MIN_OF_FSIOTime` 两个指标的值相差很大，说明当前环境存在 HDFS 慢节点的情况。如下所示的 Profile，就是典型的 HDFS 慢节点场景：
+在访问 HDFS 上存储的数据文件时，如果发现 SQL 查询的 Profile 中 `__MAX_OF_FSIOTime` 和 `__MIN_OF_FSIOTime` 两个指标的值相差很大，说明当前环境存在 HDFS 集群某些 DataNode 节点较慢的情况。如下所示的 Profile，就是典型的 HDFS 慢节点场景：
 
 ```plaintext
  - InputStream: 0
@@ -48,7 +48,7 @@ displayed_sidebar: "Chinese"
 
 #### 【推荐】缩短 HDFS 客户端和 DataNode 的超时时间
 
-可以通过在 `hdfs-site.xml` 配置 `dfs.client.socket-timeout` 属性，来缩短 HDFS 客户端和 DataNode 之间的超时时间（默认超时时间是 60s，比较长）。这样，当 StarRocks 遇到一个慢 DataNode 时，能够快速超时，转而向新的 DataNode 发起请求。如下例子中，配置了 5s 的超时时间：
+可以通过在 `hdfs-site.xml` 配置 `dfs.client.socket-timeout` 属性，来缩短 HDFS 客户端和 DataNode 之间的超时时间（默认超时时间是 60s，比较长）。这样，当 StarRocks 遇到一个反应缓慢的 DataNode 节点时，能够快速超时，转而向新的 DataNode 发起请求。如下例子中，配置了 5s 的超时时间：
 
 ```xml
 <configuration>
