@@ -132,10 +132,10 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
             Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
-                // LOG(INFO) << strings::Substitute(
-                //         "OrcMinMaxDecoder decode failed, may occur performance degradation. Because SR's column($0) "
-                //         "can't convert to orc file's column($1)",
-                //         slot->debug_string(), orc_type->toString());
+                LOG(INFO) << strings::Substitute(
+                        "OrcMinMaxDecoder decode failed, may occur performance degradation. Because SR's column($0) "
+                        "can't convert to orc file's column($1)",
+                        slot->debug_string(), orc_type->toString());
                 return false;
             }
         } else {
@@ -439,7 +439,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         options.setMemoryPool(*getOrcMemoryPool());
         if (_scanner_ctx.split_context != nullptr) {
             auto* split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
-            VLOG_FILE << "[xxx] orc set footer. size = " << split_context->footer->size();
             options.setSerializedFileTail(*(split_context->footer.get()));
         }
         reader = orc::createReader(std::move(_input_stream), options);
@@ -463,7 +462,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             (_scanner_ctx.enable_split_tasks && stripes.size() >= 2) && (_scanner_ctx.split_context == nullptr);
     if (enable_split_tasks) {
         auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
-        VLOG_FILE << "[xxx] orc get footer. size = " << footer->size();
         for (const auto& info : stripes) {
             auto ctx = std::make_unique<SplitContext>();
             ctx->footer = footer;
