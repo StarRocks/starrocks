@@ -62,9 +62,7 @@ public class JDBCScanner {
         String key = scanContext.getUser() + "/" + scanContext.getJdbcURL();
         URL driverURL = new File(driverLocation).toURI().toURL();
         DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(key, () -> {
-            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {
-                    driverURL,
-            });
+            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL,});
             Thread.currentThread().setContextClassLoader(classLoader);
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
@@ -111,22 +109,10 @@ public class JDBCScanner {
         }
     }
 
-    private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(Arrays.asList(
-            Boolean.class,
-            Short.class,
-            Integer.class,
-            Long.class,
-            Float.class,
-            Double.class,
-            BigInteger.class,
-            BigDecimal.class,
-            java.sql.Date.class,
-            Timestamp.class,
-            LocalDate.class,
-            LocalDateTime.class,
-            Time.class,
-            String.class
-    ));
+    private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(
+            Arrays.asList(Boolean.class, Short.class, Integer.class, Long.class, Float.class, Double.class,
+                    BigInteger.class, BigDecimal.class, java.sql.Date.class, Timestamp.class, LocalDate.class,
+                    LocalDateTime.class, Time.class, String.class));
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
