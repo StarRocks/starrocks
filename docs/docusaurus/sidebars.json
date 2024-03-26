@@ -1400,17 +1400,6 @@
                         "loading/cloud_storage_load"
                     ]
                 },
-                {
-                    "type": "category",
-                    "label": "概念介绍",
-                    "link": {
-                        "type": "doc",
-                        "id": "loading/load_concept/strict_mode"
-                    },
-                    "items": [
-                        "loading/load_concept/strict_mode"
-                    ]
-                },
                 "loading/StreamLoad",
                 "loading/hdfs_load",
                 {
