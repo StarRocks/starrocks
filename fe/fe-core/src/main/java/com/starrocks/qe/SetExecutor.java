@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,6 +72,10 @@ public class SetExecutor {
                     .getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
             if (null == userAuthenticationInfo) {
                 throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
+            }
+            if (!userAuthenticationInfo.getAuthPlugin().equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
+                throw new DdlException("only allow set password for native user, current user: " +
+                        setPassVar.getUserIdent() + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
             }
             userAuthenticationInfo.setPassword(setPassVar.getPassword());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
