@@ -52,7 +52,6 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.Locale;
 
 public class NetUtils {
 
@@ -71,8 +70,7 @@ public class NetUtils {
             while (a.hasMoreElements()) {
                 InetAddress addr = a.nextElement();
                 // IPv6 address starting with fe80 (Link-local Address) is not supported for now.
-                if (addr instanceof Inet6Address &&
-                        addr.getHostAddress().toLowerCase(Locale.ROOT).startsWith("fe80")) {
+                if (addr instanceof Inet6Address && addr.isLinkLocalAddress()) {
                     continue;
                 }
                 hosts.add(addr);
