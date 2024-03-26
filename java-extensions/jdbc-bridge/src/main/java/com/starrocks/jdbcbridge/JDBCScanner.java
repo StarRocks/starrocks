@@ -133,11 +133,11 @@ public class JDBCScanner {
     }
 
     private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
-                put("com.clickhouse.data.value.UnsignedByte", Short.class);
-                put("com.clickhouse.data.value.UnsignedShort", Integer.class);
-                put("com.clickhouse.data.value.UnsignedInteger", Long.class);
-                put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
-        }};
+        put("com.clickhouse.data.value.UnsignedByte", Short.class);
+        put("com.clickhouse.data.value.UnsignedShort", Integer.class);
+        put("com.clickhouse.data.value.UnsignedInteger", Long.class);
+        put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
+    }};
 
     private Class mapEngineSpecificClassType(Class<?> clazz) {
         String className = clazz.getName();
@@ -175,6 +175,8 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = ((Number) resultObject).intValue();
                 } else if (dataColumn instanceof Long[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).longValue();
+                } else if (dataColumn instanceof BigInteger[]) {
+                    dataColumn[resultNumRows] = ((Number) resultObject).longValue();
                 } else if (dataColumn instanceof Float[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
                 } else if (dataColumn instanceof Double[]) {
@@ -183,8 +185,12 @@ public class JDBCScanner {
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;
                 } else if (!(dataColumn instanceof String[])) {
-                    // for other general class type, assign value directly
-                    dataColumn[resultNumRows] = resultObject;
+                    if (dataColumn instanceof BigInteger[] && resultObject instanceof Number) {
+                        dataColumn[resultNumRows] = new BigInteger(resultObject.toString());
+                    } else {
+                        // for other general class type, assign value directly
+                        dataColumn[resultNumRows] = resultObject;
+                    }
                 } else {
                     // for non-general class type, use string representation
                     dataColumn[resultNumRows] = resultSet.getString(i + 1);
