@@ -298,6 +298,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     int to_sched[_io_tasks_per_scan_operator];
     int size = 0;
 
+    // right here, we want total running io tasks as `total_cnt`
     {
         bool skip[_io_tasks_per_scan_operator];
         // check if we can return earlier.
@@ -307,7 +308,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             }
         }
         // update skip vector, and pick up already started chunk source.
-        for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
+        for (int i = 0; i < _io_tasks_per_scan_operator && total_cnt > 0; i++) {
             if (_is_io_task_running[i]) {
                 skip[i] = true;
                 total_cnt -= 1;
