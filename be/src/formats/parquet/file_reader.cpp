@@ -37,45 +37,15 @@
 
 namespace starrocks::parquet {
 
-struct SplitContext : public pipeline::ScanSplitContext {
-    size_t split_start = 0;
-    size_t split_end = 0;
+struct SplitContext : public HdfsSplitContext {
     FileMetaDataPtr file_metadata;
-};
 
-static void merge_split_tasks(std::vector<pipeline::ScanSplitContextPtr>& split_tasks, int64_t max_split_size) {
-    std::vector<pipeline::ScanSplitContextPtr> new_split_tasks;
-
-    auto do_merge = [&](size_t start, size_t end) {
-        auto start_ctx = down_cast<const SplitContext*>(split_tasks[start].get());
-        auto end_ctx = down_cast<const SplitContext*>(split_tasks[end].get());
-        auto new_ctx = std::make_unique<SplitContext>();
-        new_ctx->split_start = start_ctx->split_start;
-        new_ctx->split_end = end_ctx->split_end;
-        new_ctx->file_metadata = start_ctx->file_metadata;
-        new_split_tasks.emplace_back(std::move(new_ctx));
-    };
-
-    size_t head = 0;
-    for (size_t i = 1; i < split_tasks.size(); i++) {
-        bool cut = false;
-
-        auto prev_ctx = down_cast<const SplitContext*>(split_tasks[i - 1].get());
-        auto ctx = down_cast<const SplitContext*>(split_tasks[i].get());
-        auto head_ctx = down_cast<const SplitContext*>(split_tasks[head].get());
-
-        if ((ctx->split_start != prev_ctx->split_end) || (ctx->split_end - head_ctx->split_start > max_split_size)) {
-            cut = true;
-        }
-
-        if (cut) {
-            do_merge(head, i - 1);
-            head = i;
-        }
+    HdfsSplitContextPtr clone() override {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->file_metadata = file_metadata;
+        return ctx;
     }
-    do_merge(head, split_tasks.size() - 1);
-    split_tasks.swap(new_split_tasks);
-}
+};
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
                        io::SharedBufferedInputStream* sb_stream, const std::set<int64_t>* _need_skip_rowids)
@@ -269,14 +239,14 @@ void FileReader::_build_split_tasks() {
         split_ctx->file_metadata = _file_metadata;
         _scanner_ctx->split_tasks->emplace_back(std::move(split_ctx));
     }
-    merge_split_tasks(*(_scanner_ctx->split_tasks), _scanner_ctx->connector_max_split_size);
+    _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
     if (_scanner_ctx->split_tasks->size() <= 1) {
         _scanner_ctx->split_tasks->clear();
     }
 
     VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
-                  << ", size = " << _scanner_ctx->split_tasks->size();
+                  << ", split_tasks.size = " << _scanner_ctx->split_tasks->size();
 }
 
 StatusOr<uint32_t> FileReader::_get_footer_read_size() const {
@@ -590,13 +560,6 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     const auto* scan_range = _scanner_ctx->scan_range;
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
-
-    if (_scanner_ctx->split_context != nullptr) {
-        auto split_context = down_cast<const SplitContext*>(_scanner_ctx->split_context);
-        scan_start = split_context->split_start;
-        scan_end = split_context->split_end;
-    }
-
     if (row_group_start >= scan_start && row_group_start < scan_end) {
         return true;
     }

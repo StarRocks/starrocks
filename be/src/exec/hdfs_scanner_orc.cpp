@@ -31,45 +31,15 @@
 
 namespace starrocks {
 
-struct SplitContext : public pipeline::ScanSplitContext {
-    size_t split_start = 0;
-    size_t split_end = 0;
+struct SplitContext : public HdfsSplitContext {
     std::shared_ptr<std::string> footer;
-};
 
-static void merge_split_tasks(std::vector<pipeline::ScanSplitContextPtr>& split_tasks, int64_t max_split_size) {
-    std::vector<pipeline::ScanSplitContextPtr> new_split_tasks;
-
-    auto do_merge = [&](size_t start, size_t end) {
-        auto start_ctx = down_cast<const SplitContext*>(split_tasks[start].get());
-        auto end_ctx = down_cast<const SplitContext*>(split_tasks[end].get());
-        auto new_ctx = std::make_unique<SplitContext>();
-        new_ctx->split_start = start_ctx->split_start;
-        new_ctx->split_end = end_ctx->split_end;
-        new_ctx->footer = start_ctx->footer;
-        new_split_tasks.emplace_back(std::move(new_ctx));
-    };
-
-    size_t head = 0;
-    for (size_t i = 1; i < split_tasks.size(); i++) {
-        bool cut = false;
-
-        auto prev_ctx = down_cast<const SplitContext*>(split_tasks[i - 1].get());
-        auto ctx = down_cast<const SplitContext*>(split_tasks[i].get());
-        auto head_ctx = down_cast<const SplitContext*>(split_tasks[head].get());
-
-        if ((ctx->split_start != prev_ctx->split_end) || (ctx->split_end - head_ctx->split_start > max_split_size)) {
-            cut = true;
-        }
-
-        if (cut) {
-            do_merge(head, i - 1);
-            head = i;
-        }
+    HdfsSplitContextPtr clone() override {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->footer = footer;
+        return ctx;
     }
-    do_merge(head, split_tasks.size() - 1);
-    split_tasks.swap(new_split_tasks);
-}
+};
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
@@ -130,12 +100,6 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
-    if (_scanner_ctx.split_context != nullptr) {
-        auto split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
-        scan_start = split_context->split_start;
-        scan_end = split_context->split_end;
-    }
-
     if (offset >= scan_start && offset < scan_end) {
         return false;
     }
@@ -168,10 +132,10 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
             Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
-                LOG(INFO) << strings::Substitute(
-                        "OrcMinMaxDecoder decode failed, may occur performance degradation. Because SR's column($0) "
-                        "can't convert to orc file's column($1)",
-                        slot->debug_string(), orc_type->toString());
+                // LOG(INFO) << strings::Substitute(
+                //         "OrcMinMaxDecoder decode failed, may occur performance degradation. Because SR's column($0) "
+                //         "can't convert to orc file's column($1)",
+                //         slot->debug_string(), orc_type->toString());
                 return false;
             }
         } else {
@@ -377,12 +341,6 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
-    if (_scanner_ctx.split_context != nullptr) {
-        auto split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
-        scan_start = split_context->split_start;
-        scan_end = split_context->split_end;
-    }
-
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
         auto stripeInfo = reader->getStripeInOrcFormat(idx);
         int64_t offset = stripeInfo.offset();
@@ -500,8 +458,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     // we can split task if we enable split tasks feature and have >= 2 stripes.
     // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
-    bool enable_split_tasks =
-            _scanner_params.enable_split_tasks && stripes.size() >= 2 && (_scanner_params.split_context == nullptr);
+    bool enable_split_tasks = _scanner_ctx.enable_split_tasks && stripes.size() >= 2 &&
+                              (_scanner_ctx.split_context == nullptr) && (_scanner_ctx.split_tasks != nullptr);
     if (enable_split_tasks) {
         auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
         for (const auto& info : stripes) {
@@ -509,12 +467,17 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             ctx->footer = footer;
             ctx->split_start = info.offset;
             ctx->split_end = info.offset + info.length;
-            _split_tasks.emplace_back(std::move(ctx));
+            _scanner_ctx.split_tasks->emplace_back(std::move(ctx));
         }
-        merge_split_tasks(_split_tasks, _scanner_params.connector_max_split_size);
-        VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                      << ", size = " << stripes.size();
-        return Status::OK();
+        _scanner_ctx.merge_split_tasks();
+        if (_scanner_ctx.split_tasks->size() >= 2) {
+            VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
+                          << ", split_tasks.size = " << _scanner_ctx.split_tasks->size();
+            _should_skip_file = true;
+            return Status::OK();
+        } else {
+            _scanner_ctx.split_tasks->clear();
+        }
     }
 
     RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
@@ -564,7 +527,7 @@ void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     CHECK(chunk != nullptr);
-    if (_should_skip_file || _split_tasks.size() > 0) {
+    if (_should_skip_file) {
         return Status::EndOfFile("");
     }
 
@@ -696,17 +659,17 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
 }
 
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
+    // if we have split tasks, we don't need to update counter
+    // and we will update those counters in sub io tasks.
+    if (_has_split_tasks) {
+        return;
+    }
     const std::string orcProfileSectionPrefix = "ORC";
 
     RuntimeProfile* root_profile = profile->runtime_profile;
     ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
 
     do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
-
-    size_t total_stripe_size = 0;
-    for (const auto& v : _app_stats.orc_stripe_sizes) {
-        total_stripe_size += v;
-    }
 
     RuntimeProfile::Counter* total_stripe_size_counter = root_profile->add_child_counter(
             "TotalStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
@@ -718,8 +681,13 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
             "TotalTinyStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
             orcProfileSectionPrefix);
 
+    size_t total_stripe_size = 0;
+    for (const auto& v : _app_stats.orc_stripe_sizes) {
+        total_stripe_size += v;
+    }
     COUNTER_UPDATE(total_stripe_size_counter, total_stripe_size);
     COUNTER_UPDATE(total_stripe_number_counter, _app_stats.orc_stripe_sizes.size());
+
     COUNTER_UPDATE(total_tiny_stripe_size_counter, _app_stats.orc_total_tiny_stripe_size);
 
     RuntimeProfile::Counter* stripe_active_lazy_coalesce_together_counter = root_profile->add_child_counter(

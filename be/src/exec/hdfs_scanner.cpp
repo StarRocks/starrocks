@@ -476,4 +476,42 @@ bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const
     return true;
 }
 
+void HdfsScannerContext::merge_split_tasks() {
+    if (split_tasks == nullptr) return;
+
+    std::vector<HdfsSplitContextPtr>& old_split_tasks = *(split_tasks);
+
+    std::vector<HdfsSplitContextPtr> new_split_tasks;
+
+    auto do_merge = [&](size_t start, size_t end) {
+        auto start_ctx = down_cast<const HdfsSplitContext*>(old_split_tasks[start].get());
+        auto end_ctx = down_cast<const HdfsSplitContext*>(old_split_tasks[end].get());
+        auto new_ctx = old_split_tasks[start]->clone();
+        new_ctx->split_start = start_ctx->split_start;
+        new_ctx->split_end = end_ctx->split_end;
+        new_split_tasks.emplace_back(std::move(new_ctx));
+    };
+
+    size_t head = 0;
+    for (size_t i = 1; i < old_split_tasks.size(); i++) {
+        bool cut = false;
+
+        auto prev_ctx = down_cast<const HdfsSplitContext*>(old_split_tasks[i - 1].get());
+        auto ctx = down_cast<const HdfsSplitContext*>(old_split_tasks[i].get());
+        auto head_ctx = down_cast<const HdfsSplitContext*>(old_split_tasks[head].get());
+
+        if ((ctx->split_start != prev_ctx->split_end) ||
+            (ctx->split_end - head_ctx->split_start > connector_max_split_size)) {
+            cut = true;
+        }
+
+        if (cut) {
+            do_merge(head, i - 1);
+            head = i;
+        }
+    }
+    do_merge(head, old_split_tasks.size() - 1);
+    old_split_tasks.swap(new_split_tasks);
+}
+
 } // namespace starrocks

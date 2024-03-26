@@ -42,6 +42,12 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 }
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
+    // if we have split tasks, we don't need to update counter
+    // and we will update those counters in sub io tasks.
+    if (_has_split_tasks) {
+        return;
+    }
+
     RuntimeProfile::Counter* request_bytes_read = nullptr;
     RuntimeProfile::Counter* request_bytes_read_uncompressed = nullptr;
     RuntimeProfile::Counter* level_decode_timer = nullptr;
