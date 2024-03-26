@@ -133,11 +133,11 @@ public class JDBCScanner {
     }
 
     private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
-            put("com.clickhouse.data.value.UnsignedByte", Short.class);
-            put("com.clickhouse.data.value.UnsignedShort", Integer.class);
-            put("com.clickhouse.data.value.UnsignedInteger", Long.class);
-            put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
-    }};
+                put("com.clickhouse.data.value.UnsignedByte", Short.class);
+                put("com.clickhouse.data.value.UnsignedShort", Integer.class);
+                put("com.clickhouse.data.value.UnsignedInteger", Long.class);
+                put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
+        }};
 
     private Class mapEngineSpecificClassType(Class<?> clazz) {
         String className = clazz.getName();
