@@ -120,7 +120,9 @@ OpFactories PipelineBuilderContext::_maybe_interpolate_local_passthrough_exchang
         local_exchange = std::make_shared<AdaptivePassthroughExchanger>(mem_mgr, local_exchange_source.get());
     } else if (pass_through_type == LocalExchanger::PassThroughType::RANDOM) {
         local_exchange = std::make_shared<RandomPassthroughExchanger>(mem_mgr, local_exchange_source.get());
-    } else if (!state->is_writer_scale_closed() && pass_through_type == LocalExchanger::PassThroughType::SCALE) {
+    } else if (state->query_options().__isset.enable_connector_sink_writer_scaling &&
+               state->query_options().enable_connector_sink_writer_scaling &&
+               pass_through_type == LocalExchanger::PassThroughType::SCALE) {
         local_exchange = std::make_shared<ConnectorSinkPassthroughExchanger>(mem_mgr, local_exchange_source.get());
     } else {
         local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());

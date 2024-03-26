@@ -363,8 +363,14 @@ Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const in
             _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
             _writer_count++;
         }
-        _source->get_sources()[(_next_accept_source++) % _writer_count]->add_chunk(chunk);
-        _data_processed += chunk->bytes_usage();
+        // set to default value in case of _source vector out of bound in multi thread
+        if (_writer_count > sources_num) {
+            _writer_count = sources_num;
+        }
+        _source->get_sources()[(_next_accept_source++) % _writer_count.load()]->add_chunk(chunk);
+        if (_writer_count < sources_num) {
+            _data_processed += chunk->bytes_usage();
+        }
     }
 
     return Status::OK();

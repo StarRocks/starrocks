@@ -287,8 +287,8 @@ public:
 
 private:
     std::atomic<size_t> _next_accept_source = 0;
-    size_t _writer_count = 1;
-    size_t _data_processed = 0;
+    std::atomic<size_t> _writer_count = 1;
+    std::atomic<size_t> _data_processed = 0;
 };
 
 // Random shuffle for each chunk of source.
