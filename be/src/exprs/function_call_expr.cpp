@@ -26,11 +26,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
-#include "storage/rowset/bloom_filter.h"
 #include "types/logical_type.h"
-#include "util/failpoint/fail_point.h"
-#include "util/slice.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
