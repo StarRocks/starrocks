@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -317,19 +316,19 @@ public class OptExternalPartitionPruner {
                 return;
             }
 
-            ImmutableMap.Builder<Long, PartitionKey> idToPartitionKey = ImmutableMap.builder();
+            // Use mutable map instead of immutable map so can be re-partition-prune, see ScanOperatorPredicates#clear().
+            Map<Long, PartitionKey> partitionKeyMap = Maps.newHashMap();
             if (table.isUnPartitioned()) {
-                idToPartitionKey.put(0L, new PartitionKey());
+                partitionKeyMap.put(0L, new PartitionKey());
             } else {
                 String catalogName = icebergTable.getCatalogName();
                 List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
                 for (PartitionKey partitionKey : partitionKeys) {
-                    idToPartitionKey.put(context.getNextUniquePartitionId(), partitionKey);
+                    partitionKeyMap.put(context.getNextUniquePartitionId(), partitionKey);
                 }
             }
 
-            Map<Long, PartitionKey> partitionKeyMap = idToPartitionKey.build();
             scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
             scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
         } else if (table instanceof PaimonTable) {
