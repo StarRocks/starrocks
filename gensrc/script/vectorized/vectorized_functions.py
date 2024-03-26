@@ -214,6 +214,17 @@ vectorized_functions = [
     [20064, 'bit_shift_right', True, False, 'LARGEINT', ['LARGEINT', 'BIGINT'],
      "BitFunctions::bitShiftRight<TYPE_LARGEINT>"],
 
+    [20070, 'bit_shift_right_logical', True, False, 'TINYINT', ['TINYINT', 'BIGINT'],
+     "BitFunctions::bitShiftRightLogical<TYPE_TINYINT>"],
+    [20071, 'bit_shift_right_logical', True, False, 'SMALLINT', ['SMALLINT', 'BIGINT'],
+     "BitFunctions::bitShiftRightLogical<TYPE_SMALLINT>"],
+    [20072, 'bit_shift_right_logical', True, False, 'INT', ['INT', 'BIGINT'],
+     "BitFunctions::bitShiftRightLogical<TYPE_INT>"],
+    [20073, 'bit_shift_right_logical', True, False, 'BIGINT', ['BIGINT', 'BIGINT'],
+     "BitFunctions::bitShiftRightLogical<TYPE_BIGINT>"],
+    [20074, 'bit_shift_right_logical', True, False, 'LARGEINT', ['LARGEINT', 'BIGINT'],
+     "BitFunctions::bitShiftRightLogical<TYPE_LARGEINT>"],
+
     # 30xxx: string functions
     [30010, 'substr', True, False, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::substring',
      'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
