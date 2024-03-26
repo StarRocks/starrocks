@@ -14,9 +14,9 @@
 
 #include "util/arrow/starrocks_column_to_arrow.h"
 
-#include "column//map_column.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
@@ -439,17 +439,17 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
         bool key_is_nullable = data_column->keys_column()->is_nullable();
         // Arrow MAP does not allow null key. Just fail to convert currently. We can improve it by
         // skip null key in the future if needed.
-        if (key_is_nullable) {
+        if (data_column->keys_column()->has_null()) {
             return arrow::Status::TypeError(
-                    fmt::format("Can't convert data to arrow because the map key is nullable, but arrow does"
+                    fmt::format("Can't convert data to arrow because the map key can be null, but arrow does"
                                 " not allow null key. logical type: {}, arrow type: {}",
                                 type_to_string(key_type_desc.type), key_arrow_type->name()));
         }
-        auto key_func = resolve_convert_func(key_type_desc.type, key_arrow_type->id(), false);
+        auto key_func = resolve_convert_func(key_type_desc.type, key_arrow_type->id(), key_is_nullable);
         if (key_func == nullptr) {
-            return arrow::Status::NotImplemented(
-                    fmt::format("Can't find convert function for map key, logical type: {}, arrow type: {}",
-                                type_to_string(key_type_desc.type), key_arrow_type->name()));
+            return arrow::Status::NotImplemented(fmt::format(
+                    "Can't find convert function for map key, logical type: {}, arrow type: {}, nullable: {}",
+                    type_to_string(key_type_desc.type), key_arrow_type->name(), key_is_nullable));
         }
         column_context->child_column_contexts.push_back({key_type_desc, key_arrow_type, key_func});
 
