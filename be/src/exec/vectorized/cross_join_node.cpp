@@ -462,6 +462,14 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
 
         TRY_CATCH_ALLOC_SCOPE_END()
 
+        {
+            std::string err_msg;
+            if (UNLIKELY((*chunk)->capacity_limit_reached(&err_msg))) {
+                return Status::InternalError(
+                        fmt::format("Result column of nest loop join exceed limit: {}", err_msg));
+            }
+        }
+
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 

@@ -600,9 +600,19 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_other_join(s
         return chunk;
     }
     while (!_is_curr_probe_chunk_finished()) {
-        ChunkPtr chunk = _permute_chunk_for_other_join(chunk_size);
+        ChunkPtr chunk;
+        TRY_CATCH_ALLOC_SCOPE_START()
+        chunk = _permute_chunk_for_other_join(chunk_size);
+        TRY_CATCH_ALLOC_SCOPE_END()
         DCHECK(chunk);
         RETURN_IF_ERROR(_probe_for_other_join(chunk));
+        {
+            std::string err_msg;
+            if (UNLIKELY(chunk->capacity_limit_reached(&err_msg))) {
+                return Status::InternalError(
+                        fmt::format("Result column of nest loop join exceed limit: {}", err_msg));
+            }
+        }
         RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
 
         RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
@@ -629,7 +639,18 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_inner_join(size_t chunk_
     }
 
     while (!_is_curr_probe_chunk_finished()) {
-        ChunkPtr chunk = _permute_chunk_for_inner_join(chunk_size);
+        ChunkPtr chunk;
+        TRY_CATCH_ALLOC_SCOPE_START()
+        chunk = _permute_chunk_for_inner_join(chunk_size);
+        TRY_CATCH_ALLOC_SCOPE_END()
+        {
+            std::string err_msg;
+            if (UNLIKELY(chunk->capacity_limit_reached(&err_msg))) {
+                return Status::InternalError(
+                        fmt::format("Result column of nest loop join exceed limit: {}", err_msg));
+            }
+        }
+
         DCHECK(chunk);
         RETURN_IF_ERROR(_probe_for_inner_join(chunk));
         RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
