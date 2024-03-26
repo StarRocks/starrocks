@@ -28,7 +28,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       TEAM: msg-reviewer
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.PAT }}
 
     steps:
       - name: ADD REVIEWER
