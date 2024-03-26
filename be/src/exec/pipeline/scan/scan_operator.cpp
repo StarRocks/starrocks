@@ -322,11 +322,11 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
         // now skip vector includes already started chunk source
         // we are going to pick up `total_cnt` new chunk source to start.
-        while (size < total_cnt) {
+        for (int i = 0; i < _io_tasks_per_scan_operator && size < total_cnt; i++) {
             _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
-            int i = _chunk_source_idx;
-            if (skip[i]) continue;
-            to_sched[size++] = i;
+            int idx = _chunk_source_idx;
+            if (skip[idx]) continue;
+            to_sched[size++] = idx;
         }
     }
 
