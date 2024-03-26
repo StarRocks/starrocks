@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
@@ -40,6 +39,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
@@ -1115,7 +1115,7 @@ public class MvUtils {
                                                 "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                                         modifiedColumn, olapTable.getName());
                                 mv.setInactiveAndReason(
-                                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                                        MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
                             }
                         }
                     }
@@ -1125,8 +1125,7 @@ public class MvUtils {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
                         olapTable.getName());
-                mv.setInactiveAndReason(
-                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
             } catch (Exception e) {
                 LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
                 // basic check: may lose some situations
@@ -1136,7 +1135,7 @@ public class MvUtils {
                                         "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                                 mvColumn.getName(), olapTable.getName());
                         mv.setInactiveAndReason(
-                                "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                                MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
                         break;
                     }
                 }
