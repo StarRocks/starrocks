@@ -32,7 +32,7 @@
 
 #include "util/slice.h"
 
-#if defined(NDEBUG) && !defined(BE_TEST)
+#if !defined(BE_TEST)
 // empty in release build
 #define TEST_KILL_RANDOM_WITH_WEIGHT(kill_point, starrock_skill_odds_weight)
 #define TEST_KILL_RANDOM(kill_point)
@@ -190,7 +190,7 @@ private:
 // Callback sync point for any read IO errors that should be ignored by
 // the fault injection framework
 // Disable in release mode
-#if defined(NDEBUG) && !defined(BE_TEST)
+#if !defined(BE_TEST)
 #define IGNORE_STATUS_IF_ERROR(_status_)
 #else
 #define IGNORE_STATUS_IF_ERROR(_status_)                  \
