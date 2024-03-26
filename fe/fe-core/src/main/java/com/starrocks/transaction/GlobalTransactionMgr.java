@@ -325,7 +325,7 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
                 break;
             case REPLICATION:
                 // skip transaction timeout range check for replication
-		break;
+                break;
             case LAKE_COMPACTION:
                 // skip transaction timeout range check for lake compaction
                 break;
