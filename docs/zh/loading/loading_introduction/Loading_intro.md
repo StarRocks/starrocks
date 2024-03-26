@@ -10,15 +10,15 @@ StarRocks 通过导入作业实现数据导入。每个导入作业都有一个�
 
 StarRocks 中所有导入方式都提供原子性保证，即同一个导入作业内的所有有效数据要么全部生效，要么全部不生效，不会出现仅导入部分数据的情况。这里的有效数据不包括由于类型转换错误等数据质量问题而被过滤掉的数据。
 
-StarRocks 提供两种访问协议用于提交导入作业：MySQL 协议和 HTTP 协议。不同的导入方式支持的访问协议有所不同，具体请参见本文“[导入方式](../loading/Loading_intro.md#导入方式)”章节。
+StarRocks 提供两种访问协议用于提交导入作业：MySQL 协议和 HTTP 协议。不同的导入方式支持的访问协议有所不同，具体请参见本文“[导入方式](#导入方式)”章节。
 
 > **注意**
 >
-> 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+> 导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
 
 ## 支持的数据类型
 
-StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../sql-reference/data-types/numeric/BIGINT.md)。
+StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](../../sql-reference/data-types/numeric/BIGINT.md)。
 
 ## 导入模式
 
@@ -64,7 +64,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
-![Broker Load 和 Spark Load 流程图](../assets/4.1-1.png)
+![Broker Load 和 Spark Load 流程图](../../assets/4.1-1.png)
 
 每个阶段的描述如下：
 
@@ -106,7 +106,7 @@ Routine Load 导入作业的执行流程描述如下：
 
 ## 导入方式
 
-StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)、[Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
+StarRocks 提供 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、 [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)、[Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
 
 | 导入方式            | 数据源                                                                                          | 业务场景                                                                                                     | 数据量（单作业）      | 数据格式                                            | 同步模式    | 协议   |
 | ------------------ | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------ | ------------------------------------------------- | ---------- | ------ |
@@ -119,31 +119,31 @@ StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation
 
 您可以根据业务场景、数据量、数据源、数据格式和导入频次等来选择合适的导入方式。另外，在选择导入方式时，可以注意以下几点：
 
-- 从 Kafka 导入数据时，推荐使用 [Routine Load](../loading/RoutineLoad.md) 实现导入。但是，如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
+- 从 Kafka 导入数据时，推荐使用 [Routine Load](../../loading/RoutineLoad.md) 实现导入。但是，如果导入过程中有复杂的多表关联和 ETL 预处理，建议先使用 Apache Flink® 从 Kafka 读取数据并对数据进行处理，然后再通过 StarRocks 提供的标准插件 [flink-connector-starrocks](../../loading/Flink-connector-starrocks.md) 把处理后的数据导入到 StarRocks 中。
 
-- 从 Hive、Iceberg、Hudi、Delta Lake 导入数据时，推荐创建 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi Catalog](../data_source/catalog/hudi_catalog.md)、[Delta Lake Catalog](../data_source/catalog/deltalake_catalog.md)，然后使用 [INSERT](../loading/InsertInto.md) 实现导入。
+- 从 Hive、Iceberg、Hudi、Delta Lake 导入数据时，推荐创建 [Hive catalog](../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../data_source/catalog/iceberg_catalog.md)、[Hudi Catalog](../../data_source/catalog/hudi_catalog.md)、[Delta Lake Catalog](../../data_source/catalog/deltalake_catalog.md)，然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。
 
-- 从另外一个 StarRocks 集群或从 Elasticsearch 导入数据时，推荐创建 [StarRocks 外部表](../data_source/External_table.md#starrocks-外部表)或 [Elasticsearch 外部表](../data_source/External_table.md#deprecated-elasticsearch-外部表)，然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
+- 从另外一个 StarRocks 集群或从 Elasticsearch 导入数据时，推荐创建 [StarRocks 外部表](../../data_source/External_table.md#starrocks-外部表)或 [Elasticsearch 外部表](../../data_source/External_table.md#deprecated-elasticsearch-外部表)，然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。
 
   > **注意**
   >
   > StarRocks 外表只支持数据写入，不支持数据读取。
 
-- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#deprecated-mysql-外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
+- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../../data_source/External_table.md#deprecated-mysql-外部表)、然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../../loading/Flink_cdc_load.md) 实现导入。
 
-- 从 Oracle、PostgreSQL 或 SQL Server 等数据源导入数据时，推荐创建 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
+- 从 Oracle、PostgreSQL 或 SQL Server 等数据源导入数据时，推荐创建 [JDBC 外部表](../../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../../loading/DataX-starrocks-writer.md) 实现导入。
 
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
 
-![数据源与导入方式关系图](../assets/4.1-3.png)
+![数据源与导入方式关系图](../../assets/4.1-3.png)
 
 ## 内存限制
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
-不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../loading/hdfs_load.md)、[Routine Load](../loading/RoutineLoad.md)、[Spark Load](../loading/SparkLoad.md) 和 [INSERT](../loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
+不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../../loading/StreamLoad.md)、[Broker Load](../../loading/hdfs_load.md)、[Routine Load](../../loading/RoutineLoad.md)、[Spark Load](../../loading/SparkLoad.md) 和 [INSERT](../../loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
 
-您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“[系统配置](../loading/Loading_intro.md#系统配置)”章节。
+您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“[系统配置](#系统配置)”章节。
 
 ## 使用说明
 
@@ -153,7 +153,7 @@ StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation
 
 - 如果您在创建 StarRocks 表时使用 `DEFAULT` 关键字给该字段对应的目标列指定了默认值，则 StarRocks 在导入时该行数据时会自动往该列填充 `DEFAULT` 中指定的默认值。
 
-  [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
+  [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 四种导入方式当前支持 `DEFAULT current_timestamp`、`DEFAULT <默认值>` 和 `DEFAULT (<表达式>)`。[Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入方式当前仅支持 `DEFAULT current_timestamp` 和 `DEFAULT <默认值>`，不支持 `DEFAULT (<表达式>)`。
 
   > **说明**
   >
@@ -165,13 +165,13 @@ StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation
   >
   > 如果该列在建表时定义该列为 `NOT NULL`，则导入会报错，作业失败。
 
-  对于 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
+  对于 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 和 [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
 
-有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
 ### 设置数据导入安全等级
 
-如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
+如果您的 StarRocks 集群有多数据副本，您可以根据业务需求为 Table 设置不同导入数据安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。您可在 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 时通过增加属性（PROPERTIES） `write_quorum` 指定导入数据安全等级，或通过 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 语句为已有 Table 添加该属性。该属性从 2.5 版本开始支持。
 
 ## 系统配置
 
@@ -224,7 +224,7 @@ StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation
 
 ### 会话变量
 
-您可以设置如下[会话变量](../reference/System_variable.md)：
+您可以设置如下[会话变量](../../reference/System_variable.md)：
 
 - `query_timeout`
 
@@ -232,4 +232,4 @@ StarRocks 提供 [Stream Load](../sql-reference/sql-statements/data-manipulation
 
 ## 常见问题
 
-请参见[导入常见问题](../faq/loading/Loading_faq.md)。
+请参见[导入常见问题](../../faq/loading/Loading_faq.md)。

@@ -148,7 +148,7 @@
             "label": "Data Loading",
             "link": {
                 "type": "doc",
-                "id": "loading/Loading_intro"
+                "id": "loading/loading_introduction/Loading_intro"
             },
             "items": [
                 {
@@ -1383,7 +1383,7 @@
             "label": "导入数据",
             "link": {
                 "type": "doc",
-                "id": "loading/Loading_intro"
+                "id": "loading/loading_introduction/Loading_intro"
             },
             "items": [
                 {
@@ -1398,17 +1398,6 @@
                         "loading/azure",
                         "loading/gcs",
                         "loading/cloud_storage_load"
-                    ]
-                },
-                {
-                    "type": "category",
-                    "label": "概念介绍",
-                    "link": {
-                        "type": "doc",
-                        "id": "loading/load_concept/strict_mode"
-                    },
-                    "items": [
-                        "loading/load_concept/strict_mode"
                     ]
                 },
                 "loading/StreamLoad",

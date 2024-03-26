@@ -72,7 +72,7 @@ PROPERTIES (
 
 ## 下一步
 
-建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入概览](../../loading/Loading_intro.md)。
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入概览](../../loading/loading_introduction/Loading_intro.md)。
 
 > - 导入数据时，仅支持全部更新，即导入任务需要指明所有列，例如示例中的 `create_time`、`order_id`、`order_state` 和 `total_price` 四个列。
 >
