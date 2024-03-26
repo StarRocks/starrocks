@@ -145,7 +145,6 @@ std::future<Status> ParquetFileWriter::_flush_row_group() {
     }
 
     if (_executors) {
-        std::cout << "add flush row group task" << std::endl;
         bool ok = _executors->try_offer(task);
         if (!ok) {
             Status exception = Status::ResourceBusy("submit close file task fails");
