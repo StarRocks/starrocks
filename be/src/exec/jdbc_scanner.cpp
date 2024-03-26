@@ -199,7 +199,7 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
         if (type != TYPE_BOOLEAN && type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
             return Status::NotSupported(
                     fmt::format("Type mismatches on column[{}], JDBC result type is Byte, please set the type to "
-                                "one of boolean, tinyint,smallint,int,bigint",
+                                "one of boolean,tinyint,smallint,int,bigint",
                                 slot_desc->col_name()));
         }
         if(type == TYPE_BOOLEAN){
@@ -274,7 +274,7 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
         }
         return TYPE_VARCHAR;
     } else if (java_class == "java.lang.Boolean") {
-            if (type != TYPE_BOOLEAN && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
+        if (type != TYPE_BOOLEAN && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
             return Status::NotSupported(
                     fmt::format("Type mismatches on column[{}], JDBC result type is Boolean, please set the type to "
                                 "one of boolean,smallint,int,bigint",
