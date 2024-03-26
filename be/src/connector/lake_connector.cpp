@@ -568,7 +568,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     // IOTime
     _io_timer = ADD_TIMER(_runtime_profile, "IOTime");
     const std::string io_statistics_name = "IOStatistics";
-    ADD_COUNTER(_runtime_profile, io_statistics_name, TUnit::NONE);
+    ADD_COUNTER(_runtime_profile, io_statistics_name, TUnit::UNIT);
     // Page count
     _pages_count_memory_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "PagesCountMemory", TUnit::UNIT, io_statistics_name);

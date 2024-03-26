@@ -268,7 +268,7 @@ Status HdfsScanner::open_random_access_file() {
 
 void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {
     const std::string ICEBERG_TIMER = "IcebergV2FormatTimer";
-    ADD_CHILD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE, parent_name);
+    ADD_CHILD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::UNIT, parent_name);
 
     RuntimeProfile::Counter* delete_build_timer =
             ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildTime", TUnit::TIME_NS, ICEBERG_TIMER);
@@ -301,7 +301,7 @@ void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     if (statistics == nullptr || statistics->size() == 0) return;
 
     RuntimeProfile* runtime_profile = profile->runtime_profile;
-    ADD_COUNTER(profile->runtime_profile, kHdfsIOProfileSectionPrefix, TUnit::NONE);
+    ADD_COUNTER(profile->runtime_profile, kHdfsIOProfileSectionPrefix, TUnit::UNIT);
 
     for (int64_t i = 0, sz = statistics->size(); i < sz; i++) {
         auto&& name = statistics->name(i);

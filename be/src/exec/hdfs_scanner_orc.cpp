@@ -563,7 +563,7 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     const std::string orcProfileSectionPrefix = "ORC";
 
     RuntimeProfile* root_profile = profile->runtime_profile;
-    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::NONE);
+    ADD_COUNTER(root_profile, orcProfileSectionPrefix, TUnit::UNIT);
 
     do_update_iceberg_v2_counter(root_profile, orcProfileSectionPrefix);
 
