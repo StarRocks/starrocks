@@ -1,7 +1,7 @@
 name: LABEL ACTION
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - labeled
       - unlabeled
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
-      TEAM: test-team
+      TEAM: msg-reviewer
 
     steps:
       - name: ADD REVIEWER
