@@ -63,7 +63,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* page_skip = nullptr;
 
     RuntimeProfile* root = profile->runtime_profile;
-    ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
+    ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
     request_bytes_read_uncompressed =
             ADD_CHILD_COUNTER(root, "RequestBytesReadUncompressed", TUnit::BYTES, kParquetProfileSectionPrefix);

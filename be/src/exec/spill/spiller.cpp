@@ -44,7 +44,7 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     total_spill_bytes = total_spill_bytes_;
 
     std::string parent = "SpillStatistics";
-    ADD_COUNTER(profile, parent, TUnit::NONE);
+    ADD_COUNTER(profile, parent, TUnit::UNIT);
 
     append_data_timer = ADD_CHILD_TIMER(profile, "AppendDataTime", parent);
     spill_rows = ADD_CHILD_COUNTER(profile, "RowsSpilled", TUnit::UNIT, parent);
