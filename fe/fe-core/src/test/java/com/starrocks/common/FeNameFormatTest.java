@@ -34,11 +34,17 @@
 
 package com.starrocks.common;
 
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.junit.Test;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Random;
+
+import static com.starrocks.sql.analyzer.FeNameFormat.SPECIAL_CHARACTERS_IN_DB_NAME;
 
 public class FeNameFormatTest {
 
@@ -62,7 +68,68 @@ public class FeNameFormatTest {
         ExceptionChecker.expectThrows(SemanticException.class, () -> FeNameFormat.checkColumnName("\0"));
         // length 0
         ExceptionChecker.expectThrows(SemanticException.class, () -> FeNameFormat.checkColumnName(""));
+    }
 
+    @Test
+    public void testCheckDbName() {
+        String prefix = "a";
+        String dbName = prefix;
+        for (char c : SPECIAL_CHARACTERS_IN_DB_NAME) {
+            dbName += c;
+        }
+
+        while (dbName.length() < 256) {
+            dbName += "a";
+        }
+        String finalDbName = dbName;
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkDbName(finalDbName));
+
+        dbName += "a";
+        String finalDbName1 = dbName;
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName(finalDbName1));
+
+        prefix = "_a";
+        dbName = prefix;
+        for (char c : SPECIAL_CHARACTERS_IN_DB_NAME) {
+            dbName += c;
+        }
+
+        while (dbName.length() < 256) {
+            dbName += "a";
+        }
+        String finalDbName2 = dbName;
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkDbName(finalDbName2));
+
+
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("!abc"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab.c"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab c"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkDbName("ab\0c"));
+    }
+
+    @Test
+    public void testCheckColNameInSharedNothing() {
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkColumnName("abc.abc"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkColumnName("!abc"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkColumnName("!abc"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkColumnName("abc<>"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkColumnName("$abc!abc"));
+
+    }
+
+    @Test
+    public void testCheckColNameInSharedData() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkColumnName("abc.abc"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkColumnName("!abc"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkColumnName("abc<>"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkColumnName("$abc!abc"));
     }
 
 }
