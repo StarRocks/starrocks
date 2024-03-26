@@ -67,7 +67,6 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
             // commit until all rowgroup flushing tasks have been done
             std::unique_lock lock(execution_state->mu);
             execution_state->cv.wait(lock, [&]() { return !execution_state->has_unfinished_task; });
-            std::cout << "commit" << std::endl;
         }
 
         FileWriter::CommitResult result{
