@@ -433,18 +433,6 @@ struct TabletSegmentIdRange {
     }
 };
 
-using KeyIndexInfo = uint32_t;
-struct KeyIndexesInfo {
-    std::vector<KeyIndexInfo> key_index_infos;
-    size_t size() const { return key_index_infos.size(); }
-    void set_difference(KeyIndexesInfo& input) {
-        std::vector<uint32_t> infos;
-        std::set_difference(key_index_infos.begin(), key_index_infos.end(), input.key_index_infos.begin(),
-                            input.key_index_infos.end(), std::back_inserter(infos));
-        key_index_infos.swap(infos);
-    }
-};
-
 } // namespace starrocks
 
 namespace std {

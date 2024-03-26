@@ -17,7 +17,6 @@
 #include <butil/time.h> // NOLINT
 
 #include "fs/fs.h"
-#include "storage/olap_common.h"
 #include "storage/sstable/table_builder.h"
 #include "util/trace.h"
 
@@ -30,7 +29,7 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     options.filter_policy = _filter_policy.get();
     options.block_cache = cache;
     Table* table;
-    RETURN_IF_ERROR(Table::Open(options, rf.get(), sstable_pb.filesz(), &table));
+    RETURN_IF_ERROR(Table::Open(options, rf.get(), sstable_pb.filesize(), &table));
     _sst.reset(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
@@ -58,29 +57,28 @@ Status PersistentIndexSstable::build_sstable(
     return Status::OK();
 }
 
-Status PersistentIndexSstable::multi_get(size_t n, const Slice* keys, const KeyIndexesInfo& key_indexes_info,
-                                         int64_t version, IndexValue* values, KeyIndexesInfo* found_keys_info) {
+Status PersistentIndexSstable::multi_get(size_t n, const Slice* keys, const std::set<KeyIndex>& key_indexes,
+                                         int64_t version, IndexValue* values, std::set<KeyIndex>* found_key_indexes) {
     std::vector<std::string> index_value_infos(n);
     ReadOptions options;
     auto start_ts = butil::gettimeofday_us();
-    RETURN_IF_ERROR(_sst->MultiGet(options, n, keys, key_indexes_info, &index_value_infos));
+    RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes, &index_value_infos));
     auto end_ts = butil::gettimeofday_us();
     TRACE_COUNTER_INCREMENT("multi_get", end_ts - start_ts);
-    const auto& key_index_infos = key_indexes_info.key_index_infos;
-    for (size_t i = 0; i < key_index_infos.size(); ++i) {
-        if (!index_value_infos[key_index_infos[i]].empty()) {
+    for (auto& key_index : key_indexes) {
+        if (!index_value_infos[key_index].empty()) {
             IndexValueWithVerPB index_value_with_ver_pb;
-            if (!index_value_with_ver_pb.ParseFromString(index_value_infos[key_index_infos[i]])) {
+            if (!index_value_with_ver_pb.ParseFromString(index_value_infos[key_index])) {
                 return Status::InternalError("parse index value info failed");
             }
             if (version < 0 && index_value_with_ver_pb.values_size() > 0) {
-                values[key_index_infos[i]] = IndexValue(index_value_with_ver_pb.values(0));
-                found_keys_info->key_index_infos.emplace_back(key_index_infos[i]);
+                values[key_index] = IndexValue(index_value_with_ver_pb.values(0));
+                found_key_indexes->insert(key_index);
             } else {
                 for (int j = 0; j < index_value_with_ver_pb.versions_size(); ++j) {
                     if (index_value_with_ver_pb.versions(j) == version) {
-                        values[key_index_infos[i]] = IndexValue(index_value_with_ver_pb.values(j));
-                        found_keys_info->key_index_infos.emplace_back(key_index_infos[i]);
+                        values[key_index] = IndexValue(index_value_with_ver_pb.values(j));
+                        found_key_indexes->insert(key_index);
                         break;
                     }
                 }

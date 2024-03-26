@@ -16,7 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/olap_common.h"
 #include "test_util.h"
 #include "testutil/assert.h"
 
@@ -183,7 +182,6 @@ TEST_F(LakePersistentIndexTest, test_replace) {
     Status st = index->try_replace(N, key_slices.data(), replace_values.data(), N, &failed);
     ASSERT_TRUE(st.ok());
     std::vector<IndexValue> new_get_values(keys.size());
-    KeyIndexesInfo get_not_found;
     ASSERT_TRUE(index->get(keys.size(), key_slices.data(), new_get_values.data()).ok());
     ASSERT_EQ(keys.size(), new_get_values.size());
     for (int i = 0; i < N; i++) {

@@ -179,7 +179,7 @@ message IndexValueWithVerPB {
 message PersistentIndexSstablePB {
     optional int64 version = 1;
     optional string filename = 2;
-    optional int64 filesz = 3;
+    optional int64 filesize = 3;
 }
 
 message PersistentIndexSstableMetaPB {
