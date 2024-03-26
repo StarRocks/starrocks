@@ -40,11 +40,16 @@ public class WarehouseManagerEpack extends WarehouseManager {
         // NOTE: default warehouse use DEFAULT_WORKER_GROUP_ID, which is 0,
         // so it is unnecessary to create a worker group for it.
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
-                    DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID,
-                    "An internal warehouse init after FE is ready");
-            nameToWh.put(wh.getName(), wh);
-            idToWh.put(wh.getId(), wh);
+            // FE Leader or FE Follower both execute initDefaultWarehouse during startup that will generate
+            // the default warehouse, and it's state is always AVAILABLE.
+            // If the state of default warehouse is updated, e.g. SUSPENDED, we should not overwrite the state.
+            if (!nameToWh.containsKey(DEFAULT_WAREHOUSE_NAME)) {
+                Warehouse wh = new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
+                        DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID,
+                        "An internal warehouse init after FE is ready");
+                nameToWh.put(wh.getName(), wh);
+                idToWh.put(wh.getId(), wh);
+            }
         }
     }
 
