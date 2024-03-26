@@ -210,7 +210,7 @@ SELECT * FROM t2;
 	
 REFRESH MATERIALIZED VIEW v1 WITH SYNC MODE;
 -- result:
-295dc341-e7ed-11ee-b3fe-2abf36b281f5
+205a5f36-eb18-11ee-a6d4-2add1b5e6fc9
 -- !result
 select count(*) from v1;
 -- result:
@@ -227,6 +227,9 @@ SELECT * FROM t3;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW v2 WITH SYNC MODE;
+-- result:
+execute task mv-74549 failed: partitions are intersected: {[types: [DATE]; keys: [2024-03-21]; ..types: [DATE]; keys: [2024-03-22]; )=p20240321_20240322} and [types: [DATE]; keys: [2024-03-01]; ..types: [DATE]; keys: [2024-04-01]; )
+-- !result
 select count(*) from v2;
 -- result:
 0
@@ -242,6 +245,9 @@ SELECT * FROM t4;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW v3 WITH SYNC MODE;
+-- result:
+execute task mv-74549 failed: partitions are intersected: {[types: [DATE]; keys: [2024-03-21]; ..types: [DATE]; keys: [2024-03-22]; )=p20240321_20240322} and [types: [DATE]; keys: [2024-03-01]; ..types: [DATE]; keys: [2024-04-01]; )
+-- !result
 select count(*) from v3;
 -- result:
 0
