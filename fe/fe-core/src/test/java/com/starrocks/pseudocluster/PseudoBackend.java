@@ -474,10 +474,19 @@ public class PseudoBackend {
     private void reportTablets() {
         // report tablets
         TReportRequest request = new TReportRequest();
+        // Report_version must be set before setting the tablets to
+        // ensure that the tablet in FE will not be accidentally deleted in the following case:
+        // t1: tablet1, tablet2, tablet3 are created on BE and current reportVersion is 3.
+        // t2: tablet1, tablet2, tablet3 are set into request.tables.
+        // t3: tablet4 is created and reportVersion changed to 4.
+        // t4: 4 is set into request.report_version.
+        // t5: The request is sent to the FE node and it is found that tablet4 is not in request.tablets
+        // and request.report_version is equal to the latest report_version recorded by FE,
+        // tablet4 metadata will be deleted from FE. Code: ReportHandler.deleteFromMeta
+        request.setReport_version(reportVersion.get());
         request.setTablets(tabletManager.getAllTabletInfo());
         request.setTablet_max_compaction_score(100);
         request.setBackend(tBackend);
-        request.setReport_version(reportVersion.get());
         try {
             if (!shutdown) {
                 TMasterResult result = frontendService.report(request);
