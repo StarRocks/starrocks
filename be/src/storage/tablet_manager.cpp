@@ -1772,10 +1772,12 @@ std::unordered_map<TTabletId, vector<pair<uint32_t, uint32_t>>> TabletManager::g
 
 void TabletManager::_add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabletInfo&& drop_info) {
     auto iter = _shutdown_tablets.find(tablet_id);
-    if (iter != _shutdown_tablets.end() && (iter->second).tablet != nullptr) {
-        // clear meta for the previous shutdown tablet
-        if (auto st = _remove_tablet_meta((iter->second).tablet); !st.ok()) {
-            LOG(FATAL) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
+    if (iter != _shutdown_tablets.end()) {
+        if ((iter->second).tablet != nullptr) {
+            auto st = _remove_tablet_meta((iter->second).tablet);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to remove previous table meta, id: " << tablet_id << " status: " << st;
+            }
         }
         _shutdown_tablets.erase(iter);
     }
