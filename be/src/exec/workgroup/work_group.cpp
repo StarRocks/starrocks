@@ -273,12 +273,12 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     std::unique_lock write_lock(_mutex);
     auto unique_id = wg->unique_id();
     create_workgroup_unlocked(wg, write_lock);
-    if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] == wg->version() &&
-        _workgroups.count(unique_id)) {
-        return _workgroups.at(unique_id);
-    } else {
-        return get_default_workgroup_unlocked();
+    if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] == wg->version()) {
+        if (auto workgroup_it = _workgroups.find(unique_id); workgroup_it != _workgroups.end()) {
+            return workgroup_it->second;
+        }
     }
+    return get_default_workgroup_unlocked();
 }
 
 void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock) {
@@ -488,8 +488,9 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
             auto version = wg_it->second->version();
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroups.erase(wg_it);
-            if (_workgroup_versions.count(id) && _workgroup_versions.at(id) <= version) {
-                _workgroup_versions.erase(id);
+            auto version_it = _workgroup_versions.find(id);
+            if (version_it != _workgroup_versions.end() && version_it->second <= version) {
+                _workgroup_versions.erase(version_it);
             }
             _workgroup_expired_versions.erase(it++);
             LOG(INFO) << "cleanup expired workgroup version:  " << id << "," << version;
