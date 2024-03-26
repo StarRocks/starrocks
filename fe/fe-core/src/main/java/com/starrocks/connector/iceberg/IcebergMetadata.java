@@ -84,6 +84,7 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
@@ -284,7 +285,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             tables.put(identifier, table);
             return table;
 
-        } catch (StarRocksConnectorException | NoSuchTableException e) {
+        } catch (StarRocksConnectorException | NoSuchTableException | NotFoundException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
         }
