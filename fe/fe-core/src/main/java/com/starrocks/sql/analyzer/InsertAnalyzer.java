@@ -22,6 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -306,7 +307,11 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Table table = MetaUtils.getTable(session, database, insertStmt.getTableName());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(

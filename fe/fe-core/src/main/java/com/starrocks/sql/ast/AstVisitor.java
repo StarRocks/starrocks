@@ -52,6 +52,7 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
+import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -151,7 +152,23 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitCreateTemporaryTableStatement(CreateTemporaryTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCreateTemporaryTableAsSelectStatement(CreateTemporaryTableAsSelectStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCreateTemporaryTableLikeStatement(CreateTemporaryTableLikeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitDropTableStatement(DropTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -176,6 +193,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowTableStatement(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTemporaryTableStatement(ShowTemporaryTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
