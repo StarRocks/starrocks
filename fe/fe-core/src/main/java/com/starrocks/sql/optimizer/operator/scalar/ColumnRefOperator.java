@@ -34,6 +34,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final int id;
     private final String name;
     private boolean nullable;
+    private boolean hasGinIndex = false;
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
@@ -184,5 +185,13 @@ public final class ColumnRefOperator extends ScalarOperator {
     @Override
     public String debugString() {
         return "col";
+    }
+
+    public void setHasGinIndex(boolean hasGinIndex) {
+        this.hasGinIndex = hasGinIndex;
+    }
+
+    public boolean hasGinIndex() {
+        return this.hasGinIndex;
     }
 }

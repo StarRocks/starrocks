@@ -23,6 +23,7 @@ import com.google.common.collect.Streams;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
+import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
@@ -35,6 +36,7 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
@@ -509,6 +511,16 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
             outputVariablesBuilder.add(columnRef);
             colRefToColumnMetaMapBuilder.put(columnRef, column.getValue());
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
+
+            if (node.getTable() instanceof OlapTable) {
+                for (Index index : ((OlapTable) node.getTable()).getIndexes()) {
+                    if (index.getIndexType() == IndexDef.IndexType.GIN &&
+                            index.getColumns().contains(column.getKey().getName())) {
+                        columnRef.setHasGinIndex(true);
+                        break;
+                    }
+                }
+            }
         }
 
         boolean isMVPlanner = session.getSessionVariable().isMVPlanner();
