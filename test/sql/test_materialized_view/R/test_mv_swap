@@ -135,7 +135,7 @@ false	based table mv1 swapped
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
 -- result:
-false	base mv is not active: mv_on_mv_1
+false	base-mv inactive: mv_on_mv_1
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
