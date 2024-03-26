@@ -298,7 +298,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     int size = 0;
 
     // pick up already started chunk source.
-    while (--cnt >= 0 && size < total_cnt) {
+    while (--cnt >= 0) {
         _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
         if (_is_io_task_running[i]) {
@@ -316,6 +316,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         }
     }
 
+    size = std::min(size, total_cnt);
     // pick up new chunk source.
     begin_pickup_morsels();
     ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
