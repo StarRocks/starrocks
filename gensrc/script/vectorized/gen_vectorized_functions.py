@@ -89,6 +89,7 @@ BuiltinFunctions::FunctionTables BuiltinFunctions::_fn_tables = {
 function_list = list()
 function_set = set()
 
+
 def add_function(fn_data):
     entry = dict()
     if fn_data[0] in function_set:
@@ -99,27 +100,39 @@ def add_function(fn_data):
     function_set.add(fn_data[0])
     entry["id"] = fn_data[0]
     entry["name"] = fn_data[1]
-    entry["ret"] = fn_data[2]
-    entry["args"] = fn_data[3]
+    entry["exception_safe"] = str(fn_data[2]).lower()
+    entry["check_overflow"] = str(fn_data[3]).lower()
+    entry["ret"] = fn_data[4]
+    entry["args"] = fn_data[5]
 
+<<<<<<< HEAD:gensrc/script/vectorized/gen_vectorized_functions.py
     if "..." in fn_data[3]:
         assert 2 <= len(fn_data[3]), "Invalid arguments in vectorized_functions.py:\n\t" + repr(fn_data)
         assert "..." == fn_data[3][-1], "variadic parameter must at the end:\n\t" + repr(fn_data)
+=======
+    function_signature = "%s#%s#(%s)" % (entry["ret"], entry["name"], ", ".join(entry["args"]))
 
-        entry["args_nums"] = len(fn_data[3]) - 1
+    if function_signature in function_signature_set:
+        print("=================================================================")
+        print("Duplicated function signature: " + function_signature)
+        print("=================================================================")
+        exit(1)
+    function_signature_set.add(function_signature)
+
+    if "..." in fn_data[5]:
+        assert 2 <= len(fn_data[5]), "Invalid arguments in functions.py:\n\t" + repr(fn_data)
+        assert "..." == fn_data[5][-1], "variadic parameter must at the end:\n\t" + repr(fn_data)
+>>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065)):gensrc/script/gen_functions.py
+
+        entry["args_nums"] = len(fn_data[5]) - 1
     else:
-        entry["args_nums"] = len(fn_data[3])
+        entry["args_nums"] = len(fn_data[5])
 
-    entry["fn"] = "&" + fn_data[4] if fn_data[4] != "nullptr" else "nullptr"
+    entry["fn"] = "&" + fn_data[6] if fn_data[6] != "nullptr" else "nullptr"
 
-    if len(fn_data) >= 7:
-        entry["prepare"] = "&" + fn_data[5] if fn_data[5] != "nullptr" else "nullptr"
-        entry["close"] = "&" + fn_data[6] if fn_data[6] != "nullptr" else "nullptr"
-    
-    if fn_data[-1] == True or fn_data[-1] == False:
-        entry["exception_safe"] = str(fn_data[-1]).lower()
-    else:
-        entry["exception_safe"] = "true"
+    if len(fn_data) >= 9:
+        entry["prepare"] = "&" + fn_data[7] if fn_data[7] != "nullptr" else "nullptr"
+        entry["close"] = "&" + fn_data[8] if fn_data[8] != "nullptr" else "nullptr"
 
     function_list.append(entry)
 
@@ -149,14 +162,14 @@ def generate_cpp(path):
     def gen_be_fn(fnm):
         res = ""
         if "prepare" in fnm:
-            res = '{%d, {"%s", %d, %s, %s, %s' % (
-                fnm["id"], fnm["name"], fnm["args_nums"], fnm["fn"], fnm["prepare"], fnm["close"])
+            res = '{%d, {"%s", %d, %s, %s, %s, %s, %s' % (
+                fnm["id"], fnm["name"], fnm["args_nums"], fnm["fn"], fnm["prepare"], fnm["close"],
+                fnm["exception_safe"], fnm["check_overflow"])
         else:
-            res ='{%d, {"%s", %d, %s' % (
-                fnm["id"], fnm["name"], fnm["args_nums"], fnm["fn"])
-        if "exception_safe" in fnm:
-            res = res + ", " + str(fnm["exception_safe"])
-            
+            res = '{%d, {"%s", %d, %s, %s, %s' % (
+                fnm["id"], fnm["name"], fnm["args_nums"], fnm["fn"], fnm["exception_safe"],
+                fnm["check_overflow"])
+
         return res + "}}"
 
     value = dict()
@@ -180,8 +193,13 @@ if __name__ == '__main__':
     if not os.path.exists(FE_PATH):
         os.makedirs(FE_PATH)
 
+<<<<<<< HEAD:gensrc/script/vectorized/gen_vectorized_functions.py
     if not os.path.exists(BE_PATH):
         os.makedirs(BE_PATH)
 
     generate_fe(FE_PATH + "VectorizedBuiltinFunctions.java")
     generate_cpp(BE_PATH + "builtin_functions.cpp")
+=======
+    generate_fe(fe_functions_dir + "/VectorizedBuiltinFunctions.java")
+    generate_cpp(be_functions_dir + "/builtin_functions.cpp")
+>>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065)):gensrc/script/gen_functions.py
