@@ -39,8 +39,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import inet.ipaddr.IPAddressString;
 import org.apache.commons.validator.routines.InetAddressValidator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
@@ -52,9 +56,10 @@ import java.util.Enumeration;
 import java.util.List;
 
 public class NetUtils {
+    private static final Logger LOG = LogManager.getLogger(NetUtils.class);
 
     public static List<InetAddress> getHosts() {
-        Enumeration<NetworkInterface> n = null;
+        Enumeration<NetworkInterface> n;
         List<InetAddress> hosts = new ArrayList<>();
         try {
             n = NetworkInterface.getNetworkInterfaces();
@@ -67,9 +72,25 @@ public class NetUtils {
             Enumeration<InetAddress> a = e.getInetAddresses();
             while (a.hasMoreElements()) {
                 InetAddress addr = a.nextElement();
+                // IPv6 address starting with fe80 (Link-local Address) is not supported for now.
+                if (addr instanceof Inet6Address && addr.isLinkLocalAddress()) {
+                    LOG.info("ipv6 link local address {} is skipped", addr.getHostAddress());
+                    continue;
+                }
                 hosts.add(addr);
             }
         }
+
+        // Prefer ipv4 address by default for compatibility reason.
+        hosts.sort((o1, o2) -> {
+            if (o1 instanceof Inet4Address && o2 instanceof Inet6Address) {
+                return -1;
+            } else if (o1 instanceof Inet6Address && o2 instanceof Inet4Address) {
+                return 1;
+            } else {
+                return 0;
+            }
+        });
         return hosts;
     }
 
