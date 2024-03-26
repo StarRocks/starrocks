@@ -53,7 +53,6 @@ RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison b
         libtool which git ccache binutils-devel python3 file java-11-openjdk java-11-openjdk-devel java-11-openjdk-jmods less psmisc && \
         yum clean all && rm -rf /var/cache/yum
 
-
 # install gcc
 COPY --from=gcc-builder /workspace/installed/ /
 # install binutils
