@@ -1830,7 +1830,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
                     context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                     getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
-                    createPos(context));
+                    context.insertProps == null ? null : getPropertyList(context.insertProps), createPos(context));
             stmt.setHintNodes(hintMap.get(context));
             return stmt;
         }
@@ -1840,7 +1840,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         // INSERT INTO FILES(...)
-        Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
+        Map<String, String> tableFunctionProperties = getPropertyList(context.filesProps);
         InsertStmt res = new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
         res.setHintNodes(hintMap.get(context));
         return res;

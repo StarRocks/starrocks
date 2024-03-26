@@ -89,6 +89,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
+import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -1994,17 +1995,22 @@ public class StmtExecutor {
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                     targetTable.isBlackHoleTable())) {
-                jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
-                        label,
-                        database.getFullName(),
-                        targetTable.getId(),
-                        EtlJobType.INSERT,
-                        createTime,
-                        estimateScanRows,
-                        estimateFileNum,
-                        estimateScanFileSize,
-                        type,
-                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                // get db id
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                if (db == null) {
+                    throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
+                }
+
+                InsertLoadJob loadJob = new InsertLoadJob(label, db.getId(), targetTable.getId(), createTime,
+                        type, ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                loadJob.setLoadFileInfo(estimateFileNum, estimateScanFileSize);
+                loadJob.setEstimateScanRow(estimateScanRows);
+                if (stmt instanceof InsertStmt) {
+                    loadJob.setInsertProperties(((InsertStmt) stmt).getInsertProperties());
+                }
+                context.getGlobalStateMgr().getLoadMgr().registerLoadJob(loadJob);
+
+                jobId = loadJob.getId();
             }
 
             coord.setLoadJobId(jobId);

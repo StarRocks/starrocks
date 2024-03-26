@@ -54,6 +54,8 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 
 public class InsertAnalyzer {
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
+        InsertStmt.checkInsertProperties(insertStmt.getInsertProperties());
+
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 

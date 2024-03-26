@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -98,14 +99,23 @@ public class InsertStmt extends DmlStmt {
     private final boolean tableFunctionAsTargetTable;
     private final boolean blackHoleTableAsTargetTable;
     private final Map<String, String> tableFunctionProperties;
+    public static final String PROPERTY_MAX_FILTER_RATIO = "max_filter_ratio";
+    public static final String PROPERTY_STRICT_MODE = "strict_mode";
+    private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
+            .add(PROPERTY_MAX_FILTER_RATIO)
+            .add(PROPERTY_STRICT_MODE)
+            .build();
+    private final Map<String, String> insertProperties;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite) {
-        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
+                      QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties) {
+        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite,
+                insertProperties, NodePosition.ZERO);
     }
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+                      QueryStatement queryStatement, boolean isOverwrite,
+                      Map<String, String> insertProperties, NodePosition pos) {
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
@@ -116,6 +126,7 @@ public class InsertStmt extends DmlStmt {
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
+        this.insertProperties = insertProperties;
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -130,6 +141,7 @@ public class InsertStmt extends DmlStmt {
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
+        this.insertProperties = null;
     }
 
     // Ctor for INSERT INTO FILES(...)
@@ -142,6 +154,7 @@ public class InsertStmt extends DmlStmt {
         this.tableFunctionAsTargetTable = true;
         this.tableFunctionProperties = tableFunctionProperties;
         this.blackHoleTableAsTargetTable = false;
+        this.insertProperties = null;
     }
 
     // Ctor for INSERT INTO blackhole() SELECT ...
@@ -154,6 +167,7 @@ public class InsertStmt extends DmlStmt {
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = true;
+        this.insertProperties = null;
     }
 
     public Table getTargetTable() {
@@ -411,5 +425,43 @@ public class InsertStmt extends DmlStmt {
 
         return new TableFunctionTable(
                 path, format, compressionType, columns, partitionColumnIDs, false, targetMaxFileSize, props);
+    }
+
+    public Map<String, String> getInsertProperties() {
+        return insertProperties;
+    }
+
+    public static void checkInsertProperties(Map<String, String> properties) throws SemanticException {
+        if (properties == null) {
+            return;
+        }
+
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (!PROPERTIES_SET.contains(entry.getKey())) {
+                throw new SemanticException(entry.getKey() + " is invalid insert property");
+            }
+        }
+
+        // max filter ratio
+        final String maxFilterRadioProperty = properties.get(PROPERTY_MAX_FILTER_RATIO);
+        if (maxFilterRadioProperty != null) {
+            try {
+                double maxFilterRatio = Double.valueOf(maxFilterRadioProperty);
+                if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
+                    throw new SemanticException(PROPERTY_MAX_FILTER_RATIO + " must between 0.0 and 1.0.");
+                }
+            } catch (NumberFormatException e) {
+                throw new SemanticException(PROPERTY_MAX_FILTER_RATIO + " is not a number.");
+            }
+        }
+
+        // strict mode
+        final String strictModeProperty = properties.get(PROPERTY_STRICT_MODE);
+        if (strictModeProperty != null) {
+            if (!strictModeProperty.equalsIgnoreCase("true")
+                    && !strictModeProperty.equalsIgnoreCase("false")) {
+                throw new SemanticException(PROPERTY_STRICT_MODE + " is not a boolean");
+            }
+        }
     }
 }

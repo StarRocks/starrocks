@@ -45,6 +45,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
@@ -63,6 +64,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -257,5 +259,9 @@ public class InsertLoadJob extends LoadJob {
 
     public void setEstimateScanRow(long rows) {
         this.estimateScanRow = rows;
+    }
+
+    public void setInsertProperties(Map<String, String> properties) throws DdlException {
+        super.setJobProperties(properties);
     }
 }
