@@ -238,10 +238,12 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     auto unique_id = wg->unique_id();
     create_workgroup_unlocked(wg, write_lock);
     if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] == wg->version()) {
-        return _workgroups[unique_id];
-    } else {
-        return get_default_workgroup_unlocked();
+        auto workgroup_it = _workgroups.find(unique_id);
+        if (workgroup_it != _workgroups.end()) {
+            return workgroup_it->second;
+        }
     }
+    return get_default_workgroup_unlocked();
 }
 
 void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock) {
@@ -405,9 +407,19 @@ WorkGroupPtr WorkGroupManager::get_default_workgroup() {
 WorkGroupPtr WorkGroupManager::get_default_workgroup_unlocked() {
     auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_VERSION, WorkGroup::DEFAULT_WG_ID);
     DCHECK(_workgroups.count(unique_id));
-    return _workgroups[unique_id];
+    return _workgroups.at(unique_id);
 }
 
+<<<<<<< HEAD
+=======
+WorkGroupPtr WorkGroupManager::get_default_mv_workgroup() {
+    std::shared_lock read_lock(_mutex);
+    auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_MV_VERSION, WorkGroup::DEFAULT_MV_WG_ID);
+    DCHECK(_workgroups.count(unique_id));
+    return _workgroups.at(unique_id);
+}
+
+>>>>>>> 29369cc3dd ([BugFix] Remove workgroup_id and version pair from workgroup_versions if the workgroup is removed (#43160))
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     std::unique_lock write_lock(_mutex);
 
@@ -416,11 +428,16 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
         if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
-            int128_t wg_id = *it;
+            auto id = wg_it->second->id();
+            auto version = wg_it->second->version();
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroups.erase(wg_it);
+            auto version_it = _workgroup_versions.find(id);
+            if (version_it != _workgroup_versions.end() && version_it->second <= version) {
+                _workgroup_versions.erase(version_it);
+            }
             _workgroup_expired_versions.erase(it++);
-            LOG(INFO) << "cleanup expired workgroup version:  " << (int64_t)(wg_id >> 64) << "," << (int64_t)wg_id;
+            LOG(INFO) << "cleanup expired workgroup version:  " << id << "," << version;
         } else {
             ++it;
         }
