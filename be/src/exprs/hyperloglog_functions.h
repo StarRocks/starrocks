@@ -51,6 +51,13 @@ public:
     DEFINE_VECTORIZED_FN(hll_serialize);
 
     DEFINE_VECTORIZED_FN(hll_deserialize);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_VARCHAR]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(base64_to_hll);
 };
 
 } // namespace starrocks
