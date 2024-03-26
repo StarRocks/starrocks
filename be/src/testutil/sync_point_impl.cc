@@ -26,13 +26,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-<<<<<<< HEAD
-#if !defined(NDEBUG) || defined(BE_TEST)
-=======
-#include <csignal>
-
 #if defined(BE_TEST)
->>>>>>> c000a24308 ([BugFix] SyncPoint only takes effect in unit test (#43124))
 namespace starrocks {
 KillPoint* KillPoint::GetInstance() {
     static KillPoint kp;
