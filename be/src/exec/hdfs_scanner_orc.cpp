@@ -470,13 +470,13 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             _scanner_ctx.split_tasks->emplace_back(std::move(ctx));
         }
         _scanner_ctx.merge_split_tasks();
-        if (_scanner_ctx.split_tasks->size() >= 2) {
-            VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                          << ", split_tasks.size = " << _scanner_ctx.split_tasks->size();
+        VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
+                      << ", split_tasks.size = " << _scanner_ctx.split_tasks->size();
+        if (_scanner_ctx.split_tasks->size() <= 1) {
+            _scanner_ctx.split_tasks->clear();
+        } else {
             _should_skip_file = true;
             return Status::OK();
-        } else {
-            _scanner_ctx.split_tasks->clear();
         }
     }
 
