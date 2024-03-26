@@ -27,7 +27,7 @@
 
 #include <csignal>
 
-#if !defined(NDEBUG) || defined(BE_TEST)
+#if defined(BE_TEST)
 namespace starrocks {
 KillPoint* KillPoint::GetInstance() {
     static KillPoint kp;

@@ -36,7 +36,7 @@
 
 #pragma once
 
-#if !defined(NDEBUG) || defined(BE_TEST)
+#if defined(BE_TEST)
 namespace starrocks {
 
 struct SyncPoint::Data {
@@ -81,4 +81,4 @@ struct SyncPoint::Data {
     void Process(const std::string_view& point, void* cb_arg);
 };
 } // namespace starrocks
-#endif // NDEBUG
+#endif
