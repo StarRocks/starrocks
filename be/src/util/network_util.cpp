@@ -116,7 +116,9 @@ Status get_hosts(std::vector<InetAddress>* hosts) {
             bool is_loopback = IN6_IS_ADDR_LOOPBACK(tmp_addr);
             std::string addr_str(addr_buf);
             boost::algorithm::to_lower(addr_str);
-            if (addr_str.rfind("fe80", 0) == 0) { // Starts with "fe80"(Link local address), not supported.
+            // Starts with "fe80"(Link local address), not supported.
+            if (addr_str.rfind("fe80", 0) == 0) {
+                LOG(INFO) << "ipv6 link local address " << addr_str << " is skipped";
                 continue;
             }
             hosts_v6.emplace_back(addr_str, AF_INET6, is_loopback);

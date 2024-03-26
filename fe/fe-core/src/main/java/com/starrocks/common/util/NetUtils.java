@@ -39,6 +39,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import inet.ipaddr.IPAddressString;
 import org.apache.commons.validator.routines.InetAddressValidator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -54,6 +56,7 @@ import java.util.Enumeration;
 import java.util.List;
 
 public class NetUtils {
+    private static final Logger LOG = LogManager.getLogger(NetUtils.class);
 
     public static List<InetAddress> getHosts() {
         Enumeration<NetworkInterface> n;
@@ -71,6 +74,7 @@ public class NetUtils {
                 InetAddress addr = a.nextElement();
                 // IPv6 address starting with fe80 (Link-local Address) is not supported for now.
                 if (addr instanceof Inet6Address && addr.isLinkLocalAddress()) {
+                    LOG.info("ipv6 link local address {} is skipped", addr.getHostAddress());
                     continue;
                 }
                 hosts.add(addr);
