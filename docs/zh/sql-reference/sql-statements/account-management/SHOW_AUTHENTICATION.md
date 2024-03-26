@@ -39,7 +39,7 @@ SHOW [ALL] AUTHENTICATION [FOR USERNAME]
 | ----------------- | ------------------------------------------------------------ |
 | UserIdentity      | 用户标识。                                                   |
 | Password          | 是否使用密码登录到 StarRocks 集群。<ul><li>`Yes`：使用密码登录。</li><li>`No`：不使用密码登录。</li></ul> |
-| AuthPlugin        | 使用的认证接口，包括三种：`MYSQL_NATIVE_PASSWORD`，`AUTHENTICATION_LDAP_SIMPLE`，`AUTHENTICATION_KERBEROS`。如未使用认证接口，则返回 `NULL`。 |
+| AuthPlugin        | 使用的认证接口，包括 `MYSQL_NATIVE_PASSWORD` 和 `AUTHENTICATION_LDAP_SIMPLE`。如未使用认证接口，则返回 `NULL`。 |
 | UserForAuthPlugin | 使用 LDAP 或 Kerberos 认证的用户名称。如未使用认证，则返回 `NULL`。 |
 
 ## 示例
@@ -59,12 +59,12 @@ SHOW AUTHENTICATION;
 
 ```Plain
 SHOW ALL AUTHENTICATION;
-+---------------+----------+-------------------------+-------------------+
-| UserIdentity  | Password | AuthPlugin              | UserForAuthPlugin |
-+---------------+----------+-------------------------+-------------------+
-| 'root'@'%'    | Yes      | NULL                    | NULL              |
-| 'chelsea'@'%' | No       | AUTHENTICATION_KERBEROS | HADOOP.COM        |
-+---------------+----------+-------------------------+-------------------+
++---------------+----------+----------------------------+-------------------+
+| UserIdentity  | Password | AuthPlugin                 | UserForAuthPlugin |
++---------------+----------+----------------------------+-------------------+
+| 'root'@'%'    | Yes      | NULL                       | NULL              |
+| 'chelsea'@'%' | No       | AUTHENTICATION_LDAP_SIMPLE | NULL              |
++---------------+----------+----------------------------+-------------------+
 ```
 
 示例三：查看指定用户的认证信息。
