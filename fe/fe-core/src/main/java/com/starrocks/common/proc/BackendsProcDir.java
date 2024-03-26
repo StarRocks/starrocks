@@ -76,7 +76,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
                 .add("DataCacheMetrics")
-                .add("location");
+                .add("Location");
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
