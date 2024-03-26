@@ -132,19 +132,17 @@ public class JDBCScanner {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
     }
 
-    private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>(){{
+    private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
             put("com.clickhouse.data.value.UnsignedByte", Short.class);
             put("com.clickhouse.data.value.UnsignedShort", Integer.class);
             put("com.clickhouse.data.value.UnsignedInteger", Long.class);
             put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
-        }};
-
+    }};
 
     private Class mapEngineSpecificClassType(Class<?> clazz) {
         String className = clazz.getName();
         return ENGINE_SPECIFIC_CLASS_MAPPING.get(className);
     }
-
 
     // used for cpp interface
     public List<String> getResultColumnClassNames() {
