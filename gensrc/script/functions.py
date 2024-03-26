@@ -526,6 +526,8 @@ vectorized_functions = [
     [70116, 'if', 'ANY_ARRAY', ['BOOLEAN', 'ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
     [70117, 'if', 'ANY_MAP', ['BOOLEAN', 'ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70118, 'if', 'ANY_STRUCT', ['BOOLEAN', 'ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [701180, 'if', 'ANY_STRUCT', ['BOOLEAN', 'ANY_STRUCT', 'NULL'], 'nullptr'],
+    [701181, 'if', 'ANY_STRUCT', ['BOOLEAN', 'NULL', 'ANY_STRUCT'], 'nullptr'],
     [70119, 'if', 'JSON', ['BOOLEAN', 'JSON', 'JSON'], 'nullptr'],
 
 
@@ -551,6 +553,8 @@ vectorized_functions = [
     [70216, 'ifnull', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
     [70217, 'ifnull', 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70218, 'ifnull', 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [702180, 'ifnull', 'ANY_STRUCT', ['ANY_STRUCT', 'NULL'], 'nullptr'],
+    [702181, 'ifnull', 'ANY_STRUCT', ['NULL', 'ANY_STRUCT'], 'nullptr'],
     [70219, 'ifnull', 'JSON', ['JSON', 'JSON'], 'nullptr'],
 
     [70300, 'nullif', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
@@ -575,6 +579,8 @@ vectorized_functions = [
     [70316, 'nullif', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
     [70317, 'nullif', 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70318, 'nullif', 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [703180, 'nullif', 'ANY_STRUCT', ['ANY_STRUCT', 'NULL'], 'nullptr'],
+    [703181, 'nullif', 'ANY_STRUCT', ['NULL', 'ANY_STRUCT'], 'nullptr'],
     [70319, 'nullif', 'JSON', ['JSON', 'JSON'], 'nullptr'],
 
     [70400, 'coalesce', 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
