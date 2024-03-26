@@ -44,7 +44,8 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     }
 
     // branch-3.0 is 150102~150104, branch-3.1 is 150103~150105
-    // https://github.com/StarRocks/starrocks/pull/17803
+    // refs: https://github.com/StarRocks/starrocks/pull/17803
+    // @todo: remove this code when branch-3.0 is deprecated
     int64_t fid = _fn.fid;
     if (_fn.fid == 150102 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL32) {
         fid = 150103;
