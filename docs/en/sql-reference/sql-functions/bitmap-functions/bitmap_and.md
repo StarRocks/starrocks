@@ -6,12 +6,12 @@ displayed_sidebar: "English"
 
 ## Description
 
-Calculates the intersection of two input bitmaps and returns the new bitmap.
+Calculates the intersection of multiple input bitmaps and returns the new bitmap.
 
 ## Syntax
 
 ```Haskell
-BITMAP BITMAP_AND(BITMAP lhs, BITMAP rhs)
+BITMAP BITMAP_AND(BITMAP bm, BITMAP bm [, BITMAP...])
 ```
 
 ## Examples

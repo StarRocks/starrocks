@@ -6,19 +6,17 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-计算两个 bitmap 的交集，返回新的 bitmap。
+计算多个 bitmap 的交集，返回新的 bitmap。
 
 ## 语法
 
 ```Haskell
-BITMAP_AND(lhs, rhs)
+BITMAP_AND(bm, bm [,...])
 ```
 
 ## 参数说明
 
-`lhs`: 支持的数据类型为 BITMAP。
-
-`rhs`: 支持的数据类型为 BITMAP。
+`bm`: 支持的数据类型为 BITMAP。
 
 ## 返回值说明
 
