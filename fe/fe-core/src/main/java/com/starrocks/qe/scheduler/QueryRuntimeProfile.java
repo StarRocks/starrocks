@@ -278,6 +278,7 @@ public class QueryRuntimeProfile {
             profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
             ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
             saveRunningProfile(profilingPlan, profile);
+            LOG.debug("update profile, profilingPlan: {}, profile: {}", profilingPlan, profile);
         }
     }
 
