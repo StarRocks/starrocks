@@ -71,7 +71,13 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
+<<<<<<< HEAD
                 .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
+=======
+                .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+                .add("DataCacheMetrics")
+                .add("Location");
+>>>>>>> 352ba74813 ([BugFix] Disable set password for non-native user (#42579))
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
