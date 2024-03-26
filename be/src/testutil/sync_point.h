@@ -66,7 +66,7 @@ public:
 
 #endif
 
-#if defined(NDEBUG) && !defined(BE_TEST)
+#if !defined(BE_TEST)
 #define TEST_SYNC_POINT(x)
 #define TEST_IDX_SYNC_POINT(x, index)
 #define TEST_SYNC_POINT_CALLBACK(x, y)
@@ -178,7 +178,7 @@ private:
     } while (0)
 #define TEST_SUCC_POINT(x)                                    \
     do {                                                      \
-        Status st;                                            \
+        Status st = Status::InternalError("Default error");   \
         starrocks::SyncPoint::GetInstance()->Process(x, &st); \
         if (st.ok()) return st;                               \
     } while (0)
