@@ -440,12 +440,12 @@ public class TabletStatMgrTest {
         };
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet, long workerGroupId) {
                 return 1000L;
             }
 
             @Mock
-            public ComputeNode chooseNode(LakeTablet tablet) {
+            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
                 return null;
             }
         };
