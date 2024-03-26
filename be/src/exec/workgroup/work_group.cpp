@@ -19,6 +19,7 @@
 #include "common/config.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "glog/logging.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "util/cpu_info.h"
 #include "util/metrics.h"
@@ -269,7 +270,7 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     auto unique_id = wg->unique_id();
     create_workgroup_unlocked(wg, write_lock);
     if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] == wg->version()) {
-        return _workgroups[unique_id];
+        return _workgroups.at(unique_id);
     } else {
         return get_default_workgroup_unlocked();
     }
@@ -460,14 +461,14 @@ WorkGroupPtr WorkGroupManager::get_default_workgroup() {
 WorkGroupPtr WorkGroupManager::get_default_workgroup_unlocked() {
     auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_VERSION, WorkGroup::DEFAULT_WG_ID);
     DCHECK(_workgroups.count(unique_id));
-    return _workgroups[unique_id];
+    return _workgroups.at(unique_id);
 }
 
 WorkGroupPtr WorkGroupManager::get_default_mv_workgroup() {
     std::shared_lock read_lock(_mutex);
     auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_MV_VERSION, WorkGroup::DEFAULT_MV_WG_ID);
     DCHECK(_workgroups.count(unique_id));
-    return _workgroups[unique_id];
+    return _workgroups.at(unique_id);
 }
 
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
