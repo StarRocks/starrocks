@@ -1003,8 +1003,20 @@ public class ExpressionAnalyzer {
 
             // throw exception direct
             checkFunction(fnName, node, argumentTypes);
-
-            if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
+            if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
+                // For the typeof function, the parameter type of the function is the result of this function.
+                // At this time, the parameter type has been obtained. You can directly replace the current 
+                // function with StringLiteral. However, since the parent node of the current node in ast 
+                // cannot be obtained, this cannot be done directly. Replacement, here the StringLiteral is 
+                // stored in the parameter of the function, so that the StringLiteral can be obtained in the 
+                // subsequent rule rewriting, and then the typeof can be replaced.
+                Type originType = argumentTypes[0];
+                argumentTypes[0] = Type.STRING;
+                fn = new Function(new FunctionName("typeof_internal"), argumentTypes, Type.STRING, false);
+                Expr newChildExpr = new StringLiteral(originType.toTypeString());
+                node.getParams().exprs().set(0, newChildExpr);
+                node.setChild(0, newChildExpr);
+            } else if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 // Compatible with the logic of the original search function "count distinct"
                 // TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
