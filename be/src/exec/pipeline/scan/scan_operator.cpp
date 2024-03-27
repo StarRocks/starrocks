@@ -293,10 +293,10 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
 
-    int cnt = _io_tasks_per_scan_operator;
     int to_sched[_io_tasks_per_scan_operator];
     int size = 0;
 
+<<<<<<< HEAD
     // pick up already started chunk source.
     while (--cnt >= 0) {
         _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
@@ -304,15 +304,38 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         if (_is_io_task_running[i]) {
             total_cnt -= 1;
             continue;
+=======
+    // right here, we want total running io tasks as `total_cnt`
+    {
+        bool skip[_io_tasks_per_scan_operator];
+        // check if we can return earlier.
+        for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
+            if (!_is_io_task_running[i] && _chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+                return Status::OK();
+            }
+>>>>>>> 7c99b112f7 ([BugFix] fix excessive io task in adaptive strategy (#43183))
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
-            return Status::OK();
+        // update skip vector, and pick up already started chunk source.
+        for (int i = 0; i < _io_tasks_per_scan_operator && total_cnt > 0; i++) {
+            if (_is_io_task_running[i]) {
+                skip[i] = true;
+                total_cnt -= 1;
+            } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
+                RETURN_IF_ERROR(_trigger_next_scan(state, i));
+                skip[i] = true;
+                total_cnt -= 1;
+            } else {
+                skip[i] = false;
+            }
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
-            RETURN_IF_ERROR(_trigger_next_scan(state, i));
-            total_cnt -= 1;
-        } else {
-            to_sched[size++] = i;
+
+        // now skip vector includes already started chunk source
+        // we are going to pick up `total_cnt` new chunk source to start.
+        for (int i = 0; i < _io_tasks_per_scan_operator && size < total_cnt; i++) {
+            _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
+            int idx = _chunk_source_idx;
+            if (skip[idx]) continue;
+            to_sched[size++] = idx;
         }
     }
 
