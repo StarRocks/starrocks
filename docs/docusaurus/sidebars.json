@@ -1388,7 +1388,7 @@
             "items": [
                 {
                     "type": "category",
-                    "label": "Load from Object Storage",
+                    "label": "从对象存储导入",
                     "link": {
                         "type": "doc",
                         "id": "loading/s3"
