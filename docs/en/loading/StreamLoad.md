@@ -312,7 +312,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 #### Prepare datasets
 
-Use the CSV file format as an example. Log in to your local file system, and create two CSV files, `file1.csv` and `file2.csv`, in a specific storage location (for example, `/user/starrocks/`). Both files consist of three columns, which represent the user ID, user name, and user score in sequence.
+Use the CSV file format as an example. Log in to your local file system, and create two CSV files, `file1.csv` and `file2.csv`, in a specific storage location (for example, `/home/disk1/business/`). Both files consist of three columns, which represent the user ID, user name, and user score in sequence.
 
 - `file1.csv`
 
@@ -358,7 +358,7 @@ PROPERTIES("replication_num"="1");
 
 #### Start a Broker Load
 
-Run the following command to start a Broker Load job that loads data from all data files (`file1.csv` and `file2.csv`) stored in the `/user/starrocks/` path of your local file system to the StarRocks table `mytable`:
+Run the following command to start a Broker Load job that loads data from all data files (`file1.csv` and `file2.csv`) stored in the `/home/disk1/business/` path of your local file system to the StarRocks table `mytable`:
 
 ```SQL
 LOAD LABEL mydatabase.label_local
