@@ -14,6 +14,8 @@
 
 package com.starrocks.lake;
 
+import com.staros.client.StarClientException;
+import com.staros.proto.StatusCode;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -76,6 +78,11 @@ class LakeTableCleaner {
             try {
                 String storagePath = anyTablet.getShardInfo().getFilePath().getFullPath();
                 storagePathToTablet.putIfAbsent(storagePath, anyTablet);
+            } catch (StarClientException e) {
+                if (e.getCode() != StatusCode.NOT_EXIST) {
+                    return null;
+                }
+                // Shard does not exist, ignore this shard
             } catch (Exception e) {
                 LOG.warn("Fail to get shard info of tablet {}: {}", anyTablet.getId(), e.getMessage());
                 return null;
