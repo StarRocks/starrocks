@@ -360,7 +360,7 @@ LOAD LABEL mydatabase.label_local
     COLUMNS TERMINATED BY ","
     (id, name, score)
 )
-WITH BROKER
+WITH BROKER "sole_broker"
 PROPERTIES
 (
     "timeout" = "3600"
