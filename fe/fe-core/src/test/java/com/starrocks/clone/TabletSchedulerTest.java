@@ -23,8 +23,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.RecyclePartitionInfo;
-import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -109,9 +107,8 @@ public class TabletSchedulerTest {
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         recycleBin.recycleDatabase(badDb, new HashSet<>());
         recycleBin.recycleTable(goodDB.getId(), badTable, true);
-        RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(goodDB.getId(), goodTable.getId(),
-                badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
-        recycleBin.recyclePartition(recyclePartitionInfo);
+        recycleBin.recyclePartition(goodDB.getId(), goodTable.getId(), badPartition,
+                null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
 
         List<TabletSchedCtx> allCtxs = new ArrayList<>();
         List<Triple<Database, Table, Partition>> arguments = Arrays.asList(

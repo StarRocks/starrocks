@@ -51,7 +51,12 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.RangeUtils;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -64,11 +69,14 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -205,22 +213,23 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
-    public synchronized void recyclePartition(RecyclePartitionInfo recyclePartitionInfo) {
-        Preconditions.checkState(!idToPartition.containsKey(recyclePartitionInfo.getPartition().getId()));
+    public synchronized void recyclePartition(long dbId, long tableId,
+                                                 Partition partition, Range<PartitionKey> range,
+                                                 DataProperty dataProperty,
+                                                 short replicationNum,
+                                                 boolean isInMemory,
+                                                 DataCacheInfo dataCacheInfo) {
+        Preconditions.checkState(!idToPartition.containsKey(partition.getId()));
 
-        long dbId = recyclePartitionInfo.getDbId();
-        long tableId = recyclePartitionInfo.getTableId();
-        Partition partition = recyclePartitionInfo.getPartition();
-        long partitionId = partition.getId();
-        String partitionName = partition.getName();
+        erasePartitionWithSameName(dbId, tableId, partition.getName());
 
-        disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
+        // recycle partition
+        RecyclePartitionInfo partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
+                range, dataProperty, replicationNum, isInMemory, dataCacheInfo);
 
-        long recycleTime = recyclePartitionInfo.isRecoverable() ? System.currentTimeMillis() : 0;
-        idToRecycleTime.put(partitionId, recycleTime);
-        idToPartition.put(partitionId, recyclePartitionInfo);
-        LOG.info("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
-                partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
+        idToRecycleTime.put(partition.getId(), System.currentTimeMillis());
+        idToPartition.put(partition.getId(), partitionInfo);
+        LOG.info("recycle partition[{}-{}]", partition.getId(), partition.getName());
     }
 
     public synchronized Partition getPartition(long partitionId) {
@@ -241,7 +250,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
     public synchronized Range<PartitionKey> getPartitionRange(long partitionId) {
         RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
-        return partitionInfo != null ? partitionInfo.getRange() : null;
+        if (partitionInfo != null) {
+            if (partitionInfo instanceof RecyclePartitionInfoV1) {
+                return ((RecyclePartitionInfoV1) partitionInfo).getRange();
+            } else {
+                return ((RecycleRangePartitionInfo) partitionInfo).getRange();
+            }
+        }
+        return null;
     }
 
     public synchronized DataProperty getPartitionDataProperty(long partitionId) {
@@ -426,13 +442,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
-    private void disablePartitionRecovery(long partitionId) {
-        RecyclePartitionInfo info = idToPartition.get(partitionId);
-        if (info != null) {
-            info.setRecoverable(false);
-        }
-    }
-
     static void logDisableTableRecovery(List<Long> tableIds) {
         if (tableIds.isEmpty()) {
             return;
@@ -500,11 +509,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         logEraseTables(finishedTables);
     }
 
-    public synchronized void replayDisablePartitionRecovery(long partitionId) {
-        disablePartitionRecovery(partitionId);
-        LOG.info("Finished replay disable partition recovery. partitionId: {}", partitionId);
-    }
-
     public synchronized void replayDisableTableRecovery(List<Long> tableIds) {
         disableTableRecovery(tableIds);
         LOG.info("Finished replay disable table recovery. table id list: {}", StringUtils.join(tableIds, ","));
@@ -527,38 +531,40 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Partition partition = partitionInfo.getPartition();
 
             long partitionId = entry.getKey();
-            if (!canErasePartition(partitionInfo, currentTimeMs)) {
-                continue;
-            }
-            if (partitionInfo.delete()) {
+            if (canErasePartition(partitionInfo, currentTimeMs)) {
+                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                // erase partition
                 iterator.remove();
                 removeRecycleMarkers(partitionId);
 
+                // log
                 GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
-
-                LOG.info("Removed partition '{}' from recycle bin. dbId: {} tableId: {} partitionId: {}",
-                        partition.getName(), partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
+                LOG.info("erase partition[{}-{}] finished", partitionId, partition.getName());
                 currentEraseOpCnt++;
                 if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
                 }
-            } else {
-                Preconditions.checkState(!partitionInfo.isRecoverable());
-                setNextEraseMinTime(partitionId, System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
             }
         } // end for partitions
     }
 
-    private synchronized void disableRecoverPartitionWithSameName(long dbId, long tableId, String partitionName) {
-        for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
+    private synchronized void erasePartitionWithSameName(long dbId, long tableId, String partitionName) {
+        Iterator<Map.Entry<Long, RecyclePartitionInfo>> iterator = idToPartition.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Long, RecyclePartitionInfo> entry = iterator.next();
             RecyclePartitionInfo partitionInfo = entry.getValue();
-            if (partitionInfo.getDbId() != dbId || partitionInfo.getTableId() != tableId ||
-                    !partitionInfo.getPartition().getName().equalsIgnoreCase(partitionName)) {
+            if (partitionInfo.getDbId() != dbId || partitionInfo.getTableId() != tableId) {
                 continue;
             }
-            partitionInfo.setRecoverable(false);
-            idToRecycleTime.replace(partitionInfo.getPartition().getId(), 0L);
-            break;
+
+            Partition partition = partitionInfo.getPartition();
+            if (partition.getName().equals(partitionName)) {
+                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                iterator.remove();
+                removeRecycleMarkers(entry.getKey());
+                LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
+                        partition.getId(), partitionName);
+            }
         }
     }
 
@@ -693,7 +699,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // make sure to get db write lock
         RecyclePartitionInfo recoverPartitionInfo = null;
 
-        for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
+        Iterator<Map.Entry<Long, RecyclePartitionInfo>> iterator = idToPartition.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Long, RecyclePartitionInfo> entry = iterator.next();
             RecyclePartitionInfo partitionInfo = entry.getValue();
 
             if (partitionInfo.getTableId() != table.getId()) {
@@ -704,23 +712,41 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 continue;
             }
 
-            if (!partitionInfo.isRecoverable()) {
-                LOG.info("Found a partition named '{}', but it cannot be recovered", partitionName);
-                continue;
-            }
-
             recoverPartitionInfo = partitionInfo;
             break;
         }
 
         if (recoverPartitionInfo == null) {
-            throw new DdlException(String.format("No partition named '%s' in recycle bin that belongs to table '%s'",
-                    partitionName, table.getName()));
+            throw new DdlException("No partition named " + partitionName + " in table " + table.getName());
         }
 
-        recoverPartitionInfo.recover(table);
+        // check if range is invalid
+        Range<PartitionKey> recoverRange = null;
+        if (recoverPartitionInfo instanceof RecyclePartitionInfoV1) {
+            recoverRange = ((RecyclePartitionInfoV1) recoverPartitionInfo).getRange();
+        } else {
+            recoverRange = ((RecycleRangePartitionInfo) recoverPartitionInfo).getRange();
+        }
+        RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
+        if (partitionInfo.getAnyIntersectRange(recoverRange, false) != null) {
+            throw new DdlException("Can not recover partition[" + partitionName + "]. Range conflict.");
+        }
 
-        long partitionId = recoverPartitionInfo.getPartition().getId();
+        // recover partition
+        Partition recoverPartition = recoverPartitionInfo.getPartition();
+        Preconditions.checkState(recoverPartition.getName().equalsIgnoreCase(partitionName));
+        table.addPartition(recoverPartition);
+
+        // recover partition info
+        long partitionId = recoverPartition.getId();
+        partitionInfo.setRange(partitionId, false, recoverRange);
+        partitionInfo.setDataProperty(partitionId, recoverPartitionInfo.getDataProperty());
+        partitionInfo.setReplicationNum(partitionId, recoverPartitionInfo.getReplicationNum());
+        partitionInfo.setIsInMemory(partitionId, recoverPartitionInfo.isInMemory());
+        if (table.isCloudNativeTable()) {
+            partitionInfo.setDataCacheInfo(partitionId,
+                    ((RecyclePartitionInfoV2) recoverPartitionInfo).getDataCacheInfo());
+        }
 
         // remove from recycle bin
         idToPartition.remove(partitionId);
@@ -729,8 +755,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), partitionId);
         GlobalStateMgr.getCurrentState().getEditLog().logRecoverPartition(recoverInfo);
-        LOG.info("Recovered partition '{}' of table '{}'. dbId={} tableId={} partitionId={}", partitionName,
-                table.getName(), dbId, table.getId(), partitionId);
+        LOG.info("recover partition[{}], name: {}", partitionId, partitionName);
     }
 
     // The caller should keep db write lock
@@ -747,7 +772,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
             table.addPartition(partitionInfo.getPartition());
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-            rangePartitionInfo.setRange(partitionId, false, partitionInfo.getRange());
+            if (partitionInfo instanceof RecyclePartitionInfoV1) {
+                rangePartitionInfo.setRange(partitionId, false, ((RecyclePartitionInfoV1) partitionInfo).getRange());
+            } else {
+                rangePartitionInfo.setRange(partitionId, false, ((RecycleRangePartitionInfo) partitionInfo).getRange());
+            }
             rangePartitionInfo.setDataProperty(partitionId, partitionInfo.getDataProperty());
             rangePartitionInfo.setReplicationNum(partitionId, partitionInfo.getReplicationNum());
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
@@ -1061,6 +1090,176 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
+    private abstract static class RecyclePartitionInfo implements Writable {
+        @SerializedName(value = "dbId")
+        protected long dbId;
+        @SerializedName(value = "tableId")
+        protected long tableId;
+        @SerializedName(value = "partition")
+        protected Partition partition;
+        @SerializedName(value = "dataProperty")
+        protected DataProperty dataProperty;
+        @SerializedName(value = "replicationNum")
+        protected short replicationNum;
+        @SerializedName(value = "isInMemory")
+        protected boolean isInMemory;
+
+        protected RecyclePartitionInfo() {
+        }
+
+        protected RecyclePartitionInfo(long dbId, long tableId, Partition partition,
+                                       DataProperty dataProperty, short replicationNum,
+                                       boolean isInMemory) {
+            this.dbId = dbId;
+            this.tableId = tableId;
+            this.partition = partition;
+            this.dataProperty = dataProperty;
+            this.replicationNum = replicationNum;
+            this.isInMemory = isInMemory;
+        }
+
+        public long getDbId() {
+            return dbId;
+        }
+
+        public long getTableId() {
+            return tableId;
+        }
+
+        public Partition getPartition() {
+            return partition;
+        }
+
+        public DataProperty getDataProperty() {
+            return dataProperty;
+        }
+
+        public short getReplicationNum() {
+            return replicationNum;
+        }
+
+        public boolean isInMemory() {
+            return isInMemory;
+        }
+
+        public void setDbId(long dbId) {
+            this.dbId = dbId;
+        }
+    }
+
+    // only for RangePartition
+    public static class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
+        private Range<PartitionKey> range;
+
+        public RecyclePartitionInfoV1() {
+            super();
+        }
+
+        public RecyclePartitionInfoV1(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
+                                      DataProperty dataProperty, short replicationNum, boolean isInMemory) {
+            super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+            this.range = range;
+        }
+
+        public Range<PartitionKey> getRange() {
+            return range;
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeLong(dbId);
+            out.writeLong(tableId);
+            partition.write(out);
+            RangeUtils.writeRange(out, range);
+            dataProperty.write(out);
+            out.writeShort(replicationNum);
+            out.writeBoolean(isInMemory);
+        }
+
+        public void readFields(DataInput in) throws IOException {
+            // dbId has been read in CatalogRecycleBin.readFields()
+            tableId = in.readLong();
+            partition = Partition.read(in);
+            range = RangeUtils.readRange(in);
+            dataProperty = DataProperty.read(in);
+            replicationNum = in.readShort();
+            isInMemory = in.readBoolean();
+        }
+    }
+
+    public static class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
+        @SerializedName(value = "storageCacheInfo")
+        private DataCacheInfo dataCacheInfo;
+
+        public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
+                                      DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                      DataCacheInfo dataCacheInfo) {
+            super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+            this.dataCacheInfo = dataCacheInfo;
+        }
+
+        public DataCacheInfo getDataCacheInfo() {
+            return dataCacheInfo;
+        }
+
+        public static RecyclePartitionInfoV2 read(DataInput in) throws IOException {
+            String json = Text.readString(in);
+            return GsonUtils.GSON.fromJson(json, RecyclePartitionInfoV2.class);
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeLong(-1L);
+            String json = GsonUtils.GSON.toJson(this);
+            Text.writeString(out, json);
+        }
+    }
+
+    public static class RecycleRangePartitionInfo extends RecyclePartitionInfoV2 implements GsonPreProcessable,
+            GsonPostProcessable {
+
+        private Range<PartitionKey> range;
+        // because Range<PartitionKey> and PartitionKey can not be serialized by gson
+        // ATTN: call preSerialize before serialization and postDeserialized after deserialization
+        @SerializedName(value = "serializedRange")
+        private byte[] serializedRange;
+
+        public RecycleRangePartitionInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
+                                         DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                         DataCacheInfo dataCacheInfo) {
+            super(dbId, tableId, partition, dataProperty, replicationNum,
+                    isInMemory, dataCacheInfo);
+            this.range = range;
+        }
+
+        public Range<PartitionKey> getRange() {
+            return range;
+        }
+
+        private byte[] serializeRange(Range<PartitionKey> range) throws IOException {
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            DataOutputStream dos = new DataOutputStream(stream);
+            RangeUtils.writeRange(dos, range);
+            return stream.toByteArray();
+        }
+
+        private Range<PartitionKey> deserializeRange(byte[] serializedRange) throws IOException {
+            InputStream inputStream = new ByteArrayInputStream(serializedRange);
+            DataInput dataInput = new DataInputStream(inputStream);
+            return RangeUtils.readRange(dataInput);
+        }
+
+        @Override
+        public void gsonPreProcess() throws IOException {
+            serializedRange = serializeRange(range);
+        }
+
+        @Override
+        public void gsonPostProcess() throws IOException {
+            range = deserializeRange(serializedRange);
+        }
+    }
+
     public synchronized List<Long> getAllDbIds() {
         return Lists.newArrayList(idToDatabase.keySet());
     }
@@ -1138,7 +1337,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         int idToPartitionSize = reader.readInt();
         for (int i = 0; i < idToPartitionSize; ++i) {
-            RecyclePartitionInfo recycleRangePartitionInfo = reader.readJson(RecyclePartitionInfoV2.class);
+            RecycleRangePartitionInfo recycleRangePartitionInfo = reader.readJson(RecycleRangePartitionInfo.class);
             idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
         }
 

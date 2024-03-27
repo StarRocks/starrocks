@@ -53,8 +53,6 @@ import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -101,13 +99,6 @@ public class LakeMaterializedViewTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
-
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
-                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
 
         new MockUp<StarOSAgent>() {
             @Mock

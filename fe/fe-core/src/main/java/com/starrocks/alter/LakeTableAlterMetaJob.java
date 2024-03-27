@@ -292,7 +292,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 addDirtyPartitionIndex(partition.getId(), index.getId(), index);
                 int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                 for (Tablet tablet : index.getTablets()) {
-                    Long backendId = Utils.chooseNodeId((LakeTablet) tablet);
+                    Long backendId = Utils.chooseBackend((LakeTablet) tablet);
                     Set<Pair<Long, Integer>> tabletIdWithHash =
                             beIdToTabletIdWithHash.computeIfAbsent(backendId, k -> Sets.newHashSet());
                     tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
