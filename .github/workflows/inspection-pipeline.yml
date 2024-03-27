@@ -538,7 +538,7 @@ jobs:
           fi
 
       - name: save unstable cases
-        if: always() && github.event_name == 'schedule' && env.BRANCH == 'main'
+        if: always() && (github.event_name == 'schedule' || (github.event_name != 'schedule' && env.BRANCH != 'main'))
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/save_unstable_cases.sh

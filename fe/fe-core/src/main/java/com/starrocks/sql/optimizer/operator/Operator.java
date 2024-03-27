@@ -60,6 +60,7 @@ public abstract class Operator {
     //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
     //                                       /      \
     //                                  EXTRA-OP    MV-SCAN
+    public static final int OP_UNION_ALL_BIT = 1 << 0;
     protected int opRuleMask = 0;
 
     // an operator logically equivalent to 'this' operator
@@ -151,8 +152,12 @@ public abstract class Operator {
         return opRuleMask;
     }
 
-    public void setOpRuleMask(int b) {
-        this.opRuleMask = b;
+    public void setOpRuleMask(int bit) {
+        this.opRuleMask |= bit;
+    }
+
+    public boolean isOpRuleMaskSet(int bit) {
+        return (opRuleMask & bit) != 0;
     }
 
     public Operator getEquivalentOp() {

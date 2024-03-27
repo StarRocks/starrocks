@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
@@ -40,6 +39,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -111,7 +112,6 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static final int OP_UNION_ALL_BIT = 1 << 0;
 
     public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
                                                       int maxLevel,
@@ -128,18 +128,18 @@ public class MvUtils {
                                      int maxLevel, int currentLevel,
                                      Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
         if (currentLevel >= maxLevel) {
-            logMVPrepare(connectContext, "Current level {} is greater than max level {}", currentLevel, maxLevel);
+            logMVPrepare("Current level {} is greater than max level {}", currentLevel, maxLevel);
             return;
         }
         Set<MvId> newMvIds = Sets.newHashSet();
         for (Table table : tablesToCheck) {
             Set<MvId> mvIds = table.getRelatedMaterializedViews();
             if (mvIds != null && !mvIds.isEmpty()) {
-                logMVPrepare(connectContext, "Table/MaterializedView {} has related materialized views: {}",
+                logMVPrepare("Table/MaterializedView {} has related materialized views: {}",
                         table.getName(), mvIds);
                 newMvIds.addAll(mvIds);
             } else if (currentLevel == 0) {
-                logMVPrepare(connectContext, "Table/MaterializedView {} has no related materialized views, " +
+                logMVPrepare("Table/MaterializedView {} has no related materialized views, " +
                                 "identifier:{}", table.getName(), table.getTableIdentifier());
             }
         }
@@ -150,12 +150,12 @@ public class MvUtils {
         for (MvId mvId : newMvIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
             if (db == null) {
-                logMVPrepare(connectContext, "Cannot find database from mvId:{}", mvId);
+                logMVPrepare("Cannot find database from mvId:{}", mvId);
                 continue;
             }
             Table table = db.getTable(mvId.getId());
             if (table == null) {
-                logMVPrepare(connectContext, "Cannot find materialized view from mvId:{}", mvId);
+                logMVPrepare("Cannot find materialized view from mvId:{}", mvId);
                 continue;
             }
             newMvs.add(table);
@@ -1115,7 +1115,7 @@ public class MvUtils {
                                                 "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                                         modifiedColumn, olapTable.getName());
                                 mv.setInactiveAndReason(
-                                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                                        MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
                             }
                         }
                     }
@@ -1125,8 +1125,7 @@ public class MvUtils {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
                         olapTable.getName());
-                mv.setInactiveAndReason(
-                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
             } catch (Exception e) {
                 LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
                 // basic check: may lose some situations
@@ -1136,7 +1135,7 @@ public class MvUtils {
                                         "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                                 mvColumn.getName(), olapTable.getName());
                         mv.setInactiveAndReason(
-                                "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
+                                MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
                         break;
                     }
                 }
@@ -1212,14 +1211,39 @@ public class MvUtils {
         return OptExpression.create(newOp, inputs);
     }
 
-    public static void setAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask() | OP_UNION_ALL_BIT;
-        op.setOpRuleMask(opRuleMask);
+    /**
+     * Check whether opt expression or its children have applied mv union rewrite.
+     * @param optExpression: opt expression to check
+     * @return : true if opt expression or its children have applied mv union rewrite, false otherwise.
+     */
+    public static boolean isAppliedMVUnionRewrite(OptExpression optExpression) {
+        if (optExpression == null) {
+            return false;
+        }
+        if (optExpression.getOp().isOpRuleMaskSet(Operator.OP_UNION_ALL_BIT)) {
+            return true;
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            if (isAppliedMVUnionRewrite(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    public static boolean isAppliedUnionAllRewrite(Operator op) {
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & OP_UNION_ALL_BIT) != 0;
+    /**
+     * Get column refs of scanMvOperator by MV's defined output columns order.
+     * @param mv: mv to be referenced for output's order
+     * @param scanMvOp: scan mv operator which contains mv
+     * @return: column refs of scanMvOperator in the defined order
+     */
+    public static List<ColumnRefOperator> getMvScanOutputColumnRefs(MaterializedView mv,
+                                                                    LogicalOlapScanOperator scanMvOp) {
+        List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
+        for (Column column : MvRewritePreprocessor.getMvOutputColumns(mv)) {
+            scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
+        }
+        return scanMvOutputColumns;
     }
 
     public static ParseNode getQueryAst(String query) {

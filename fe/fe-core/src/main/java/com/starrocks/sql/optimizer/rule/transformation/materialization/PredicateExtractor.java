@@ -141,7 +141,8 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
         }
 
         TreeRangeSet<ConstantOperator> range = range(predicate.getBinaryType(), op2);
-        if (DateTruncEquivalent.INSTANCE.isEquivalent(op1, op2)) {
+        if (DateTruncEquivalent.isSupportedBinaryType(predicate.getBinaryType()) &&
+                DateTruncEquivalent.INSTANCE.isEquivalent(op1, op2)) {
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range);
             return new ColumnRangePredicate(op1.getChild(1).cast(), rangeSet);

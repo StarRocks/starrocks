@@ -303,7 +303,7 @@ Broker Load 支持导入单个数据文件到单张表、导入多个数据文�
 
 #### 数据样例
 
-以 CSV 格式的数据为例，登录本地文件系统，在指定路径（假设为 `/user/starrocks/`）下创建两个 CSV 格式的数据文件，`file1.csv` 和 `file2.csv`。两个数据文件都包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
+以 CSV 格式的数据为例，登录本地文件系统，在指定路径（假设为 `/home/disk1/business/`）下创建两个 CSV 格式的数据文件，`file1.csv` 和 `file2.csv`。两个数据文件都包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
 - `file1.csv`
 
@@ -351,7 +351,7 @@ PROPERTIES("replication_num"="1");
 
 #### 提交导入作业
 
-通过如下语句，把本地文件系统的 `/user/starrocks/` 路径下所有数据文件（`file1.csv` 和 `file2.csv`）的数据导入到目标表 `mytable`：
+通过如下语句，把本地文件系统的 `/home/disk1/business/` 路径下所有数据文件（`file1.csv` 和 `file2.csv`）的数据导入到目标表 `mytable`：
 
 ```SQL
 LOAD LABEL mydatabase.label_local
@@ -435,7 +435,7 @@ WHERE LABEL = "label_local";
 
 1. 把 NAS 挂载到所有的 BE、FE 节点，同时保证所有节点的挂载路径完全一致。这样，所有 BE 可以像访问 BE 自己的本地文件一样访问 NAS。
 
-2. 使用 Broker Load 导入数据。
+2. 使用 Broker Load 导入数据。例如：
 
    ```SQL
    LOAD LABEL test_db.label_nas

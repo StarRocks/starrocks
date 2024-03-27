@@ -61,6 +61,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
+import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.SqlModeHelper;
@@ -72,9 +73,12 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -3790,5 +3794,30 @@ public class PrivilegeCheckerTest {
                 "drop role role_x_11", starRocksAssert.getCtx()), starRocksAssert.getCtx());
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role role_x_12", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+    }
+
+    @Test
+    public void testSetPasswordForNonNativeUser() throws Exception {
+        String createUserSql = "CREATE USER 'testNonNativeUser' IDENTIFIED WITH authentication_ldap_simple";
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
+        AuthenticationMgr authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
+        authenticationManager.createUser(createUserStmt);
+        UserIdentity testNonNativeUser = createUserStmt.getUserIdentity();
+        SetPassVar setPassVar = new SetPassVar(testNonNativeUser, "01234");
+        SetStmt setStmt = new SetStmt(Arrays.asList(setPassVar));
+        SetExecutor executor = new SetExecutor(null, setStmt);
+        try {
+            executor.execute();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("only allow set password for native user"));
+        }
+
+        // clean
+        String dropUserSql = "drop user testNonNativeUser";
+        DropUserStmt dropUserStmt =
+                (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropUserSql, starRocksAssert.getCtx());
+        authenticationManager.dropUser(dropUserStmt);
     }
 }

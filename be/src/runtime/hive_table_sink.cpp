@@ -100,7 +100,8 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
     size_t sink_dop = context->data_sink_dop();
     if (t_hive_sink.partition_column_names.size() == 0 || t_hive_sink.is_static_partition_sink) {
         auto ops = context->maybe_interpolate_local_passthrough_exchange(
-                runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop);
+                runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
+                pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
         context->add_pipeline(std::move(ops));
     } else {

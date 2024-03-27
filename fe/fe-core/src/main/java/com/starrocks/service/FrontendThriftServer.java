@@ -45,13 +45,13 @@ import java.io.IOException;
 /**
  * StarRocks frontend thrift server
  */
-public class FeServer {
-    private static final Logger LOG = LogManager.getLogger(FeServer.class);
+public class FrontendThriftServer {
+    private static final Logger LOG = LogManager.getLogger(FrontendThriftServer.class);
 
     private int port;
     private ThriftServer server;
 
-    public FeServer(int port) {
+    public FrontendThriftServer(int port) {
         this.port = port;
     }
 

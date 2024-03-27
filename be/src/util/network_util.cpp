@@ -44,6 +44,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 #include <climits>
 #include <sstream>
 
@@ -89,6 +91,8 @@ Status get_hosts(std::vector<InetAddress>* hosts) {
         return Status::InternalError(ss.str());
     }
 
+    std::vector<InetAddress> hosts_v4;
+    std::vector<InetAddress> hosts_v6;
     for (ifaddrs* if_addr = if_addrs; if_addr != nullptr; if_addr = if_addr->ifa_next) {
         if (!if_addr->ifa_addr) {
             continue;
@@ -102,7 +106,7 @@ Status get_hosts(std::vector<InetAddress>* hosts) {
             //check is loopback Addresses
             in_addr_t s_addr = ((struct sockaddr_in*)if_addr->ifa_addr)->sin_addr.s_addr;
             bool is_loopback = (ntohl(s_addr) & 0xFF000000) == 0x7F000000;
-            hosts->emplace_back(std::string(addr_buf), AF_INET, is_loopback);
+            hosts_v4.emplace_back(std::string(addr_buf), AF_INET, is_loopback);
         } else if (addr->sa_family == AF_INET6) {
             //check legitimacy of IPv6 Address
             auto tmp_addr = &((struct sockaddr_in6*)if_addr->ifa_addr)->sin6_addr;
@@ -110,11 +114,22 @@ Status get_hosts(std::vector<InetAddress>* hosts) {
             inet_ntop(AF_INET6, tmp_addr, addr_buf, sizeof(addr_buf));
             //check is loopback Addresses
             bool is_loopback = IN6_IS_ADDR_LOOPBACK(tmp_addr);
-            hosts->emplace_back(std::string(addr_buf), AF_INET6, is_loopback);
+            std::string addr_str(addr_buf);
+            boost::algorithm::to_lower(addr_str);
+            // Starts with "fe80"(Link local address), not supported.
+            if (addr_str.rfind("fe80", 0) == 0) {
+                LOG(INFO) << "ipv6 link local address " << addr_str << " is skipped";
+                continue;
+            }
+            hosts_v6.emplace_back(addr_str, AF_INET6, is_loopback);
         } else {
             continue;
         }
     }
+
+    // Prefer ipv4 address by default for compatibility reason.
+    hosts->insert(hosts->end(), hosts_v4.begin(), hosts_v4.end());
+    hosts->insert(hosts->end(), hosts_v6.begin(), hosts_v6.end());
 
     if (if_addrs != nullptr) {
         freeifaddrs(if_addrs);
