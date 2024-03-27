@@ -82,7 +82,8 @@ public:
                     long array_element_length =
                             offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
                     compacted_array_list[col_idx]->append(*(col_array->elements_column()),
-                                                          offset_column->get(row_idx).get_int32(), array_element_length);
+                                                          offset_column->get(row_idx).get_int32(),
+                                                          array_element_length);
 
                     if (array_element_length < max_length_array_size) {
                         compacted_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
