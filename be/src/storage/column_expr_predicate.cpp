@@ -290,7 +290,8 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     // format as: col LIKE xxx, xxx can be any expr with string type
     bool vaild_pred = false;
     auto* vectorized_function_call = dynamic_cast<VectorizedFunctionCallExpr*>(_expr_ctxs[0]->root());
-    if (vectorized_function_call && LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
+    if (vectorized_function_call &&
+        LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
         _expr_ctxs[0]->root()->get_num_children() == 2 &&
         _expr_ctxs[0]->root()->get_child(0)->node_type() == TExprNodeType::SLOT_REF) {
         vaild_pred = true;
