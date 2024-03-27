@@ -21,7 +21,7 @@ show create table partition_unixtime;
 partition_unixtime	CREATE TABLE `partition_unixtime` (
   `create_time` bigint(20) NULL COMMENT "",
   `sku_id` varchar(100) NULL COMMENT "",
-  `total_amount` decimal64(10, 0) NULL COMMENT "",
+  `total_amount` decimal(10, 0) NULL COMMENT "",
   `id` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`create_time`, `sku_id`)
@@ -39,11 +39,9 @@ PARTITION p20231226 VALUES [("2023-12-26 00:00:00"), ("2023-12-27 00:00:00")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "1",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -72,7 +70,7 @@ show create table partition_unixtime_ms;
 partition_unixtime_ms	CREATE TABLE `partition_unixtime_ms` (
   `create_time` bigint(20) NULL COMMENT "",
   `sku_id` varchar(100) NULL COMMENT "",
-  `total_amount` decimal64(10, 0) NULL COMMENT "",
+  `total_amount` decimal(10, 0) NULL COMMENT "",
   `id` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`create_time`, `sku_id`)
@@ -90,11 +88,9 @@ PARTITION p20231226 VALUES [("2023-12-26 00:00:00"), ("2023-12-27 00:00:00")))
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "1",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
