@@ -1045,13 +1045,21 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public boolean tableExists(String databaseName, String tableName)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        try {
+            Table table = getTable(databaseName, tableName);
+            return table != null;
+        } catch (UnknownDBException | NoSuchObjectException e) {
+            return false;
+        } catch (TException e) {
+            LOG.warn("Failed to check table {}.{} existence", databaseName, tableName, e);
+            throw e;
+        }
     }
 
     @Override
     public boolean tableExists(String catName, String dbName, String tableName)
             throws MetaException, TException, UnknownDBException {
-        throw new TException("method not implemented");
+        return tableExists(dbName, tableName);
     }
 
     @Override
