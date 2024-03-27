@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
@@ -33,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.HashSet;
@@ -77,47 +79,56 @@ public class PruneGroupByKeysRule extends TransformationRule {
         Set<ColumnRefOperator> removedGroupingKeys = new HashSet<>();
         Pair<ColumnRefOperator, ScalarOperator> firstConstantGroupingKey = null;
 
-        Set<Integer> existedColumnIds = new HashSet<>();
+        Map<ColumnRefOperator, ColumnRefOperator> inputToOutputMap = Maps.newHashMap();
         for (ColumnRefOperator groupingKey : groupingKeys) {
             ScalarOperator groupingExpr = projections.get(groupingKey);
             Preconditions.checkState(groupingExpr != null,
                     "cannot find grouping key from projections");
             if (groupingExpr.isColumnRef()) {
-                int columnId = ((ColumnRefOperator) groupingExpr).getId();
+                ColumnRefOperator inputCol = (ColumnRefOperator) groupingExpr;
                 // if this column already exists, ignore it, otherwise, add it into new grouping key
-                if (!existedColumnIds.contains(columnId)) {
+                // if the groupingExpr used cols had been added into the newGroupingKeys, it means other
+                // groupingKey had been added, we can skip it. But we need add a projection using after the agg
+                // to ensure the correct output columns and the projection should use agg output to rewrite.
+                if (!inputToOutputMap.containsKey(inputCol)) {
                     newGroupingKeys.add(groupingKey);
-                    existedColumnIds.add(columnId);
+                    inputToOutputMap.put(inputCol, groupingKey);
                     newProjections.put(groupingKey, groupingExpr);
                     newPostAggProjections.put(groupingKey, groupingKey);
-                    continue;
+                } else {
+                    removedGroupingKeys.add(groupingKey);
+                    newPostAggProjections.put(groupingKey, inputToOutputMap.get(inputCol));
                 }
             } else if (groupingExpr.isConstant()) {
                 if (firstConstantGroupingKey == null) {
                     firstConstantGroupingKey = new Pair<>(groupingKey, groupingExpr);
                 }
+                removedGroupingKeys.add(groupingKey);
+                newPostAggProjections.put(groupingKey, groupingExpr);
             } else {
-                ColumnRefSet usedColumns = groupingExpr.getUsedColumns();
+                List<ColumnRefOperator> usedColumns = groupingExpr.getColumnRefs();
                 // if this expr contains only one column that already exists in the grouping key,
                 // it won't affect the grouping result, just remove it.
                 // Otherwise, we should reserve it.
                 if (usedColumns.size() == 1 && !Utils.hasNonDeterministicFunc(groupingExpr)) {
-                    int columnId = usedColumns.getColumnIds()[0];
-                    if (!existedColumnIds.contains(columnId)) {
+                    ColumnRefOperator inputCol = usedColumns.get(0);
+                    if (!inputToOutputMap.containsKey(inputCol)) {
                         newGroupingKeys.add(groupingKey);
                         newProjections.put(groupingKey, groupingExpr);
                         newPostAggProjections.put(groupingKey, groupingKey);
-                        continue;
+                    } else {
+                        removedGroupingKeys.add(groupingKey);
+                        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(
+                                ImmutableMap.of(inputCol, inputToOutputMap.get(inputCol)));
+                        ScalarOperator newGroupingExpr = rewriter.rewrite(groupingExpr);
+                        newPostAggProjections.put(groupingKey, newGroupingExpr);
                     }
                 } else {
                     newGroupingKeys.add(groupingKey);
                     newProjections.put(groupingKey, groupingExpr);
                     newPostAggProjections.put(groupingKey, groupingKey);
-                    continue;
                 }
             }
-            removedGroupingKeys.add(groupingKey);
-            newPostAggProjections.put(groupingKey, groupingExpr);
         }
 
         if (newGroupingKeys.isEmpty() && !aggregations.isEmpty()) {
