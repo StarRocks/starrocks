@@ -699,6 +699,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockT1WithNullPartitionColumns(); // t1_par_null
         mockTablesWithSinglePartitionColumn();
         mockOrders();
+        mockWithMultiDuplicatePartitionColumns();
     }
 
     public static void mockOrders() {
@@ -1131,6 +1132,39 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockTables.put(t1.getTableName(),
                        new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, MOCKED_HIVE_CATALOG_NAME),
                                          partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+    }
+
+    private static void mockWithMultiDuplicatePartitionColumns() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
+
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c1", "int", null));
+
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+        Table t1 = new Table("duplicate_partition", "partitioned_db", null, 0, 0, 0, sd,
+                ImmutableList.of(new FieldSchema("day", "string", null),
+                        new FieldSchema("hour", "int", null)), Maps.newHashMap(), null, null,
+                "EXTERNAL_TABLE");
+        List<String> partitionNames = Lists.newArrayList("day=2012-01-01/hour=6", "day=2012-01-01/hour=06");
+        Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
+
+        Map<String, ColumnStatistic> columnStatisticMap;
+        List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());
+        columnStatisticMap =
+                colNames.stream().collect(Collectors.toMap(Function.identity(), col -> ColumnStatistic.unknown()));
+        columnStatisticMap.put("day", ColumnStatistic.unknown());
+        columnStatisticMap.put("hour", ColumnStatistic.unknown());
+
+        List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+        partitionNames.forEach(
+                k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(), null)));
+
+        mockTables.put(t1.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, MOCKED_HIVE_CATALOG_NAME),
+                        partitionNames, 0, columnStatisticMap, remoteFileInfos));
     }
 
     public static void mockT1WithNullPartitionColumns() {
