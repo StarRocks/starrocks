@@ -286,7 +286,7 @@ struct HdfsScannerContext {
     // user create table with 3 fields A, B, C, and there is one file F1
     // but user change schema and add one field like D.
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
-    void append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+    Status append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
 
     // If there is no partition column in the chunk，append partition column to chunk，
     // otherwise update partition column in chunk
