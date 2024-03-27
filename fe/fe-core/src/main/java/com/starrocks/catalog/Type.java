@@ -571,6 +571,12 @@ public abstract class Type implements Cloneable {
      */
     protected abstract String toSql(int depth);
 
+    public final String toTypeString() {
+        return toTypeString(0);
+    }
+
+    protected abstract String toTypeString(int depth);
+    
     /**
      * Same as toSql() but adds newlines and spaces for better readability of nested types.
      */

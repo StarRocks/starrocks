@@ -80,6 +80,14 @@ public class StructField {
         return sb.toString();
     }
 
+    public String toTypeString(int depth) {
+        String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toTypeString(depth) : "...";
+        StringBuilder sb = new StringBuilder();
+        sb.append(name).append(' ');
+        sb.append(typeSql);
+        return sb.toString();
+    }
+
     /**
      * Pretty prints this field with lpad number of leading spaces.
      * Calls prettyPrint(lpad) on this field's type.
