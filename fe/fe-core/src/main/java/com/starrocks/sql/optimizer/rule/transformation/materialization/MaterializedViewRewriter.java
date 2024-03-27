@@ -669,7 +669,7 @@ public class MaterializedViewRewriter {
         PermutationGenerator generator = new PermutationGenerator(mvExtraTableScanDescLists);
         int retries = 0;
         while (generator.hasNext()) {
-            if (retries++ >= optimizerContext.getSessionVariable().getMaterializedViewViewDeltaRewriteMaxRetries()) {
+            if (retries++ >= optimizerContext.getSessionVariable().getMaterializedViewMaxRelationMappingSize()) {
                 break;
             }
             List<TableScanDesc> mvExtraTableScanDescs = generator.next();
@@ -765,7 +765,11 @@ public class MaterializedViewRewriter {
         logMVRewrite(mvRewriteContext, "MV predicate split:{}", mvPredicateSplit);
         logMVRewrite(mvRewriteContext, "Query predicate split:{}", queryPredicateSplit);
         logMVRewrite(mvRewriteContext, "Construct {} relation id mappings from query to mv", relationIdMappings.size());
+        int retries = 0;
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
+            if (retries++ >= optimizerContext.getSessionVariable().getMaterializedViewMaxRelationMappingSize()) {
+                break;
+            }
             mvRewriteContext.setMvPruneConjunct(mvPrunePredicate);
             rewriteContext.setQueryToMvRelationIdMapping(relationIdMapping);
 

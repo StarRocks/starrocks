@@ -2165,7 +2165,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testViewDeltaJoinUKFK15() {
-        connectContext.getSessionVariable().setMaterializedViewViewDeltaRewriteMaxRetries(0);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(0);
         String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
                 + "left outer join dependents using (empid)"
@@ -2175,7 +2175,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "left outer join dependents using (empid)\n"
                 + "where emps.empid = 1";
         testRewriteFail(mv, query);
-        connectContext.getSessionVariable().setMaterializedViewViewDeltaRewriteMaxRetries(5);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
     }
 
     @Test
@@ -2267,7 +2267,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testViewDeltaJoinUKFKInMV7() {
-        connectContext.getSessionVariable().setMaterializedViewViewDeltaRewriteMaxRetries(1);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(1);
         String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
                 + "left join dependents using (empid)"
                 + "inner join depts b on (emps.deptno=b.deptno)\n"
@@ -2279,7 +2279,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid);" +
                 "emps_no_constraint(deptno) references depts(deptno)\" ";
         testRewriteFail(mv, query, constraint);
-        connectContext.getSessionVariable().setMaterializedViewViewDeltaRewriteMaxRetries(5);
+        connectContext.getSessionVariable().setMaterializedViewMaxRelationMappingSize(5);
     }
 
     @Test
