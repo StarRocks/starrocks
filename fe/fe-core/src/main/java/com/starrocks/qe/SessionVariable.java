@@ -1578,10 +1578,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMaterializedViewUnionRewrite = true;
 
     /**
-     * <= 0: default mode, only try to union all rewrite by logical plan tree after partition compensate
-     * 1: eager mode v1, try to pull up query's filter after union when query's output matches mv's define query
-     * which will increase union rewrite's ability.
-     * 2: eager mode v2, try to pull up query's filter after union as much as possible.
+     * see {@code MaterializedViewUnionRewriteMode} for more details.
      */
     @VarAttr(name = MATERIALIZED_VIEW_UNION_REWRITE_MODE)
     private int materializedViewUnionRewriteMode = 0;

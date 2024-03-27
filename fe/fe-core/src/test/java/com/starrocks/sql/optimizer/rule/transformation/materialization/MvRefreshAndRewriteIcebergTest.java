@@ -1212,7 +1212,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d \n" +
                     " where t1.d in ('2023-08-01')\n" +
                     " group by t1.a, t2.b, t1.d;";
-            String plan = getFragmentPlan(query);
+            String plan = getFragmentPlan(query, "MV");
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                     "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +

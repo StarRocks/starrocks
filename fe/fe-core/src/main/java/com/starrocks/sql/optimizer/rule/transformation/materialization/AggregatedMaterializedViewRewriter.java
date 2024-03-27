@@ -37,7 +37,6 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -244,11 +243,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         "cannot compensate aggregate having predicates: {}", queryAggregationOperator.getPredicate().toString());
                 return null;
             }
-            LogicalScanOperator scanOperator = mvOptExpr.getOp().cast();
-            Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
-            builder.withOperator(scanOperator);
+            Operator op = mvOptExpr.getOp().cast();
+            Operator.Builder builder = OperatorBuilderFactory.build(op);
+            builder.withOperator(op);
             // take care original scan predicates and new having exprs
-            builder.setPredicate(Utils.compoundAnd(rewrittenPred, scanOperator.getPredicate()));
+            builder.setPredicate(Utils.compoundAnd(rewrittenPred, op.getPredicate()));
             mvOptExpr = OptExpression.create(builder.build());
         }
 
@@ -442,6 +441,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
+        // reset original partition predicates to prune partitions/tablets again
+        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         Preconditions.checkState(viewInput.getOp().getProjection() != null);
@@ -506,7 +507,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 unionExpr, newProjection);
         // Add extra union all predicates above union all operator.
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
-            addUnionAllExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
+            addExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
         }
         deriveLogicalProperty(result);
 
