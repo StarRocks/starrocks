@@ -14,6 +14,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "util/stack_util.h"
 #include "util/thread.h"
 
 namespace starrocks::pipeline {
@@ -156,6 +157,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
             query_statistic->add_stats_item(stats_item);
         }
     }
+    LOG(WARNING) << "cpu_ns:" << query_statistic->get_cpu_ns() << " stack :\n " << get_stack_trace();
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
 }
@@ -164,6 +166,12 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
     res->add_cpu_costs(cpu_cost());
+    if (res->get_cpu_ns() < 0) {
+        LOG(WARNING) << query_id() << " final_query_statistic::cpu cost is negative: " << res->get_cpu_ns()
+                     << "final sink's cpu cost is" << cpu_cost() << " stack:\n"
+                     << get_stack_trace();
+    }
+
     res->add_mem_costs(mem_cost_bytes());
 
     {

@@ -161,6 +161,9 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             ctx.getAuditEventBuilder().setReturnRows(statistics.returnedRows == null ? 0 : statistics.returnedRows);
+            if (statistics.cpuCostNs != null && statistics.cpuCostNs < 0) {
+                LOG.warn("query:{} 's cpuCostNs is negative:{}", ctx.getQueryId(), statistics.cpuCostNs);
+            }
         }
 
         if (ctx.getState().isQuery()) {

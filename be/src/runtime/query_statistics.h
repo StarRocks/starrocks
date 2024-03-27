@@ -53,6 +53,7 @@ public:
 
     int64_t get_scan_rows() const { return scan_rows; }
     int64_t get_mem_bytes() const { return mem_cost_bytes; }
+    int64_t get_cpu_ns() const { return cpu_ns; }
 
     void clear();
 

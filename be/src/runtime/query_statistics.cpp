@@ -21,6 +21,8 @@
 
 #include "runtime/query_statistics.h"
 
+#include "util/stack_util.h"
+
 namespace starrocks {
 
 void QueryStatistics::to_pb(PQueryStatistics* statistics) {
@@ -124,6 +126,11 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
             update_stats_item(table_id, stats_item->scan_rows, stats_item->scan_bytes);
         }
     }
+
+    if (this->cpu_ns < 0) {
+        LOG(WARNING) << "current cpu_ns:" << this->cpu_ns << "add cpu_ns:" << cpu_ns << " stack:\n"
+                     << get_stack_trace();
+    }
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
@@ -145,6 +152,10 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
             const auto& stats_item = statistics.stats_items(i);
             update_stats_item(stats_item.table_id(), stats_item.scan_rows(), stats_item.scan_bytes());
         }
+    }
+    if (cpu_ns < 0) {
+        LOG(WARNING) << "cpu_ns:" << cpu_ns << " statistics.cpu_cost_ns:" << statistics.cpu_cost_ns() << " stack :\n "
+                     << get_stack_trace();
     }
 }
 

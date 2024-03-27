@@ -17,6 +17,7 @@
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
+#include "util/stack_util.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -128,6 +129,11 @@ public:
     void incr_cpu_cost(int64_t cost) {
         _total_cpu_cost_ns += cost;
         _delta_cpu_cost_ns += cost;
+        if (_total_cpu_cost_ns < 0) {
+            LOG(WARNING) << query_id() << "_total_cpu_cost_ns" << _total_cpu_cost_ns << " added cost is" << cost
+                         << " stack:\n"
+                         << get_stack_trace();
+        }
     }
     void incr_cur_scan_rows_num(int64_t rows_num) {
         _total_scan_rows_num += rows_num;
