@@ -37,6 +37,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -180,9 +182,32 @@ public class JDBCTable extends Table {
         // -> jdbc_postgresql_172.26.194.237_5432_db_pg_select
         // requirement: it should be used as local path.
         // and there is no ':' in it to avoid be parsed into non-local filesystem.
-        return uri.replace("//", "")
-                .replace("/", "_")
-                .replace(":", "_");
+
+        String ans = uri.replace("//", "")
+                .replace('/', '_')
+                .replace(':', '_');
+
+        // currently we use this uri as part of name of download file.
+        // so if this uri is too long, we might fail to write file on BE side.
+        // so here we have to shorten it to reduce fail probability because of long file name.
+
+        // in most cases, jdbc uri is not that long, so we can preserve original information.
+        if (ans.length() > 128) {
+            try {
+                // 256bits = 32bytes = 64hex chars.
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                digest.update(ans.getBytes());
+                byte[] hashBytes = digest.digest();
+                StringBuilder sb = new StringBuilder();
+                for (byte b : hashBytes) {
+                    sb.append(String.format("%02x", b));
+                }
+                ans = sb.toString();
+            } catch (NoSuchAlgorithmException e) {
+                // don't update `ans`.
+            }
+        }
+        return ans;
     }
 
     @Override
