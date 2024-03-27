@@ -75,44 +75,48 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
+
+    const std::string kParquetReaderInit = "ParquetReaderInit";
+    ADD_CHILD_COUNTER(root, kParquetReaderInit, TUnit::NONE, kParquetProfileSectionPrefix);
+
+    const std::string kInitFooterGetTime = "InitFooterGetTime";
+    footer_get_timer = ADD_CHILD_TIMER(root, kInitFooterGetTime, kParquetReaderInit);
+    footer_read_timer = ADD_CHILD_TIMER(root, "ReaderInitFooterRead", kInitFooterGetTime);
+    footer_cache_read_timer = ADD_CHILD_TIMER(root, "FooterCacheReadTime", kInitFooterGetTime);
+    footer_cache_read_counter = ADD_CHILD_COUNTER(root, "FooterCacheReadCount", TUnit::UNIT, kInitFooterGetTime);
+    footer_cache_write_timer = ADD_CHILD_TIMER(root, "FooterCacheWriteTimer", kInitFooterGetTime);
+    footer_cache_write_bytes = ADD_CHILD_COUNTER(root, "FooterCacheWriteBytes", TUnit::BYTES, kInitFooterGetTime);
+    footer_cache_write_counter = ADD_CHILD_COUNTER(root, "FooterCacheWriteCount", TUnit::UNIT, kInitFooterGetTime);
+    footer_cache_write_fail_counter =
+            ADD_CHILD_COUNTER(root, "FooterCacheWriteFailCount", TUnit::UNIT, kInitFooterGetTime);
+
+    column_names_set_timer = ADD_CHILD_TIMER(root, "InitColumnNamesSetTime", kParquetReaderInit);
+    read_columns_prepare_timer = ADD_CHILD_TIMER(root, "InitReadColumnsPrepareTime", kParquetReaderInit);
+    group_reader_init_timer = ADD_CHILD_TIMER(root, "InitGroupReaderInitTime", kParquetReaderInit);
+    column_reader_init_timer = ADD_CHILD_TIMER(root, "ReaderInitColumnReaderInit", "InitGroupReaderInitTime");
+
+    const std::string kParquetGroupRead = "ParquetGroupRead";
+    ADD_CHILD_COUNTER(root, kParquetGroupRead, TUnit::NONE, kParquetProfileSectionPrefix);
+
+    const std::string kGroupChunkReadTime = "GroupChunkReadTime";
+    group_chunk_read_timer = ADD_CHILD_TIMER(root, kGroupChunkReadTime, kParquetGroupRead);
+    page_read_timer = ADD_CHILD_TIMER(root, "PageReadTime", kGroupChunkReadTime);
+    page_decompress_timer = ADD_CHILD_TIMER(root, "PageDecompressTime", "PageReadTime");
+    page_read_bytes = ADD_CHILD_COUNTER(root, "PageReadBytes", TUnit::BYTES, kGroupChunkReadTime);
+    page_read_bytes_uncompressed =
+            ADD_CHILD_COUNTER(root, "PageReadBytesUncompressed", TUnit::BYTES, kGroupChunkReadTime);
+    page_read_counter = ADD_CHILD_COUNTER(root, "PageReadCount", TUnit::UNIT, kGroupChunkReadTime);
+    page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kGroupChunkReadTime);
+    has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kGroupChunkReadTime);
+    level_decode_timer = ADD_CHILD_TIMER(root, "LevelDecodeTime", kGroupChunkReadTime);
+    value_decode_timer = ADD_CHILD_TIMER(root, "ValueDecodeTime", kGroupChunkReadTime);
+
+    group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilterTime", kParquetGroupRead);
+    group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecodeTime", kParquetGroupRead);
+
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
     request_bytes_read_uncompressed =
             ADD_CHILD_COUNTER(root, "RequestBytesReadUncompressed", TUnit::BYTES, kParquetProfileSectionPrefix);
-
-    footer_cache_write_counter =
-            ADD_CHILD_COUNTER(root, "FooterCacheWriteCount", TUnit::UNIT, kParquetProfileSectionPrefix);
-    footer_cache_write_bytes =
-            ADD_CHILD_COUNTER(root, "FooterCacheWriteBytes", TUnit::BYTES, kParquetProfileSectionPrefix);
-    footer_cache_write_fail_counter =
-            ADD_CHILD_COUNTER(root, "FooterCacheWriteFailCount", TUnit::UNIT, kParquetProfileSectionPrefix);
-    footer_cache_read_counter =
-            ADD_CHILD_COUNTER(root, "FooterCacheReadCount", TUnit::UNIT, kParquetProfileSectionPrefix);
-    footer_cache_read_timer = ADD_CHILD_TIMER(root, "FooterCacheReadTimer", kParquetProfileSectionPrefix);
-    footer_cache_write_timer = ADD_CHILD_TIMER(root, "FooterCacheWriteTimer", kParquetProfileSectionPrefix);
-
-    level_decode_timer = ADD_CHILD_TIMER(root, "LevelDecodeTime", kParquetProfileSectionPrefix);
-    value_decode_timer = ADD_CHILD_TIMER(root, "ValueDecodeTime", kParquetProfileSectionPrefix);
-
-    page_read_bytes = ADD_CHILD_COUNTER(root, "PageReadBytes", TUnit::BYTES, kParquetProfileSectionPrefix);
-    page_read_bytes_uncompressed =
-            ADD_CHILD_COUNTER(root, "PageReadBytesUncompressed", TUnit::BYTES, kParquetProfileSectionPrefix);
-    page_read_counter = ADD_CHILD_COUNTER(root, "PageReadCount", TUnit::UNIT, kParquetProfileSectionPrefix);
-    page_read_timer = ADD_CHILD_TIMER(root, "PageReadTime", kParquetProfileSectionPrefix);
-    page_decompress_timer = ADD_CHILD_TIMER(root, "PageDecompressTime", kParquetProfileSectionPrefix);
-
-    footer_read_timer = ADD_CHILD_TIMER(root, "ReaderInitFooterRead", kParquetProfileSectionPrefix);
-    column_reader_init_timer = ADD_CHILD_TIMER(root, "ReaderInitColumnReaderInit", kParquetProfileSectionPrefix);
-    footer_get_timer = ADD_CHILD_TIMER(root, "InitFooterGetTimer", kParquetProfileSectionPrefix);
-    column_names_set_timer = ADD_CHILD_TIMER(root, "InitColumnNamesSetTimer", kParquetProfileSectionPrefix);
-    read_columns_prepare_timer = ADD_CHILD_TIMER(root, "InitReadColumnsPrepareTimer", kParquetProfileSectionPrefix);
-    group_reader_init_timer = ADD_CHILD_TIMER(root, "InitGroupReaderInitTimer", kParquetProfileSectionPrefix);
-
-    group_chunk_read_timer = ADD_CHILD_TIMER(root, "GroupChunkRead", kParquetProfileSectionPrefix);
-    group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
-    group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
-
-    has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
-    page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
 
     COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
