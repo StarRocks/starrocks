@@ -1512,7 +1512,7 @@ public class Config extends ConfigBase {
 
     /**
      * Doing distribution balance may break the disk size balance,
-     * but it cannot exceed tablet_sched_distribution_balance_threshold_ratio * tablet_sched_balance_load_score_threshold
+     * but the maximum gap between disks cannot exceed tablet_sched_distribution_balance_threshold_ratio * tablet_sched_balance_load_score_threshold
      * If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value.
      * If you want the tablet distribution to be more balanced, increase this value.
      */
