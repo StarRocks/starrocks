@@ -7078,11 +7078,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         throw new SemanticException("not support");
     }
 
-    @Override
-    public ParseNode visitCancelDisableDiskClause(StarRocksParser.CancelDisableDiskClauseContext context) {
-        throw new SemanticException("not support");
-    }
-
     // ------------------------------------------- Util Functions -------------------------------------------
 
     protected <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {

@@ -240,7 +240,7 @@ CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 // BE process will exit if the percentage of error disk reach this value.
-CONF_mInt32(max_percentage_of_error_disk, "0");
+CONF_mInt32(max_percentage_of_error_disk, "100");
 // CONF_Int32(default_num_rows_per_data_block, "1024");
 CONF_mInt32(default_num_rows_per_column_file_block, "1024");
 CONF_Int32(max_tablet_num_per_shard, "1024");

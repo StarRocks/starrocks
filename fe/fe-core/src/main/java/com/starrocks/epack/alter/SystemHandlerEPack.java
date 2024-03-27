@@ -23,7 +23,6 @@ import com.starrocks.epack.sql.ast.AddBackendClauseEPack;
 import com.starrocks.epack.sql.ast.AddComputeNodeClauseEPack;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CancelDecommissionDiskClause;
-import com.starrocks.epack.sql.ast.CancelDisableDiskClause;
 import com.starrocks.epack.sql.ast.DecommissionDiskClause;
 import com.starrocks.epack.sql.ast.DisableDiskClause;
 import com.starrocks.epack.sql.ast.DropBackendClauseEPack;
@@ -136,17 +135,6 @@ public class SystemHandlerEPack extends SystemHandler {
             try {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .disableDisks(clause.getBeHostPort(), clause.getDiskList());
-            } catch (DdlException e) {
-                throw new RuntimeException(e);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitCancelDisableDiskClause(CancelDisableDiskClause clause, Void context) {
-            try {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .cancelDisableDisks(clause.getBeHostPort(), clause.getDiskList());
             } catch (DdlException e) {
                 throw new RuntimeException(e);
             }

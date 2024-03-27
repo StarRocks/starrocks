@@ -95,7 +95,6 @@ import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
-import com.starrocks.persist.CancelDisableDiskInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ColumnRenameInfo;
@@ -1204,10 +1203,6 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_DISABLE_DISK:
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DisableDiskInfo.class);
-                isRead = true;
-                break;
-            case OperationType.OP_CANCEL_DISABLE_DISK:
-                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
                 isRead = true;
                 break;
             case OperationType.OP_REPLICATION_JOB:

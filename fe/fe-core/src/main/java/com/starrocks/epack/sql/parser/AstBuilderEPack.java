@@ -24,7 +24,6 @@ import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.CancelDecommissionDiskClause;
-import com.starrocks.epack.sql.ast.CancelDisableDiskClause;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
@@ -1027,15 +1026,5 @@ public class AstBuilderEPack extends AstBuilder {
                 .map(c -> ((StringLiteral) visit(c)).getStringValue())
                 .collect(toList());
         return new DisableDiskClause(strings.get(strings.size() - 1), strings.subList(0, strings.size() - 1));
-    }
-
-    @Override
-    public ParseNode visitCancelDisableDiskClause(StarRocksParser.CancelDisableDiskClauseContext context) {
-        List<String> strings = context
-                .string()
-                .stream()
-                .map(c -> ((StringLiteral) visit(c)).getStringValue())
-                .collect(toList());
-        return new CancelDisableDiskClause(strings.get(strings.size() - 1), strings.subList(0, strings.size() - 1));
     }
 }

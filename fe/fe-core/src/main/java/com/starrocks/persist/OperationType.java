@@ -855,9 +855,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DISABLE_DISK = 13035;
 
-    @IgnorableOnReplayFailed
-    public static final short OP_CANCEL_DISABLE_DISK = 13036;
-
     public static final short OP_BATCH_DELETE_REPLICA = 13037;
 
     @IgnorableOnReplayFailed

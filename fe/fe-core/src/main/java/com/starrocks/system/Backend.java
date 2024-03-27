@@ -362,17 +362,6 @@ public class Backend extends ComputeNode {
         LOG.info("disk {} is set to DISABLED", rootPath);
     }
 
-    public void cancelDisableDisk(String rootPath) throws DdlException {
-        DiskInfo diskInfo = disksRef.get(rootPath);
-        if (diskInfo == null) {
-            throw new DdlException("Disk: " + rootPath + " does not exist");
-        }
-        if (diskInfo.getState() == DiskState.DISABLED) {
-            diskInfo.setState(DiskState.ONLINE);
-            LOG.info("disk {} is recovered to ONLINE, previous state is DISABLED", rootPath);
-        }
-    }
-
     public void setStorageMediumForAllDisks(TStorageMedium m) {
         for (DiskInfo diskInfo : disksRef.values()) {
             diskInfo.setStorageMedium(m);

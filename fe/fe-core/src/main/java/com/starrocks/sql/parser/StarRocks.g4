@@ -1057,7 +1057,6 @@ alterClause
     | decommissionDiskClause
     | cancelDecommissionDiskClause
     | disableDiskClause
-    | cancelDisableDiskClause
 
     //Alter table clause
     | createIndexClause
@@ -1157,10 +1156,6 @@ cancelDecommissionDiskClause
 
 disableDiskClause
     : DISABLE DISK string (',' string)* ON BACKEND string
-    ;
-
-cancelDisableDiskClause
-    : CANCEL DISABLE DISK string (',' string)* ON BACKEND string
     ;
 
 // ---------Alter table clause---------

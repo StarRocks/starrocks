@@ -65,10 +65,6 @@ public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitCancelDisableDiskClause(CancelDisableDiskClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
     default R visitApplyMaskingPolicyClause(ApplyMaskingPolicyClause clause, C context) {
         return visitNode(clause, context);
     }
