@@ -350,6 +350,32 @@ Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_dr
     return Status::OK();
 }
 
+Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t sources_num = _source->get_sources().size();
+    if (sources_num == 1) {
+        _source->get_sources()[0]->add_chunk(chunk);
+    } else {
+        // Scale up writers when current buffer memory utilization is more than 50% of the maximum and data processed
+        // is greater than current writer count * connector_sink_scaling_min_size. This also mean that we won't scale
+        // local writers if the writing speed can cope up with incoming data. In another word, buffer utilization is
+        // below 50%.
+        if (_writer_count < sources_num && _memory_manager->is_half_full() &&
+            _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
+            _writer_count++;
+        }
+        // set to default value in case of _source vector out of bound in multi thread
+        if (_writer_count > sources_num) {
+            _writer_count = sources_num;
+        }
+        _source->get_sources()[(_next_accept_source++) % _writer_count.load()]->add_chunk(chunk);
+        if (_writer_count < sources_num) {
+            _data_processed += chunk->bytes_usage();
+        }
+    }
+
+    return Status::OK();
+}
+
 bool LocalExchanger::need_input() const {
     return !_memory_manager->is_full() && !is_all_sources_finished();
 }
