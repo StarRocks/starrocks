@@ -115,21 +115,17 @@ public class DropPartitionTest {
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210202 force;";
         dropPartition(dropPartitionSql);
-        List<Replica> replicaList;
-        replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+        List<Replica> replicaList =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         partition = table.getPartition("p20210202");
-        Assert.assertFalse(replicaList.isEmpty());
+        Assert.assertTrue(replicaList.isEmpty());
         Assert.assertNull(partition);
         String recoverPartitionSql = "recover partition p20210202 from test.tbl1";
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "No partition named 'p20210202' in recycle bin that belongs to table 'tbl1'",
-                () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
-
-        GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
-        replicaList = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
-        Assert.assertTrue(replicaList.isEmpty());
+                "No partition named p20210202 in table tbl1",
+                () -> GlobalStateMgr.getCurrentState().recoverPartition(recoverPartitionStmt));
     }
 
     @Test

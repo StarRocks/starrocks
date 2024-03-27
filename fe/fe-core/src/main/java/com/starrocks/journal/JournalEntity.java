@@ -88,7 +88,6 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
-import com.starrocks.persist.DisablePartitionRecoveryInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -290,11 +289,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DISABLE_TABLE_RECOVERY: {
                 data = DisableTableRecoveryInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
-                data = DisablePartitionRecoveryInfo.read(in);
                 isRead = true;
                 break;
             }

@@ -274,7 +274,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                         MaterializedIndex.IndexExtState.VISIBLE)) {
                     addDirtyPartitionIndex(physicalPartition.getId(), index.getId(), index);
                     for (Tablet tablet : index.getTablets()) {
-                        Long backendId = Utils.chooseNodeId((LakeTablet) tablet);
+                        Long backendId = Utils.chooseBackend((LakeTablet) tablet);
                         Set<Long> set = beIdToTabletSet.computeIfAbsent(backendId, k -> Sets.newHashSet());
                         set.add(tablet.getId());
                     }

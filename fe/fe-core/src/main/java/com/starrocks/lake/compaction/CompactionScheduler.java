@@ -350,7 +350,7 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utils.chooseNodeId((LakeTablet) tablet);
+                Long beId = Utils.chooseBackend((LakeTablet) tablet);
                 if (beId == null) {
                     beToTablets.clear();
                     return beToTablets;

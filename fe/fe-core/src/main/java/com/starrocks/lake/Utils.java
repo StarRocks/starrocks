@@ -15,7 +15,6 @@
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
-import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -31,6 +30,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,7 +39,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -50,38 +49,23 @@ public class Utils {
     }
 
     // Returns null if no backend available.
-    public static Long chooseNodeId(LakeTablet tablet) {
+    public static Long chooseBackend(LakeTablet tablet) {
         try {
-            ShardInfo shardInfo = tablet.getShardInfo();
-            return chooseNodeId(shardInfo);
-        } catch (Exception e) {
-            LOG.error(e);
-            return null;
-        }
-    }
-
-    public static Long chooseNodeId(ShardInfo shardInfo) {
-        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllBackendIdsByShard(shardInfo, true);
-        if (!ids.isEmpty()) {
-            return ids.iterator().next();
-        }
-        try {
-            return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
-        } catch (UserException e) {
-            return null;
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            return tablet.getPrimaryComputeNodeId(workerGroupId);
+        } catch (UserException ex) {
+            LOG.info("Ignored error {}", ex.getMessage());
+            try {
+                return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+            } catch (UserException e) {
+                return null;
+            }
         }
     }
 
     public static ComputeNode chooseNode(LakeTablet tablet) {
-        Long nodeId = chooseNodeId(tablet);
-        if (nodeId == null) {
-            return null;
-        }
-        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
-    }
-
-    public static ComputeNode chooseNode(ShardInfo shardInfo) {
-        Long nodeId = chooseNodeId(shardInfo);
+        Long nodeId = chooseBackend(tablet);
         if (nodeId == null) {
             return null;
         }
@@ -101,7 +85,7 @@ public class Utils {
         for (Partition partition : partitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
                 for (Tablet tablet : index.getTablets()) {
-                    Long beId = chooseNodeId((LakeTablet) tablet);
+                    Long beId = chooseBackend((LakeTablet) tablet);
                     if (beId == null) {
                         throw new NoAliveBackendException("no alive backend");
                     }

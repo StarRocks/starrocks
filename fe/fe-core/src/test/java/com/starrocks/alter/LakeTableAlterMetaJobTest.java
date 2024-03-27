@@ -203,7 +203,7 @@ public class LakeTableAlterMetaJobTest {
     public void testRunPendingJob() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -219,7 +219,7 @@ public class LakeTableAlterMetaJobTest {
         FeConstants.runningUnitTest = false;
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -246,7 +246,7 @@ public class LakeTableAlterMetaJobTest {
     public void testDropTableBeforeCancel() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -260,7 +260,7 @@ public class LakeTableAlterMetaJobTest {
     public void testRunningJob() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -285,7 +285,7 @@ public class LakeTableAlterMetaJobTest {
     public void testFinishedRewritingJob() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
 
@@ -320,7 +320,7 @@ public class LakeTableAlterMetaJobTest {
     public void testReplay() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
 
