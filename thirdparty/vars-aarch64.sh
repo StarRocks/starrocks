@@ -56,3 +56,9 @@ STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.2.2/starca
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
 STARCACHE_MD5SUM="43b768470c712371df2a4620bf445b3f"
+
+# avx2ki for aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/boostkit/library/system?subtab=AVX2KI)
+AVX2KI_DOWNLOAD="https://kunpeng-repo.obs.cn-north-4.myhuaweicloud.com/Kunpeng%20BoostKit/Kunpeng%20BoostKit%2023.0.RC5/BoostKit-ksl_2.0.0.zip"
+AVX2KI_NAME="BoostKit-ksl_2.0.0.zip"
+AVX2KI_SOURCE="BoostKit-ksl_2.0.0"
+AVX2KI_MD5SUM="1bb221b173d8ed71bf1d08636469368b"

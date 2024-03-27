@@ -1,0 +1,19 @@
+--- /usr/local/ksl/include/operatoroverload.h	2023-09-14 18:39:40.000000000 +0800
++++ /usr/local/ksl/operatoroverload.h	2023-12-19 23:11:28.546116818 +0800
+@@ -448,6 +448,16 @@
+     return a;
+ }
+ 
++FORCE_INLINE
++__m256i operator ~ (const __m256i &a)
++{
++    __m256i ret;
++    ret.vect_s32[0] = vmvnq_s32(a.vect_s32[0]);
++    ret.vect_s32[1] = vmvnq_s32(a.vect_s32[1]);
++    return ret;
++    
++}
++
+ //  __m256 operator overloading
+ FORCE_INLINE
+ __m256 operator + (const __m256 &a, const __m256 &b)

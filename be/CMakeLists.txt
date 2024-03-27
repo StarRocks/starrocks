@@ -94,6 +94,8 @@ option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
+option(USE_AVX2KI "Build with AVX2KI on arm" OFF)
+
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
@@ -431,6 +433,10 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     endforeach()
 endif()
 
+if (${USE_AVX2KI} STREQUAL "ON")
+    LINK_LIBRARIES(${THIRDPARTY_DIR}/lib/libavx2neon.so)
+endif() 
+
 if (${WITH_STARCACHE} STREQUAL "ON")
     add_library(starcache STATIC IMPORTED GLOBAL)
     if ("${USE_STAROS}" STREQUAL "ON")
@@ -692,6 +698,10 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
+    if (${USE_AVX2KI})
+        add_definitions(-DUSE_AVX2KI)
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -lm -I ${THIRDPARTY_DIR}/ksl/include -L ${THIRDPARTY_DIR}/ksl/lib -lavx2ki")
+    endif()
 endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_USE_GLOG")
 
@@ -942,6 +952,13 @@ if (${WITH_STARCACHE} STREQUAL "ON")
         brpc
         starcache
         ${WL_END_GROUP}
+    )
+endif()
+
+if (${USE_AVX2KI} STREQUAL "ON")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        avx2neon
     )
 endif()
 

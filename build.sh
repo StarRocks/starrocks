@@ -168,6 +168,22 @@ fi
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
 fi
+if [[ -z ${USE_AVX2KI} ]]; then
+    if [[ "${MACHINE_TYPE}" == "aarch64"  && -f ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ]]; then
+        USE_AVX2KI=ON
+    else
+        USE_AVX2KI=OFF
+    fi
+elif [[ "${USE_AVX2KI}" == "ON" ]]; then
+    if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
+        USE_AVX2KI=OFF
+        echo "USE_AVX2KI=ON but it is not supported on non-aarch64 platform, will force it off"
+    elif [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ]]; then
+        USE_AVX2KI=OFF
+        echo "USE_AVX2KI=ON but missing depdency libraries(avx2ki), will force it off"
+    fi
+fi
+
 
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
@@ -264,6 +280,7 @@ echo "Get params:
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
+    USE_AVX2KI          -- $USE_AVX2KI
     USE_SSE4_2          -- $USE_SSE4_2
     JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
     PARALLEL            -- $PARALLEL
@@ -357,6 +374,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+                  -DUSE_AVX2KI=$USE_AVX2KI                              \
                   -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
@@ -524,6 +542,16 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
+
+    if [ "${WITH_CACHELIB}" == "ON"  ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
+        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
+    fi
+
+    if [ "${USE_AVX2KI}" == "ON"  ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/avx2ki
+        cp ${STARROCKS_THIRDPARTY}/installed/lib/libavx2neon.so ${STARROCKS_OUTPUT}/be/lib/avx2ki/libavx2neon.so.2.0.0
+    fi
 
     MSG="${MSG} √ ${MSG_BE}"
 fi
