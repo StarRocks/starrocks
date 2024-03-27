@@ -27,9 +27,8 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -74,13 +73,13 @@ public class PartitionDiffer {
     public PartitionDiffer() {
     }
 
-    public static PartitionDiffer build(MaterializedView materializedView, TaskRunContext context)
+    public static PartitionDiffer build(MaterializedView materializedView, Pair<String, String> partitionRange)
             throws AnalysisException {
         Range<PartitionKey> rangeToInclude = null;
         Column partitionColumn =
                 ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-        String start = context == null ? null : context.getProperties().get(TaskRun.PARTITION_START);
-        String end = context == null ? null : context.getProperties().get(TaskRun.PARTITION_END);
+        String start = partitionRange.first;
+        String end = partitionRange.second;
         if (start != null || end != null) {
             rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         }

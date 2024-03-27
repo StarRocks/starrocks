@@ -825,32 +825,56 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
                 "   PARTITION p2_20240322 VALUES LESS THAN ('2024-03-21'), \n" +
                 "   PARTITION p2_20240323 VALUES LESS THAN ('2024-04-21') \n" +
                 ") ");
-
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
-                "PARTITION BY date_trunc('day', observation_date)\n" +
-                "DISTRIBUTED BY HASH(leg_id)\n" +
-                "REFRESH ASYNC\n" +
-                "AS \n" +
-                "SELECT * FROM mv_union_t1 t1\n" +
-                "UNION ALL\n" +
-                "SELECT * FROM mv_union_t2 t2\n");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS mv_union_t4 (\n" +
+                "    leg_id VARCHAR(100) NOT NULL,\n" +
+                "    cabin_class VARCHAR(1) NOT NULL,\n" +
+                "    observation_date DATE NOT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY(leg_id, cabin_class)\n" +
+                "PARTITION BY RANGE(observation_date) (" +
+                "   PARTITION p2_20240321 VALUES LESS THAN ('2024-03-21'), \n" +
+                "   PARTITION p2_20240322 VALUES LESS THAN ('2024-03-22') \n" +
+                ") ");
 
         {
             Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
-                    starRocksAssert.refreshMvPartition("refresh materialized view mv1"));
+                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
+                            "PARTITION BY date_trunc('day', observation_date)\n" +
+                            "DISTRIBUTED BY HASH(leg_id)\n" +
+                            "REFRESH ASYNC\n" +
+                            "AS \n" +
+                            "SELECT * FROM mv_union_t1 t1\n" +
+                            "UNION ALL\n" +
+                            "SELECT * FROM mv_union_t2 t2\n"));
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }
 
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
-                "PARTITION BY date_trunc('day', observation_date)\n" +
-                "DISTRIBUTED BY HASH(leg_id)\n" +
-                "REFRESH ASYNC\n" +
-                "AS \n" +
-                "SELECT * FROM mv_union_t1 t1\n" +
-                "UNION ALL\n" +
-                "SELECT * FROM mv_union_t3 t2\n");
+        {
+            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
+                            "PARTITION BY date_trunc('day', observation_date)\n" +
+                            "DISTRIBUTED BY HASH(leg_id)\n" +
+                            "REFRESH ASYNC\n" +
+                            "AS \n" +
+                            "SELECT * FROM mv_union_t1 t1\n" +
+                            "UNION ALL\n" +
+                            "SELECT * FROM mv_union_t3 t2\n"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
+        }
 
         {
+            // create succeed, but refresh fail
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
+                    "PARTITION BY date_trunc('day', observation_date)\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "SELECT * FROM mv_union_t1 t1\n" +
+                    "UNION ALL\n" +
+                    "SELECT * FROM mv_union_t4 t2\n");
+            // add partition to child table
+            starRocksAssert.ddl("alter table mv_union_t4 add partition p20240325 values less than ('2024-03-25')");
+            starRocksAssert.ddl("alter table mv_union_t1 add partition p20240326 values less than ('2024-03-26')");
+
             Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
                     starRocksAssert.refreshMvPartition("refresh materialized view mv2"));
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));

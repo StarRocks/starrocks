@@ -940,6 +940,50 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void syncPartitionsForExpr(TaskRunContext context) {
+        Pair<String, String> partitionRange = Pair.create(
+                context.getProperties().get(TaskRun.PARTITION_START),
+                context.getProperties().get(TaskRun.PARTITION_END));
+        DiffResult result = computePartitionRangeDiff(db, materializedView, partitionRange);
+        if (result == null) {
+            return;
+        }
+        Map<String, Range<PartitionKey>> deletes = result.rangePartitionDiff.getDeletes();
+
+        // Delete old partitions and then add new partitions because the old and new partitions may overlap
+        for (String mvPartitionName : deletes.keySet()) {
+            dropPartition(db, materializedView, mvPartitionName);
+        }
+        LOG.info("The process of synchronizing materialized view [{}] delete partitions range [{}]",
+                materializedView.getName(), deletes);
+
+        // Create new added materialized views' ranges
+        Map<String, String> partitionProperties = getPartitionProperties(materializedView);
+        DistributionDesc distributionDesc = getDistributionDesc(materializedView);
+        Map<String, Range<PartitionKey>> adds = result.rangePartitionDiff.getAdds();
+        addRangePartitions(db, materializedView, adds, partitionProperties, distributionDesc);
+        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
+            String mvPartitionName = addEntry.getKey();
+            result.mvRangePartitionMap.put(mvPartitionName, addEntry.getValue());
+        }
+        LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
+                materializedView.getName(), adds);
+
+        // used to get partitions to refresh
+        Map<Table, Expr> tableToExprMap = materializedView.getTableToPartitionExprMap();
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef = SyncPartitionUtils
+                .generateBaseRefMap(result.refBaseTablePartitionMap, tableToExprMap, result.mvRangePartitionMap);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = SyncPartitionUtils
+                .generateMvRefMap(result.mvRangePartitionMap, tableToExprMap, result.refBaseTablePartitionMap);
+        mvContext.setMvRangePartitionMap(result.mvRangePartitionMap);
+        mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
+        mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
+        mvContext.setRefBaseTableRangePartitionMap(result.refBaseTablePartitionMap);
+        mvContext.setExternalRefBaseTableMVPartitionMap(result.refBaseTableMVPartitionMap);
+    }
+
+    public static DiffResult computePartitionRangeDiff(Database db,
+                                                       MaterializedView materializedView,
+                                                       Pair<String, String> partitionRange) {
         Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
         Map<Table, Column> partitionTableAndColumn = materializedView.getRelatedPartitionTableAndColumn();
         Preconditions.checkArgument(!partitionTableAndColumn.isEmpty());
@@ -966,54 +1010,40 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                     refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable)));
                 }
 
-                Column partitionColumn =
-                        (materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-                PartitionDiffer differ = PartitionDiffer.build(materializedView, context);
+                Column partitionColumn = (materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+                PartitionDiffer differ = PartitionDiffer.build(materializedView, partitionRange);
                 rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
                         refBaseTablePartitionMap.get(refBaseTable), mvRangePartitionMap, differ));
             }
 
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
-            return;
+            return null;
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
 
         // UnionALL MV may generate multiple PartitionDiff, needs to be merged into one PartitionDiff
         RangePartitionDiff rangePartitionDiff = RangePartitionDiff.merge(rangePartitionDiffList);
-        Map<String, Range<PartitionKey>> deletes = rangePartitionDiff.getDeletes();
+        return new DiffResult(mvRangePartitionMap, refBaseTablePartitionMap, refBaseTableMVPartitionMap,
+                rangePartitionDiff);
+    }
 
-        // Delete old partitions and then add new partitions because the old and new partitions may overlap
-        for (String mvPartitionName : deletes.keySet()) {
-            dropPartition(db, materializedView, mvPartitionName);
+    private static class DiffResult {
+        public final Map<String, Range<PartitionKey>> mvRangePartitionMap;
+        public final Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap;
+        public final Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap;
+        public final RangePartitionDiff rangePartitionDiff;
+
+        public DiffResult(Map<String, Range<PartitionKey>> mvRangePartitionMap,
+                          Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap,
+                          Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap,
+                          RangePartitionDiff rangePartitionDiff) {
+            this.mvRangePartitionMap = mvRangePartitionMap;
+            this.refBaseTablePartitionMap = refBaseTablePartitionMap;
+            this.refBaseTableMVPartitionMap = refBaseTableMVPartitionMap;
+            this.rangePartitionDiff = rangePartitionDiff;
         }
-        LOG.info("The process of synchronizing materialized view [{}] delete partitions range [{}]",
-                materializedView.getName(), deletes);
-
-        // Create new added materialized views' ranges
-        Map<String, String> partitionProperties = getPartitionProperties(materializedView);
-        DistributionDesc distributionDesc = getDistributionDesc(materializedView);
-        Map<String, Range<PartitionKey>> adds = rangePartitionDiff.getAdds();
-        addRangePartitions(db, materializedView, adds, partitionProperties, distributionDesc);
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            mvRangePartitionMap.put(mvPartitionName, addEntry.getValue());
-        }
-        LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
-                materializedView.getName(), adds);
-
-        // used to get partitions to refresh
-        Map<Table, Expr> tableToExprMap = materializedView.getTableToPartitionExprMap();
-        Map<Table, Map<String, Set<String>>> baseToMvNameRef = SyncPartitionUtils
-                .generateBaseRefMap(refBaseTablePartitionMap, tableToExprMap, mvRangePartitionMap);
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = SyncPartitionUtils
-                .generateMvRefMap(mvRangePartitionMap, tableToExprMap, refBaseTablePartitionMap);
-        mvContext.setMvRangePartitionMap(mvRangePartitionMap);
-        mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
-        mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
-        mvContext.setRefBaseTableRangePartitionMap(refBaseTablePartitionMap);
-        mvContext.setExternalRefBaseTableMVPartitionMap(refBaseTableMVPartitionMap);
     }
 
     private void syncPartitionsForList() {
