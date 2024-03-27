@@ -335,11 +335,6 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayDisableTableRecovery(disableTableRecoveryInfo);
                     break;
                 }
-                case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
-                    DisablePartitionRecoveryInfo disableRecoveryInfo = (DisablePartitionRecoveryInfo) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayDisablePartitionRecovery(disableRecoveryInfo);
-                    break;
-                }
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.getData();
                     globalStateMgr.replayErasePartition(Long.parseLong(partitionId.toString()));
@@ -1399,10 +1394,6 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DROP_TABLE, info);
         }
-    }
-
-    public void logDisablePartitionRecovery(long partitionId) {
-        logEdit(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId));
     }
 
     public void logDisableTableRecovery(List<Long> tableIds) {

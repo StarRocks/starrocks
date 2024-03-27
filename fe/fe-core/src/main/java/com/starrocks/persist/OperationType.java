@@ -901,7 +901,6 @@ public class OperationType {
     public static final short OP_REPLICATION_JOB = 13500;
 
     public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
-    public static final short OP_DISABLE_PARTITION_RECOVERY = 13511;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

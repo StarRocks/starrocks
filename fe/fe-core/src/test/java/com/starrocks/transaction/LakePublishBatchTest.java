@@ -21,7 +21,10 @@ import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -34,6 +37,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -300,6 +304,13 @@ public class LakePublishBatchTest {
                 getTransactionState(transactionId8);
         Assert.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
         Assert.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
+    }
+
+    @Test
+    public void testPublishLogVersion() throws Exception {
+        List<Tablet> tablets = new ArrayList<>();
+        tablets.add(new LakeTablet(1L));
+        Utils.publishLogVersion(tablets, 1, 1);
     }
 
     @Test
