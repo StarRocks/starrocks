@@ -1584,17 +1584,16 @@ public class LocalMetastore implements ConnectorMetadata {
         if (clause.hasMultiPartitions()) {
             PartitionDesc partitionDesc = clause.getPartitionDesc();
             if (partitionDesc instanceof MultiRangePartitionDesc) {
-
                 if (!(partitionInfo instanceof RangePartitionInfo)) {
-                    throw new DdlException("Batch deletion of partitions only support range partition tables.");
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO);
                 }
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
 
                 List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
                 if (partitionColumns.size() != 1) {
-                    throw new DdlException("Alter batch drop partition only support single range column.");
+                    ErrorReport.reportDdlException("%s", ErrorCode.ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS,
+                            partitionColumns.size());
                 }
-
                 Column firstPartitionColumn = partitionColumns.get(0);
                 MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
                 boolean isAutoPartitionTable = false;
@@ -1624,30 +1623,32 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionNames.addAll(singleRangePartitionDescs.stream()
                         .map(SingleRangePartitionDesc::getPartitionName).collect(Collectors.toList()));
             }
-        } else {
+        } else if (clause.getPartitionName() != null) {
             partitionNames.add(clause.getPartitionName());
+        } else if (clause.getPartitionNames() != null) {
+            partitionNames.addAll(clause.getPartitionNames());
         }
-        List<String> existPartition = Lists.newArrayList();
-        List<String> notExistPartition = Lists.newArrayList();
+        List<String> existPartitions = Lists.newArrayList();
+        List<String> notExistPartitions = Lists.newArrayList();
 
         for (String partitionName : partitionNames) {
             if (olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
-                existPartition.add(partitionName);
+                existPartitions.add(partitionName);
             } else {
-                notExistPartition.add(partitionName);
+                notExistPartitions.add(partitionName);
             }
         }
-        if (CollectionUtils.isNotEmpty(notExistPartition)) {
+        if (CollectionUtils.isNotEmpty(notExistPartitions)) {
             if (clause.isSetIfExists()) {
-                LOG.info("drop partition[{}] which does not exist", notExistPartition.toString());
-                if (CollectionUtils.isEmpty(existPartition)) {
+                LOG.info("drop partition[{}] which does not exist", notExistPartitions.toString());
+                if (CollectionUtils.isEmpty(existPartitions)) {
                     return;
                 }
             } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DROP_PARTITION_NON_EXISTENT, notExistPartition.toString());
+                ErrorReport.reportDdlException(ErrorCode.ERR_DROP_PARTITION_NON_EXISTENT, notExistPartitions.toString());
             }
         }
-        for (String partitionName : existPartition) {
+        for (String partitionName : existPartitions) {
             // drop
             if (isTempPartition) {
                 olapTable.dropTempPartition(partitionName, true);
@@ -1690,23 +1691,23 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("fail to refresh materialized views when dropping partition", e);
             }
         }
-        DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(),
-                isTempPartition, clause.isForceDrop(), partitionNames);
+        DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(), isTempPartition,
+                clause.isForceDrop(), partitionNames);
         GlobalStateMgr.getCurrentState().getEditLog().logDropPartition(info);
-        LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionNames.toString(), isTempPartition,
+        LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionNames, isTempPartition,
                 clause.isForceDrop());
     }
 
-    public void replayDropPartition(DropPartitionInfo info) {
+    public void replayDropPartition(DropPartitionInfo info, String partitionName) {
         Database db = this.getDb(info.getDbId());
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             if (info.isTempPartition()) {
-                olapTable.dropTempPartition(info.getPartitionName(), true);
+                olapTable.dropTempPartition(partitionName, true);
             } else {
-                olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
+                olapTable.dropPartition(info.getDbId(), partitionName, info.isForceDrop());
             }
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);

@@ -277,8 +277,11 @@ public enum ErrorCode {
     ERR_MULTI_SUB_PARTITION(5504, new byte[] {'4', '2', '0', '0', '0'},
             "Partition '%s' has sub partitions, should specify the partition id"),
     ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
-    ;
 
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO(1530, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch drop partition only support RangePartitionInfo"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(1531, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]");
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
 
