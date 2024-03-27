@@ -50,8 +50,6 @@ public class DropPartitionInfo implements Writable {
     private Long dbId;
     @SerializedName(value = "tableId")
     private Long tableId;
-    @SerializedName(value = "partitionName")
-    private String partitionName;
     @SerializedName(value = "isTempPartition")
     private boolean isTempPartition = false;
     @SerializedName(value = "forceDrop")
@@ -62,14 +60,6 @@ public class DropPartitionInfo implements Writable {
     private DropPartitionInfo() {
     }
 
-    public DropPartitionInfo(Long dbId, Long tableId, String partitionName, boolean isTempPartition,
-                             boolean forceDrop) {
-        this.dbId = dbId;
-        this.tableId = tableId;
-        this.partitionName = partitionName;
-        this.isTempPartition = isTempPartition;
-        this.forceDrop = forceDrop;
-    }
     public DropPartitionInfo(Long dbId, Long tableId, boolean isTempPartition, boolean forceDrop, List<String> partitionNames) {
         this.dbId = dbId;
         this.tableId = tableId;
@@ -77,7 +67,6 @@ public class DropPartitionInfo implements Writable {
         this.forceDrop = forceDrop;
         this.partitionNames = partitionNames;
     }
-
 
     public Long getDbId() {
         return dbId;
@@ -87,16 +76,20 @@ public class DropPartitionInfo implements Writable {
         return tableId;
     }
 
-    public String getPartitionName() {
-        return partitionName;
-    }
-
     public boolean isTempPartition() {
         return isTempPartition;
     }
 
     public boolean isForceDrop() {
         return forceDrop;
+    }
+
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionNames(List<String> partitionNames) {
+        this.partitionNames = partitionNames;
     }
 
     public static DropPartitionInfo read(DataInput in) throws IOException {
@@ -112,7 +105,7 @@ public class DropPartitionInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(dbId, tableId, partitionName);
+        return Objects.hashCode(dbId, tableId, partitionNames);
     }
 
     @Override
@@ -128,7 +121,7 @@ public class DropPartitionInfo implements Writable {
 
         return (dbId.equals(info.dbId))
                 && (tableId.equals(info.tableId))
-                && (partitionName.equals(info.partitionName))
+                && (partitionNames.equals(info.partitionNames))
                 && (isTempPartition == info.isTempPartition)
                 && (forceDrop == info.forceDrop);
     }

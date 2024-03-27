@@ -290,9 +290,11 @@ public enum ErrorCode {
     ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
 
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
-            "unsupported statement in shared_nothing mode")
-    ;
-
+            "unsupported statement in shared_nothing mode"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO(1530, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch drop partition only support RangePartitionInfo"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(1531, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]");
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
             " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
 
