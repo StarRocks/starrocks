@@ -1956,6 +1956,7 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
+    | '[' identifier '|' primaryExpression literalExpressionList']'
     ;
 
 hintMap
@@ -2283,6 +2284,10 @@ multiItemListPartitionDesc
 
 stringList
     : '(' string (',' string)* ')'
+    ;
+
+literalExpressionList
+    : '(' literalExpression (',' literalExpression)* ')'
     ;
 
 rangePartitionDesc

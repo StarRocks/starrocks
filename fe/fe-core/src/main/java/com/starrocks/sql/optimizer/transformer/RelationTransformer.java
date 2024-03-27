@@ -730,10 +730,25 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     .collect(Collectors.toList()));
         }
 
+        ScalarOperator skewColumn = null;
+        if (node.getSkewColumn() != null) {
+            skewColumn = SqlToScalarOperatorTranslator.translate(node.getSkewColumn(),
+                    expressionMapping, columnRefFactory,
+                    session, cteContext, leftOpt, null, false);
+        }
+
+        List<ScalarOperator> skewValues = Lists.newArrayList();
+        if (node.getSkewValues() != null) {
+            skewValues = node.getSkewValues().stream().map(SqlToScalarOperatorTranslator::translate).
+                    collect(Collectors.toList());
+        }
+
         LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder()
                 .setJoinType(node.getJoinOp())
                 .setOnPredicate(onPredicate)
                 .setJoinHint(node.getJoinHint())
+                .setSkewColumn(skewColumn)
+                .setSkewValues(skewValues)
                 .build();
 
         OptExprBuilder joinOptExprBuilder =

@@ -328,6 +328,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
 
+    public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -1498,6 +1500,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableExprPrunePartition = true;
 
     private int exprChildrenLimit = -1;
+
+    @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
+    private int skewJoinRandRange = 1000;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
@@ -2966,7 +2971,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getEnableArrayDistinctAfterAggOpt() {
-        return  enableArrayDistinctAfterAggOpt;
+        return enableArrayDistinctAfterAggOpt;
+    }
+
+    public int getSkewJoinRandRange() {
+        return skewJoinRandRange;
+    }
+
+    public void setSkewJoinRandRange(int skewJoinRandRange) {
+        this.skewJoinRandRange = skewJoinRandRange;
     }
 
     // Serialize to thrift object
