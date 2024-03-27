@@ -84,17 +84,17 @@ public class PruneGroupByKeysRule extends TransformationRule {
             ScalarOperator groupingExpr = projections.get(groupingKey);
             Preconditions.checkState(groupingExpr != null,
                     "cannot find grouping key from projections");
+
+            // if the output col of this groupingExpr had been added into the newGroupingKeys, it means this
+            // is a duplicate group by ket, we can skip it. But we need add a projection using after the agg
+            // to ensure the correct output columns and the projection should use agg output to rewrite.
             if (groupingExpr.isColumnRef()) {
                 ColumnRefOperator inputCol = (ColumnRefOperator) groupingExpr;
-                // if this column already exists, ignore it, otherwise, add it into new grouping key
-                // if the groupingExpr used cols had been added into the newGroupingKeys, it means other
-                // groupingKey had been added, we can skip it. But we need add a projection using after the agg
-                // to ensure the correct output columns and the projection should use agg output to rewrite.
                 if (!inputToOutputMap.containsKey(inputCol)) {
                     newGroupingKeys.add(groupingKey);
                     inputToOutputMap.put(inputCol, groupingKey);
                     newProjections.put(groupingKey, groupingExpr);
-                    newPostAggProjections.put(groupingKey, groupingKey);
+                    newPostAggProjections.put(groupingKey, inputToOutputMap.get(inputCol));
                 } else {
                     removedGroupingKeys.add(groupingKey);
                     newPostAggProjections.put(groupingKey, inputToOutputMap.get(inputCol));
