@@ -24,7 +24,8 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/block_manager.h"
-#include "exec/workgroup//scan_task_queue.h"
+#include "exec/spill/data_stream.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
@@ -66,7 +67,6 @@ public:
     [[nodiscard]] virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                                   uint32_t size) = 0;
 
-    // @TODO(silverbullet233)
     // Theoretically, the implementation of done and finalize interfaces only have calculation logic, and there is no need to do them separately.
     // However, there are some limitations at this stage:
     // 1. The pipeline scheduling mechanism does not support reentrancy. It is difficult to implement the yield mechanism in the computing thread. we can only rely on the yield mechanism of the scan task.
@@ -80,28 +80,23 @@ public:
         return Status::OK();
     }
     // call `finalize` to serialize data after `done` is called
-    // after `finalize` is successfully called, we can get serialized data by `get_next_serialized_data`.
     // NOTE: The implementation of `finalize` needs to ensure reentrancy in order to implement io task yield mechanism
-    virtual Status finalize(workgroup::YieldContext& yield_ctx) = 0;
+    virtual Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& block) = 0;
 
     virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {
         return Status::NotSupported("unsupport to call as_input_stream");
     }
 
-    StatusOr<Slice> get_next_serialized_data();
-    size_t get_serialized_data_size() const;
     virtual void reset() = 0;
 
     size_t num_rows() const { return _num_rows; }
 
 protected:
-    using MemoryBlockPtr = std::shared_ptr<MemoryBlock>;
     RuntimeState* _runtime_state;
     const size_t _max_buffer_size;
     std::unique_ptr<MemTracker> _tracker;
     Spiller* _spiller = nullptr;
     size_t _num_rows = 0;
-    MemoryBlockPtr _block;
     bool _is_done = false;
 };
 
@@ -118,7 +113,7 @@ public:
     [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                           uint32_t size) override;
 
-    Status finalize(workgroup::YieldContext& yield_ctx) override;
+    Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;
     void reset() override;
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
@@ -141,7 +136,7 @@ public:
                                           uint32_t size) override;
 
     Status done() override;
-    Status finalize(workgroup::YieldContext& yield_ctx) override;
+    Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;
     void reset() override;
 
 private:
