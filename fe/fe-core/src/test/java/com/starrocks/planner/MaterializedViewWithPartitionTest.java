@@ -177,9 +177,9 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
                 .contains("partial_mv_6")
-                .contains("TABLE: test_base_part\n" +
+                .contains("     TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 9: c2 < 3000, 9: c2 >= 2000\n" +
+                        "     PREDICATES: 10: c3 < 3000, 9: c2 < 3000, 9: c2 >= 2000\n" +
                         "     partitions=5/5");
         // test query delta
         sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
@@ -396,11 +396,11 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         // Union: MV table should be partition/distribution pruned.
         sql("select c1, c3, c2 from test_base_part")
                 .contains("UNION")
-                .contains("TABLE: partial_mv_7\n" +
+                .contains("     TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=4/5\n" +
                         "     rollup: partial_mv_7\n" +
-                        "     tabletRatio=4/8")
+                        "     tabletRatio=8/8")
                 .contains("TABLE: test_base_part");
 
         // match all
@@ -501,10 +501,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"storage_medium\" = \"HDD\"\n" +
-                    ")\n" +
                     "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part`\n" +
                     "WHERE `test_base_part`.`c3` < 1000\n" +
@@ -522,17 +518,13 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"storage_medium\" = \"HDD\"\n" +
-                    ")\n" +
                     "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part`\n" +
                     "WHERE `test_base_part`.`c3` < 1000\n" +
                     "GROUP BY `test_base_part`.`c3`, `test_base_part`.`c1`;");
 
             String query = "select c1, c3, sum(c4) from test_base_part where c3 < 2000 group by c1, c3;";
-            String plan = getFragmentPlan(query);
+            String plan = getFragmentPlan(query, "MV");
             PlanTestBase.assertContains(plan, "partial_mv_11", "TABLE: test_base_part\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/5");
@@ -556,10 +548,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"storage_medium\" = \"HDD\"\n" +
-                    ")\n" +
                     "AS SELECT `c1`, `c3`, sum(`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part_not_null`\n" +
                     "WHERE `c3` < 1000\n" +
@@ -577,10 +565,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"storage_medium\" = \"HDD\"\n" +
-                    ")\n" +
                     "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part`\n" +
                     "WHERE `test_base_part`.`c3` is null\n" +
@@ -598,10 +582,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "PARTITION BY (`c3`)\n" +
                     "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
                     "REFRESH MANUAL\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\",\n" +
-                    "\"storage_medium\" = \"HDD\"\n" +
-                    ")\n" +
                     "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
                     "FROM `test_mv`.`test_base_part`\n" +
                     "WHERE `test_base_part`.`c3` is not null\n" +

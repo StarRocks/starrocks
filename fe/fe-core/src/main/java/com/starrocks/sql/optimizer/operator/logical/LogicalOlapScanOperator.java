@@ -228,7 +228,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
-            builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
+            if (selectedPartitionId == null) {
+                builder.selectedPartitionId = null;
+            } else {
+                builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
+            }
             return this;
         }
 

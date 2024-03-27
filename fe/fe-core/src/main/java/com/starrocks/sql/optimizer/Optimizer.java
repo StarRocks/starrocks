@@ -373,6 +373,19 @@ public class Optimizer {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
+
+        // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
+        // and do partition predicate again.
+        // TODO: Do it in CBO if needed later.
+        if (MvUtils.isAppliedMVUnionRewrite(tree)) {
+            // Do predicate push down if union rewrite successes.
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+            // It's necessary for external table since its predicate is not used directly after push down.
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        }
     }
 
     private OptExpression logicalRuleRewrite(

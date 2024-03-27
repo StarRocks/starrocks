@@ -53,12 +53,15 @@ public class MVColumnPruner {
         }
     }
 
-    public OptExpression doPruneColumns(OptExpression project) {
-        Projection projection = project.getOp().getProjection();
+    public OptExpression doPruneColumns(OptExpression optExpression) {
+        Projection projection = optExpression.getOp().getProjection();
         // OptExpression after mv rewrite must have projection.
+        if (projection == null) {
+            return optExpression;
+        }
         Preconditions.checkState(projection != null);
         requiredOutputColumns = new ColumnRefSet(projection.getOutputColumns());
-        return project.getOp().accept(new ColumnPruneVisitor(), project, null);
+        return optExpression.getOp().accept(new ColumnPruneVisitor(), optExpression, null);
     }
 
     // Prune columns by top-down, only support SPJG/union operators.

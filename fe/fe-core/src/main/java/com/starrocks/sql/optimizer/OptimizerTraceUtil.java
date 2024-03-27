@@ -51,10 +51,39 @@ public class OptimizerTraceUtil {
         });
     }
 
+    public static void logMVPrepare(String format, Object... object) {
+        Tracers.log(Tracers.Module.MV, input -> {
+            String str = MessageFormatter.arrayFormat(format, object).getMessage();
+            Object[] args = new Object[] {"GLOBAL", str};
+            return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
+        });
+    }
+
+    public static void logMVPrepare(MaterializedView mv,
+                                    String format, Object... object) {
+        Tracers.log(Tracers.Module.MV, input -> {
+            String str = MessageFormatter.arrayFormat(format, object).getMessage();
+            Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
+            return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
+        });
+    }
+
     public static void logMVRewrite(String mvName, String format, Object... objects) {
         Tracers.log(Tracers.Module.MV, input -> {
             String str = MessageFormatter.arrayFormat(format, objects).getMessage();
             return MessageFormatter.format("[MV TRACE] [REWRITE {}] {}", mvName, str).getMessage();
+        });
+    }
+
+    public static void logMVRewrite(MaterializationContext mvContext, String format, Object... object) {
+        Tracers.log(Tracers.Module.MV, input -> {
+            Object[] args = new Object[] {
+                    mvContext.getMv().getName(),
+                    mvContext.getOptimizerContext().isInMemoPhase(),
+                    MessageFormatter.arrayFormat(format, object).getMessage()
+            };
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] {}",
+                    args).getMessage();
         });
     }
 

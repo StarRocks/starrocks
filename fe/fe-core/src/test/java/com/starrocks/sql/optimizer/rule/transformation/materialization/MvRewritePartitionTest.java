@@ -545,10 +545,11 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     " where a.id_date>='1991-03-30' " +
                     " group by a.t1a,a.id_date;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
-                    "     TABLE: table_with_day_partition\n" +
+            PlanTestBase.assertContains(plan, "     TABLE: table_with_day_partition\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=4/4");
+                    "     partitions=4/4\n" +
+                    "     rollup: table_with_day_partition\n" +
+                    "     tabletRatio=12/12");
         }
 
         {
@@ -636,7 +637,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                                     " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
                                     " where %s " +
                                     " group by a.t1a,a.id_date;", expect.partitionPredicate);
-                            String plan = getFragmentPlan(query);
+                            String plan = getFragmentPlan(query, "MV");
                             if (expect.isExpectRewrite) {
                                 if (expect.isCompensateUnionAll) {
                                     PlanTestBase.assertContains(plan, "UNION");
