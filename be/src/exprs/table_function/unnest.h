@@ -39,8 +39,6 @@ public:
         state->set_processed_rows(arg0->size());
         Columns result;
         if (arg0->has_null() || state->get_left_join_flag()) {
-            auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
-
             auto offset_column = col_array->offsets_column();
             auto compacted_offset_column = UInt32Column::create();
             compacted_offset_column->append_datum(Datum(0));
@@ -48,8 +46,8 @@ public:
             ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();
             int compact_offset = 0;
 
-            for (int row_idx = 0; row_idx < nullable_array_column->size(); ++row_idx) {
-                if (nullable_array_column->is_null(row_idx)) {
+            for (int row_idx = 0; row_idx < arg0->size(); ++row_idx) {
+                if (arg0->is_null(row_idx)) {
                     if (state->get_left_join_flag()) {
                         // to support unnest with null.
                         compact_offset -= 1;
