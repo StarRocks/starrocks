@@ -116,6 +116,11 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: [code-checker]
     name: Thirdparty Update
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        linux: [ centos7, ubuntu ]
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
@@ -125,10 +130,6 @@ jobs:
       (needs.code-checker.outputs.output1 == 'true' ||
       needs.code-checker.outputs.output2 == 'true' ||
       needs.code-checker.outputs.output3 == 'true')
-    outputs:
-      ip: ${{ steps.update-image.outputs.ip }}
-      instance_id: ${{ steps.update-image.outputs.instance_id }}
-      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
     steps:
       - name: clean
         run: |
@@ -140,26 +141,64 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Update Image
+      - name: Update Image (${{ matrix.linux }})
         id: update-image
+        if: needs.code-checker.outputs.output2 == 'true'
+        env:
+          linux_distro: ${{ matrix.linux }}
         run: |
-          if [[ "${{ needs.code-checker.outputs.output2 }}" == 'true' ]]; then
-              rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-              ./bin/run-pr-update-image.sh
-          fi
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/run-pr-update-image.sh
+
+      - name: Upload Thirdparty Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: THIRDPARTY-RESULT-${{ matrix.linux }}
+          path: image_cache.info
+          retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
-        if: always()
+        if: always() && needs.code-checker.outputs.output2 == 'true'
         run: |
-          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
-              cd ci-tool && source lib/init.sh
-              ./bin/elastic-cluster.sh --delete
-          fi
+          cd ci-tool && source lib/init.sh
+          ./bin/elastic-cluster.sh --delete
           rm -rf ${{ github.workspace }}/*
+
+  thirdparty-info:
+    runs-on: [self-hosted, normal]
+    needs:
+      - thirdparty-update
+    name: Thirdparty Info
+    outputs:
+      centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
+      ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
+    steps:
+      - name: Check Result
+        run: |
+          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
+            echo "::error:: Thirdparty Update Error!"
+            exit 1
+          fi
+
+      - name: Download Thirdparty Artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: THIRDPARTY-RESULT-*
+          path: outputs
+
+      - name: Read Info
+        id: info
+        if: needs.thirdparty-update.result == 'success'
+        run: |
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [code-checker, thirdparty-update]
+    needs: [thirdparty-info]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -187,8 +226,8 @@ jobs:
           SKIP_OSS: 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          if [[ "${{ needs.code-checker.outputs.output2 }}" == 'true' ]]; then
-              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+          if [[ "${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}" != '' ]]; then
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }}
