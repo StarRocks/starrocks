@@ -50,20 +50,22 @@ public class SubfieldAccessPathNormalizer {
     private static final Pattern JSON_ARRAY_PATTEN = Pattern.compile("^([\\w#.]+)((?:\\[[\\d:*]+])*)");
 
     /*
-    get_json_bool,   BOOL,      111111 00
-    get_json_int,    BIGINT,    111110 00
-    get_json_double, DOUBLE,    111100 00
-    get_json_string, VARCHAR,   111000 00
-    json_exists,     VARCHAR,   111000 00
-    json_query,      JSON,      000000 00
-    json_length,     JSON,      000000 00
+    get_json_int,    BIGINT,    011110 00, 120
+    get_json_double, DOUBLE,    011100 00, 112
+    get_json_bool,   VARCHAR,   100000 00, 128
+    get_json_string, VARCHAR,   100000 00, 128
+    json_exists,     VARCHAR,   100000 00, 128
+    json_query,      JSON,      000000 00, 0
+    json_length,     JSON,      000000 00, 0
+
+    bool will flatting as string, because it's need save string-literal(true/false)
      */
     private static final Map<PrimitiveType, Byte> JSON_COMPATIBLE_TYPE =
             ImmutableMap.<PrimitiveType, Byte>builder()
-                    .put(PrimitiveType.BOOLEAN, (byte) 0xFC)
-                    .put(PrimitiveType.BIGINT, (byte) (0xFC << 1))
-                    .put(PrimitiveType.DOUBLE, (byte) (0xFC << 2))
-                    .put(PrimitiveType.VARCHAR, (byte) (0xFC << 3))
+                    .put(PrimitiveType.BOOLEAN, (byte) 128)
+                    .put(PrimitiveType.BIGINT, (byte) 120)
+                    .put(PrimitiveType.DOUBLE, (byte) 112)
+                    .put(PrimitiveType.VARCHAR, (byte) 128)
                     .put(PrimitiveType.JSON, (byte) 0)
                     .build();
 
@@ -222,12 +224,11 @@ public class SubfieldAccessPathNormalizer {
                     List<String> flatPaths = Lists.newArrayList();
                     boolean isOverflown = formatJsonPath(path, flatPaths);
                     p.appendFieldNames(flatPaths);
-                    if (isOverflown) {
+                    if (isOverflown || FunctionSet.JSON_LENGTH.equals(call.getFnName())) {
                         p.setValueType(Type.JSON);
-                    } else if (FunctionSet.JSON_EXISTS.equals(call.getFnName())) {
+                    } else if (FunctionSet.JSON_EXISTS.equals(call.getFnName()) ||
+                            FunctionSet.JSON_OBJECT.equals(call.getFnName())) {
                         p.setValueType(Type.STRING);
-                    } else if (FunctionSet.JSON_LENGTH.equals(call.getFnName())) {
-                        p.setValueType(Type.JSON);
                     } else {
                         p.setValueType(call.getType());
                     }
