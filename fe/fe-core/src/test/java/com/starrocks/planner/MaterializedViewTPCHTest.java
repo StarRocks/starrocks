@@ -61,7 +61,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @ParameterizedTest(name = "Tpch.{0}")
     @MethodSource("tpchSource")
     public void testTPCH(String name, String sql, String resultFile) {
-        runFileUnitTest(sql, resultFile, true);
+        runFileUnitTest(sql, resultFile);
     }
 
     private static Stream<Arguments> tpchSource() {
