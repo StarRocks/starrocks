@@ -27,7 +27,7 @@ import java.util.List;
 public class ExternalSchemaProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Field").add("Type").add("Null").add("Key")
-            .add("Default").add("Extra")
+            .add("Default").add("Extra").add("Comment")
             .build();
 
     private Table table;
@@ -56,7 +56,8 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
                     column.isAllowNull() ? "Yes" : "No",
                     ((Boolean) column.isKey()).toString(),
                     DEFAULT_STR,
-                    extraStr);
+                    extraStr,
+                    column.getComment());
             result.addRow(rowList);
         }
         return result;
