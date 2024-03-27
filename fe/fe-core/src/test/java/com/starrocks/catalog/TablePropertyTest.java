@@ -17,7 +17,10 @@
 
 package com.starrocks.catalog;
 
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import org.junit.After;
 import org.junit.Assert;
@@ -75,7 +78,6 @@ public class TablePropertyTest {
         in.close();
     }
 
-
     @Test
     public void testBuildDataCachePartitionDuration() throws IOException {
         // 1. Write objects to file
@@ -93,6 +95,35 @@ public class TablePropertyTest {
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         TableProperty readTableProperty = TableProperty.read(in);
+        Assert.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
+        in.close();
+    }
+
+    @Test
+    public void testBuildDataCacheEnable() throws IOException {
+        // 1. Write objects to file
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+
+        HashMap<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+        TableProperty tableProperty = new TableProperty(properties);
+        tableProperty.write(out);
+        out.flush();
+        out.close();
+
+        // 2. Read objects from file
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+
+        TableProperty readTableProperty = TableProperty.read(in);
+        // test setting datacache.enable while the storageInfo of TableProperty is null
+        Assert.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
+
+        // test setting datacache.enable after setting the storageInfo of TableProperty
+        readTableProperty.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
         Assert.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
         in.close();
     }

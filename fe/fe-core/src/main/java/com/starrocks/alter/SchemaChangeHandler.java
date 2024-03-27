@@ -144,6 +144,16 @@ public class SchemaChangeHandler extends AlterHandler {
     // check "__doris_shadow_" to prevent compatibility problems
     public static final String SHADOW_NAME_PRFIX_V1 = "__doris_shadow_";
 
+    // List of properties that can go with LocalMetastore.alterTableProperties()
+    private static final List<String> COMMON_ALTER_PROPERTIES = new ImmutableList.Builder<String>()
+            .add(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+            .add(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+            .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
+            .add(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)
+            .add(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)
+            .add(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)
+            .build();
+
     public SchemaChangeHandler() {
         super("schema change");
     }
@@ -1526,19 +1536,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
                     return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
-                    return null;
-                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+                } else if (properties.keySet().stream().anyMatch(COMMON_ALTER_PROPERTIES::contains)) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     return null;
                 }

@@ -136,6 +136,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
@@ -145,6 +146,7 @@ import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
+import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateDbInfo;
@@ -3022,7 +3024,9 @@ public class LocalMetastore implements ConnectorMetadata {
                                             partition.getId(),
                                             hdd,
                                             (short) -1,
-                                            partitionInfo.getIsInMemory(partition.getId()));
+                                            partitionInfo.getIsInMemory(partition.getId()),
+                                            partitionInfo.getDataCacheInfo(partition.getId()) != null &&
+                                                    partitionInfo.getDataCacheInfo(partition.getId()).isEnabled());
                             GlobalStateMgr.getCurrentState().getEditLog().logModifyPartition(info);
                         }
                     } // end for partitions
@@ -4152,6 +4156,49 @@ public class LocalMetastore implements ConnectorMetadata {
                                 ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+                String dataCacheEnable = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE);
+                boolean isEnable = Boolean.parseBoolean(dataCacheEnable);
+
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.WRITE);
+                try {
+                    if ((table instanceof LakeTable) || (table instanceof LakeMaterializedView)) {
+                        Collection<Partition> partitions = table.getPartitions();
+                        List<Partition> partitionsList = new ArrayList<>(partitions);
+                        GlobalStateMgr.getCurrentState().getStarOSAgent().updateShardGroup(partitionsList, isEnable);
+                    } else {
+                        throw new DdlException("Property 'datacache.enable' is only supported in shared-data mode");
+                    }
+                    tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, dataCacheEnable);
+                    tableProperty.buildDataCacheEnable();
+
+                    // When modifying table's datacache.enable, you also need to modify the datacache info in the partitions.
+                    Collection<Partition> partitions = table.getPartitions();
+                    PartitionInfo partitionInfo = table.getPartitionInfo();
+                    List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
+                    for (Partition partition : partitions) {
+                        DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                        boolean asyncWriteBack = dataCacheInfo == null ? false : dataCacheInfo.isAsyncWriteBack();
+                        partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(isEnable, asyncWriteBack));
+
+                        ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
+                                null, // DataProperty, Setting it to null means it will have no effect during replay.
+                                (short) -1,   // ReplicationNum, Setting it to -1 means it will have no effect during replay.
+                                partitionInfo.getIsInMemory(partition.getId()), isEnable);
+                        modifyPartitionInfos.add(info);
+                    }
+                    GlobalStateMgr.getCurrentState().getEditLog().logBatchModifyPartition(
+                            new BatchModifyPartitionsInfo(modifyPartitionInfos));
+
+                    ModifyTablePropertyOperationLog info =
+                            new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                                    ImmutableMap.of(key, propertiesToPersist.get(key)));
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+                } finally {
+                    locker.unLockDatabase(db, LockType.WRITE);
+                }
+            }
         }
     }
 
@@ -4196,6 +4243,14 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             String locations = PropertyAnalyzer.analyzeLocation(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+            try {
+                PropertyAnalyzer.analyzeDataCacheEnable(properties);
+                results.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, null);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -4248,7 +4303,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // log
         ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
-                newDataProperty, replicationNum, isInMemory);
+                newDataProperty, replicationNum, isInMemory,
+                partitionInfo.getDataCacheInfo(partition.getId()) != null &&
+                        partitionInfo.getDataCacheInfo(partition.getId()).isEnabled());
         GlobalStateMgr.getCurrentState().getEditLog().logModifyPartition(info);
         LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getOriginName(), table.getName(),
                 partition.getName(), replicationNum);
