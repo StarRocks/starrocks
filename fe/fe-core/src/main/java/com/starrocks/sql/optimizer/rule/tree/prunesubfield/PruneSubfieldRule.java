@@ -137,8 +137,6 @@ public class PruneSubfieldRule extends TransformationRule {
         private static final Map<PrimitiveType, Function> SUPPORT_CAST_TYPE;
 
         static {
-            Function jsonBool = Expr.getBuiltinFunction(FunctionSet.GET_JSON_BOOL,
-                    new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
             Function jsonInt = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT,
                     new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
             Function jsonDouble = Expr.getBuiltinFunction(FunctionSet.GET_JSON_DOUBLE,
@@ -147,7 +145,6 @@ public class PruneSubfieldRule extends TransformationRule {
                     new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
 
             SUPPORT_GET_TYPE = ImmutableMap.<PrimitiveType, Function>builder()
-                    .put(PrimitiveType.BOOLEAN, jsonBool)
                     .put(PrimitiveType.BIGINT, jsonInt)
                     .put(PrimitiveType.DOUBLE, jsonDouble)
                     .put(PrimitiveType.VARCHAR, jsonString)
