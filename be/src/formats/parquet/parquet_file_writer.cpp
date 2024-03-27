@@ -62,6 +62,8 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
                  location = _location, state = _runtime_state, execution_state = _execution_state] {
 #ifndef BE_TEST
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+        CurrentThread::current().set_query_id(state->query_id());
+        CurrentThread::current().set_fragment_instance_id(state->fragment_instance_id());
 #endif
         {
             // commit until all rowgroup flushing tasks have been done
@@ -122,6 +124,8 @@ std::future<Status> ParquetFileWriter::_flush_row_group() {
                  execution_state = _execution_state] {
 #ifndef BE_TEST
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+        CurrentThread::current().set_query_id(state->query_id());
+        CurrentThread::current().set_fragment_instance_id(state->fragment_instance_id());
 #endif
         try {
             rowgroup_writer->close();
@@ -131,6 +135,8 @@ std::future<Status> ParquetFileWriter::_flush_row_group() {
             LOG(WARNING) << exception;
             p->set_value(exception);
         }
+
+        CHECK(false);
 
         {
             std::lock_guard lock(execution_state->mu);
