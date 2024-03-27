@@ -288,17 +288,19 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     // Only support simple like predicate for now
     // Root must be LIKE, and left child must be ColumnRef, which satisfy simple like predicate
     // format as: col LIKE xxx, xxx can be any expr with string type
-    auto* vectorized_function_call = dynamic_cast<VectorizedFunctionCallExpr*>(_expr_ctxs[0]->root());
     bool vaild_pred = false;
-    if (vectorized_function_call && boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) == LIKE_FN_NAME &&
-        _expr_ctxs[0]->root()->get_num_children() >= 1) {
-        auto first_child = dynamic_cast<ColumnRef*>(_expr_ctxs[0]->root()->get_child(0));
-        if (first_child != nullptr) {
-            vaild_pred = true;
-        }
+    auto* vectorized_function_call = dynamic_cast<VectorizedFunctionCallExpr*>(_expr_ctxs[0]->root());
+    if (vectorized_function_call && LIKE_FN_NAME == boost::to_lower_copy(vectorized_function_call->get_function_desc()->name) &&
+        _expr_ctxs[0]->root()->get_num_children() == 2 &&
+        _expr_ctxs[0]->root()->get_child(0)->node_type() == TExprNodeType::SLOT_REF) {
+        vaild_pred = true;
     }
     if (!vaild_pred) {
-        return Status::NotSupported("Not supported function call in inverted index");
+        std::stringstream ss;
+        ss << "Not supported function call in inverted index, expr predicate: "
+           << (_expr_ctxs[0]->root() != nullptr ? _expr_ctxs[0]->root()->debug_string() : "");
+        LOG(WARNING) << ss.str();
+        return Status::NotSupported(ss.str());
     }
     auto* like_target = dynamic_cast<VectorizedLiteral*>(vectorized_function_call->get_child(1));
     RETURN_IF(!like_target, Status::NotSupported("Not supported like predicate parameters"));
