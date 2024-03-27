@@ -136,8 +136,6 @@ std::future<Status> ParquetFileWriter::_flush_row_group() {
             p->set_value(exception);
         }
 
-        CHECK(false);
-
         {
             std::lock_guard lock(execution_state->mu);
             execution_state->has_unfinished_task = false;
