@@ -123,6 +123,8 @@ std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
                  row_counter = _row_counter, location = _location, state = _runtime_state] {
 #ifndef BE_TEST
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+        CurrentThread::current().set_query_id(state->query_id());
+        CurrentThread::current().set_fragment_instance_id(state->fragment_instance_id());
 #endif
         FileWriter::CommitResult result{
                 .io_status = Status::OK(), .format = ORC, .location = location, .rollback_action = rollback};
