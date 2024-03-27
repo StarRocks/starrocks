@@ -356,7 +356,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
                         Long backendId = Utils.chooseNodeId(lakeTablet);
                         if (backendId == null) {
-                            throw new AlterCancelException("No alivptest_sort_key_dup_tble backend");
+                            throw new AlterCancelException("No alive backend");
                         }
                         countDownLatch.addMark(backendId, shadowTabletId);
 
