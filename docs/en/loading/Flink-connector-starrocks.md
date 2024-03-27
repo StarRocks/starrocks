@@ -115,7 +115,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | sink.properties.max_filter_ratio  | No           | 0                 | The maximum error tolerance of the Stream Load. It's the maximum percentage of data records that can be filtered out due to inadequate data quality. Valid values: `0` to `1`. Default value: `0`. See [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) for details.                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.parallelism                  | No           | NONE              | The parallelism of the connector. Only available for Flink SQL. If not set, Flink planner will decide the parallelism. In the scenario of multi-parallelism, users need to guarantee data is written in the correct order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.properties.strict_mode | No | false | Specifies whether to enable the strict mode for Stream Load. It affects the loading behavior when there are unqualified rows, such as inconsistent column values. Valid values: `true` and `false`. Default value: `false`. See [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) for details. |
-
+ 
 ## Data type mapping between Flink and StarRocks
 
 | Flink data type                   | StarRocks data type   |
@@ -441,16 +441,16 @@ There are several ways to implement a Flink DataStream job according to the type
 
 ### Synchronize data with Flink CDC 3.0 (with schema change supported)
 
-[Flink CDC 3.0](https://github.com/ververica/flink-cdc-connectors/releases) framework can be used
-to easily [build a streaming ELT pipeline from CDC sources](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) (such as MySQL and Kafka) to StarRocks. The pipeline can synchronize whole database, merged sharding tables, and schema changes from sources to StarRocks.
+[Flink CDC 3.0](https://nightlies.apache.org/flink/flink-cdc-docs-stable) framework can be used
+to easily build a streaming ELT pipeline from CDC sources (such as MySQL and Kafka) to StarRocks. The pipeline can synchronize whole database, merged sharding tables, and schema changes from sources to StarRocks.
 
-Since v1.2.9, the Flink connector for StarRocks is integrated into this framework as [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html). The StarRocks Pipeline Connector supports:
+Since v1.2.9, the Flink connector for StarRocks is integrated into this framework as [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/starrocks). The StarRocks Pipeline Connector supports:
 
 - Automatic creation of databases and tables
 - Schema change synchronization
 - Full and incremental data synchronization
 
-For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html).
+For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
 
 ## Best practices
 

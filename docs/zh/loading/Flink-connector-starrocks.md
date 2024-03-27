@@ -147,7 +147,7 @@ Flink connector JAR 文件的命名格式如下：
 
 - 如果您希望 sink 保证 exactly-once 语义，则建议升级 StarRocks 到 2.5 或更高版本，并将 Flink connector 升级到 1.2.4 或更高版本。
 
-  - 自 2.4 版本 StarRocks 开始支持 [Stream Load 事务接口](https://docs.starrocks.io/zh-cn/latest/loading/Stream_Load_transaction_interface)。自 Flink connector 1.2.4 版本起， Sink 基于 Stream Load 事务接口重新设计 exactly-once 的实现，相较于原来基于 Stream Load 非事务接口实现的 exactly-once，降低了内存使用和 checkpoint 耗时，提高了作业的实时性和稳定性。
+  - 自 2.4 版本 StarRocks 开始支持 [Stream Load 事务接口](./Stream_Load_transaction_interface.md)。自 Flink connector 1.2.4 版本起， Sink 基于 Stream Load 事务接口重新设计 exactly-once 的实现，相较于原来基于 Stream Load 非事务接口实现的 exactly-once，降低了内存使用和 checkpoint 耗时，提高了作业的实时性和稳定性。
   - 自 Flink connector 1.2.4 版本起，如果 StarRocks 支持 Stream Load 事务接口，则 Sink 默认使用 Stream Load 事务接口，如果需要使用 Stream Load  非事务接口实现，则需要配置 `sink.version` 为`V1`。
   > **注意**
   >
@@ -168,7 +168,7 @@ Flink connector JAR 文件的命名格式如下：
   
     请注意，当您设置一个较大的值时，则建议指定 `sink.label-prefix` 的值，则 Flink connector 可以根据 label 前缀和检查点中的一些信息来清理未完成的事务，而不是因事务超时后由 StarRocks 清理（这可能会导致数据丢失）。
 
-  - `label_keep_max_second` 和 `label_keep_max_num`：StarRocks FE 参数，默认值分别为 `259200` 和 `1000`。更多信息，参见[FE 配置](../loading/Loading_intro.md#fe-配置)。`label_keep_max_second` 的值需要大于 Flink job 的停止时间。否则，Flink connector 无法使用保存在 Flink 的 savepoint 或 checkpoint 中的事务 lable 来检查事务在 StarRocks 中的状态，并判断这些事务是否已提交，最终可能导致数据丢失。
+  - `label_keep_max_second` 和 `label_keep_max_num`：StarRocks FE 参数，默认值分别为 `259200` 和 `1000`。更多信息，参见[FE 配置](./loading_introduction/loading_considerations.md#fe-配置)。`label_keep_max_second` 的值需要大于 Flink job 的停止时间。否则，Flink connector 无法使用保存在 Flink 的 savepoint 或 checkpoint 中的事务 label 来检查事务在 StarRocks 中的状态，并判断这些事务是否已提交，最终可能导致数据丢失。
 
   您可以使用 `ADMIN SET FRONTEND CONFIG` 修改上述配置。
 
@@ -180,7 +180,7 @@ Flink connector JAR 文件的命名格式如下：
 
 ### Flush 策略
 
-Flink connector 先在内存中 buffer 数据，然后通过 Stream Load 将其一次性 flush 到 StarRocks。在 at-least-once 和 exactly-once 场景中使用不同的方式触发 flush 。
+Flink connector 先在内存中 buffer 数据，然后通过 Stream Load 将其一次性 flush 到 StarRocks。在 at-least-once 和 exactly-once 场景中使用不同的方式触发 flush。
 
 对于 at-least-once，在满足以下任何条件时触发 flush：
 
@@ -417,15 +417,15 @@ DISTRIBUTED BY HASH(id);
 
 ### 使用 Flink CDC 3.0 同步数据（支持 schema change）
 
-[Flink CDC 3.0 框架](https://github.com/ververica/flink-cdc-connectors/releases)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建[流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html)。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
+[Flink CDC 3.0 框架](https://nightlies.apache.org/flink/flink-cdc-docs-stable)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建流式 ELT 管道。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
 
-自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html)。StarRocks Pipeline Connector 支持：
+自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/starrocks)。StarRocks Pipeline Connector 支持：
 
 - 自动创建数据库/表
 - 同步 schema change
 - 同步全量和增量数据
 
-快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html)。
+快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks)。
 
 ## 最佳实践
 
