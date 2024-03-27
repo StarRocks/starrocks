@@ -129,7 +129,7 @@ function: manual_compact("sort_key_uni_tbl_with_rollup", "uni_test")
 select * from uni_test;
 
 alter table uni_test add rollup r1 (k1,k2,v3,v1);
-wait_alter_table_finish("rollup", 8);
+function: wait_alter_table_finish("rollup", 8)
 
 alter table uni_test order by (k1,k2);
 function: wait_alter_table_finish()
