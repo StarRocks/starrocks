@@ -12,10 +12,7 @@ ENGINE=file
 PROPERTIES
 (
     "path" = "oss://${oss_bucket}/test_orc_build_search_argument/${uuid0}/",
-    "format" = "orc",
-    "aws.s3.access_key" = "${oss_ak}",
-    "aws.s3.secret_key" = "${oss_sk}",
-    "aws.s3.endpoint" = "${oss_endpoint}"
+    "format" = "orc"
 );
 
 select count(*) from multi_stripes;
