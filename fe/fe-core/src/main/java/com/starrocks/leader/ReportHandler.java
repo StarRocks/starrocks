@@ -1169,6 +1169,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             // get negative max rowset creation time or too close to the max rowset creation time, unmigratable
             if (maxRowsetCreationTime < 0 || System.currentTimeMillis() - maxRowsetCreationTime * 1000 <=
                     Config.primary_key_disk_schedule_time * 1000) {
+                LOG.warn("primary key tablet {} can not be migrated, " +
+                        "because the creation time of the latest row set is less than {} seconds than the current time",
+                        tablet.getId(), Config.primary_key_disk_schedule_time);
                 return false;
             }
 
