@@ -205,7 +205,7 @@ start_fe_no_meta()
         while true
         do
             log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as follower ..."
-            mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
+            mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u starrocks --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
             # check if added successful
             if show_frontends $svc | grep -q -w "$MYSELF" &>/dev/null ; then
                 break;
