@@ -107,6 +107,14 @@ private:
     const std::function<void()> _rollback_action;
     PriorityThreadPool* _executors = nullptr;
     RuntimeState* _runtime_state = nullptr;
+
+    struct ExecutionState {
+        std::mutex mu;
+        std::condition_variable cv;
+        bool has_unfinished_task = false;
+    };
+
+    std::shared_ptr<ExecutionState> _execution_state = std::make_shared<ExecutionState>();
 };
 
 class ParquetFileWriterFactory : public FileWriterFactory {

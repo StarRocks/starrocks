@@ -47,7 +47,7 @@ std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
     if (auto status = _rowgroup_writer->write(chunk.get()); !status.ok()) {
         return make_ready_future(std::move(status));
     }
-    if (_rowgroup_writer->estimated_buffered_bytes() > _writer_options->rowgroup_size) {
+    if (_rowgroup_writer->estimated_buffered_bytes() >= _writer_options->rowgroup_size) {
         return _flush_row_group();
     }
     return make_ready_future(Status::OK());
@@ -59,10 +59,16 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
 
     auto task = [writer = _writer, output_stream = _output_stream, p = promise,
                  has_field_id = _writer_options->column_ids.has_value(), rollback = _rollback_action,
-                 location = _location, state = _runtime_state] {
+                 location = _location, state = _runtime_state, execution_state = _execution_state] {
 #ifndef BE_TEST
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 #endif
+        {
+            // commit until all rowgroup flushing tasks have been done
+            std::unique_lock lock(execution_state->mu);
+            execution_state->cv.wait(lock, [&]() { return !execution_state->has_unfinished_task; });
+        }
+
         FileWriter::CommitResult result{
                 .io_status = Status::OK(), .format = PARQUET, .location = location, .rollback_action = rollback};
         try {
@@ -112,20 +118,31 @@ std::future<Status> ParquetFileWriter::_flush_row_group() {
     auto promise = std::make_shared<std::promise<Status>>();
     std::future<Status> future = promise->get_future();
 
-    auto task = [rowgroup_writer = _rowgroup_writer, p = promise, state = _runtime_state] {
+    auto task = [rowgroup_writer = _rowgroup_writer, p = promise, state = _runtime_state,
+                 execution_state = _execution_state] {
 #ifndef BE_TEST
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 #endif
         try {
             rowgroup_writer->close();
+            p->set_value(Status::OK());
         } catch (const ::parquet::ParquetStatusException& e) {
             Status exception = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
             LOG(WARNING) << exception;
             p->set_value(exception);
-            return;
         }
-        p->set_value(Status::OK());
+
+        {
+            std::lock_guard lock(execution_state->mu);
+            execution_state->has_unfinished_task = false;
+            execution_state->cv.notify_one();
+        }
     };
+
+    {
+        std::lock_guard lock(_execution_state->mu);
+        _execution_state->has_unfinished_task = true;
+    }
 
     if (_executors) {
         bool ok = _executors->try_offer(task);
