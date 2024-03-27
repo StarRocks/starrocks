@@ -191,6 +191,7 @@ public class IcebergApiConverterTest {
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         Assert.assertEquals("table {\n" +
+<<<<<<< HEAD
                 "  1: c1: required boolean ()\n" +
                 "  2: c2: required int ()\n" +
                 "  3: c3: required long ()\n" +
@@ -206,6 +207,24 @@ public class IcebergApiConverterTest {
                 "  13: c13: required list<int> ()\n" +
                 "  14: c14: required map<int, int> ()\n" +
                 "  15: c15: required struct<19: col1: optional int> ()\n" +
+=======
+                "  1: c1: required boolean\n" +
+                "  2: c2: required int\n" +
+                "  3: c3: required long\n" +
+                "  4: c4: required float\n" +
+                "  5: c5: required double\n" +
+                "  6: c6: required date\n" +
+                "  7: c7: required timestamp\n" +
+                "  8: c8: required string\n" +
+                "  9: c9: required string\n" +
+                "  10: c10: required decimal(-1, -1)\n" +
+                "  11: c11: required decimal(-1, -1)\n" +
+                "  12: c12: required decimal(-1, -1)\n" +
+                "  13: c13: required list<int>\n" +
+                "  14: c14: required map<int, int>\n" +
+                "  15: c15: required struct<20: col1: optional int>\n" +
+                "  16: c16: required time\n" +
+>>>>>>> 34aaff5df9 ([Enhancement] Skip to write Iceberg table/column comment if comment is empty (#43127))
                 "}", schema.toString());
 
         PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, Lists.newArrayList("c1"));

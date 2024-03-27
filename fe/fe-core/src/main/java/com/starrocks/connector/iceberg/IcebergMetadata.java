@@ -215,6 +215,13 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
+<<<<<<< HEAD
+=======
+        String comment = stmt.getComment();
+        if (comment != null && !comment.isEmpty()) {
+            properties.put(COMMENT, comment);
+        }
+>>>>>>> 34aaff5df9 ([Enhancement] Skip to write Iceberg table/column comment if comment is empty (#43127))
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
         return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
