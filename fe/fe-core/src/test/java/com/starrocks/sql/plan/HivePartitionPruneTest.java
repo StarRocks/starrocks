@@ -173,4 +173,20 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
     }
+    @Test
+    public void testWithDuplicatePartition() throws Exception {
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition", "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01'",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour=6",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour>0",
+                "partitions=2/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour=0",
+                "partitions=0/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour > 10",
+                "partitions=0/2");
+        assertPlanContains("select * from hive0.partitioned_db.duplicate_partition where day='2012-01-01' and hour < 10",
+                "partitions=2/2");
+    }
 }
