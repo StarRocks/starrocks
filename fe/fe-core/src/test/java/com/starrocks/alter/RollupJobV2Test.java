@@ -106,6 +106,24 @@ public class RollupJobV2Test extends DDLTestBase {
         GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
     }
 
+
+    private void waitAlterJobDone(Map<Long, AlterJobV2> alterJobs) throws Exception {
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            while (!alterJobV2.getJobState().isFinalState()) {
+                LOG.info("alter job {} is running. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
+                Thread.sleep(1000);
+            }
+            LOG.info("alter job {} is done. state: {}", alterJobV2.getJobId(), alterJobV2.getJobState());
+            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(alterJobV2.getDbId());
+            OlapTable tbl = (OlapTable) db.getTable(alterJobV2.getTableId());
+            while (tbl.getState() != OlapTable.OlapTableState.NORMAL) {
+                Thread.sleep(1000);
+            }
+        }
+    }
+
     @Test
     public void testRunRollupJobConcurrentLimit() throws UserException {
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
@@ -164,18 +182,7 @@ public class RollupJobV2Test extends DDLTestBase {
         // runWaitingTxnJob
         rollupJob.runWaitingTxnJob();
         assertEquals(AlterJobV2.JobState.RUNNING, rollupJob.getJobState());
-
-        int retryCount = 0;
-        int maxRetry = 5;
-        while (retryCount < maxRetry) {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            rollupJob.runRunningJob();
-            if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
-                break;
-            }
-            retryCount++;
-            LOG.info("rollupJob is waiting for JobState retryCount:" + retryCount);
-        }
+        waitAlterJobDone(alterJobsV2);
 
         // finish alter tasks
         assertEquals(AlterJobV2.JobState.FINISHED, rollupJob.getJobState());
