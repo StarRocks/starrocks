@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -41,6 +42,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ConstantFunction;
 import org.apache.commons.collections4.MapUtils;
@@ -49,10 +51,12 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.util.SizeEstimator;
 
 import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
 import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 
 /**
@@ -133,6 +137,65 @@ public class MetaFunctions {
         } finally {
             locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
         }
+    }
+
+    /**
+     * Return verbose metadata of a materialized-view
+     */
+    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR, BOOLEAN}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvPlan(ConstantOperator mvName, ConstantOperator useCache) {
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not materialized view");
+        }
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
+            MaterializedView mv = (MaterializedView) table;
+            List<MvPlanContext> planContexts =
+                    CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, useCache.getBoolean());
+            String plan = "";
+            return ConstantOperator.createVarchar(plan);
+        } finally {
+            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+        }
+    }
+
+    /**
+     * Return verbose metadata of a materialized-view
+     */
+    @ConstantFunction(name = "clear_mv_plan_cache", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator clearMvPlanCache(ConstantOperator mvName) {
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        if (!table.isMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    tableName + " is not materialized view");
+        }
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
+            MaterializedView mv = (MaterializedView) table;
+            CachingMvPlanContextBuilder.getInstance().invalidateFromCache(mv, false);
+            return ConstantOperator.createVarchar("success");
+        } catch (Exception e) {
+            return ConstantOperator.createVarchar("failed");
+        } finally {
+            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+        }
+    }
+
+    /**
+     * Return verbose metadata of a materialized-view
+     */
+    @ConstantFunction(name = "clear_mv_plan_cache", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator clearMvPlanCache() {
+        CachingMvPlanContextBuilder.getInstance().rebuildCache();
+        return ConstantOperator.createVarchar("success");
     }
 
     /**
