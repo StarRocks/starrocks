@@ -39,3 +39,6 @@ select id, scores, unnest from student_score left join unnest([1, 2]) as unnest 
 
 -- not support left join generate_series
 select id, scores, gen from student_score left join generate_series(1, 3) as t(gen) on true order by 1, 3;
+
+-- multi-unnest
+select * from student_score left join unnest(scores, []) on true order by 1, 3;
