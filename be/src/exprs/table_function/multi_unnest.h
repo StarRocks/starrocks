@@ -63,21 +63,30 @@ public:
                     max_length_array_size = array_element_length;
                 }
             }
-            compacted_offset_column->append(offset + max_length_array_size);
-            offset += max_length_array_size;
+            if (max_length_array_size == 0 && state->get_is_left_join()) {
+                compacted_offset_column->append(offset + 1);
+                offset += 1;
+            } else {
+                compacted_offset_column->append(offset + max_length_array_size);
+                offset += max_length_array_size;
+            }
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
                 Column* column = state->get_columns()[col_idx].get();
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
-                long array_element_length =
-                        offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
-                compacted_array_list[col_idx]->append(*(col_array->elements_column()),
-                                                      offset_column->get(row_idx).get_int32(), array_element_length);
+                if (max_length_array_size == 0 && state->get_is_left_join()) {
+                    compacted_array_list[col_idx]->append_nulls(1);
+                } else {
+                    long array_element_length =
+                            offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
+                    compacted_array_list[col_idx]->append(*(col_array->elements_column()),
+                                                          offset_column->get(row_idx).get_int32(), array_element_length);
 
-                if (array_element_length < max_length_array_size) {
-                    compacted_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
+                    if (array_element_length < max_length_array_size) {
+                        compacted_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
+                    }
                 }
             }
         }
@@ -99,6 +108,10 @@ public:
 
     [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
+        const auto& table_fn = fn.table_fn;
+        if (table_fn.__isset.is_left_join) {
+            (*state)->set_is_left_join(table_fn.is_left_join);
+        }
         return Status::OK();
     }
 
