@@ -65,7 +65,7 @@ public class FileTable extends Table {
     private static final ImmutableMap<String, RemoteFileInputFormat> SUPPORTED_FORMAT = ImmutableMap.of(
             "parquet", RemoteFileInputFormat.PARQUET,
             "orc", RemoteFileInputFormat.ORC,
-            "text", RemoteFileInputFormat.TEXT,
+            "text", RemoteFileInputFormat.TEXTFILE,
             "avro", RemoteFileInputFormat.AVRO,
             "rctext", RemoteFileInputFormat.RCTEXT,
             "rcbinary", RemoteFileInputFormat.RCBINARY,
@@ -157,7 +157,7 @@ public class FileTable extends Table {
 
         RemoteFileInputFormat format = getFileFormat();
         TextFileFormatDesc textFileFormatDesc = null;
-        if (format.equals(RemoteFileInputFormat.TEXT)) {
+        if (format.equals(RemoteFileInputFormat.TEXTFILE)) {
             textFileFormatDesc = new TextFileFormatDesc(
                     fileProperties.getOrDefault(JSON_KEY_COLUMN_SEPARATOR, "\t"),
                     fileProperties.getOrDefault(JSON_KEY_ROW_DELIMITER, "\n"),

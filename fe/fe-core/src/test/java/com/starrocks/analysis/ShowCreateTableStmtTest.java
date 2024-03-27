@@ -128,7 +128,7 @@ public class ShowCreateTableStmtTest {
         Map<String, String> props = new HashMap<>();
         props.put("COLUMN_STATS_ACCURATE", "{\"BASIC_STATS\":\"true\"}");
 
-        HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx",
+        HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx", "",
                 0, new ArrayList<>(), fullSchema.stream().map(x -> x.getName()).collect(Collectors.toList()),
                 props, new HashMap<>(),  HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
         List<String> result = new ArrayList<>();

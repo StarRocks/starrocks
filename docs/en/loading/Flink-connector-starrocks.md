@@ -573,6 +573,8 @@ Since v1.2.9, the Flink connector for StarRocks is integrated into this framewor
 
 For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html).
 
+It is advised to use StarRocks v3.2.1 and later versions to enable [fast_schema_evolution](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution). It will improve the speed of adding or dropping columns and reduce resource usage.
+
 ## Best practices
 
 ### Load data to a Primary Key table
@@ -734,7 +736,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
 
 ### Load data into columns of BITMAP type
 
-[`BITMAP`](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-types/BITMAP) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_bitmap).
+[`BITMAP`](https://docs.starrocks.io/en-us/latest/sql-reference/data-types/other-data-types/BITMAP) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](https://docs.starrocks.io/en-us/latest/using_starrocks/Using_bitmap).
 Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type.
 
 1. Create a StarRocks Aggregate table in MySQL client.
@@ -801,7 +803,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 ### Load data into columns of HLL type
 
-[`HLL`](../sql-reference/sql-statements/data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
+[`HLL`](../sql-reference/data-types/other-data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
 
 Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.
 

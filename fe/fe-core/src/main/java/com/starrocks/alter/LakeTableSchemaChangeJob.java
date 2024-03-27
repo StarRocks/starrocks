@@ -43,6 +43,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -72,7 +73,6 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import io.opentelemetry.api.trace.StatusCode;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -359,6 +359,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME,
                                         (LakeTablet) shadowTablet);
                         if (computeNode == null) {
+                            //todo: fix the error message.
                             throw new AlterCancelException("No alive backend");
                         }
                         countDownLatch.addMark(computeNode.getId(), shadowTabletId);
@@ -695,7 +696,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                     "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                             mvColumn.getName(), tbl.getName());
                     mv.setInactiveAndReason(
-                            "base table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
+                            MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
                     return;
                 }
             }

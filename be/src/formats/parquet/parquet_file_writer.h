@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+
 #include <arrow/api.h>
 #include <arrow/buffer.h>
 #include <arrow/io/api.h>
@@ -49,7 +50,7 @@ struct ParquetWriterOptions : FileWriterOptions {
     int64_t dictionary_pagesize = 1024 * 1024; // 1MB
     int64_t page_size = 1024 * 1024;           // 1MB
     int64_t write_batch_size = 4096;
-    int64_t rowgroup_size = 1 << 27; // 128MB
+    int64_t rowgroup_size = 128L * 1024 * 1024; // 128MB
     std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
 };
 
@@ -58,8 +59,10 @@ public:
     ParquetFileWriter(const std::string& location, std::unique_ptr<parquet::ParquetOutputStream> output_stream,
                       const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                      TCompressionType::type compression_type,
                       const std::shared_ptr<ParquetWriterOptions>& writer_options,
-                      const std::function<void()> rollback_action, PriorityThreadPool* executors);
+                      const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                      RuntimeState* runtime_state);
 
     ~ParquetFileWriter() override;
 
@@ -72,6 +75,8 @@ public:
     std::future<CommitResult> commit() override;
 
 private:
+    static StatusOr<::parquet::Compression::type> _convert_compression_type(TCompressionType::type type);
+
     static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
             const std::vector<FileColumnId>& file_column_ids);
@@ -93,22 +98,33 @@ private:
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _type_descs;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<ParquetWriterOptions> _writer_options;
     std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
 
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
     const std::function<void()> _rollback_action;
-    PriorityThreadPool* _executors;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
+
+    struct ExecutionState {
+        std::mutex mu;
+        std::condition_variable cv;
+        bool has_unfinished_task = false;
+    };
+
+    std::shared_ptr<ExecutionState> _execution_state = std::make_shared<ExecutionState>();
 };
 
 class ParquetFileWriterFactory : public FileWriterFactory {
 public:
-    ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::map<std::string, std::string>& options,
+    ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
+                             const std::map<std::string, std::string>& options,
                              const std::vector<std::string>& column_names,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                             std::optional<std::vector<formats::FileColumnId>> field_ids = std::nullopt,
-                             PriorityThreadPool* executors = nullptr);
+                             std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
+                             RuntimeState* runtime_state);
 
     Status init() override;
 
@@ -116,13 +132,15 @@ public:
 
 private:
     std::shared_ptr<FileSystem> _fs;
+    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::optional<std::vector<formats::FileColumnId>> _field_ids;
     std::map<std::string, std::string> _options;
     std::shared_ptr<ParquetWriterOptions> _parsed_options;
 
     std::vector<std::string> _column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
-    PriorityThreadPool* _executors;
+    PriorityThreadPool* _executors = nullptr;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::formats

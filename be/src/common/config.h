@@ -814,10 +814,6 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
 
-// text reader
-// Spilt text file's scan range into io ranges of 16mb size
-CONF_Int64(text_io_range_size, "16777216");
-
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
 CONF_Bool(enable_orc_libdeflate_decompression, "true");
@@ -1233,6 +1229,9 @@ CONF_mInt32(json_flat_column_max, "20");
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
 CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
+
+// Min data processed when scaling connector sink writers, default value is the same as Trino
+CONF_mInt64(writer_scaling_min_size_mb, "128");
 
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");

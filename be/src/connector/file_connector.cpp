@@ -14,6 +14,7 @@
 
 #include "connector/file_connector.h"
 
+#include "connector_sink/file_chunk_sink.h"
 #include "exec/avro_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
@@ -27,6 +28,10 @@ namespace starrocks::connector {
 DataSourceProviderPtr FileConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<FileDataSourceProvider>(scan_node, plan_node);
+}
+
+std::unique_ptr<ConnectorChunkSinkProvider> FileConnector::create_data_sink_provider() const {
+    return std::make_unique<FileChunkSinkProvider>();
 }
 
 // ================================

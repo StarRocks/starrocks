@@ -395,7 +395,7 @@ TEST_F(TestRle, TestRoundTripRandomSequencesWithRuns) {
         std::string roundtrip_str;
         int rem_to_read = num_bits;
         size_t run_len;
-        bool val;
+        bool val = false;
         while (rem_to_read > 0 && (run_len = decoder.GetNextRun(&val, std::min(kMaxToReadAtOnce, rem_to_read))) != 0) {
             ASSERT_LE(run_len, kMaxToReadAtOnce);
             roundtrip_str.append(run_len, val ? '1' : '0');

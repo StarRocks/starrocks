@@ -314,6 +314,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert withTable(MTable mTable) throws Exception {
+        String sql = mTable.getCreateTableSql();
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
     public StarRocksAssert withTable(PseudoCluster cluster,
                                      MTable mTable,
                                      ExceptionRunnable action) {

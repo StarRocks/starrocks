@@ -940,7 +940,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            setInactiveAndReason("db not exists: " + dbId);
+            setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForDbNotExists(dbId));
             return false;
         }
         if (baseTableInfos == null) {
@@ -950,7 +950,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 for (long tableId : baseTableIds) {
                     Table table = db.getTable(tableId);
                     if (table == null) {
-                        setInactiveAndReason(String.format("mv's base table %s does not exist ", tableId));
+                        setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(tableId));
                         return false;
                     }
                     baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), table.getName(), tableId));
@@ -967,7 +967,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Optional<Table> table = baseTableInfo.mayGetTable();
                     if (!table.isPresent()) {
-                        setInactiveAndReason(String.format("mv's base table %s does not exist ",
+                        setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(
                                 baseTableInfo.getTableId()));
                         return false;
                     }
@@ -998,7 +998,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 if (!baseMV.isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
-                    setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
+                    setInactiveAndReason(
+                            MaterializedViewExceptions.inactiveReasonForBaseTableActive(baseTableInfo.getTableName()));
                     res = false;
                 }
             }
@@ -1929,7 +1930,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         super.doAfterRestore(mvRestoreContext);
 
         if (baseTableInfos == null) {
-            setInactiveAndReason("base mv is not active: base info is null");
+            setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForBaseInfoMissed());
             return new Status(Status.ErrCode.NOT_FOUND,
                     String.format("Materialized view %s's base info is not found", this.name));
         }

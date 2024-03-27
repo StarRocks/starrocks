@@ -33,6 +33,7 @@ jobs:
     outputs:
       LABELS: ${{ steps.label_info.outputs.labels }}
       PR_NUMBER: ${{ steps.pr.outputs.PR_NUMBER }}
+      HEAD_REF: ${{ steps.pr.outputs.HEAD_REF }}
 
     steps:
       - name: PR
@@ -42,6 +43,7 @@ jobs:
             echo "PR_NUMBER=${{ github.event.number }}" >> $GITHUB_OUTPUT
           else
             echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "HEAD_REF=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
           fi
 
       - name: LABELS
@@ -59,7 +61,7 @@ jobs:
   meta-review:
     needs: info
     runs-on: [ self-hosted, normal ]
-    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'META-REVIEW')
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'META-REVIEW') && !contains(needs.info.outputs.LABELS, 'sync') && !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
     name: META-REVIEW
 
     env:
@@ -77,7 +79,7 @@ jobs:
   proto-review:
     needs: info
     runs-on: [ self-hosted, normal ]
-    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'PROTO-REVIEW')
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'PROTO-REVIEW') && !contains(needs.info.outputs.LABELS, 'sync') && !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
     name: PROTO-REVIEW
 
     env:
@@ -88,6 +90,24 @@ jobs:
 
     steps:
       - name: PROTO-REVIEW
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-approve.sh
+
+  feature-review:
+    needs: info
+    runs-on: [ self-hosted, normal ]
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'feature') && !contains(needs.info.outputs.LABELS, 'sync') && !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
+    name: FEATURE-REVIEW
+
+    env:
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+      REPO: ${{ github.repository }}
+      TEAM: msg-reviewer
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: FEATURE-REVIEW
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-approve.sh

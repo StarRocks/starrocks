@@ -39,7 +39,7 @@ jobs:
           sleep 10
 
       - name: Download workflow artifact - PR
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           run_id: ${{ github.event.workflow_run.id }}

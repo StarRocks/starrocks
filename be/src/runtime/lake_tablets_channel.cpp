@@ -482,10 +482,12 @@ void LakeTabletsChannel::_flush_stale_memtables() {
 }
 
 Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental) {
+    int64_t schema_id = 0;
     std::vector<SlotDescriptor*>* slots = nullptr;
     for (auto& index : _schema->indexes()) {
         if (index->index_id == _index_id) {
             slots = &index->slots;
+            schema_id = index->schema_id;
             break;
         }
     }
@@ -531,7 +533,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_table_id(params.table_id())
                                               .set_immutable_tablet_size(params.immutable_tablet_size())
                                               .set_mem_tracker(_mem_tracker)
-                                              .set_index_id(_index_id)
+                                              .set_schema_id(schema_id)
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

@@ -25,18 +25,6 @@
 
 namespace starrocks {
 
-const std::string DEFAULT_FIELD_DELIM = "\001";
-const std::string DEFAULT_COLLECTION_DELIM = "\002";
-const std::string DEFAULT_MAPKEY_DELIM = "\003";
-// LF = Line Feed = '\n'
-const std::string LINE_DELIM_LF = "\n";
-// Most hive TextFile using LF as line delimiter
-const std::string DEFAULT_LINE_DELIM = LINE_DELIM_LF;
-// CR = Carriage Return = '\r'
-const std::string LINE_DELIM_CR = "\r";
-// TODO(SmithCruise) CR + LF, but we don't support it yet, because our code only support single char as line delimiter
-const std::string LINE_DELIM_CR_LF = "\r\n";
-
 static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
     ssize_t end = filename.size() - 1;
     while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
@@ -64,8 +52,6 @@ public:
 
     Status next_record(Record* record);
 
-    size_t get_offset();
-
 protected:
     Status _fill_buffer() override;
 
@@ -83,10 +69,6 @@ private:
     // Hive TextFile's line delimiter maybe \n, \r or \r\n, we need to probe it
     bool _need_probe_line_delimiter = false;
 };
-
-size_t HdfsScannerCSVReader::get_offset() {
-    return _offset;
-}
 
 Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
     RETURN_IF_ERROR(_file->seek(offset));
@@ -264,7 +246,6 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         }
     }
     RETURN_IF_ERROR(open_random_access_file());
-    RETURN_IF_ERROR(_setup_io_ranges());
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
@@ -309,12 +290,6 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 }
 
 Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
-    if (_shared_buffered_input_stream != nullptr) {
-        // we need to release previous shared buffers to save memory
-        const size_t reader_offset = down_cast<HdfsScannerCSVReader*>(_reader.get())->get_offset();
-        _shared_buffered_input_stream->release_to_offset(reader_offset);
-    }
-
     DCHECK_EQ(0, chunk->get()->num_rows());
 
     int num_columns = chunk->get()->num_columns();
@@ -452,20 +427,6 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
             CSVReader::Record dummy;
             RETURN_IF_ERROR(reader->next_record(&dummy));
         }
-    }
-    return Status::OK();
-}
-
-Status HdfsTextScanner::_setup_io_ranges() const {
-    if (_shared_buffered_input_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges{};
-        const int64_t scan_range_end = _scanner_params.scan_range->offset + _scanner_params.scan_range->length;
-        for (int64_t offset = _scanner_params.scan_range->offset; offset < scan_range_end;) {
-            const int64_t remain_length = std::min(config::text_io_range_size, scan_range_end - offset);
-            ranges.emplace_back(offset, remain_length);
-            offset += remain_length;
-        }
-        RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
     }
     return Status::OK();
 }

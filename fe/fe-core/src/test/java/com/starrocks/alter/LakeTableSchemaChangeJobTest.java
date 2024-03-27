@@ -283,28 +283,8 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
-            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
+            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
                 return null;
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
             }
         };
 

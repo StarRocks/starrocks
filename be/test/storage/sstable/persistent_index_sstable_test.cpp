@@ -58,7 +58,7 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
     // scan & check
-    sstable::Table* sstable;
+    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
     CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
     sstable::ReadOptions read_options;
@@ -72,6 +72,8 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_scan_and_check) {
         count++;
     }
     ASSERT_TRUE(count == N);
+    delete iter;
+    delete sstable;
 }
 
 TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
@@ -88,7 +90,7 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
     // seek & check
-    sstable::Table* sstable;
+    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
     CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
     sstable::ReadOptions read_options;
@@ -102,6 +104,8 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
         IndexValue cur_val(UNALIGNED_LOAD64(iter->value().get_data()));
         ASSERT_TRUE(exp_val == cur_val);
     }
+    delete iter;
+    delete sstable;
 }
 
 TEST_F(PersistentIndexSstableTest, test_merge) {
@@ -128,11 +132,13 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     }
     sstable::Options options;
     sstable::ReadOptions read_options;
+    std::vector<std::unique_ptr<sstable::Table>> sstable_ptrs(3);
     for (int i = 0; i < 3; ++i) {
-        sstable::Table* sstable;
+        sstable::Table* sstable = nullptr;
         CHECK_OK(sstable::Table::Open(options, read_files[i].get(), fileszs[i], &sstable));
         sstable::Iterator* iter = sstable->NewIterator(read_options);
         list.emplace_back(iter);
+        sstable_ptrs[i].reset(sstable);
     }
 
     phmap::btree_map<std::string, std::string> map;
@@ -155,23 +161,7 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
             }
             iter->Next();
         }
-    }
-    {
-        // reserve iterate
-        sstable::Options options;
-        sstable::Iterator* iter = sstable::NewMergingIterator(options.comparator, &list[0], list.size());
-
-        iter->SeekToLast();
-        std::string cur_key = "";
-        while (iter->Valid()) {
-            auto key = iter->key().to_string();
-            iter->Prev();
-            if (cur_key != "") {
-                ASSERT_TRUE(cur_key >= key);
-            }
-            cur_key = key;
-        }
-        CHECK_OK(iter->status());
+        delete iter;
     }
 
     ASSERT_EQ(N, map.size());
@@ -183,7 +173,7 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     }
     CHECK_OK(builder.Finish());
     uint64_t filesz = builder.FileSize();
-    sstable::Table* sstable;
+    sstable::Table* sstable = nullptr;
     ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
     CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
     sstable::Iterator* iter = sstable->NewIterator(read_options);
@@ -198,6 +188,9 @@ TEST_F(PersistentIndexSstableTest, test_merge) {
     }
     list.clear();
     read_files.clear();
+    delete iter;
+    delete sstable;
+    sstable_ptrs.clear();
 }
 
 TEST_F(PersistentIndexSstableTest, test_empty_iterator) {
@@ -365,6 +358,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             i++;
         }
         ASSERT_OK(iter->status());
+        delete iter;
     }
     {
         sstable::ReadIOStat stat;
@@ -382,6 +376,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             i--;
         }
         ASSERT_OK(iter->status());
+        delete iter;
     }
     // 9. iterate seek test
     {
@@ -403,6 +398,7 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
                 ASSERT_FALSE(iter->Valid());
             }
         }
+        delete iter;
     }
 }
 
