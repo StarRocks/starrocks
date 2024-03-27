@@ -148,3 +148,10 @@ truncate table t2;
 insert into t1(c_key, c_string) values (1, "1"), (2, "1"), (3, "1"), (4, "1234567"), (5, "1234567"), (6, "3");
 insert into t2(c_key, c_int) values (1, 1), (2, 1234567), (3, 3);
 select t1.c_key, t2.c_key from t1 join [skew|t1.c_string("1","2","99999")] t2 on t1.c_string=t2.c_int order by t1.c_key, t2.c_key;
+
+-- type not match
+truncate table t1;
+truncate table t2;
+insert into t1(c_key, c_bigint) values (1, 1), (2, 1), (3, 1), (4, 1234567), (5, 1234567), (6, 3);
+insert into t2(c_key, c_int) values (1, 1), (2, 1234567), (3, 3);
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
