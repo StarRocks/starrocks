@@ -43,6 +43,7 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ConstantFunction;
 import org.apache.commons.collections4.MapUtils;
@@ -151,16 +152,26 @@ public class MetaFunctions {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not materialized view");
         }
-        Locker locker = new Locker();
         try {
-            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
+            String plans = "";
             List<MvPlanContext> planContexts =
                     CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, useCache.getBoolean());
-            String plan = "";
-            return ConstantOperator.createVarchar(plan);
-        } finally {
-            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+            int size = planContexts.size();
+            for (int i = 0; i < size; i++) {
+                MvPlanContext context = planContexts.get(i);
+                if (context != null) {
+                    OptExpression plan = context.getLogicalPlan();
+                    String debugString = plan.debugString();
+                    plans += String.format("plan %d: \n%s\n", i, debugString);
+                } else {
+                    plans += String.format(" plan %d: null\n", i);
+                }
+            }
+            return ConstantOperator.createVarchar(plans);
+        } catch (Exception e) {
+            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
+            return ConstantOperator.createVarchar("failed");
         }
     }
 
@@ -176,16 +187,13 @@ public class MetaFunctions {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not materialized view");
         }
-        Locker locker = new Locker();
         try {
-            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             CachingMvPlanContextBuilder.getInstance().invalidateFromCache(mv, false);
             return ConstantOperator.createVarchar("success");
         } catch (Exception e) {
+            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
             return ConstantOperator.createVarchar("failed");
-        } finally {
-            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
         }
     }
 
@@ -194,8 +202,13 @@ public class MetaFunctions {
      */
     @ConstantFunction(name = "clear_mv_plan_cache", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator clearMvPlanCache() {
-        CachingMvPlanContextBuilder.getInstance().rebuildCache();
-        return ConstantOperator.createVarchar("success");
+        try {
+            CachingMvPlanContextBuilder.getInstance().rebuildCache();
+            return ConstantOperator.createVarchar("success");
+        } catch (Exception e) {
+            ErrorReport.report(ErrorCode.ERR_UNKNOWN_ERROR, e.getMessage());
+            return ConstantOperator.createVarchar("failed");
+        }
     }
 
     /**
