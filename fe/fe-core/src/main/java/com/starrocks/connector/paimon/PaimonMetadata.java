@@ -173,7 +173,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             String fieldName = field.name();
             DataType type = field.type();
             Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true);
+            Column column = new Column(fieldName, fieldType, true, field.description());
             fullSchema.add(column);
         }
         long createTime = 0;
@@ -182,7 +182,12 @@ public class PaimonMetadata implements ConnectorMetadata {
         } catch (Exception e) {
             LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
         }
+        String comment = "";
+        if (paimonNativeTable.comment().isPresent()) {
+            comment = paimonNativeTable.comment().get();
+        }
         PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema, paimonNativeTable, createTime);
+        table.setComment(comment);
         tables.put(identifier, table);
         return table;
     }

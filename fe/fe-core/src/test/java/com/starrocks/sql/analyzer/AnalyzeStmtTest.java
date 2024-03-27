@@ -148,7 +148,8 @@ public class AnalyzeStmtTest {
             public Table getTable(ConnectContext session, TableName tableName) {
                 return new HiveTable(1, "customer", Lists.newArrayList(), "resource_name",
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName("resource_name", "hive"),
-                        "hive", "tpch", "", 0, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(),
+                        "hive", "tpch", "", "",
+                        0, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(),
                         Maps.newHashMap(), null, null);
             }
         };

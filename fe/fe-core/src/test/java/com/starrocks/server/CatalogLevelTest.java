@@ -115,7 +115,7 @@ public class CatalogLevelTest {
 
         org.apache.iceberg.Table tbl = new org.apache.iceberg.BaseTable(hiveTableOperations, "iceberg_table");
         com.starrocks.catalog.Table icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
-                "resource_name", "iceberg_db", "iceberg_table",
+                "resource_name", "iceberg_db", "iceberg_table", "",
                 Lists.newArrayList(new Column("col1", Type.LARGEINT)), tbl, Maps.newHashMap());
 
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
