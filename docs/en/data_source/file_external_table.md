@@ -77,16 +77,9 @@ A set of parameters for accessing the target data file.
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-<<<<<<< HEAD
-| path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`. The default port number is 8020. If you use the default port, you do not need to specify it.</li><li>If the data file is stored in AWS S3, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
-| format                   | Yes      | The format of the data file. Only Parquet and ORC are supported. |
-| enable_recursive_listing | No       | Specifies whether to recursively transverse all files under the current path. Default value: `false`. |
-=======
 | path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`. The default port number is 8020. If you use the default port, you do not need to specify it.</li><li>If the data file is stored in AWS S3 or other S3-compatible storage system, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
-| format                   | Yes      | The format of the data file. Valid values: `parquet`, `orc`, `avro`, `rctext` or `rcbinary`, and `sequence`. |
+| format                   | Yes      | The format of the data file. Valid values: `parquet` and `orc`. |
 | enable_recursive_listing | No       | Specifies whether to recursively transverse all files under the current path. Default value: `true`. The value `true` specifies to recursively list subdirectories, and the value `false` specifies to ignore subdirectories. |
-| enable_wildcards         | No       | Whether to support using wildcards (`*`) in `path`. Default value: `false`. For example, `2024-07-*` is to match all files with the `2024-07-` prefix. This parameter is supported from v3.1.9. |
->>>>>>> ea3efaf389 ([Doc]  Update default value of `enable_recursive_listing` in hive_catalog and file external table (#42979))
 
 #### StorageCredentialParams (Optional)
 
