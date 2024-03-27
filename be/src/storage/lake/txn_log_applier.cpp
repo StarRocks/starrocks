@@ -32,7 +32,7 @@
 namespace starrocks::lake {
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
-    PrimaryKeyTxnLogApplier(Tablet tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
+    PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet),
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
@@ -301,7 +301,7 @@ private:
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
-    NonPrimaryKeyTxnLogApplier(Tablet tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
+    NonPrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet), _metadata(std::move(metadata)), _new_version(new_version) {}
 
     Status apply(const TxnLogPB& log) override {
