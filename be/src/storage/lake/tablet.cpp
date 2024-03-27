@@ -146,7 +146,7 @@ std::string Tablet::root_location() const {
 }
 
 Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
-    auto txn_log = std::make_shared<lake::TxnLog>();
+    auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_id);
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
