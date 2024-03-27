@@ -25,6 +25,8 @@ ARG commit_id
 ARG starlet_tag=v3.1.7
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
+# Token to access artifacts in private github repositories.
+ARG GITHUB_TOKEN
 
 FROM starrocks/toolchains-${distro}:main-20230517 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
@@ -35,6 +37,7 @@ FROM base as builder
 ARG prebuild_maven
 ARG predownload_thirdparty
 ARG thirdparty_url
+ARG GITHUB_TOKEN
 
 COPY . ./starrocks
 RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
@@ -42,7 +45,7 @@ RUN if test "x$predownload_thirdparty" = "xtrue" ; then \
         mkdir -p starrocks/thirdparty/src && tar -xf thirdparty.tar -C starrocks/thirdparty/src ; \
     fi
 RUN mkdir -p $STARROCKS_THIRDPARTY/installed && cd starrocks/thirdparty && \
-     PARALLEL=`nproc` ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
+     PARALLEL=`nproc` GH_TOKEN=${GITHUB_TOKEN} ./build-thirdparty.sh && cp -r installed $STARROCKS_THIRDPARTY/
 RUN if test "x$prebuild_maven" = "xtrue" ; then \
         export MAVEN_OPTS='-Dmaven.artifact.threads=128' ; cd /root/starrocks ; ./build.sh --fe || true ; \
         cd java-extensions ; mvn package -DskipTests || true ;  \

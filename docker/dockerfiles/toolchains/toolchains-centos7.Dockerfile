@@ -32,6 +32,8 @@ ARG MAVEN_INSTALL_HOME
 
 LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
 
+RUN yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && yum install -y gh
+
 RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
         libtool which git ccache binutils-devel python3 file java-1.8.0-openjdk java-1.8.0-openjdk-devel && \
         yum clean all && rm -rf /var/cache/yum
