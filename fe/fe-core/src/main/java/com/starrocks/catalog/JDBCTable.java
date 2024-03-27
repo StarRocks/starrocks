@@ -199,6 +199,8 @@ public class JDBCTable extends Table {
                 digest.update(ans.getBytes());
                 byte[] hashBytes = digest.digest();
                 StringBuilder sb = new StringBuilder();
+                // it's for be side parsing: expect a _ in name.
+                sb.append("jdbc_");
                 for (byte b : hashBytes) {
                     sb.append(String.format("%02x", b));
                 }
