@@ -288,7 +288,6 @@ Broker Load is an asynchronous loading method. After you submit a load job, Star
 - Currently Broker Load supports loading from a local file system only through a single broker whose version is v2.5 or later.
 - Highly concurrent queries against a single broker may cause issues such as timeout and OOM. To mitigate the impact, you can use the `pipeline_dop` variable (see [System variable](../reference/System_variable.md#pipeline_dop)) to set the query parallelism for Broker Load. For queries against a single broker, we recommend that you set `pipeline_dop` to a value smaller than `16`.
 
-<<<<<<< HEAD
 ### Before you begin
 
 Before you can use Broker Load to load data from a local file system, finish the following preparations:
@@ -305,8 +304,6 @@ Before you can use Broker Load to load data from a local file system, finish the
    ALTER SYSTEM ADD BROKER sole_broker "172.26.199.40:8000";
    ```
 
-=======
->>>>>>> 4d224e13dd ([Doc] fix path inconsistency in code in stream load user guide doc (#43210))
 ### Typical example
 
 Broker Load supports loading from a single data file to a single table, loading from multiple data files to a single table, and loading from multiple data files to multiple tables. This section uses loading from multiple data files to a single table as an example.
