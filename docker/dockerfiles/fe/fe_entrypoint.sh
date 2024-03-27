@@ -88,29 +88,22 @@ probe_leader_for_pod0()
     local memlist=
     while true
     do
-        NC="nc -z -w 2"
-        if $NC $svc $QUERY_PORT ; then
-            log_stderr "FE service is alive, check if has leader ..."
+        memlist=`show_frontends $svc`
+        local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $2}'`
+        if [[ "x$leader" != "x" ]] ; then
+            # has leader, done
+            log_stderr "Find leader: $leader!"
+            FE_LEADER=$leader
+            return 0
+        fi
 
-            memlist=`show_frontends $svc`
-            local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $2}'`
-            if [[ "x$leader" != "x" ]] ; then
-                # has leader, done
-                log_stderr "Find leader: $leader!"
-                FE_LEADER=$leader
-                return 0
-            fi
-
-            if [[ "x$memlist" != "x" ]] ; then
-                # FE service does not have leader yet, but has members.
-                has_member=true
-            fi
-            log_stderr "No leader yet, has_member: $has_member ..."
-        else
-            log_stderr "FE service $svc:$QUERY_PORT is not alive yet!"
+        if [[ "x$memlist" != "x" ]] ; then
+            # has memberlist ever before
+            has_member=true
         fi
 
         # no leader yet, check if needs timeout and quit
+        log_stderr "No leader yet, has_member: $has_member ..."
         local timeout=$PROBE_LEADER_POD0_TIMEOUT
         if $has_member ; then
             # set timeout to the same as PODX since there are other members
@@ -141,21 +134,15 @@ probe_leader_for_podX()
     local start=`date +%s`
     while true
     do
-        NC="nc -z -w 2"
-        if $NC $svc $QUERY_PORT ; then
-            log_stderr "FE service is alive, check if has leader ..."
-            local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $2}'`
-            if [[ "x$leader" != "x" ]] ; then
-                # has leader, done
-                log_stderr "Find leader: $leader!"
-                FE_LEADER=$leader
-                return 0
-            fi
-            # no leader yet, check if needs timeout and quit
-            log_stderr "No leader yet ..."
-        else
-            log_stderr "FE service $svc:$QUERY_PORT is not alive yet!"
+        local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $2}'`
+        if [[ "x$leader" != "x" ]] ; then
+            # has leader, done
+            log_stderr "Find leader: $leader!"
+            FE_LEADER=$leader
+            return 0
         fi
+        # no leader yet, check if needs timeout and quit
+        log_stderr "No leader yet ..."
 
         local now=`date +%s`
         let "expire=start+PROBE_LEADER_PODX_TIMEOUT"
@@ -218,7 +205,7 @@ start_fe_no_meta()
         while true
         do
             log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as follower ..."
-            mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
+            mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u starrocks --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
             # check if added successful
             if show_frontends $svc | grep -q -w "$MYSELF" &>/dev/null ; then
                 break;

@@ -26,12 +26,12 @@ FROM ubuntu:22.04
 ARG STARROCKS_ROOT=/opt/starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        default-jdk mysql-client curl vim tree net-tools less tzdata locales netcat && \
+        default-jdk mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
-        locale-gen en_US.UTF-8 && \
         rm -rf /var/lib/apt/lists/*
-RUN touch /.dockerenv
+RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc && \
+        touch /.dockerenv
 ENV JAVA_HOME=/lib/jvm/default-java
 
 WORKDIR $STARROCKS_ROOT
@@ -51,7 +51,7 @@ COPY --from=artifacts --chown=starrocks:starrocks /release/fe_artifacts/ $STARRO
 COPY --chown=starrocks:starrocks docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
-RUN mkdir -p /opt/starrocks/fe/meta
+RUN mkdir -p /opt/starrocks/fe/meta && chown starrocks:starrocks /opt/starrocks/fe/meta
 
 # run as root by default
-USER root
+USER $USER
