@@ -28,8 +28,7 @@ namespace starrocks {
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
                               const std::string& expected_checksum) {
     auto success = false;
-    auto tmp_file =
-            fmt::format("{}_{}_{}", target_file, expected_checksum, ThreadLocalUUIDGenerator::next_uuid_string());
+    auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
     auto fp = fopen(tmp_file.c_str(), "w");
     DeferOp defer([&]() {
         if (fp != nullptr) {
@@ -42,8 +41,10 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
     });
 
     if (fp == nullptr) {
-        LOG(ERROR) << fmt::format("fail to open file {}", tmp_file);
-        return Status::InternalError(fmt::format("fail to open tmp file when downloading file from {}", url));
+        int errnum = errno;
+        LOG(ERROR) << fmt::format("fail to open file. file = {}, error = {}", tmp_file, strerror(errnum));
+        return Status::InternalError(
+                fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, strerror(errnum)));
     }
 
     Md5Digest digest;
