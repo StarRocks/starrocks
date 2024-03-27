@@ -15,6 +15,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
+#include "util/stack_util.h"
 
 namespace starrocks::parquet {
 class FileReader;
@@ -236,7 +237,13 @@ public:
     int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     int64_t num_rows_read() const { return _stats.num_rows_read; }
-    int64_t cpu_time_spent() const { return _total_running_time - _stats.io_ns; }
+    int64_t cpu_time_spent() const {
+        if (_total_running_time - _stats.io_ns < 0) {
+            LOG(WARNING) << "_total_running_time:" << _total_running_time << " _stats.io_ns:" << _stats.io_ns
+                         << " stack :\n " << get_stack_trace();
+        }
+        return _total_running_time - _stats.io_ns;
+    }
     int64_t io_time_spent() const { return _stats.io_ns; }
     int64_t estimated_mem_usage() const;
     void set_keep_priority(bool v) { _keep_priority = v; }

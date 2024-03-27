@@ -157,7 +157,9 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
             query_statistic->add_stats_item(stats_item);
         }
     }
-    LOG(WARNING) << "cpu_ns:" << query_statistic->get_cpu_ns() << " stack :\n " << get_stack_trace();
+    if (query_statistic->get_cpu_ns() < 0) {
+        LOG(WARNING) << "cpu_ns:" << query_statistic->get_cpu_ns() << " stack :\n " << get_stack_trace();
+    }
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
 }
