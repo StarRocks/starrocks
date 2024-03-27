@@ -1966,7 +1966,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             // this will make disk balance worse, but can not exceed 0.9 * Config.balance_load_score_threshold;
             return maxUsedPercentAfterBalance - minUsedPercentAfterBalance <
-                    0.9 * Config.tablet_sched_balance_load_score_threshold;
+                    Config.tablet_sched_distribution_balance_threshold_ratio *
+                            Config.tablet_sched_balance_load_score_threshold;
         }
 
         public void moveReplica(Long src, Long dest, Long size) {
