@@ -17,42 +17,42 @@ DATE CURDATE()
 ## 示例
 
 ```Plain Text
-SELECT CURDATE();
+mysql> SELECT CURDATE();
 +------------+
 | curdate()  |
 +------------+
 | 2024-03-27 |
 +------------+
 
-SELECT CURRENT_DATE();
+mysql> SELECT CURRENT_DATE();
 +----------------+
 | current_date() |
 +----------------+
 | 2024-03-27     |
 +----------------+
 
-SELECT CURDATE() + 0;
+mysql> SELECT CURDATE() + 0;
 +-----------------+
 | (curdate()) + 0 |
 +-----------------+
 |        20240327 |
 +-----------------+
 
-SELECT CURDATE() +2;
+mysql> SELECT CURDATE() +2;
 +-----------------+
 | (curdate()) + 2 |
 +-----------------+
 |        20240329 |
 +-----------------+
 
-SELECT CURDATE() - INTERVAL 5 DAY;
+mysql> SELECT CURDATE() - INTERVAL 5 DAY;
 +----------------------------+
 | curdate() - INTERVAL 5 DAY |
 +----------------------------+
 | 2024-03-22 00:00:00        |
 +----------------------------+
 
-SELECT QUARTER(CURDATE());
+mysql> SELECT QUARTER(CURDATE());
 +--------------------+
 | quarter(curdate()) |
 +--------------------+
