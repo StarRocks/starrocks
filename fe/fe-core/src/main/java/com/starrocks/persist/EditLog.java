@@ -1992,6 +1992,10 @@ public class EditLog {
         logEdit(OperationType.OP_STARMGR, journal);
     }
 
+    public JournalTask logStarMgrOperationNoWait(StarMgrJournal journal) {
+        return submitLog(OperationType.OP_STARMGR, journal, -1);
+    }
+
     public void logCreateUser(
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,

@@ -36,6 +36,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 // wrapper for star manager to use bdbje
@@ -157,6 +158,15 @@ public class BDBJEJournalSystem implements JournalSystem {
     public void write(Journal journal) throws StarException {
         try {
             editLog.logStarMgrOperation(new StarMgrJournal(journal));
+        } catch (Exception e) {
+            throw new StarException(ExceptionCode.JOURNAL, e.getMessage());
+        }
+    }
+
+    @Override
+    public Future<Boolean> writeAsync(Journal journal) throws StarException {
+        try {
+            return editLog.logStarMgrOperationNoWait(new StarMgrJournal(journal));
         } catch (Exception e) {
             throw new StarException(ExceptionCode.JOURNAL, e.getMessage());
         }
