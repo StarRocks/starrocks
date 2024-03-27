@@ -161,10 +161,7 @@ properties (
     "partition_refresh_number" = "1"
 ) as select /*+ set_user_variable(@c = (select min(c3) from t1)) */ * from t1;
 -- result:
-<<<<<<< HEAD
 E: (1064, 'Unexpected exception: unsupported user variable hint in Materialized view for now.')
-=======
-E: (1064, 'unsupported user variable hint in Materialized view for now.')
 -- !result
 set @test = (select date_col from all_type);
 -- result:
