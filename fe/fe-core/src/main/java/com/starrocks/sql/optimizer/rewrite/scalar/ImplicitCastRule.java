@@ -206,9 +206,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
         // strict check, only support white check
         if ((typeVariable.isNumericType() && typeConstant.isNumericType()) ||
+                (typeVariable.isNumericType() && typeConstant.isBoolean()) ||
                 (typeVariable.isDateType() && typeConstant.isNumericType()) ||
-                (typeVariable.isDateType() && typeConstant.isStringType())
-                || checkStringCastToNumber) {
+                (typeVariable.isDateType() && typeConstant.isStringType()) ||
+                (typeVariable.isBoolean() && typeConstant.isStringType()) ||
+                checkStringCastToNumber) {
 
             Optional<ScalarOperator> op = Utils.tryCastConstant(constant, variable.getType());
             if (op.isPresent()) {

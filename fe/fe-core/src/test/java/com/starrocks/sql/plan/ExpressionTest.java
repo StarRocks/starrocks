@@ -1785,6 +1785,18 @@ public class ExpressionTest extends PlanTestBase {
             sql = "select t1g = 'abc' from test_all_type";
             plan = getVerboseExplain(sql);
             assertContains(plan, "cast([7: t1g, BIGINT, true] as VARCHAR(1048576)) = 'abc'");
+
+            sql = "select id_bool = 'abc' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([11: id_bool, BOOLEAN, true] as DOUBLE) = cast('abc' as DOUBLE)");
+
+            sql = "select id_bool = 'false' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[11: id_bool, BOOLEAN, true] = FALSE");
+
+            sql = "select t1g = true from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[7: t1g, BIGINT, true] = 1");
         } finally {
             connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
         }
@@ -1825,6 +1837,18 @@ public class ExpressionTest extends PlanTestBase {
             plan = getVerboseExplain(sql);
             assertContains(plan, "cast([7: t1g, BIGINT, true] as DECIMAL128(38,9)) " +
                     "= cast('abc' as DECIMAL128(38,9))");
+
+            sql = "select id_bool = 'abc' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([11: id_bool, BOOLEAN, true] as DOUBLE) = cast('abc' as DOUBLE)");
+
+            sql = "select id_bool = 'false' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[11: id_bool, BOOLEAN, true] = FALSE");
+
+            sql = "select t1g = true from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[7: t1g, BIGINT, true] = 1");
         } finally {
             connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
         }
