@@ -53,6 +53,9 @@ public:
     OpFactories maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
                                                              OpFactories& pred_operators, int num_receivers,
                                                              bool force = false);
+    OpFactories maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
+                                                             OpFactories& pred_operators, int num_receivers,
+                                                             LocalExchanger::PassThroughType pass_through_type);
     OpFactories maybe_interpolate_local_random_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
                                                                     OpFactories& pred_operators, int num_receivers,
                                                                     bool force = false);
