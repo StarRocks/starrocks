@@ -95,6 +95,7 @@ alter table agg_test order by (k2,k1,v2,v1,v3);
 function: wait_alter_table_finish()
 show create table agg_test;
 select * from agg_test;
+
 drop table agg_test;
 drop database sort_key_test_agg;
 

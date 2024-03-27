@@ -120,12 +120,12 @@ alter table uni_test order by (k2);
 -- result:
 E: (1064, 'The sort columns of UNIQUE KEY table must be same with key columns')
 -- !result
+alter table uni_test order by (k1,k2,k1);
+-- result:
+E: (1064, 'Duplicated column[k1]')
+-- !result
 alter table uni_test order by (k1,k2);
 -- result:
--- !result
-alter table uni_test order by (k1,k2,k2);
--- result:
-E: (1064, 'A schema change operation is in progress on the table "uni_test". Please wait until the current operation completes.\nTo check the status of the operation, see https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER')
 -- !result
 function: wait_alter_table_finish()
 -- result:

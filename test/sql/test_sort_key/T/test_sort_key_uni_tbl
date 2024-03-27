@@ -82,8 +82,8 @@ select * from uni_test;
 
 alter table uni_test order by (k2,v1);
 alter table uni_test order by (k2);
+alter table uni_test order by (k1,k2,k1);
 alter table uni_test order by (k1,k2);
-alter table uni_test order by (k1,k2,k2);
 function: wait_alter_table_finish()
 show create table uni_test;
 select * from uni_test;
