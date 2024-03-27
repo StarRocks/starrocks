@@ -1201,6 +1201,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 3. check partition key
+<<<<<<< HEAD
             List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns();
             for (Column partitionCol : partitionColumns) {
                 String colName = partitionCol.getName();
@@ -1233,6 +1234,12 @@ public class SchemaChangeHandler extends AlterHandler {
                             + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
                 }
             } // end for distributionCols
+=======
+            checkPartitionColumnChange(olapTable, alterSchema, alterIndexId);
+
+            // 4. check distribution key:
+            checkDistributionColumnChange(olapTable, alterSchema, alterIndexId);
+>>>>>>> 4f7ad9b3a0 ([BugFix] Fix drop normal table failed when table has synchronized mv (#41990))
 
             // 5. calc short key
             List<Integer> sortKeyIdxes = new ArrayList<>();
@@ -1282,10 +1289,69 @@ public class SchemaChangeHandler extends AlterHandler {
         return dataBuilder.build();
     }
 
+<<<<<<< HEAD
     private AlterJobV2 createJobForProcessReorderColumnOfPrimaryKey(long dbId, OlapTable olapTable,
                                                                     Map<Long, LinkedList<Column>> indexSchemaMap,
                                                                     List<Integer> sortKeyIdxes,
                                                                     List<Integer> sortKeyUniqueIds) throws UserException {
+=======
+    private void checkPartitionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexId)
+            throws DdlException {
+        // Since partition key and distribution key's schema change can only happen in base index,
+        // only check it in base index.There may be some trivial changes between base index and other
+        // indices(eg: AggregateType), so check it in base index.
+        if (alterIndexId != olapTable.getBaseIndexId()) {
+            return;
+        }
+
+        List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns();
+        for (Column partitionCol : partitionColumns) {
+            String colName = partitionCol.getName();
+            Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
+            if (col.isPresent() && !col.get().equals(partitionCol)) {
+                throw new DdlException("Can not modify partition column[" + colName + "]. index["
+                        + olapTable.getIndexNameById(alterIndexId) + "]");
+            }
+            if (col.isEmpty() && alterIndexId == olapTable.getBaseIndexId()) {
+                // 2.1 partition column cannot be deleted.
+                throw new DdlException("Partition column[" + partitionCol.getName()
+                        + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+                // ATTN. partition columns' order also need remaining unchanged.
+                // for now, we only allow one partition column, so no need to check order.
+            }
+        } // end for partitionColumns
+    }
+
+    private void checkDistributionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexId)
+            throws DdlException {
+        // Since partition key and distribution key's schema change can only happen in base index,
+        // only check it in base index.There may be some trivial changes between base index and other
+        // indices(eg: AggregateType), so check it in base index.
+        if (alterIndexId != olapTable.getBaseIndexId()) {
+            return;
+        }
+
+        List<Column> distributionColumns = olapTable.getDefaultDistributionInfo().getDistributionColumns();
+        for (Column distributionCol : distributionColumns) {
+            String colName = distributionCol.getName();
+            Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
+            if (col.isPresent() && !col.get().equals(distributionCol)) {
+                throw new DdlException("Can not modify distribution column[" + colName + "]. index["
+                        + olapTable.getIndexNameById(alterIndexId) + "]");
+            }
+            if (col.isEmpty() && alterIndexId == olapTable.getBaseIndexId()) {
+                // 2.2 distribution column cannot be deleted.
+                throw new DdlException("Distribution column[" + distributionCol.getName()
+                        + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+            }
+        } // end for distributionCols
+    }
+
+    private AlterJobV2 createJobForProcessModifySortKeyColumn(long dbId, OlapTable olapTable,
+                                                              Map<Long, LinkedList<Column>> indexSchemaMap,
+                                                              List<Integer> sortKeyIdxes,
+                                                              List<Integer> sortKeyUniqueIds) throws UserException {
+>>>>>>> 4f7ad9b3a0 ([BugFix] Fix drop normal table failed when table has synchronized mv (#41990))
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
