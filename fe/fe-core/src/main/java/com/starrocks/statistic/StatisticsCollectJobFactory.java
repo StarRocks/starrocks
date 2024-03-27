@@ -66,6 +66,9 @@ public class StatisticsCollectJobFactory {
                 for (Table table : db.getTables()) {
                     createJob(statsJobs, nativeAnalyzeJob, db, table, null);
                 }
+                for (Table table : db.getTemporaryTables()) {
+                    createJob(statsJobs, nativeAnalyzeJob, db, table, null);
+                }
             }
         } else if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getTableId()
                 && StatsConstants.DEFAULT_ALL_ID != nativeAnalyzeJob.getDbId()) {

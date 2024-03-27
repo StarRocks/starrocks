@@ -56,10 +56,13 @@ statement
     // Table Statement
     | createTableStatement
     | createTableAsSelectStatement
-    | createTemporaryTableStatement
     | createTableLikeStatement
+    | createTemporaryTableStatement
+    | createTemporaryTableAsSelectStatement
+    | createTemporaryTableLikeStatement
     | showCreateTableStatement
     | dropTableStatement
+    | cleanTemporaryTableStatement
     | recoverTableStatement
     | truncateTableStatement
     | showTableStatement
@@ -70,6 +73,7 @@ statement
     | alterTableStatement
     | cancelAlterTableStatement
     | showAlterStatement
+    | showTemporaryTableStatement
 
     // View Statement
     | createViewStatement
@@ -440,6 +444,23 @@ createTableStatement
           extProperties?
      ;
 
+createTemporaryTableStatement
+    : CREATE TEMPORARY TABLE (IF NOT EXISTS)? qualifiedName
+          '(' columnDesc (',' columnDesc)* (',' indexDesc)* ')'
+          engineDesc?
+          charsetDesc?
+          keyDesc?
+          withRowAccessPolicy*
+          comment?
+          partitionDesc?
+          distributionDesc?
+          orderByDesc?
+          rollupDesc?
+          properties?
+          extProperties?
+     ;
+
+
 columnDesc
     : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
     (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
@@ -527,11 +548,6 @@ ifNotExists:
     (IF NOT EXISTS)?
     ;
 
-createTemporaryTableStatement
-    : CREATE TEMPORARY TABLE qualifiedName
-        queryStatement
-    ;
-
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
@@ -544,8 +560,25 @@ createTableAsSelectStatement
         AS queryStatement
     ;
 
+createTemporaryTableAsSelectStatement
+    : CREATE TEMPORARY TABLE (IF NOT EXISTS)? qualifiedName
+        ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
+        keyDesc?
+        comment?
+        partitionDesc?
+        distributionDesc?
+        orderByDesc?
+        properties?
+        AS queryStatement
+    ;
+
+
 dropTableStatement
     : DROP TEMPORARY? TABLE (IF EXISTS)? qualifiedName FORCE?
+    ;
+
+cleanTemporaryTableStatement
+    : CLEAN TEMPORARY TABLE ON SESSION string
     ;
 
 alterTableStatement
@@ -570,6 +603,10 @@ indexType
 
 showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showTemporaryTableStatement
+    : SHOW TEMPORARY TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showCreateTableStatement
@@ -602,6 +639,14 @@ descTableStatement
 
 createTableLikeStatement
     : CREATE (EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName
+        partitionDesc?
+        distributionDesc?
+        properties?
+        LIKE qualifiedName
+    ;
+
+createTemporaryTableLikeStatement
+    : CREATE TEMPORARY TABLE (IF NOT EXISTS)? qualifiedName
         partitionDesc?
         distributionDesc?
         properties?

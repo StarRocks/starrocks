@@ -75,6 +75,10 @@ public class ExportStmtAnalyzer {
                             ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
+            if (table.isTemporaryTable()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Do not support exporting temporary table");
+            }
             statement.setTblName(tableName);
             PartitionNames partitionNames = statement.getTableRef().getPartitionNames();
             if (partitionNames != null) {

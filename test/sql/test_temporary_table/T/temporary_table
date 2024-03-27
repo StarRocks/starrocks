@@ -1,0 +1,142 @@
+-- name: test_create_temporary_table
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+create temporary table if not exists `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+
+show create table `t0`;
+desc `t0`;
+insert into `t0` values (1,1),(2,2),(3,3);
+select * from `t0` order by `c1`,`c2`;
+
+update `t0` set `c2`=`c2`+1 where `c1`=1;
+select * from `t0` order by `c1`,`c2`;
+
+delete from `t0` where `c1` = 1;
+select * from `t0` order by `c1`, `c2`;
+
+drop temporary table `t0`;
+
+-- name: test_create_temporary_table_like
+create table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="group1");
+insert into `t0` values (1,1),(2,2),(3,3);
+
+create temporary table `t1` like `t0`;
+show create table `t1`;
+select * from `t1`;
+
+insert into `t1` values (1,1),(2,2);
+select * from `t1` order by `c1`,`c2`;
+
+
+-- name: test_create_table_as_select
+create table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="group1");
+insert into `t0` values (1,1),(2,2),(3,3);
+
+create temporary table `t1` as select * from `t0`;
+show create table `t1`;
+select * from `t1` order by `c1`,`c2`;
+
+insert into `t1` values (4,4),(5,5);
+select * from `t1` order by `c1`,`c2`;
+
+-- name: test_truncate_table 
+create temporary table `t0` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+insert into `t0` values (1,1),(2,2),(3,3);
+select * from `t0` order by `c1`,`c2`;
+truncate table `t0`;
+select * from `t0` order by `c1`,`c2`;
+
+
+-- name: test_name_conflict
+create table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+insert into `t` values (1,1),(2,2),(3,3);
+
+create temporary table `t` (
+    `c1` int,
+    `c2` int,
+    `c3` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+
+select * from `t`;
+insert into `t` values (1,1,1),(2,2,2);
+select * from `t` order by `c1`,`c2`,`c3`;
+drop temporary table `t`;
+select * from `t` order by `c1`,`c2`;
+
+-- name: test_ddl_on_temporary_table
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+alter table `t` add column `c3` int default null;
+
+-- name: test_submit_task_on_temporary_table
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+submit task as insert into `t` select * from `t`;
+submit task as create table `t0` as select * from `t`;
+
+-- name: test_select_out_file
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+select * from `t` into outfile "oss://${oss_bucket}/test_temporary_table/${uuid0}/" properties("aws.s3.access_key"="${oss_ak}","aws.s3.secret_key"="${oss_sk}","aws.s3.endpoint"="${oss_endpoint}");
+
+
+-- name: test_create_view
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create view `v1` as select * from `t`;
+create materialized view `mv1` as select * from `t`;
+create materialized view `m1` refresh immediate manual as select * from `t`;
+create table `t1` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+create view `v1` as select * from `t1`;
+alter view `v1` as select * from `t`;
+
+-- name: test_export
+create temporary table `t` (
+    `c1` int,
+    `c2` int
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1");
+export table `t`
+TO "oss://${oss_bucket}/test_temporary_table/${uuid0}/"
+WITH BROKER
+(
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "fs.oss.endpoint" = "${oss_endpoint}"
+);

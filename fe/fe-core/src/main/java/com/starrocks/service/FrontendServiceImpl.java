@@ -138,6 +138,7 @@ import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -219,6 +220,8 @@ import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
+import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
 import com.starrocks.thrift.TGetTrackingLoadsResult;
 import com.starrocks.thrift.TGetUserPrivsParams;
 import com.starrocks.thrift.TGetUserPrivsResult;
@@ -234,6 +237,9 @@ import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesInfo;
 import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TListPipesResult;
+import com.starrocks.thrift.TListSessionOptions;
+import com.starrocks.thrift.TListSessionRequest;
+import com.starrocks.thrift.TListSessionResponse;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadJobType;
@@ -268,6 +274,7 @@ import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TRequireSlotRequest;
 import com.starrocks.thrift.TRequireSlotResponse;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
+import com.starrocks.thrift.TSessionInfo;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -315,6 +322,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -2781,5 +2789,35 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TTableReplicationResponse startTableReplication(TTableReplicationRequest request) throws TException {
         return leaderImpl.startTableReplication(request);
+    }
+
+    @Override
+    public TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(TGetTemporaryTablesInfoRequest request)
+            throws TException {
+        return InformationSchemaDataSource.generateTemporaryTablesInfoResponse(request);
+    }
+
+    @Override
+    public TListSessionResponse listSessions(TListSessionRequest request) throws TException {
+        if (!request.isSetOptions()) {
+            throw new SemanticException("options must be set");
+        }
+        TListSessionOptions options = request.options;
+        if (options.isSetTemporary_table_only() && options.temporary_table_only) {
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            Set<UUID> sessions = ExecuteEnv.getInstance().getScheduler().listAllSessionsId();
+            sessions.retainAll(temporaryTableMgr.listSessions());
+            List<TSessionInfo> sessionInfos = new ArrayList<>();
+            for (UUID session : sessions) {
+                TSessionInfo sessionInfo = new TSessionInfo();
+                sessionInfo.setSession_id(session.toString());
+                sessionInfos.add(sessionInfo);
+            }
+            TListSessionResponse response = new TListSessionResponse();
+            response.setSessions(sessionInfos);
+            return response;
+        } else {
+            throw new SemanticException("only support temporary_table_only for now");
+        }
     }
 }

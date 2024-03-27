@@ -115,6 +115,7 @@ import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ExplainAnalyzer;
+import com.starrocks.sql.ShowTemporaryTableStmt;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -128,6 +129,8 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
@@ -136,6 +139,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -653,6 +657,15 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof DmlStmt) {
                 handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt);
             } else if (parsedStmt instanceof DdlStmt) {
+                if (parsedStmt instanceof CreateTemporaryTableStmt) {
+                    ((CreateTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
+                }
+                if (parsedStmt instanceof DropTemporaryTableStmt) {
+                    ((DropTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
+                }
+                if (parsedStmt instanceof CreateTemporaryTableLikeStmt) {
+                    ((CreateTemporaryTableLikeStmt) parsedStmt).setSessionId(context.getSessionId());
+                }
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
                 handleShow();
@@ -1063,6 +1076,13 @@ public class StmtExecutor {
         boolean isOutfileQuery = false;
         if (queryStmt instanceof QueryStatement) {
             isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
+            if (isOutfileQuery) {
+                Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(queryStmt);
+                boolean hasTemporaryTable = tables.values().stream().anyMatch(t -> t.isTemporaryTable());
+                if (hasTemporaryTable) {
+                    throw new SemanticException("temporary table doesn't support select outfile statement");
+                }
+            }
         }
 
         if (context instanceof HttpConnectContext) {
@@ -1139,7 +1159,7 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
-        Table table = MetaUtils.getTable(context, analyzeStmt.getTableName());
+        Table table = MetaUtils.getTable(context, db, analyzeStmt.getTableName());
         if (StatisticUtils.isEmptyTable(table)) {
             return;
         }
@@ -1221,6 +1241,9 @@ public class StmtExecutor {
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        if (table.isTemporaryTable()) {
+            statsConnectCtx.setSessionId(context.getSessionId());
+        }
         // from current session, may execute analyze stmt
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
@@ -1547,6 +1570,9 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
+        if (parsedStmt instanceof ShowTemporaryTableStmt) {
+            ((ShowTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
+        }
         ShowExecutor executor = new ShowExecutor();
         ShowResultSet resultSet = executor.execute((ShowStmt) parsedStmt, context);
         if (resultSet == null) {
@@ -1915,7 +1941,7 @@ public class StmtExecutor {
         if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
             targetTable = ((InsertStmt) stmt).getTargetTable();
         } else {
-            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            targetTable = MetaUtils.getTable(context, database, stmt.getTableName());
         }
 
         if (isExplainAnalyze) {
