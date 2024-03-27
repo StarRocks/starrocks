@@ -54,7 +54,7 @@ Status BinlogDataSource::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(binlog_scan_node.tuple_id);
     _is_stream_pipeline = state->fragment_ctx()->is_stream_pipeline();
 
-#ifndef NDEBUG
+#ifdef BE_TEST
     // for ut
     if (state->fragment_ctx()->is_stream_test()) {
         return Status::OK();
@@ -88,7 +88,7 @@ void BinlogDataSource::close(RuntimeState* state) {
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_cpu_time_ns);
 
-#ifndef NDEBUG
+#ifdef BE_TEST
     // for ut
     if (state->fragment_ctx()->is_stream_test()) {
         return _mock_chunk_test(chunk);
