@@ -516,6 +516,19 @@ public class StarOSAgent {
         }
     }
 
+    private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
+        return getShardReplicas(shardId, DEFAULT_WORKER_GROUP_ID);
+    }
+
+    private List<ReplicaInfo> getShardReplicas(long shardId, long workerGroupId) throws UserException {
+        try {
+            ShardInfo info = getShardInfo(shardId, workerGroupId);
+            return info.getReplicaInfoList();
+        } catch (StarClientException e) {
+            throw new UserException(e);
+        }
+    }
+
     private Optional<Long> getBackendIdByHostStarletPort(String host, int starletPort) {
         long backendId = GlobalStateMgr.getCurrentSystemInfo()
                 .getBackendIdWithStarletPort(host, starletPort);
@@ -602,18 +615,9 @@ public class StarOSAgent {
         return getAllBackendIdsByShard(shardId, workerGroupId, false);
     }
 
-    public Set<Long> getAllBackendIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
+    private Set<Long> getAllBackendIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
             throws UserException {
-        try {
-            ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
-            return getAllBackendIdsByShard(shardInfo, onlyPrimary);
-        } catch (StarClientException e) {
-            throw new UserException(e);
-        }
-    }
-
-    public Set<Long> getAllBackendIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
-        List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
+        List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
         if (onlyPrimary) {
             replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
                     .collect(Collectors.toList());

@@ -54,7 +54,7 @@ public class LakeTableCleanerTest {
 
         new MockUp<Utils>() {
             @Mock
-            public ComputeNode chooseNode(ShardInfo info) {
+            public ComputeNode chooseNode(LakeTablet tablet) {
                 return new ComputeNode();
             }
         };
@@ -140,7 +140,7 @@ public class LakeTableCleanerTest {
 
         new MockUp<Utils>() {
             @Mock
-            public ComputeNode chooseNode(ShardInfo info) {
+            public ComputeNode chooseNode(LakeTablet tablet) {
                 return null;
             }
         };
@@ -219,7 +219,7 @@ public class LakeTableCleanerTest {
 
         new MockUp<Utils>() {
             @Mock
-            public ComputeNode chooseNode(ShardInfo info) {
+            public ComputeNode chooseNode(LakeTablet tablet) {
                 return new ComputeNode();
             }
         };

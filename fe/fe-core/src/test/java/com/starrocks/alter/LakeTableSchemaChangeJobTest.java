@@ -230,7 +230,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPendingJobNoAliveBackend() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return null;
             }
         };
@@ -256,7 +256,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableDroppedInPending() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -292,7 +292,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testCreateTabletFailed() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -325,7 +325,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testCreateTabletSuccess() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -370,7 +370,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPreviousTxnNotFinished() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -423,7 +423,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testThrowAnalysisExceptiondWhileWaitingTxn() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -479,7 +479,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -546,7 +546,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableDroppedBeforeRewriting() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -620,7 +620,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testAlterTabletFailed() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -685,7 +685,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testAlterTabletSuccess() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -762,7 +762,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPublishVersion() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
 
@@ -869,7 +869,7 @@ public class LakeTableSchemaChangeJobTest {
         // Make publish version success
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
 
@@ -928,7 +928,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTransactionRaceCondition() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseNodeId(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
             }
         };
