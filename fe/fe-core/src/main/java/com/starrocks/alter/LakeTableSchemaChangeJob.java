@@ -340,7 +340,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             .setId(shadowIdxId) // For newly create materialized index, schema id equals to index id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
-                            .setSortKeyUniqueIds(copiedSortKeyIdxes)
+                            .setSortKeyIndexes(copiedSortKeyIdxes)
                             .setSortKeyUniqueIds(null)
                             .setIndexes(indexes)
                             .setBloomFilterColumnNames(bfColumns)
