@@ -20,6 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
+#include "exec/spill/data_stream.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
@@ -162,9 +163,8 @@ public:
 
     const auto& mem_table() const { return _mem_table; }
 
-    BlockPtr& block() { return _block; }
-
-    void reset_block() { _block = nullptr; }
+    SpillOutputDataStreamPtr& output_stream() { return _output_stream; }
+    void reset_output_stream() { _output_stream = nullptr; }
 
     BlockGroup& block_group() { return _block_group; }
 
@@ -180,19 +180,13 @@ public:
 
 public:
     struct FlushContext : public SpillIOTaskContext {
-        BlockPtr block;
+        std::shared_ptr<SpillOutputDataStream> output;
     };
     using FlushContextPtr = std::shared_ptr<FlushContext>;
 
 private:
-    template <class Provider>
-    StatusOr<BlockPtr> get_block_from_ctx(Provider&& provider) {
-        return provider();
-    }
-
-private:
     BlockGroup _block_group;
-    BlockPtr _block;
+    SpillOutputDataStreamPtr _output_stream;
     MemTablePtr _mem_table;
     std::queue<MemTablePtr> _mem_table_pool;
     std::mutex _mutex;
