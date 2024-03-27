@@ -141,12 +141,13 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
         }
         db.writeLock();
 
-        LakeTable table = (LakeTable) db.getTable(tableId);
-        if (table == null) {
-            // table has been dropped
-            throw new AlterCancelException("table does not exist, tableId:" + tableId);
-        }
         try {
+            LakeTable table = (LakeTable) db.getTable(tableId);
+            if (table == null) {
+                // table has been dropped
+                throw new AlterCancelException("table does not exist, tableId:" + tableId);
+            }
+
             commitVersionMap.clear();
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = table.getPartition(partitionId);
@@ -227,12 +228,13 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
         }
         db.readLock();
 
-        LakeTable table = (LakeTable) db.getTable(tableId);
-        if (table == null) {
-            // table has been dropped
-            throw new AlterCancelException("table does not exist, tableId:" + tableId);
-        }
         try {
+            LakeTable table = (LakeTable) db.getTable(tableId);
+            if (table == null) {
+                // table has been dropped
+                throw new AlterCancelException("table does not exist, tableId:" + tableId);
+            }
+
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = table.getPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -453,12 +455,12 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             return;
         }
         db.writeLock();
-        LakeTable table = (LakeTable) db.getTable(tableId);
-        if (table == null) {
-            return;
-        }
-
         try {
+            LakeTable table = (LakeTable) db.getTable(tableId);
+            if (table == null) {
+                return;
+            }
+
             if (jobState == JobState.FINISHED_REWRITING) {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
