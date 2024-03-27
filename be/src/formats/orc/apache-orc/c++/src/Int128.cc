@@ -23,8 +23,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "orc/Common.hh"
-
 namespace orc {
 
 Int128 Int128::maximumValue() {
@@ -433,6 +431,27 @@ std::string Int128::toHexString() const {
         << lowbits;
     return buf.str();
 }
+
+const static int32_t MAX_PRECISION_64 = 18;
+const static int64_t POWERS_OF_TEN[MAX_PRECISION_64 + 1] = {1,
+                                                            10,
+                                                            100,
+                                                            1000,
+                                                            10000,
+                                                            100000,
+                                                            1000000,
+                                                            10000000,
+                                                            100000000,
+                                                            1000000000,
+                                                            10000000000,
+                                                            100000000000,
+                                                            1000000000000,
+                                                            10000000000000,
+                                                            100000000000000,
+                                                            1000000000000000,
+                                                            10000000000000000,
+                                                            100000000000000000,
+                                                            1000000000000000000};
 
 Int128 scaleUpInt128ByPowerOfTen(Int128 value, int32_t power, bool& overflow) {
     overflow = false;
