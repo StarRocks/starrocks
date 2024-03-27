@@ -33,6 +33,7 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <arrow/json/test_common.h>
 DIAGNOSTIC_POP
 
+#include <arrow/ipc/json_simple.h>
 #include <arrow/memory_pool.h>
 #include <arrow/pretty_print.h>
 #include <column/chunk.h>
@@ -529,12 +530,27 @@ TEST_F(StarRocksColumnToArrowTest, testConstNullColumn) {
     ConstNullColumnTester<TYPE_DECIMAL128, ArrowTypeId::DECIMAL>::apply(997, decimal128_type_desc);
 }
 
+void convert_to_arrow(const TypeDescriptor& type_desc, const ColumnPtr& column,
+                      std::shared_ptr<arrow::DataType>& arrow_type, arrow::MemoryPool* memory_pool,
+                      std::shared_ptr<arrow::RecordBatch>* result) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(column, SlotId(0));
+    std::vector<const TypeDescriptor*> slot_types{&type_desc};
+    std::vector<SlotId> slot_ids{SlotId(0)};
+
+    auto arrow_schema = arrow::schema({arrow::field("col", arrow_type, false)});
+    auto st = convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool, result);
+    ASSERT_TRUE(st.ok());
+    ASSERT_TRUE(result->get() != nullptr);
+    ASSERT_EQ(1, (*result)->num_columns());
+    std::shared_ptr<arrow::Array> array = (*result)->column(0);
+    ASSERT_TRUE(array);
+    ASSERT_EQ(array->type()->ToString(), arrow_type->ToString());
+}
+
 TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     auto array_type_desc = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    auto column = ColumnHelper::create_column(array_type_desc, false, false, 0, false);
 
     // [1, 2, 3]
     column->append_datum(DatumArray{1, 2, 3});
@@ -545,51 +561,22 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     // [NULL, NULL]
     column->append_datum(DatumArray{Datum(), Datum()});
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(0));
-    std::vector<const TypeDescriptor*> slot_types{&array_type_desc};
-    std::vector<SlotId> slot_ids{SlotId(0)};
-
-    std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
-    auto arrow_schema = arrow::schema({arrow::field("col", arrow_type, false)});
     auto memory_pool = arrow::MemoryPool::CreateDefault();
+    std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
     std::shared_ptr<arrow::RecordBatch> result;
-    Status st =
-            convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(result);
-    ASSERT_EQ(1, result->num_columns());
+    convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
-    ASSERT_TRUE(array);
-    ASSERT_EQ(array->type()->ToString(), arrow_type->ToString());
-    auto* data_array = down_cast<arrow::ListArray*>(array.get());
-    ASSERT_EQ(data_array->length(), 4);
 
-    std::unique_ptr<arrow::ArrayBuilder> builder;
-    ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
-    arrow::ListBuilder* list_builder = down_cast<arrow::ListBuilder*>(builder.get());
-    arrow::Int32Builder* value_builder = down_cast<arrow::Int32Builder*>(list_builder->value_builder());
-    ASSERT_OK(list_builder->Append());
-    ASSERT_OK(value_builder->AppendValues({1, 2, 3}));
-    ASSERT_OK(list_builder->Append());
-    ASSERT_OK(value_builder->Append(4));
-    ASSERT_OK(value_builder->AppendNull());
-    ASSERT_OK(value_builder->AppendValues({5, 6}));
-    ASSERT_OK(list_builder->Append());
-    ASSERT_OK(list_builder->Append());
-    ASSERT_OK(value_builder->AppendNull());
-    ASSERT_OK(value_builder->AppendNull());
     std::shared_ptr<arrow::Array> expect_array;
-    ASSERT_OK(list_builder->Finish(&expect_array));
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]",
+                                                       &expect_array);
+    ASSERT_TRUE(s.ok());
     ASSERT_TRUE(expect_array->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     auto array_type_desc = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = NullableColumn::create(ArrayColumn::create(elements, offsets), NullColumn::create());
+    auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
 
     // [1, 2, 3]
     column->append_datum(DatumArray{1, 2, 3});
@@ -602,43 +589,16 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     // [NULL, NULL]
     column->append_datum(DatumArray{Datum(), Datum()});
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(0));
-    std::vector<const TypeDescriptor*> slot_types{&array_type_desc};
-    std::vector<SlotId> slot_ids{SlotId(0)};
-
-    std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
-    auto arrow_schema = arrow::schema({arrow::field("col", arrow_type, true)});
     auto memory_pool = arrow::MemoryPool::CreateDefault();
+    std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
     std::shared_ptr<arrow::RecordBatch> result;
-    Status st =
-            convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(result);
-    ASSERT_EQ(1, result->num_columns());
+    convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
-    ASSERT_TRUE(array);
-    ASSERT_EQ(array->type()->ToString(), arrow_type->ToString());
-    auto* data_array = down_cast<arrow::ListArray*>(array.get());
-    ASSERT_EQ(data_array->length(), 5);
 
-    std::unique_ptr<arrow::ArrayBuilder> builder;
-    ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
-    arrow::ListBuilder* list_builder = down_cast<arrow::ListBuilder*>(builder.get());
-    arrow::Int32Builder* value_builder = down_cast<arrow::Int32Builder*>(list_builder->value_builder());
-    ASSERT_OK(list_builder->Append());
-    ASSERT_OK(value_builder->AppendValues({1, 2, 3}));
-    ASSERT_OK(list_builder->AppendNull());
-    ASSERT_OK(list_builder->Append());
-    ASSERT_OK(value_builder->Append(4));
-    ASSERT_OK(value_builder->AppendNull());
-    ASSERT_OK(value_builder->AppendValues({5, 6}));
-    ASSERT_OK(list_builder->Append());
-    ASSERT_OK(list_builder->Append());
-    ASSERT_OK(value_builder->AppendNull());
-    ASSERT_OK(value_builder->AppendNull());
     std::shared_ptr<arrow::Array> expect_array;
-    ASSERT_OK(list_builder->Finish(&expect_array));
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(
+            arrow_type, "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]", &expect_array);
+    ASSERT_TRUE(s.ok());
     ASSERT_TRUE(expect_array->Equals(array));
 }
 
@@ -646,11 +606,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     std::vector<std::string> field_names{"id", "name"};
     auto struct_type_desc =
             TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
-
-    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c1 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    Columns fields{c0, c1};
-    auto column = StructColumn::create(fields, field_names);
+    auto column = ColumnHelper::create_column(struct_type_desc, false, false, 0, false);
 
     // {1, "test1"}
     column->append_datum(DatumStruct{1, "test1"});
@@ -661,46 +617,23 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     // {NULL, NULL}
     column->append_datum(DatumStruct{Datum(), Datum()});
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(0));
-    std::vector<const TypeDescriptor*> slot_types{&struct_type_desc};
-    std::vector<SlotId> slot_ids{SlotId(0)};
-
+    auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type =
             arrow::struct_({arrow::field("id", arrow::int32()), arrow::field("name", arrow::utf8())});
-    auto arrow_schema = arrow::schema({arrow::field("col", arrow_type, false)});
-    auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::RecordBatch> result;
-    Status st =
-            convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(result);
-    ASSERT_EQ(1, result->num_columns());
+    convert_to_arrow(struct_type_desc, column, arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
-    ASSERT_TRUE(array);
-    ASSERT_EQ(array->type()->ToString(), arrow_type->ToString());
-    auto* data_array = down_cast<arrow::StructArray*>(array.get());
-    ASSERT_EQ(data_array->length(), 4);
 
-    std::unique_ptr<arrow::ArrayBuilder> builder;
-    ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
-    arrow::StructBuilder* struct_builder = down_cast<arrow::StructBuilder*>(builder.get());
-    arrow::Int32Builder* id_builder = down_cast<arrow::Int32Builder*>(struct_builder->field_builder(0));
-    arrow::StringBuilder* name_builder = down_cast<arrow::StringBuilder*>(struct_builder->field_builder(1));
-    ASSERT_OK(struct_builder->Append());
-    ASSERT_OK(id_builder->Append(1));
-    ASSERT_OK(name_builder->Append("test1"));
-    ASSERT_OK(struct_builder->Append());
-    ASSERT_OK(id_builder->AppendNull());
-    ASSERT_OK(name_builder->Append("test2"));
-    ASSERT_OK(struct_builder->Append());
-    ASSERT_OK(id_builder->Append(2));
-    ASSERT_OK(name_builder->AppendNull());
-    ASSERT_OK(struct_builder->Append());
-    ASSERT_OK(id_builder->AppendNull());
-    ASSERT_OK(name_builder->AppendNull());
     std::shared_ptr<arrow::Array> expect_array;
-    ASSERT_OK(struct_builder->Finish(&expect_array));
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
+                                                       R"([
+                        {"id": 1, "name": "test1"},
+                        {"id": null, "name": "test2"},
+                        {"id": 2, "name": null},
+                        {"id": null, "name": null}
+                    ])",
+                                                       &expect_array);
+    ASSERT_TRUE(s.ok());
     ASSERT_TRUE(expect_array->Equals(array));
 }
 
@@ -708,11 +641,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     std::vector<std::string> field_names{"id", "name"};
     auto struct_type_desc =
             TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
-
-    auto c0 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c1 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    Columns fields{c0, c1};
-    auto column = NullableColumn::create(StructColumn::create(fields, field_names), NullColumn::create());
+    auto column = ColumnHelper::create_column(struct_type_desc, true, false, 0, false);
 
     // {1, "test1"}
     column->append_datum(DatumStruct{1, "test1"});
@@ -725,111 +654,64 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     // {NULL, NULL}
     column->append_datum(DatumStruct{Datum(), Datum()});
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(0));
-    std::vector<const TypeDescriptor*> slot_types{&struct_type_desc};
-    std::vector<SlotId> slot_ids{SlotId(0)};
-
+    auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type =
             arrow::struct_({arrow::field("id", arrow::int32()), arrow::field("name", arrow::utf8())});
-    auto arrow_schema = arrow::schema({arrow::field("col", arrow_type, true)});
-    auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::RecordBatch> result;
-    Status st =
-            convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(result);
-    ASSERT_EQ(1, result->num_columns());
+    convert_to_arrow(struct_type_desc, column, arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
-    ASSERT_TRUE(array);
-    ASSERT_EQ(array->type()->ToString(), arrow_type->ToString());
-    auto* data_array = down_cast<arrow::StructArray*>(array.get());
-    ASSERT_EQ(data_array->length(), 5);
 
-    std::unique_ptr<arrow::ArrayBuilder> builder;
-    ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
-    arrow::StructBuilder* struct_builder = down_cast<arrow::StructBuilder*>(builder.get());
-    arrow::Int32Builder* id_builder = down_cast<arrow::Int32Builder*>(struct_builder->field_builder(0));
-    arrow::StringBuilder* name_builder = down_cast<arrow::StringBuilder*>(struct_builder->field_builder(1));
-    ASSERT_OK(struct_builder->Append());
-    ASSERT_OK(id_builder->Append(1));
-    ASSERT_OK(name_builder->Append("test1"));
-    ASSERT_OK(struct_builder->AppendNull());
-    ASSERT_OK(struct_builder->Append());
-    ASSERT_OK(id_builder->AppendNull());
-    ASSERT_OK(name_builder->Append("test2"));
-    ASSERT_OK(struct_builder->Append());
-    ASSERT_OK(id_builder->Append(2));
-    ASSERT_OK(name_builder->AppendNull());
-    ASSERT_OK(struct_builder->Append());
-    ASSERT_OK(id_builder->AppendNull());
-    ASSERT_OK(name_builder->AppendNull());
     std::shared_ptr<arrow::Array> expect_array;
-    ASSERT_OK(struct_builder->Finish(&expect_array));
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
+                                                       R"([
+                        {"id": 1, "name": "test1"},
+                        null,
+                        {"id": null, "name": "test2"},
+                        {"id": 2, "name": null},
+                        {"id": null, "name": null}
+                    ])",
+                                                       &expect_array);
+    ASSERT_TRUE(s.ok());
     ASSERT_TRUE(expect_array->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
     auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
-
-    auto offsets = UInt32Column::create();
-    auto keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto values = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = MapColumn::create(keys, values, offsets);
+    auto column = ColumnHelper::create_column(map_type_desc, false, false, 0, false);
 
     // {1:"test1"},{2,"test2"}
     column->append_datum(DatumMap{{1, (Slice) "test1"}, {2, (Slice) "test2"}});
-
     // {3:"test3"},{4,"test4"}
-    column->keys_column()->append_datum(3);
-    column->keys_column()->append_datum(4);
-    column->values_column()->append_datum(Datum((Slice) "test3"));
-    column->values_column()->append_datum(Datum((Slice) "test4"));
-    column->offsets_column()->append(column->keys_column()->size());
-
+    column->append_datum(DatumMap{{3, (Slice) "test3"}, {4, (Slice) "test4"}});
     // {5:Null}
-    column->keys_column()->append_datum(5);
-    column->values_column()->append_nulls(1);
-    column->offsets_column()->append(column->keys_column()->size());
-
+    column->append_datum(DatumMap{{5, Datum()}});
     // empty
     column->append_datum(DatumMap{});
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(0));
-    std::vector<const TypeDescriptor*> slot_types{&map_type_desc};
-    std::vector<SlotId> slot_ids{SlotId(0)};
-
-    std::shared_ptr<arrow::DataType> arrow_type = arrow::map(arrow::int32(), arrow::utf8());
-    auto arrow_schema = arrow::schema({arrow::field("col", arrow_type, true)});
     auto memory_pool = arrow::MemoryPool::CreateDefault();
+    std::shared_ptr<arrow::DataType> arrow_type = arrow::map(arrow::int32(), arrow::utf8());
     std::shared_ptr<arrow::RecordBatch> result;
-    Status st =
-            convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(result);
-    ASSERT_EQ(1, result->num_columns());
+    convert_to_arrow(map_type_desc, column, arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
-    ASSERT_TRUE(array);
-    ASSERT_EQ(array->type()->ToString(), arrow_type->ToString());
-    auto* data_array = down_cast<arrow::ListArray*>(array.get());
-    ASSERT_EQ(data_array->length(), 4);
 
     std::unique_ptr<arrow::ArrayBuilder> builder;
     ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
     arrow::MapBuilder* map_builder = down_cast<arrow::MapBuilder*>(builder.get());
     arrow::Int32Builder* key_builder = down_cast<arrow::Int32Builder*>(map_builder->key_builder());
     arrow::StringBuilder* item_builder = down_cast<arrow::StringBuilder*>(map_builder->item_builder());
+    // {1:"test1"},{2,"test2"}
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->AppendValues({1, 2}));
     ASSERT_OK(item_builder->AppendValues({"test1", "test2"}));
+    // {3:"test3"},{4,"test4"}
     ASSERT_OK(map_builder->Append());
-    ASSERT_OK(key_builder->Append(3));
-    ASSERT_OK(key_builder->Append(4));
+    ASSERT_OK(key_builder->AppendValues({3, 4}));
     ASSERT_OK(item_builder->AppendValues({"test3", "test4"}));
+    // {5:Null}
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(5));
     ASSERT_OK(item_builder->AppendNull());
+    // empty
     ASSERT_OK(map_builder->Append());
     std::shared_ptr<arrow::Array> expect_array;
     ASSERT_OK(map_builder->Finish(&expect_array));
@@ -838,76 +720,122 @@ TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
     auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
-
-    auto offsets = UInt32Column::create();
-    auto keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto values = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = MapColumn::create(keys, values, offsets);
-    auto nullable_column = NullableColumn::create(column, NullColumn::create());
+    auto column = ColumnHelper::create_column(map_type_desc, true, false, 0, false);
 
     // {1:"test1"},{2,"test2"}
-    nullable_column->append_datum(DatumMap{{1, (Slice) "test1"}, {2, (Slice) "test2"}});
-
+    column->append_datum(DatumMap{{1, (Slice) "test1"}, {2, (Slice) "test2"}});
     // {3:"test3"},{4,"test4"}
-    nullable_column->null_column()->append(0);
-    column->keys_column()->append_datum(3);
-    column->keys_column()->append_datum(4);
-    column->values_column()->append_datum(Datum((Slice) "test3"));
-    column->values_column()->append_datum(Datum((Slice) "test4"));
-    column->offsets_column()->append(column->keys_column()->size());
-
+    column->append_datum(DatumMap{{3, (Slice) "test3"}, {4, (Slice) "test4"}});
     // {5:Null}
-    nullable_column->null_column()->append(0);
-    column->keys_column()->append_datum(5);
-    column->values_column()->append_nulls(1);
-    column->offsets_column()->append(column->keys_column()->size());
-
+    column->append_datum(DatumMap{{5, Datum()}});
     // empty
-    nullable_column->append_datum(DatumMap{});
-
+    column->append_datum(DatumMap{});
     // NULL
-    nullable_column->append_nulls(1);
+    column->append_nulls(1);
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(nullable_column, SlotId(0));
-    std::vector<const TypeDescriptor*> slot_types{&map_type_desc};
-    std::vector<SlotId> slot_ids{SlotId(0)};
-
-    std::shared_ptr<arrow::DataType> arrow_type = arrow::map(arrow::int32(), arrow::utf8());
-    auto arrow_schema = arrow::schema({arrow::field("col", arrow_type, true)});
     auto memory_pool = arrow::MemoryPool::CreateDefault();
+    std::shared_ptr<arrow::DataType> arrow_type = arrow::map(arrow::int32(), arrow::utf8());
     std::shared_ptr<arrow::RecordBatch> result;
-    Status st =
-            convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(result);
-    ASSERT_EQ(1, result->num_columns());
+    convert_to_arrow(map_type_desc, column, arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
-    ASSERT_TRUE(array);
-    ASSERT_EQ(array->type()->ToString(), arrow_type->ToString());
-    auto* data_array = down_cast<arrow::ListArray*>(array.get());
-    ASSERT_EQ(data_array->length(), 5);
 
     std::unique_ptr<arrow::ArrayBuilder> builder;
     ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
     arrow::MapBuilder* map_builder = down_cast<arrow::MapBuilder*>(builder.get());
     arrow::Int32Builder* key_builder = down_cast<arrow::Int32Builder*>(map_builder->key_builder());
     arrow::StringBuilder* item_builder = down_cast<arrow::StringBuilder*>(map_builder->item_builder());
+    // {1:"test1"},{2,"test2"}
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->AppendValues({1, 2}));
     ASSERT_OK(item_builder->AppendValues({"test1", "test2"}));
+    // {3:"test3"},{4,"test4"}
     ASSERT_OK(map_builder->Append());
-    ASSERT_OK(key_builder->Append(3));
-    ASSERT_OK(key_builder->Append(4));
+    ASSERT_OK(key_builder->AppendValues({3, 4}));
     ASSERT_OK(item_builder->AppendValues({"test3", "test4"}));
+    // {5:Null}
     ASSERT_OK(map_builder->Append());
     ASSERT_OK(key_builder->Append(5));
     ASSERT_OK(item_builder->AppendNull());
+    // empty
     ASSERT_OK(map_builder->Append());
+    // NULL
     ASSERT_OK(map_builder->AppendNull());
     std::shared_ptr<arrow::Array> expect_array;
     ASSERT_OK(map_builder->Finish(&expect_array));
     ASSERT_TRUE(expect_array->Equals(array));
+}
+
+TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
+    // ARRAY<STRUCT<INT,MAP<INT,CHAR>>>>
+    auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
+    std::vector<std::string> field_names{"id", "map"};
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), map_type_desc});
+    auto array_type_desc = TypeDescriptor::create_array_type(struct_type_desc);
+    auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
+    // [{"id": 1, "map": {11:"test11"},{111:"test111"}}, null]
+    column->append_datum(
+            DatumArray{DatumStruct{1, DatumMap{{11, (Slice) "test11"}, {111, (Slice) "test111"}}}, Datum()});
+    // []
+    column->append_datum(DatumArray());
+    // [{"id": 2, "map": null}, {"id": null, "map": {33:"test33"},{333:null}}]
+    column->append_datum(DatumArray{DatumStruct{2, Datum()},
+                                    DatumStruct{Datum(), DatumMap{{33, (Slice) "test33"}, {333, Datum()}}}});
+    // [{"id": 4, "map": {}}}]
+    column->append_datum(DatumArray{DatumStruct{4, DatumMap{}}});
+    // null
+    column->append_nulls(1);
+
+    auto memory_pool = arrow::MemoryPool::CreateDefault();
+    std::shared_ptr<arrow::DataType> arrow_map_type = arrow::map(arrow::int32(), arrow::utf8());
+    std::shared_ptr<arrow::DataType> arrow_struct_type =
+            arrow::struct_({arrow::field("id", arrow::int32()), arrow::field("map", arrow_map_type)});
+    std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow_struct_type);
+    std::shared_ptr<arrow::RecordBatch> result;
+    convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &result);
+    std::shared_ptr<arrow::Array> array = result->column(0);
+    ASSERT_EQ(5, array->length());
+
+    std::unique_ptr<arrow::ArrayBuilder> builder;
+    ASSERT_OK(arrow::MakeBuilder(memory_pool.get(), arrow_type, &builder));
+    arrow::ListBuilder* list_builder = down_cast<arrow::ListBuilder*>(builder.get());
+    arrow::StructBuilder* struct_builder = down_cast<arrow::StructBuilder*>(list_builder->value_builder());
+    arrow::Int32Builder* id_builder = down_cast<arrow::Int32Builder*>(struct_builder->field_builder(0));
+    arrow::MapBuilder* map_builder = down_cast<arrow::MapBuilder*>(struct_builder->field_builder(1));
+    arrow::Int32Builder* key_builder = down_cast<arrow::Int32Builder*>(map_builder->key_builder());
+    arrow::StringBuilder* item_builder = down_cast<arrow::StringBuilder*>(map_builder->item_builder());
+    // [{"id": 1, "map": {11:"test11"},{111:"test111"}}, null]
+    ASSERT_OK(list_builder->Append());
+    ASSERT_OK(struct_builder->Append());
+    ASSERT_OK(id_builder->Append(1));
+    ASSERT_OK(map_builder->Append());
+    ASSERT_OK(key_builder->AppendValues({11, 111}));
+    ASSERT_OK(item_builder->AppendValues({"test11", "test111"}));
+    ASSERT_OK(struct_builder->AppendNull());
+    // []
+    ASSERT_OK(list_builder->Append());
+    // [{"id": 2, "map": null}, {"id": null, "map": {33:"test33"},{333:null}}]
+    ASSERT_OK(list_builder->Append());
+    ASSERT_OK(struct_builder->Append());
+    ASSERT_OK(id_builder->Append(2));
+    ASSERT_OK(map_builder->AppendNull());
+    ASSERT_OK(struct_builder->Append());
+    ASSERT_OK(id_builder->AppendNull());
+    ASSERT_OK(map_builder->Append());
+    ASSERT_OK(key_builder->AppendValues({33, 333}));
+    ASSERT_OK(item_builder->Append("test33"));
+    ASSERT_OK(item_builder->AppendNull());
+    // [{"id": 4, "map": {}}}]
+    ASSERT_OK(list_builder->Append());
+    ASSERT_OK(struct_builder->Append());
+    ASSERT_OK(id_builder->Append(4));
+    ASSERT_OK(map_builder->Append());
+    // null
+    ASSERT_OK(list_builder->AppendNull());
+    std::shared_ptr<arrow::Array> expect_array;
+    ASSERT_OK(map_builder->Finish(&expect_array));
+    ASSERT_TRUE(expect_array->Equals(array));
+    LOG(INFO) << "expected\n" << expect_array->ToString();
+    LOG(INFO) << "actual\n" << array->ToString();
 }
 
 } // namespace starrocks
