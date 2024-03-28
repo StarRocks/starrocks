@@ -107,104 +107,19 @@ public class Checkpoint extends FrontendDaemon {
         if (imageVersion < logVersion) {
             newImageCreated = createImage(logVersion);
         }
-<<<<<<< HEAD
-
-        if (!success) {
-            return;
-        }
-
-        // push image file to all the other non-leader nodes
-        // DO NOT get other nodes from HaProtocol, because node may not in bdbje replication group yet.
-        List<Frontend> allFrontends = GlobalStateMgr.getServingState().getFrontends(null);
-        int successPushed = 0;
-        int otherNodesCount = 0;
-        if (!allFrontends.isEmpty()) {
-            otherNodesCount = allFrontends.size() - 1; // skip master itself
-            for (Frontend fe : allFrontends) {
-                String host = fe.getHost();
-                if (host.equals(GlobalStateMgr.getServingState().getLeaderIp())) {
-                    // skip master itself
-                    continue;
-                }
-                int port = Config.http_port;
-
-                String url = "http://" + host + ":" + port + "/put?version=" + checkpointVersion
-                        + "&port=" + port + "&subdir=" + subDir;
-                LOG.info("Put image:{}", url);
-
-                try {
-                    MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
-                    successPushed++;
-                } catch (IOException e) {
-                    LOG.error("Exception when pushing image file. url = {}", url, e);
-                }
-=======
         if (newImageCreated) {
             // Push the image file to all other nodes
             // NOTE: Do not get other nodes from HaProtocol, because the node may not be in bdbje replication group yet.
             for (Frontend frontend : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
                 nodesToPushImage.add(frontend.getNodeName());
->>>>>>> 10b324ff98 ([Enhancement] Add retry to push image (#40939))
             }
         }
 
-<<<<<<< HEAD
-        // Delete old journals
-        if (successPushed == otherNodesCount) {
-            long minOtherNodesJournalId = Long.MAX_VALUE;
-            long deleteVersion = checkpointVersion;
-            if (successPushed > 0) {
-                for (Frontend fe : allFrontends) {
-                    String host = fe.getHost();
-                    if (host.equals(GlobalStateMgr.getServingState().getLeaderIp())) {
-                        // skip master itself
-                        continue;
-                    }
-                    int port = Config.http_port;
-                    URL idURL;
-                    HttpURLConnection conn = null;
-                    try {
-                        /*
-                         * get current replayed journal id of each non-master nodes.
-                         * when we delete bdb database, we cannot delete db newer than
-                         * any non-master node's current replayed journal id. otherwise,
-                         * this lagging node can never get the deleted journal.
-                         */
-                        idURL = new URL("http://" + host + ":" + port + "/journal_id?prefix=" + journal.getPrefix());
-                        conn = (HttpURLConnection) idURL.openConnection();
-                        conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
-                        conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
-                        String idString = conn.getHeaderField("id");
-                        long id = Long.parseLong(idString);
-                        if (minOtherNodesJournalId > id) {
-                            minOtherNodesJournalId = id;
-                        }
-                    } catch (IOException e) {
-                        LOG.error("Exception when getting current replayed journal id. host={}, port={}",
-                                host, port, e);
-                        minOtherNodesJournalId = 0;
-                        break;
-                    } finally {
-                        if (conn != null) {
-                            conn.disconnect();
-                        }
-                    }
-                }
-                deleteVersion = Math.min(minOtherNodesJournalId, checkpointVersion);
-            }
-            journal.deleteJournals(deleteVersion + 1);
-            if (MetricRepo.hasInit) {
-                MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
-            }
-            LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
-                    deleteVersion, journal.getPrefix(), checkpointVersion, minOtherNodesJournalId);
-=======
         // Step2: push image
         int needToPushCnt = nodesToPushImage.size();
         long newImageVersion = newImageCreated ? logVersion : imageVersion;
         if (needToPushCnt > 0) {
             pushImage(newImageVersion);
->>>>>>> 10b324ff98 ([Enhancement] Add retry to push image (#40939))
         }
 
         // Step3: Delete old journals
@@ -252,7 +167,7 @@ public class Checkpoint extends FrontendDaemon {
                 continue;
             }
 
-            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+            String url = "http://" + frontend.getHost() + ":" + Config.http_port
                     + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir;
             try {
                 MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
@@ -336,7 +251,7 @@ public class Checkpoint extends FrontendDaemon {
                  * any non-master node's current replayed journal id. otherwise,
                  * this lagging node can never get the deleted journal.
                  */
-                idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(host, port) + "/journal_id?prefix=" + journal.getPrefix());
+                idURL = new URL("http://" + host + ":" + port + "/journal_id?prefix=" + journal.getPrefix());
                 conn = (HttpURLConnection) idURL.openConnection();
                 conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                 conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
