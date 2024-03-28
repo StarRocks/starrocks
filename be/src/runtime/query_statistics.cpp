@@ -121,6 +121,7 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     int64_t cpu_ns = other.cpu_ns.load();
     if (other.cpu_ns.compare_exchange_strong(cpu_ns, 0)) {
         this->cpu_ns += cpu_ns;
+        DCHECK(this->cpu_ns >= 0);
     }
 
     int64_t mem_cost_bytes = other.mem_cost_bytes.load();
@@ -148,6 +149,7 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
     }
     if (statistics.has_cpu_cost_ns()) {
         cpu_ns += statistics.cpu_cost_ns();
+        DCHECK(cpu_ns >= 0);
     }
     if (statistics.has_mem_cost_bytes()) {
         mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
