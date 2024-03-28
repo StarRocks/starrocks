@@ -55,7 +55,7 @@ StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
                                                                             _partition_column_evaluators, chunk.get()));
     }
 
-        HIVE_STYLE_PARTITIONING_CONSUME_CHUNK(partition, chunk);
+    HIVE_STYLE_PARTITIONING_CONSUME_CHUNK(partition, chunk);
 }
 
 ConnectorChunkSink::Futures IcebergChunkSink::finish() {
