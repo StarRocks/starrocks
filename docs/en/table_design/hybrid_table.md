@@ -10,19 +10,19 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 **Hybrid row-column storage**
 
-- Storage method：Data is stored in both row-by-row and column-by-column fashions. Simply put, a table that uses hybrid row-column storage contains an additional, hidden binary-type column `__row`. When data is written to the table, all values from the value columns of a row are encoded and written to the `__row` column (as shown below). As the data is stored in both row-by-row and column-by-column fashions, additional storage costs are incurred.
+- Storage method: Data is stored in both row-by-row and column-by-column fashions. Simply put, a table that uses hybrid row-column storage contains an additional, hidden binary-type column `__row`. When data is written to the table, all values from the value columns of each involved row are encoded and written to the `__row` column (as shown below). As the data is stored in both row-by-row and column-by-column fashions, additional storage costs are incurred.
 
    ![img](../assets/table_design/hybrid_table.png)
 
-- Scenarios：Suitable for use cases of both rowstore and columnstore storage, but incurs additional storage costs.<ul><li>Use case of rowstore:</li><ul><li>High-concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>Use case of columnstore: Complex data analysis.</li></ul>
+- Scenarios: supports the user scenarios of both row-by-row and column-by-column storage, but incurs additional storage costs.<ul><li>Use case of rowstore:</li><ul><li>High-concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>Use case of columnstore: Complex data analysis.</li></ul>
 
 **Column-oriented**
 
-- Storage method：Data is stored in a column-by-column fashion.
+- Storage method: Data is stored in a column-by-column fashion.
 
   ![img](../assets/table_design/hybrid_table.png)
 
-- Scenarios：Complex data analysis. <ul><li>Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.</li><li>Tables consist of many fields (such as wide tables), but queries against these tables involve only a few columns.</li></ul>
+- Scenarios: Complex data analysis. <ul><li>Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.</li><li>Tables consist of many fields (such as wide tables), but queries against these tables involve only a few columns.</li></ul>
 
 ## Basic usages  
 
