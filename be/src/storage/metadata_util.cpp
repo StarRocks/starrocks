@@ -69,18 +69,18 @@ static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggr
     return STORAGE_AGGREGATE_NONE;
 }
 
-static Status validate_tablet_schema(const TabletSchemaPB schema_pb) {
+static Status validate_tablet_schema(const TabletSchemaPB& schema_pb) {
 #ifndef NDEBUG
     std::unordered_set<std::string> column_names;
     std::unordered_set<int64_t> column_ids;
     for (const auto& col : schema_pb.column()) {
         DCHECK(col.has_unique_id()) << col.DebugString();
         if (auto [it, ok] = column_ids.insert(col.unique_id()); !ok) {
-            LOG(ERROR) << "Duplicate column unique id: " << schema_pb.DebugString();
+            LOG(ERROR) << "Duplicate column unique id: " << col.unique_id() << " schema: " << schema_pb.DebugString();
             return Status::InvalidArgument("Duplicate column id found in tablet schema");
         }
         if (auto [it, ok] = column_names.insert(col.name()); !ok) {
-            LOG(ERROR) << "Duplicate column name: " << schema_pb.DebugString();
+            LOG(ERROR) << "Duplicate column name: " << col.name() << " schema: " << schema_pb.DebugString();
             return Status::InvalidArgument("Duplicate column name found in tablet schema");
         }
     }
