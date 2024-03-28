@@ -46,6 +46,10 @@ public class ShowCreateRoutineLoadStmt extends ShowStmt {
         return labelName.getDbName();
     }
 
+    public void setDbFullName(String db) {
+        labelName.setDbName(db);
+    }
+
     public void setLabelName(LabelName labelName) {
         this.labelName = labelName;
     }
