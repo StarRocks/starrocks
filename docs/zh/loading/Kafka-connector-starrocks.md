@@ -237,7 +237,7 @@ transforms.unwrap.delete.handling.mode=rewrite
 
 在上述配置中，我们指定 `transforms=addfield,unwrap`。
 
-- Debezium CDC 格式数据的 `op` 字段记录了来自上游数据库的数据对应的 SQL 操作，`i`、`u`、`d` 分别代表 insert，update 和 delete。如果 StarRocks 表是主键表，则需要指定 addfield transform。addfield transform 会增加一个 `__op` 字段，来标记数据对应的 SQL 操作，并且会根据 Debezium CDC 格式数据的 `op` 字段的值去 `before` 或者 `after` 字段中里取其它列的值，以拼成一个完整的一行数据。最终这些数据会转成 JSON 或 CSV 格式，写入 StarRocks 中。addfield transform 的类是 `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
+- Debezium CDC 格式数据的 `op` 字段记录了来自上游数据库的数据对应的 SQL 操作，`i`、`u`、`d` 分别代表 insert，update 和 delete。如果 StarRocks 表是主键表，则需要指定 addfield transform。addfield transform 会为每行数据增加一个 `__op` 字段，来标记数据对应的 SQL 操作，并且会根据 Debezium CDC 格式数据的 `op` 字段的值去 `before` 或者 `after` 字段中里取其它列的值，以拼成一个完整的一行数据。最终这些数据会转成 JSON 或 CSV 格式，写入 StarRocks 中。addfield transform 的类是 `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
 
   如果 StarRocks 表不是主键表，则无需指定 addfield transform。
 
