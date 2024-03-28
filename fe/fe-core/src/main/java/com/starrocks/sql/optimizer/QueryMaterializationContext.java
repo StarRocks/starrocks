@@ -54,6 +54,8 @@ public class QueryMaterializationContext {
             .recordStats()
             .build();
 
+    private boolean hasRewrittenSuccess = false;
+
     public QueryMaterializationContext() {
     }
 
@@ -124,5 +126,13 @@ public class QueryMaterializationContext {
             }
         }
         this.mvQueryContextCache.invalidateAll();
+    }
+
+    public void markRewriteSuccess(boolean val) {
+        this.hasRewrittenSuccess = val;
+    }
+
+    public boolean hasRewrittenSuccess() {
+        return this.hasRewrittenSuccess;
     }
 }

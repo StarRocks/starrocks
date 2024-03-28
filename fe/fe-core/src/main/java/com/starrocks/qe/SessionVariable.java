@@ -556,6 +556,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE =
             "enable_materialized_view_rewrite_greedy_mode";
+    public static final String MATERIALIZED_VIEW_REWRITE_STRATEGY =
+            "materialized_view_rewrite_strategy";
 
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
 
@@ -1629,6 +1631,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // - Use the max plan tree to rewrite in view-delta mode to avoid too many rewrites.
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE)
     private boolean enableMaterializedViewRewriteGreedyMode = false;
+
+    // 0: rewrite only in old stage(default),
+    // 2: rewrite in multi stages to support more rewrite cases.
+    @VarAttr(name = MATERIALIZED_VIEW_REWRITE_STRATEGY)
+    private int materializedViewRewriteStrategy = 0;
 
     // whether to use materialized view plan context cache to reduce mv rewrite time cost
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
@@ -3160,6 +3167,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMaterializedViewRewriteGreedyMode() {
         return this.enableMaterializedViewRewriteGreedyMode;
+    }
+
+    public int getMaterializedViewRewriteStrategy() {
+        return materializedViewRewriteStrategy;
+    }
+
+    public void setMaterializedViewRewriteStrategy(int materializedViewRewriteStrategy) {
+        this.materializedViewRewriteStrategy = materializedViewRewriteStrategy;
     }
 
     public void setEnableMaterializedViewPlanCache(boolean enableMaterializedViewPlanCache) {

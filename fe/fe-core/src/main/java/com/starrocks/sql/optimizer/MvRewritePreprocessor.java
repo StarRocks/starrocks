@@ -65,7 +65,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -219,7 +218,7 @@ public class MvRewritePreprocessor {
         }
     }
 
-    public void prepare(OptExpression queryOptExpression, MvRewriteStrategy strategy) {
+    public void prepare(OptExpression queryOptExpression) {
         // MV Rewrite will be used when cbo is enabled.
         if (context.getOptimizerConfig().isRuleBased()) {
             return;
@@ -250,9 +249,6 @@ public class MvRewritePreprocessor {
                 if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
                     context.setQueryMaterializationContext(queryMaterializationContext);
                 }
-
-                // initialize mv rewrite strategy finally
-                MvRewriteStrategy.prepareRewriteStrategy(context, connectContext, queryOptExpression, strategy);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}", tableNames, e.getMessage());

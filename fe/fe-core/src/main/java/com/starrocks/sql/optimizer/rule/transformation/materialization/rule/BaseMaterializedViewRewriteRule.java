@@ -192,6 +192,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             }
 
             results.add(candidate);
+            // mark: query has been rewritten by mv success.
+            context.getQueryMaterializationContext().markRewriteSuccess(true);
 
             // update metrics
             mvContext.updateMVUsedCount();
