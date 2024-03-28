@@ -140,6 +140,10 @@ public class Pattern {
             return true;
         }
 
+        if (isPatternMultiJoin() && isMultiJoin(expression.getOp().getOpType())) {
+            return true;
+        }
+
         return getOpType().equals(expression.getOp().getOpType());
     }
 
