@@ -87,6 +87,14 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
     return null_count;
 }
 
+void filter_all(size_t num_elements, Filter* filter, size_t column_start_idx) {
+    DCHECK_EQ(filter->size(), num_elements);
+    auto* filter_data = (&filter->front()) + column_start_idx;
+    for (size_t i = 0; i < num_elements; ++i) {
+        filter_data[i] = false;
+    }
+}
+
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Filter* filter,
                  size_t column_start_idx, ArrowConvertContext* ctx) {
     DCHECK_EQ(filter->size(), column_start_idx + num_elements);

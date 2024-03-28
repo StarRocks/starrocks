@@ -54,6 +54,9 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Filter* filter,
                  size_t column_start_idx, ArrowConvertContext* ctx);
 
+// fill_all_filter fills all filter elements with invalid flag.
+void filter_all(size_t num_elements, Filter* filter, size_t column_start_idx);
+
 // ConvertFunc is used to fill column's range [column_start_idx, column_start_idx + num_elements)
 // with array's range [array_start_idx, array_start_idx + num_elements). A slot is null if
 // null_data[i - column_start_idx] == DATUM_NULL, null slots are skipped.

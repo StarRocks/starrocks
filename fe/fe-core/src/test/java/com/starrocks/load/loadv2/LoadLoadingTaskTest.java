@@ -46,11 +46,13 @@ public class LoadLoadingTaskTest {
 
         LoadLoadingTask task = new LoadLoadingTask.Builder()
                 .setJSONOptions(jsonOptions)
+                .setFlexibleColumnMapping(true)
                 .build();
 
 
         LoadJob.JSONOptions realJSONOptions =  Deencapsulation.getField(task, "jsonOptions");
         Assert.assertEquals(jsonOptions, realJSONOptions);
+        Assert.assertTrue(Deencapsulation.getField(task, "flexibleColumnMapping"));
     }
 
     @Test

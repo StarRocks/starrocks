@@ -136,6 +136,7 @@ public class LoadPlanner {
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+    private boolean flexibleColumnMapping;
 
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
@@ -248,6 +249,10 @@ public class LoadPlanner {
 
     public void setJsonOptions(LoadJob.JSONOptions options) {
         this.jsonOptions = options;
+    }
+
+    public void setFlexibleColumnMapping(boolean enable) {
+        this.flexibleColumnMapping = enable;
     }
 
     public void plan() throws UserException {
@@ -401,6 +406,7 @@ public class LoadPlanner {
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.setJSONOptions(jsonOptions);
+            fileScanNode.setFlexibleColumnMapping(flexibleColumnMapping);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
             scanNode = fileScanNode;
