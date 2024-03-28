@@ -40,6 +40,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.utframe.UtFrameUtils;
@@ -86,6 +87,14 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 
@@ -160,6 +169,14 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm3", "host3");
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         Resource.fromStmt(stmt);
     }
@@ -173,6 +190,14 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 
@@ -206,6 +231,14 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = false;
+            }
+        };
+
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
             }
         };
 

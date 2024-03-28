@@ -1131,7 +1131,7 @@ public class UtFrameUtils {
                 try (DataInputStream dis = new DataInputStream(
                         new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
                     je.readFields(dis);
-                    EditLog.loadJournal(GlobalStateMgr.getCurrentState(), je);
+                    GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), je);
                     // System.out.println("replayed journal type: " + je.getOpCode());
                 } catch (JournalInconsistentException e) {
                     System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());

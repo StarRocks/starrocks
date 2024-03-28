@@ -834,15 +834,13 @@ public class AuthorizationMgrTest {
         // show tables in db:
         // root can see two tables + 1 views
         ShowTableStmt showTableStmt = new ShowTableStmt("db", false, null);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(showTableStmt, ctx);
+        ShowResultSet resultSet = ShowExecutor.execute(showTableStmt, ctx);
         Set<String> allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
         Assert.assertEquals(new HashSet<>(Arrays.asList("tbl0", "tbl1", "tbl2", "tbl3", "mv1", "view1")), allTables);
 
         // user with table priv can only see tbl1
         setCurrentUserAndRoles(ctx, userWithTablePriv);
-        executor = new ShowExecutor();
-        resultSet = executor.execute(showTableStmt, ctx);
+        resultSet = ShowExecutor.execute(showTableStmt, ctx);
         allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
         Assert.assertEquals(new HashSet<>(List.of("tbl1")), allTables);
 
@@ -851,8 +849,7 @@ public class AuthorizationMgrTest {
 
         // root can see db && db1
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
-        executor = new ShowExecutor();
-        resultSet = executor.execute(showDbStmt, ctx);
+        resultSet = ShowExecutor.execute(showDbStmt, ctx);
         Set<String> set = new HashSet<>();
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
@@ -862,8 +859,7 @@ public class AuthorizationMgrTest {
 
         // user with table priv can only see db
         setCurrentUserAndRoles(ctx, userWithTablePriv);
-        executor = new ShowExecutor();
-        resultSet = executor.execute(showDbStmt, ctx);
+        resultSet = ShowExecutor.execute(showDbStmt, ctx);
         set.clear();
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
@@ -873,8 +869,7 @@ public class AuthorizationMgrTest {
 
         // user with table priv can only see db
         setCurrentUserAndRoles(ctx, userWithDbPriv);
-        executor = new ShowExecutor();
-        resultSet = executor.execute(showDbStmt, ctx);
+        resultSet = ShowExecutor.execute(showDbStmt, ctx);
         set.clear();
         while (resultSet.next()) {
             set.add(resultSet.getString(0));
@@ -1861,8 +1856,7 @@ public class AuthorizationMgrTest {
 
         sql = "show grants for user_for_system";
         ShowGrantsStmt showStreamLoadStmt = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(showStreamLoadStmt, ctx);
+        ShowResultSet resultSet = ShowExecutor.execute(showStreamLoadStmt, ctx);
     }
 
     @Test

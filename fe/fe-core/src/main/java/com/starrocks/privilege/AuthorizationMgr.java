@@ -64,7 +64,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 public class AuthorizationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthorizationMgr.class);
@@ -136,7 +135,20 @@ public class AuthorizationMgr {
                             PrivilegeBuiltinConstants.ROOT_ROLE_NAME,
                             "built-in root role which has all privileges on all objects");
             // GRANT ALL ON ALL
-            for (ObjectType objectType : provider.getAllPrivObjectTypes()) {
+            List<ObjectType> objectTypes = Lists.newArrayList(ObjectType.TABLE,
+                    ObjectType.DATABASE,
+                    ObjectType.SYSTEM,
+                    ObjectType.USER,
+                    ObjectType.RESOURCE,
+                    ObjectType.VIEW,
+                    ObjectType.CATALOG,
+                    ObjectType.MATERIALIZED_VIEW,
+                    ObjectType.FUNCTION,
+                    ObjectType.RESOURCE_GROUP,
+                    ObjectType.PIPE,
+                    ObjectType.GLOBAL_FUNCTION,
+                    ObjectType.STORAGE_VOLUME);
+            for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
                         provider.getAvailablePrivType(objectType));
             }
@@ -145,11 +157,20 @@ public class AuthorizationMgr {
             // 2. builtin db_admin role
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID,
                     PrivilegeBuiltinConstants.DB_ADMIN_ROLE_NAME, "built-in database administration role");
-            // ALL system but GRANT AND NODE
-            List<PrivilegeType> actionWithoutNodeGrant = provider.getAvailablePrivType(ObjectType.SYSTEM).stream().filter(
-                    x -> !x.equals(PrivilegeType.GRANT) && !x.equals(PrivilegeType.NODE)).collect(Collectors.toList());
-            initPrivilegeCollections(rolePrivilegeCollection, ObjectType.SYSTEM, actionWithoutNodeGrant, null,
-                    false);
+            // System grant belong to db_admin
+            List<PrivilegeType> dbAdminSystemGrant = Lists.newArrayList(
+                    PrivilegeType.CREATE_RESOURCE,
+                    PrivilegeType.PLUGIN,
+                    PrivilegeType.FILE,
+                    PrivilegeType.BLACKLIST,
+                    PrivilegeType.OPERATE,
+                    PrivilegeType.CREATE_EXTERNAL_CATALOG,
+                    PrivilegeType.REPOSITORY,
+                    PrivilegeType.CREATE_RESOURCE_GROUP,
+                    PrivilegeType.CREATE_GLOBAL_FUNCTION,
+                    PrivilegeType.CREATE_STORAGE_VOLUME);
+            initPrivilegeCollections(rolePrivilegeCollection, ObjectType.SYSTEM, dbAdminSystemGrant, null, false);
+
             for (ObjectType t : Arrays.asList(
                     ObjectType.CATALOG,
                     ObjectType.DATABASE,
@@ -173,10 +194,10 @@ public class AuthorizationMgr {
             initPrivilegeCollections(
                     rolePrivilegeCollection,
                     ObjectType.SYSTEM,
-                    Collections.singletonList(PrivilegeType.NODE),
+                    List.of(PrivilegeType.NODE),
                     null,
                     false);
-            rolePrivilegeCollection.disableMutable(); // not mutable
+            rolePrivilegeCollection.disableMutable();
 
             // 4. user_admin
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID,
@@ -188,8 +209,8 @@ public class AuthorizationMgr {
                     Collections.singletonList(PrivilegeType.GRANT),
                     null,
                     false);
-            ObjectType t = ObjectType.USER;
-            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
+            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, ObjectType.USER,
+                    provider.getAvailablePrivType(ObjectType.USER));
             rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 5. public
