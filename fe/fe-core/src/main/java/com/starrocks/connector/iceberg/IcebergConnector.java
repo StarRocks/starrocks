@@ -15,6 +15,8 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.starrocks.common.Config;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
@@ -29,15 +31,18 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.DataFile;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.iceberg.util.ThreadPools.newWorkerPool;
 
 public class IcebergConnector implements Connector {
@@ -56,12 +61,14 @@ public class IcebergConnector implements Connector {
     private IcebergCatalog icebergNativeCatalog;
     private ExecutorService icebergJobPlanningExecutor;
     private ExecutorService refreshOtherFeExecutor;
+    private Cache<String, Set<DataFile>> catalogLevelCache;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
+        this.catalogLevelCache = buildIcebergCache();
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -103,7 +110,7 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
-                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor());
+                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), catalogLevelCache);
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -127,6 +134,16 @@ public class IcebergConnector implements Connector {
             this.icebergNativeCatalog = nativeCatalog;
         }
         return icebergNativeCatalog;
+    }
+
+    private Cache<String, Set<DataFile>> buildIcebergCache() {
+        if (catalogLevelCache == null) {
+            long maxSize = Long.parseLong(properties.getOrDefault("iceberg_cache_max_size", "100000"));
+            long ttl = Long.parseLong(properties.getOrDefault("iceberg_data_file_cache_ttl_sec", "86400"));
+            catalogLevelCache = CacheBuilder.newBuilder().expireAfterWrite(ttl, SECONDS).maximumSize(maxSize).build();
+        }
+
+        return catalogLevelCache;
     }
 
     private ExecutorService buildIcebergJobPlanningExecutor() {

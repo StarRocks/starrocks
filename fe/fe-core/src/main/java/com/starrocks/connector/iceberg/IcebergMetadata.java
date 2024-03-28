@@ -15,6 +15,8 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -59,6 +61,7 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.CachingTableScan;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
@@ -121,6 +124,7 @@ import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
 import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -142,14 +146,24 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final ExecutorService refreshOtherFeExecutor;
     private final IcebergMetricsReporter metricsReporter;
 
+    private final Cache<String, Set<DataFile>> dataFileCache;
+
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
                            ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor) {
+        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, refreshOtherFeExecutor,
+                CacheBuilder.newBuilder().expireAfterWrite(0, SECONDS).maximumSize(0).build());
+    }
+
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           Cache<String, Set<DataFile>> dataFileCache) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
         this.metricsReporter = new IcebergMetricsReporter();
         this.jobPlanningExecutor = jobPlanningExecutor;
         this.refreshOtherFeExecutor = refreshOtherFeExecutor;
+        this.dataFileCache = dataFileCache;
     }
 
     @Override
@@ -502,7 +516,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
-        TableScan scan = nativeTbl.newScan()
+        TableScan scan = new CachingTableScan(nativeTbl, nativeTbl.schema(), CachingTableScan.newTableScanContext(nativeTbl),
+                catalogName, dbName, tableName, dataFileCache)
                 .useSnapshot(snapshotId)
                 .metricsReporter(metricsReporter)
                 .planWith(jobPlanningExecutor);
