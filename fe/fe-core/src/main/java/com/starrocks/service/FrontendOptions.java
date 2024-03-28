@@ -73,7 +73,7 @@ public class FrontendOptions {
 
     @VisibleForTesting
     static final List<String> PRIORITY_CIDRS = Lists.newArrayList();
-    private static InetAddress localAddr;
+    private static InetAddress localAddr = InetAddress.getLoopbackAddress();
     private static boolean useFqdn = false;
 
     public static void init(String[] args) throws UnknownHostException {
