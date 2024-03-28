@@ -1965,7 +1965,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             // this will make disk balance worse, but can not exceed
-            // Config.tablet_sched_distribution_balance_threshold_ratio * Config.balance_load_score_threshold;
+            // Config.tablet_sched_num_based_balance_threshold_ratio * Config.balance_load_score_threshold;
             return maxUsedPercentAfterBalance - minUsedPercentAfterBalance <
                     Config.tablet_sched_num_based_balance_threshold_ratio *
                             Config.tablet_sched_balance_load_score_threshold;
