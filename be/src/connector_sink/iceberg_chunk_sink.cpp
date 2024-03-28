@@ -58,8 +58,9 @@ StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
     // create writer if not found
     if (_partition_writers[partition] == nullptr) {
         auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
-        ASSIGN_OR_RETURN(_partition_writers[partition], _file_writer_factory->create(path));
+        ASSIGN_OR_RETURN(auto writer, _file_writer_factory->create(path));
         RETURN_IF_ERROR(_partition_writers[partition]->init());
+        _partition_writers[partition] = writer;
     }
 
     Futures futures;
