@@ -79,10 +79,37 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t v
     return pick_rowsets(tablet_metadata, false, nullptr);
 }
 
+<<<<<<< HEAD
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMetadataPtr tablet_metadata,
                                                                        bool calc_score, std::vector<bool>* has_dels) {
     std::vector<RowsetPtr> input_rowsets;
     UpdateManager* mgr = _tablet->update_mgr();
+=======
+// Return true if segment number meet the requirement of min input
+bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
+    int64_t total_segment_cnt = 0;
+    for (int i = 0; i < tablet_metadata->rowsets_size(); i++) {
+        const auto& rowset = tablet_metadata->rowsets(i);
+        total_segment_cnt += rowset.overlapped() ? rowset.segments_size() : 1;
+        if (total_segment_cnt >= config::lake_pk_compaction_min_input_segments) {
+            // Return when requirement meet
+            return true;
+        }
+    }
+    return false;
+}
+
+StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
+    UpdateManager* mgr = _tablet_mgr->update_mgr();
+    std::vector<int64_t> rowset_indexes;
+    if (!min_input_segment_check(tablet_metadata)) {
+        // When the number of segments cannot meet the requirement
+        // 1. Compaction score will be zero.
+        // 2. None of rowset will be picked.
+        return rowset_indexes;
+    }
+>>>>>>> a531aeb498 ([Enhancement] avoid useless compaction in cloud native pk table (#43271))
     std::vector<RowsetCandidate> rowset_vec;
     const int64_t compaction_data_size_threshold =
             static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
