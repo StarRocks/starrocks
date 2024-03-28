@@ -1511,13 +1511,13 @@ public class Config extends ConfigBase {
     public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
 
     /**
-     * Doing distribution balance may break the disk size balance,
+     * Doing num based balance may break the disk size balance,
      * but the maximum gap between disks cannot exceed tablet_sched_distribution_balance_threshold_ratio * tablet_sched_balance_load_score_threshold
      * If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value.
      * If you want the tablet distribution to be more balanced, increase this value.
      */
     @ConfField(mutable = true)
-    public static double tablet_sched_distribution_balance_threshold_ratio = 0.5;
+    public static double tablet_sched_num_based_balance_threshold_ratio = 0.5;
 
     @ConfField(mutable = true, comment = "How much time we should wait before dropping the tablet from BE on tablet report")
     public static long tablet_report_drop_tablet_delay_sec = 120;
