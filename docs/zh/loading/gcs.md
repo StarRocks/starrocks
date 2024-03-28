@@ -8,6 +8,8 @@ keywords: ['Broker Load']
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
+import PipeAdvantages from '../assets/commonMarkdown/pipeAdvantages.md'
+
 StarRocks 支持通过以下方式从 GCS 导入数据：
 
 - 使用 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
@@ -71,11 +73,13 @@ StarRocks 支持通过以下方式从 GCS 导入数据：
 ```SQL
 SELECT * FROM FILES
 (
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+    "path" = "gs://starrocks-samples/user-behavior-10-million-rows.parquet",
     "format" = "parquet",
+    -- highlight-start
     "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
     "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----- ----END PRIVATE KEY-----"
+    -- highlight-end
 )
 LIMIT 3;
 ```
@@ -109,7 +113,7 @@ LIMIT 3;
 > 使用表结构推断功能时，CREATE TABLE 语句不支持设置副本数。如果您的集群为存算一体模式，您需要在建表前把副本数设置好。例如，您可以通过如下命令设置副本数为 `3`：
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
 > ```
 
 通过如下语句创建数据库、并切换至该数据库：
@@ -125,11 +129,13 @@ USE mydatabase;
 CREATE TABLE user_behavior_inferred AS
 SELECT * FROM FILES
 (
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+    "path" = "gs://starrocks-samples/user-behavior-10-million-rows.parquet",
     "format" = "parquet",
+    -- highlight-start
     "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
     "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----- ----END PRIVATE KEY-----"
+    -- highlight-end
 );
 ```
 
@@ -146,15 +152,15 @@ DESCRIBE user_behavior_inferred;
 系统返回类似如下查询结果：
 
 ```Plain
-+--------------+-----------+------+-------+---------+-------+
-| Field        | Type      | Null | Key   | Default | Extra |
-+--------------+-----------+------+-------+---------+-------+
-| UserID       | bigint    | YES  | true  | NULL    |       |
-| ItemID       | bigint    | YES  | true  | NULL    |       |
-| CategoryID   | bigint    | YES  | true  | NULL    |       |
-| BehaviorType | varbinary | YES  | false | NULL    |       |
-| Timestamp    | varbinary | YES  | false | NULL    |       |
-+--------------+-----------+------+-------+---------+-------+
++--------------+------------------+------+-------+---------+-------+
+| Field        | Type             | Null | Key   | Default | Extra |
++--------------+------------------+------+-------+---------+-------+
+| UserID       | bigint           | YES  | true  | NULL    |       |
+| ItemID       | bigint           | YES  | true  | NULL    |       |
+| CategoryID   | bigint           | YES  | true  | NULL    |       |
+| BehaviorType | varchar(1048576) | YES  | false | NULL    |       |
+| Timestamp    | varchar(1048576) | YES  | false | NULL    |       |
++--------------+------------------+------+-------+---------+-------+
 ```
 
 您可以查询新建表中的数据，验证数据已成功导入。例如：
@@ -209,7 +215,7 @@ CREATE TABLE user_behavior_declared
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp varbinary
+    Timestamp datetime
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
@@ -230,9 +236,8 @@ DESCRIBE user_behavior_declared;
 | ItemID       | int            | NO   | false | NULL    |       |
 | CategoryID   | int            | NO   | false | NULL    |       |
 | BehaviorType | varchar(65533) | NO   | false | NULL    |       |
-| Timestamp    | varbinary      | NO   | false | NULL    |       |
+| Timestamp    | datetime       | NO   | false | NULL    |       |
 +--------------+----------------+------+-------+---------+-------+
-5 rows in set (0.00 sec)
 ```
 
 :::tip
@@ -251,13 +256,15 @@ DESCRIBE user_behavior_declared;
 
 ```SQL
 INSERT INTO user_behavior_declared
-  SELECT * FROM FILES
-  (
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+SELECT * FROM FILES
+(
+    "path" = "gs://starrocks-samples/user-behavior-10-million-rows.parquet",
     "format" = "parquet",
+    -- highlight-start
     "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
     "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----- ----END PRIVATE KEY-----"
+    -- highlight-end
 );
 ```
 
@@ -374,12 +381,11 @@ CREATE TABLE user_behavior
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp varbinary
+    Timestamp datetime
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES;
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### 提交导入作业
@@ -389,16 +395,17 @@ PROPERTIES;
 ```SQL
 LOAD LABEL user_behavior
 (
-    DATA INFILE("gs://starrocks-samples/user_behavior_ten_million_rows.parquet")
+    DATA INFILE("gs://starrocks-samples/user-behavior-10-million-rows.parquet")
     INTO TABLE user_behavior
     FORMAT AS "parquet"
  )
  WITH BROKER
  (
- 
+    -- highlight-start
     "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
     "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----- ----END PRIVATE KEY-----"
+    -- highlight-end
  )
 PROPERTIES
 (
@@ -432,19 +439,37 @@ SELECT * FROM information_schema.loads;
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
 ```SQL
-SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior';
+SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior' \G
 ```
 
-例如，在下面的返回结果中，有两条关于导入作业 `user_behavior` 的记录：
-
-- 第一条记录显示导入作业的状态为 `CANCELLED`。通过记录中的 `ERROR_MSG` 字段，可以确定导致作业出错的原因是 `listPath failed`。
-- 第二条记录显示导入作业的状态为 `FINISHED`，表示作业成功。
-
 ```Plain
-JOB_ID|LABEL                                      |DATABASE_NAME|STATE    |PROGRESS           |TYPE  |PRIORITY|SCAN_ROWS|FILTERED_ROWS|UNSELECTED_ROWS|SINK_ROWS|ETL_INFO|TASK_INFO                                           |CREATE_TIME        |ETL_START_TIME     |ETL_FINISH_TIME    |LOAD_START_TIME    |LOAD_FINISH_TIME   |JOB_DETAILS                                                                                                                                                                                                                                                    |ERROR_MSG                             |TRACKING_URL|TRACKING_SQL|REJECTED_RECORD_PATH|
-------+-------------------------------------------+-------------+---------+-------------------+------+--------+---------+-------------+---------------+---------+--------+----------------------------------------------------+-------------------+-------------------+-------------------+-------------------+-------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------+------------+------------+--------------------+
- 10121|user_behavior                              |mydatabase   |CANCELLED|ETL:N/A; LOAD:N/A  |BROKER|NORMAL  |        0|            0|              0|        0|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:59:30|                   |                   |                   |2023-08-10 14:59:34|{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}}                                                                                        |type:ETL_RUN_FAIL; msg:listPath failed|            |            |                    |
- 10106|user_behavior                              |mydatabase   |FINISHED |ETL:100%; LOAD:100%|BROKER|NORMAL  | 86953525|            0|              0| 86953525|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:50:15|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:55:10|{"All backends":{"a5fe5e1d-d7d0-4826-ba99-c7348f9a5f2f":[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":2710603082,"InternalTableLoadRows":86953525,"ScanBytes":1225637388,"ScanRows":86953525,"TaskNumber":1,"Unfinished backends":{"a5|                                      |            |            |                    |
+*************************** 1. row ***************************
+              JOB_ID: 10148
+               LABEL: user_behavior
+       DATABASE_NAME: mydatabase
+       # highlight-start
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: BROKER
+            PRIORITY: NORMAL
+           SCAN_ROWS: 10000000
+       # highlight-end
+       FILTERED_ROWS: 0
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 10000000
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):72000; max_filter_ratio:0.0
+         CREATE_TIME: 2024-03-01 14:51:26
+      ETL_START_TIME: 2024-03-01 14:51:30
+     ETL_FINISH_TIME: 2024-03-01 14:51:30
+     LOAD_START_TIME: 2024-03-01 14:51:30
+    LOAD_FINISH_TIME: 2024-03-01 14:51:40
+         JOB_DETAILS: {"All backends":{"2f99dcc2-13b8-4792-ad49-61ca67a707d6":[10004]},"FileNumber":1,"FileSize":136901706,"InternalTableLoadBytes":311746399,"InternalTableLoadRows":10000000,"ScanBytes":136901706,"ScanRows":10000000,"TaskNumber":1,"Unfinished backends":{"2f99dcc2-13b8-4792-ad49-61ca67a707d6":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: NULL
+        TRACKING_SQL: NULL
+REJECTED_RECORD_PATH: NULL
+1 row in set (0.03 sec) 
 ```
 
 导入作业完成后，您可以从表内查询数据，验证数据是否已成功导入。例如：
@@ -464,3 +489,143 @@ SELECT * from user_behavior LIMIT 3;
 |    142 | 3031639 |    3607361 | pv           | 2017-11-25 15:19:25 |
 +--------+---------+------------+--------------+---------------------+
 ```
+
+## Use Pipe
+
+Starting from v3.2, StarRocks provides the Pipe loading method, which currently supports only the Parquet and ORC file formats.
+
+### Advantages of Pipe
+
+<PipeAdvantages menu=" object storage like Google GCS uses ETag "/>
+
+### Differences between Pipe and INSERT+FILES()
+
+A Pipe job is split into one or more transactions based on the size and number of rows in each data file. Users can query the intermediate results during the loading process. In contrast, an INSERT+`FILES()` job is processed as a single transaction, and users are unable to view the data during the loading process.
+
+### File loading sequence
+
+For each Pipe job, StarRocks maintains a file queue, from which it fetches and loads data files as micro-batches. Pipe does not ensure that the data files are loaded in the same order as they are uploaded. Therefore, newer data may be loaded prior to older data.
+
+### Typical example
+
+#### Create a database and a table
+
+Create a database and switch to it:
+
+```SQL
+CREATE DATABASE IF NOT EXISTS mydatabase;
+USE mydatabase;
+```
+
+Create a table by hand:
+
+```SQL
+CREATE TABLE user_behavior_from_pipe
+(
+    UserID int(11),
+    ItemID int(11),
+    CategoryID int(11),
+    BehaviorType varchar(65533),
+    Timestamp datetime
+)
+ENGINE = OLAP 
+DUPLICATE KEY(UserID)
+DISTRIBUTED BY HASH(UserID);
+```
+
+#### Start a Pipe job
+
+Run the following command to start a Pipe job that loads data from the sample dataset `gs://starrocks-samples/user-behavior-10-million-rows/*` to the `user_behavior_from_pipe` table. This pipe job uses both micro batches, and continuous loading (described above) pipe-specific features.
+
+The other examples in this guide load a single Parquet file with 10 million rows. For the pipe example, the same dataset is split into 57 separate files, and these are all stored in one GCS folder. Note in the `CREATE PIPE` command below the `path` is the URI for a folder and rather than providing a filename the URI ends in `/*`. By setting `AUTO_INGEST` and specifying a folder rather than an individual file the pipe job will poll the folder for new files and ingest them as they are added to the folder.
+
+```SQL
+CREATE PIPE user_behavior_pipe
+PROPERTIES
+(
+    "AUTO_INGEST" = "TRUE"
+)
+AS
+INSERT INTO user_behavior_from_pipe
+SELECT * FROM FILES
+(
+    "path" = "gs://starrocks-samples/user-behavior-10-million-rows/*",
+    "format" = "parquet",
+    -- highlight-start
+    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY----- ----END PRIVATE KEY-----"
+    -- highlight-end
+);
+```
+
+:::note
+Substitute the credentials in the above command with your own credentials. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user.
+:::
+
+This job has four main sections:
+
+- `pipe_name`: The name of the pipe. The pipe name must be unique within the database to which the pipe belongs.
+- `INSERT_SQL`: The INSERT INTO SELECT FROM FILES statement that is used to load data from the specified source data file to the destination table.
+- `PROPERTIES`: A set of optional parameters that specify how to execute the pipe. These include `AUTO_INGEST`, `POLL_INTERVAL`, `BATCH_SIZE`, and `BATCH_FILES`. Specify these properties in the `"key" = "value"` format.
+
+For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md).
+
+#### Check load progress
+
+- Query the progress of the Pipe job by using [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) in the current database to which the Pipe job belongs.
+
+  ```SQL
+  SHOW PIPES WHERE NAME = 'user_behavior_pipe' \G
+  ```
+
+  The following result is returned:
+
+  :::tip
+  In the output shown below the pipe is in the `RUNNING` state. A pipe will stay in the `RUNNING` state until you manually stop it. The output also shows the number of files loaded (57) and the last time that a file was loaded.
+  :::
+
+  ```SQL
+  *************************** 1. row ***************************
+  DATABASE_NAME: mydatabase
+        PIPE_ID: 10476
+      PIPE_NAME: user_behavior_pipe
+      -- highlight-start
+          STATE: RUNNING
+     TABLE_NAME: mydatabase.user_behavior_from_pipe
+    LOAD_STATUS: {"loadedFiles":57,"loadedBytes":295345637,"loadingFiles":0,"lastLoadedTime":"2024-02-28 22:14:19"}
+      -- highlight-end
+     LAST_ERROR: NULL
+   CREATED_TIME: 2024-02-28 22:13:41
+  1 row in set (0.02 sec)
+  ```
+
+#### Check file status
+
+You can query the load status of the files loaded from the [`pipe_files`](../reference/information_schema/pipe_files.md) view in the StarRocks Information Schema.
+
+```SQL
+SELECT * FROM information_schema.pipe_files WHERE pipe_name = 'user_behavior_pipe' \G
+```
+
+The output shows information like this for each of the files ingested:
+
+```SQL
+*************************** 56. row ***************************
+   DATABASE_NAME: mydatabase
+         PIPE_ID: 10160
+       PIPE_NAME: user_behavior_pipe
+       FILE_NAME: gs://starrocks-samples/user-behavior-10-million-rows/data_0_0_5.parquet
+    FILE_VERSION: 1709302156665
+       FILE_SIZE: 5205174
+   LAST_MODIFIED: 2024-03-01 14:09:16
+      LOAD_STATE: FINISHED
+     STAGED_TIME: 2024-03-01 15:03:27
+ START_LOAD_TIME: 2024-03-01 15:03:28
+FINISH_LOAD_TIME: 2024-03-01 15:04:04
+       ERROR_MSG:
+```
+
+#### Manage Pipe jobs
+
+You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/data-manipulation/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/data-manipulation/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/data-manipulation/RETRY_FILE.md).
