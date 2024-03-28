@@ -14,6 +14,15 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
     auto hdfs_builder = hdfsNewBuilder();
     hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
     const THdfsProperties* properties = options.hdfs_properties();
+
+    // Insert cloud properties(key-value paired) into Hadoop configuration
+    const std::vector<TCloudProperty> cloud_properties = options.cloud_configuration->cloud_properties;
+    if (!cloud_properties.empty()) {
+        for (const auto& cloud_property : cloud_properties) {
+            hdfsBuilderConfSetStr(hdfs_builder, cloud_property.key.data(), cloud_property.value.data());
+        }
+    }
+
     if (properties != nullptr) {
         if (properties->__isset.hdfs_username) {
             hdfsBuilderSetUserName(hdfs_builder, properties->hdfs_username.data());
