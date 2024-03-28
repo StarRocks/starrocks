@@ -137,6 +137,44 @@ TEST_F(LakeTabletManagerTest, create_tablet) {
     EXPECT_EQ(TPersistentIndexType::LOCAL, metadata->persistent_index_type());
 }
 
+TEST_F(LakeTabletManagerTest, create_tablet_with_duplicate_column_id_or_name) {
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    TColumnType col_type;
+    col_type.__set_type(TPrimitiveType::SMALLINT);
+    req.tablet_schema.columns.resize(2);
+    auto& c0 = req.tablet_schema.columns[0];
+    c0.__set_is_key(true);
+    c0.__set_is_allow_null(false);
+    c0.__set_column_name("c0");
+    c0.__set_aggregation_type(TAggregationType::NONE);
+    c0.__set_col_unique_id(0);
+    c0.__set_column_type(col_type);
+    auto& c1 = req.tablet_schema.columns[1];
+    c1 = c0;
+    c1.__set_column_name("c1");
+    auto st = _tablet_manager->create_tablet(req);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, st.code());
+    ASSERT_TRUE(MatchPattern(st.message(), "*Duplicate column id*")) << st.message();
+
+    c1.__set_col_unique_id(1);
+    c1.__set_column_name(c0.column_name);
+    st = _tablet_manager->create_tablet(req);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, st.code());
+    ASSERT_TRUE(MatchPattern(st.message(), "*Duplicate column name*")) << st.message();
+}
+
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, create_tablet_without_schema_file) {
     auto fs = FileSystem::Default();
