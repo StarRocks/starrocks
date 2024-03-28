@@ -99,7 +99,7 @@ private:
     std::map<std::string, int> _partition2index;
 };
 
-#define HIVE_PARTITIONING_STYLE_CONSUME_CHUNKS(partition, chunk)                                                                   \
+#define HIVE_PARTITIONING_STYLE_CONSUME_CHUNKS(partition, chunk)                                                      \
     do {                                                                                                              \
         Futures futures;                                                                                              \
         auto it = _partition_writers.find(partition);                                                                 \
