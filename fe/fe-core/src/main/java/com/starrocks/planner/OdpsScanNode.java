@@ -52,10 +52,9 @@ import java.util.stream.Collectors;
 /**
  * full scan on ODPS table.
  */
-public class OdpsScanNode extends ScanNode {
+public class OdpsScanNode extends CatalogScanNode {
     private static final Logger LOG = LogManager.getLogger(OdpsScanNode.class);
     private OdpsTable table;
-    private CloudConfiguration cloudConfiguration = null;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
@@ -63,24 +62,10 @@ public class OdpsScanNode extends ScanNode {
     public OdpsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         table = (OdpsTable) desc.getTable();
-        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
-    }
-
-    private void setupCloudCredential() {
-        String catalog = table.getCatalogName();
-        if (catalog == null) {
-            return;
-        }
-        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-        Preconditions.checkState(connector != null,
-                String.format("connector of catalog %s should not be null", catalog));
-        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-        Preconditions.checkState(cloudConfiguration != null,
-                String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate,
@@ -178,11 +163,9 @@ public class OdpsScanNode extends ScanNode {
         if (table != null) {
             tHdfsScanNode.setTable_name(table.getTableName());
         }
+        setColumnAccessPathToThrift(tHdfsScanNode);
+        setCloudConfigurationToThrift(tHdfsScanNode);
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-        cloudConfiguration.toThrift(tCloudConfiguration);
-        tCloudConfiguration.setCloud_type(TCloudType.ALIYUN);
-        tHdfsScanNode.setCloud_configuration(tCloudConfiguration);
         msg.hdfs_scan_node = tHdfsScanNode;
     }
 

@@ -16,9 +16,10 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
@@ -27,7 +28,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
@@ -79,7 +79,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
-public class IcebergScanNode extends ScanNode {
+public class IcebergScanNode extends CatalogScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
 
     private final IcebergTable icebergTable;
@@ -367,13 +367,7 @@ public class IcebergScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            output.append(explainCatalogComplexTypePrune(prefix));
         }
 
         if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(icebergTable.getCatalogName())) {
@@ -409,8 +403,9 @@ public class IcebergScanNode extends ScanNode {
             msg.hdfs_scan_node.setMor_tuple_id(equalityDeleteTupleDesc.getId().asInt());
         }
 
+        setColumnAccessPathToThrift(tHdfsScanNode);
+        setCloudConfigurationToThrift(tHdfsScanNode);
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
     }
 

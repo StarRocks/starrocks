@@ -20,6 +20,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 
@@ -59,6 +60,8 @@ public:
     std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
 
     bool is_key() const { return _type == TAccessPathType::type::KEY; }
+
+    bool is_value() const { return _type == TAccessPathType::type::VALUE; }
 
     bool is_offset() const { return _type == TAccessPathType::type::OFFSET; }
 
@@ -106,5 +109,16 @@ inline std::ostream& operator<<(std::ostream& out, const ColumnAccessPath& val) 
     out << val.to_string();
     return out;
 }
+
+class ColumnAccessPathUtil {
+public:
+    static void rewrite_complex_type_descriptor(TypeDescriptor& original_type, const ColumnAccessPathPtr& access_path);
+
+private:
+    static void rewrite_struct_type_descriptor(TypeDescriptor& original_type, const ColumnAccessPathPtr& access_path);
+    static void rewrite_map_type_descriptor(TypeDescriptor& original_type, const ColumnAccessPathPtr& access_path);
+    static void rewrite_array_type_descriptor(TypeDescriptor& original_type, const ColumnAccessPathPtr& access_path);
+    static bool is_select_all_subfields(const ColumnAccessPathPtr& path);
+};
 
 } // namespace starrocks

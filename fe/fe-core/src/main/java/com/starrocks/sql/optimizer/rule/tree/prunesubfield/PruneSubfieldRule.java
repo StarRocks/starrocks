@@ -46,7 +46,7 @@ public class PruneSubfieldRule extends TransformationRule {
             .build();
 
     public static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
-            .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE)
+            .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_VALUES, FunctionSet.MAP_SIZE)
             .add(FunctionSet.ARRAY_LENGTH)
             .add(FunctionSet.CARDINALITY)
             .addAll(SUPPORT_JSON_FUNCTIONS)

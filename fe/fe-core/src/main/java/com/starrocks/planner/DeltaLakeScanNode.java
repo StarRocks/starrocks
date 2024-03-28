@@ -30,6 +30,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
@@ -50,6 +51,7 @@ import io.delta.standalone.data.CloseableIterator;
 import io.delta.standalone.expressions.And;
 import io.delta.standalone.expressions.Expression;
 import io.delta.standalone.types.StructType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -63,19 +65,17 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
-public class DeltaLakeScanNode extends ScanNode {
+public class DeltaLakeScanNode extends CatalogScanNode {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
     private DeltaLakeTable deltaLakeTable;
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private Optional<Expression> deltaLakePredicates = Optional.empty();
-    private CloudConfiguration cloudConfiguration = null;
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         deltaLakeTable = (DeltaLakeTable) desc.getTable();
-        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -84,19 +84,6 @@ public class DeltaLakeScanNode extends ScanNode {
 
     public DeltaLakeTable getDeltaLakeTable() {
         return deltaLakeTable;
-    }
-
-    private void setupCloudCredential() {
-        String catalog = deltaLakeTable.getCatalogName();
-        if (catalog == null) {
-            return;
-        }
-        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-        Preconditions.checkState(connector != null,
-                String.format("connector of catalog %s should not be null", catalog));
-        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-        Preconditions.checkState(cloudConfiguration != null,
-                String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
     @Override
@@ -250,13 +237,7 @@ public class DeltaLakeScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            output.append(explainCatalogComplexTypePrune(prefix));
         }
 
         return output.toString();
@@ -278,8 +259,9 @@ public class DeltaLakeScanNode extends ScanNode {
             msg.hdfs_scan_node.setTable_name(deltaLakeTable.getName());
         }
 
+        setColumnAccessPathToThrift(tHdfsScanNode);
+        setCloudConfigurationToThrift(tHdfsScanNode);
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
     }
 

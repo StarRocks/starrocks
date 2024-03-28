@@ -41,6 +41,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
@@ -61,18 +62,16 @@ import java.util.stream.Collectors;
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-public class PaimonScanNode extends ScanNode {
+public class PaimonScanNode extends CatalogScanNode {
     private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
     private final PaimonTable paimonTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
-    private CloudConfiguration cloudConfiguration = null;
 
     public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         this.paimonTable = (PaimonTable) desc.getTable();
-        setupCloudCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -81,19 +80,6 @@ public class PaimonScanNode extends ScanNode {
 
     public PaimonTable getPaimonTable() {
         return paimonTable;
-    }
-
-    private void setupCloudCredential() {
-        String catalog = paimonTable.getCatalogName();
-        if (catalog == null) {
-            return;
-        }
-        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-        Preconditions.checkState(connector != null,
-                String.format("connector of catalog %s should not be null", catalog));
-        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-        Preconditions.checkState(cloudConfiguration != null,
-                String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
     @Override
@@ -274,13 +260,7 @@ public class PaimonScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            output.append(explainCatalogComplexTypePrune(prefix));
         }
 
         return output.toString();
@@ -305,8 +285,9 @@ public class PaimonScanNode extends ScanNode {
             msg.hdfs_scan_node.setTable_name(paimonTable.getName());
         }
 
+        setColumnAccessPathToThrift(tHdfsScanNode);
+        setCloudConfigurationToThrift(tHdfsScanNode);
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
     }
 

@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import org.junit.After;
 import org.junit.Before;
@@ -25,7 +24,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
-        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         String dbName = "prune_column_test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
@@ -189,7 +187,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         sql = "select map_values(map2) from pc0";
         plan = getVerboseExplain(sql);
-        assertNotContains(plan, "ColumnAccessPath");
+        assertContains(plan, "[/map2/VALUE]");
 
         sql = "select map_keys(map3[1][2]) from pc0";
         plan = getVerboseExplain(sql);
@@ -281,7 +279,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void testPruneMapValues() throws Exception {
         String sql = "select map_keys(map1), map_values(map1) from pc0";
         String plan = getVerboseExplain(sql);
-        assertNotContains(plan, "ColumnAccessPath");
+        assertContains(plan, "[/map1/ALL]");
 
         sql = "select map_keys(map1), map_size(map1) from pc0";
         plan = getVerboseExplain(sql);
@@ -670,7 +668,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=1.0\n" +
-                    "     Pruned type: 7 <-> [ARRAY<INT>]\n" +
                     "     cardinality: 1");
 
         }
@@ -684,7 +681,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=3.0\n" +
-                    "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
                     "     ColumnAccessPath: [/st3/sa3]\n" +
                     "     cardinality: 1\n");
         }
@@ -702,7 +698,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=3.0\n" +
-                    "     Pruned type: 7 <-> [ARRAY<INT>]\n" +
                     "     ColumnAccessPath: [/a1/INDEX]\n" +
                     "     cardinality: 1");
         }
@@ -716,7 +711,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                     "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     actualRows=0, avgRowSize=3.0\n" +
-                    "     Pruned type: 4 <-> [struct<s1 int(11), s2 int(11), sa3 array<int(11)>>]\n" +
                     "     ColumnAccessPath: [/st3/sa3/ALL]\n" +
                     "     cardinality: 1\n");
         }
