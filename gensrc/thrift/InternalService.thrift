@@ -285,6 +285,9 @@ struct TQueryOptions {
   130: optional bool enable_wait_dependent_event = false;
 
   131: optional bool orc_use_column_names = false;
+
+  132: optional bool enable_datacache_async_populate_mode;
+  133: optional bool enable_datacache_io_adaptor;
 }
 
 
