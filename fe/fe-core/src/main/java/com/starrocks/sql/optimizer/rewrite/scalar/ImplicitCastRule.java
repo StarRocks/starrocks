@@ -161,9 +161,6 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             return predicate;
         }
 
-        Type compatibleType =
-                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
-
         // we will try cast const operator to variable operator
         if ((rightChild.isVariable() && leftChild.isConstantRef()) ||
                 (leftChild.isVariable() && rightChild.isConstantRef())) {
@@ -174,6 +171,9 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 return optional.get();
             }
         }
+
+        Type compatibleType =
+                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);
