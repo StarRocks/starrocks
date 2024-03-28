@@ -190,6 +190,10 @@ public abstract class ScalarOperator implements Cloneable {
         return this instanceof ColumnRefOperator;
     }
 
+    public boolean isCast() {
+        return this instanceof CastOperator;
+    }
+
     public boolean isConstantRef() {
         return this instanceof ConstantOperator;
     }
