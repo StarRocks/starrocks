@@ -72,7 +72,8 @@ LocalTabletsChannel::~LocalTabletsChannel() {
 }
 
 Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                                 bool is_incremental) {
+                                 bool is_incremental, TabletsChannelOpenTimeStat* open_time_stat) {
+    open_time_stat->set_start_time(GetCurrentTimeNanos());
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
@@ -88,7 +89,8 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sh
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     }
 
-    RETURN_IF_ERROR(_open_all_writers(params));
+    RETURN_IF_ERROR(_open_all_writers(params, open_time_stat));
+    open_time_stat->set_end_time(GetCurrentTimeNanos());
     return Status::OK();
 }
 
@@ -459,7 +461,8 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
     return n - 1;
 }
 
-Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params) {
+Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params,
+                                              TabletsChannelOpenTimeStat* stat) {
     std::vector<SlotDescriptor*>* index_slots = nullptr;
     int32_t schema_hash = 0;
     for (auto& index : _schema->indexes()) {
@@ -527,7 +530,9 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         }
         options.merge_condition = params.merge_condition();
 
+        int64_t start_time_ns = GetCurrentTimeNanos();
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
+        stat->add_open_writer_cost(GetCurrentTimeNanos() - start_time_ns);
         if (res.status().ok()) {
             auto writer = std::move(res).value();
             _delta_writers.emplace(tablet.tablet_id(), std::move(writer));

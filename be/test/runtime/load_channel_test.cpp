@@ -258,7 +258,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
     PTabletWriterOpenRequest open_request = _open_request;
     PTabletWriterOpenResult open_response;
     open_request.set_num_senders(1);
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    LoadChannelOpenTimeStat open_time_stat;
+    _load_channel->open(nullptr, open_request, &open_response, nullptr, &open_time_stat);
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -327,7 +328,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {
 TEST_F(LoadChannelTestForLakeTablet, test_write_concurrently) {
     PTabletWriterOpenRequest open_request = _open_request;
     PTabletWriterOpenResult open_response;
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    LoadChannelOpenTimeStat open_time_stat;
+    _load_channel->open(nullptr, open_request, &open_response, nullptr, &open_time_stat);
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -396,7 +398,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_abort) {
     PTabletWriterOpenRequest open_request = _open_request;
     PTabletWriterOpenResult open_response;
     open_request.set_num_senders(1);
-    _load_channel->open(nullptr, open_request, &open_response, nullptr);
+    LoadChannelOpenTimeStat open_time_stat;
+    _load_channel->open(nullptr, open_request, &open_response, nullptr, &open_time_stat);
     ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
 
     constexpr int kChunkSize = 128;
@@ -463,7 +466,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_incremental_open) {
         PTabletWriterOpenResult open_response;
         open_request.set_num_senders(1);
         open_request.set_is_incremental(true);
-        _load_channel->open(nullptr, open_request, &open_response, nullptr);
+        LoadChannelOpenTimeStat open_time_stat;
+        _load_channel->open(nullptr, open_request, &open_response, nullptr, &open_time_stat);
         ASSERT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
     }
 
@@ -471,7 +475,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_incremental_open) {
         PTabletWriterOpenRequest open_request = _open_request;
         PTabletWriterOpenResult open_response;
         open_request.set_is_incremental(true);
-        _load_channel->open(nullptr, open_request, &open_response, nullptr);
+        LoadChannelOpenTimeStat open_time_stat;
+        _load_channel->open(nullptr, open_request, &open_response, nullptr, &open_time_stat);
         EXPECT_EQ(TStatusCode::NOT_IMPLEMENTED_ERROR, open_response.status().status_code());
         EXPECT_EQ("incremental open not supported by this tablets channel", open_response.status().error_msgs(0));
     }
@@ -482,7 +487,8 @@ TEST_F(LoadChannelTestForLakeTablet, test_add_segment) {
         PTabletWriterOpenRequest open_request = _open_request;
         PTabletWriterOpenResult open_response;
         open_request.set_num_senders(1);
-        _load_channel->open(nullptr, open_request, &open_response, nullptr);
+        LoadChannelOpenTimeStat open_time_stat;
+        _load_channel->open(nullptr, open_request, &open_response, nullptr, &open_time_stat);
         ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
     }
 

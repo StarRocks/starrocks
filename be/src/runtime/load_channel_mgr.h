@@ -62,6 +62,35 @@ namespace starrocks {
 
 class Cache;
 
+class LoadChannelMgrOpenTimeStat {
+public:
+    LoadChannelMgrOpenTimeStat();
+
+    int64_t get_start_time() { return _start_time_ns; }
+
+    void set_start_time(int64_t start_time_ns) { _start_time_ns = start_time_ns; }
+
+    int64_t get_lock_time() { return _lock_time_ns; }
+
+    void set_lock_time(int64_t lock_time_ns) { _lock_time_ns = lock_time_ns; }
+
+    LoadChannelOpenTimeStat* get_load_channel_stat() { return _load_channel_stat.get(); }
+
+    int64_t get_end_time() { return _end_time_ns; }
+
+    void set_end_time(int64_t end_time_ns) { _end_time_ns = end_time_ns; }
+
+    int64_t get_total_time() { return _end_time_ns - _start_time_ns; }
+
+    std::string to_string();
+
+private:
+    int64_t _start_time_ns;
+    int64_t _lock_time_ns;
+    std::shared_ptr<LoadChannelOpenTimeStat> _load_channel_stat;
+    int64_t _end_time_ns;
+};
+
 // LoadChannelMgr -> LoadChannel -> TabletsChannel -> DeltaWriter
 // All dispatched load data for this backend is routed from this class
 class LoadChannelMgr {

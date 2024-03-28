@@ -63,7 +63,7 @@ public:
     const TabletsChannelKey& key() const { return _key; }
 
     Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                bool is_incremental) override;
+                bool is_incremental, TabletsChannelOpenTimeStat* open_time_stat) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
@@ -126,7 +126,7 @@ private:
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
     };
 
-    Status _create_delta_writers(const PTabletWriterOpenRequest& params);
+    Status _create_delta_writers(const PTabletWriterOpenRequest& params, TabletsChannelOpenTimeStat* open_time_stat);
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
@@ -182,13 +182,15 @@ LakeTabletsChannel::~LakeTabletsChannel() {
 }
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
-                                [[maybe_unused]] bool is_incremental) {
+                                [[maybe_unused]] bool is_incremental, TabletsChannelOpenTimeStat* open_time_stat) {
+    open_time_stat->set_start_time(GetCurrentTimeNanos());
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
     _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     _senders = std::vector<Sender>(params.num_senders());
-    RETURN_IF_ERROR(_create_delta_writers(params));
+    RETURN_IF_ERROR(_create_delta_writers(params, open_time_stat));
+    open_time_stat->set_end_time(GetCurrentTimeNanos());
     return Status::OK();
 }
 
@@ -355,7 +357,8 @@ int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitio
     return n - 1;
 }
 
-Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params) {
+Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params,
+                                                 TabletsChannelOpenTimeStat* stat) {
     std::vector<SlotDescriptor*>* slots = nullptr;
     for (auto& index : _schema->indexes()) {
         if (index->index_id == _index_id) {
@@ -388,6 +391,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     for (const PTabletWithPartition& tablet : params.tablets()) {
+        int64_t start_time_ns = GetCurrentTimeNanos();
         std::unique_ptr<AsyncDeltaWriter> writer;
         if (!params.merge_condition().empty()) {
             writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
@@ -396,6 +400,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
             writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
                                               slots, _mem_tracker);
         }
+        stat->add_open_writer_cost(GetCurrentTimeNanos() - start_time_ns);
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
