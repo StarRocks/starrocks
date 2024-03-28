@@ -47,15 +47,18 @@ Status IcebergChunkSink::init() {
 
 // requires that input chunk belongs to a single partition (see LocalKeyPartitionExchange)
 StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
+    bool partitioned = !_partition_column_names.empty();
     std::string partition;
-    if (_partition_column_names.empty()) {
+    if (partitioned) {
         partition = DEFAULT_PARTITION;
     } else {
         ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name_nullable(_partition_column_names,
                                                                             _partition_column_evaluators, chunk.get()));
     }
 
-    HIVE_STYLE_PARTITIONING_CONSUME_CHUNK(partition, chunk);
+    return HiveUtils::hive_style_partitioning_write_chunk(partitioned, partition, _partition_writers,
+                                                          _location_provider.get(), _file_writer_factory.get(),
+                                                          _max_file_size, chunk);
 }
 
 ConnectorChunkSink::Futures IcebergChunkSink::finish() {

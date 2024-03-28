@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "connector_chunk_sink.h"
 #include "exprs/expr_context.h"
 #include "fmt/format.h"
 #include "formats/column_evaluator.h"
@@ -25,6 +26,8 @@
 #include "runtime/types.h"
 
 namespace starrocks::connector {
+
+class LocationProvider;
 
 class HiveUtils {
 public:
@@ -35,6 +38,12 @@ public:
     static StatusOr<std::string> make_partition_name_nullable(
             const std::vector<std::string>& column_names,
             const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
+
+    static StatusOr<ConnectorChunkSink::Futures> hive_style_partitioning_write_chunk(
+            bool partitioned, const std::string& partition,
+            std::map<std::string, std::shared_ptr<formats::FileWriter>> partition_writers,
+            LocationProvider* location_provider, formats::FileWriterFactory* file_writer_factory, int64_t max_file_size,
+            ChunkPtr chunk);
 
 private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
@@ -98,34 +107,5 @@ private:
     int _index = 0;
     std::map<std::string, int> _partition2index;
 };
-
-#define HIVE_STYLE_PARTITIONING_CONSUME_CHUNK(partition, chunk)                                                       \
-    do {                                                                                                              \
-        Futures futures;                                                                                              \
-        auto it = _partition_writers.find(partition);                                                                 \
-        if (it != _partition_writers.end()) {                                                                         \
-            auto* writer = it->second.get();                                                                          \
-            if (writer->get_written_bytes() >= _max_file_size) {                                                      \
-                futures.commit_file_futures.push_back(writer->commit());                                              \
-                _partition_writers.erase(it);                                                                         \
-                auto path = _partition_column_names.empty() ? _location_provider->get()                               \
-                                                            : _location_provider->get(partition);                     \
-                ASSIGN_OR_RETURN(auto new_writer, _file_writer_factory->create(path));                                \
-                RETURN_IF_ERROR(new_writer->init());                                                                  \
-                futures.add_chunk_futures.push_back(new_writer->write(chunk));                                        \
-                _partition_writers.emplace(partition, std::move(new_writer));                                         \
-            } else {                                                                                                  \
-                futures.add_chunk_futures.push_back(writer->write(chunk));                                            \
-            }                                                                                                         \
-        } else {                                                                                                      \
-            auto path =                                                                                               \
-                    _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition); \
-            ASSIGN_OR_RETURN(auto new_writer, _file_writer_factory->create(path));                                    \
-            RETURN_IF_ERROR(new_writer->init());                                                                      \
-            futures.add_chunk_futures.push_back(new_writer->write(chunk));                                            \
-            _partition_writers.emplace(partition, std::move(new_writer));                                             \
-        }                                                                                                             \
-        return futures;                                                                                               \
-    } while (0)
 
 } // namespace starrocks::connector
