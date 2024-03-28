@@ -50,6 +50,7 @@ import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadParam;
+import com.starrocks.thrift.TEnvelope;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -171,6 +172,20 @@ public class StreamLoadPlannerTest {
         StreamLoadInfo streamLoadInfo2 = StreamLoadInfo.fromStreamLoadContext(loadId, 100, 100, param);
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         StreamLoadInfo streamLoadInfo3 = StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+    }
+    @Test
+    public void testEnvelope() throws UserException {
+        UUID uuid = UUID.randomUUID();
+        StreamLoadParam param1 = new StreamLoadParam();
+        TUniqueId loadId1 = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        StreamLoadInfo streamLoadInfo1 = StreamLoadInfo.fromStreamLoadContext(loadId1, 100, 100, param1);
+        Assert.assertSame(streamLoadInfo1.getEnvelope(), TEnvelope.UNKNOWN);
+
+        StreamLoadParam param2 = new StreamLoadParam();
+        param2.envelope = param2.parseStreamLoadEnvelope("debezium");
+        TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        StreamLoadInfo streamLoadInfo2 = StreamLoadInfo.fromStreamLoadContext(loadId, 100, 100, param2);
+        Assert.assertSame(streamLoadInfo2.getEnvelope(), TEnvelope.DEBEZIUM);
     }
 
     @Test

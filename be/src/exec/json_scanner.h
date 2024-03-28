@@ -73,6 +73,7 @@ private:
     std::vector<std::vector<SimpleJsonPath>> _json_paths;
     std::vector<SimpleJsonPath> _root_paths;
     bool _strip_outer_array = false;
+    int _envelope = TEnvelope::UNKNOWN;
 };
 
 // Reader to parse the json.
@@ -113,8 +114,9 @@ private:
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
 
-    Status _construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
+    Status _construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk, bool is_delete);
     Status _construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
+    Status _construct_row_by_debezium(simdjson::ondemand::object* row, Chunk* chunk);
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);

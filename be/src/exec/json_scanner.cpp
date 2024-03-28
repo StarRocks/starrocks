@@ -73,6 +73,9 @@ Status JsonScanner::open() {
     if (range.__isset.strip_outer_array) {
         _strip_outer_array = range.strip_outer_array;
     }
+    if (range.__isset.envelope) {
+        _envelope = range.envelope;
+    }
 
     return Status::OK();
 }
@@ -511,7 +514,7 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
     return Status::OK();
 }
 
-Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
+Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk, bool is_delete) {
     _parsed_columns.assign(chunk->num_columns(), false);
 
     try {
@@ -598,15 +601,50 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
-                    std::ignore = column->append_strings(std::vector{Slice{"0"}});
+                    std::string op = is_delete ? "1" : "0";
+                    std::ignore = column->append_strings(std::vector{Slice{op}});
                 } else {
-                    column->append_datum(Datum((uint8_t)0));
+                    uint8_t op = is_delete ? 1 : 0;
+                    column->append_datum(Datum((uint8_t)op));
                 }
             } else {
                 column->append_nulls(1);
             }
         }
     }
+    return Status::OK();
+}
+// process debezium-json record
+Status JsonReader::_construct_row_by_debezium(simdjson::ondemand::object* row, Chunk* chunk) {
+    if (UNLIKELY(_op_col_index < 0)) {
+        return Status::InternalError("Debezium json must apply to PRIMARY KEY table.");
+    }
+    simdjson::ondemand::value op_value, value;
+    // Extract the operation type
+    std::vector<SimpleJsonPath> op_json_paths;
+    RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string("$.op"), &op_json_paths));
+    RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, op_json_paths, &op_value));
+    std::string_view op_sv = op_value.get_string().value();
+
+    std::vector<SimpleJsonPath> row_json_paths;
+    // Based on the operation type, extract the relevant data and set the operation column
+    if (op_sv == "c" || op_sv == "u" || op_sv == "r") {
+        // For create, update, or read operations, use the 'after' field
+        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string("$.after"), &row_json_paths));
+        RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, row_json_paths, &value));
+    } else if (op_sv == "d") {
+        // For delete operations, use the 'before' field
+        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string("$.before"), &row_json_paths));
+        RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, row_json_paths, &value));
+    } else {
+        return Status::DataQualityError("Invalid 'op' value in Debezium JSON");
+    }
+
+    // Construct the row with the extracted value
+    simdjson::ondemand::object value_obj;
+    value.get(value_obj);
+    RETURN_IF_ERROR(_construct_row_without_jsonpath(&value_obj, chunk, op_sv == "d"));
+
     return Status::OK();
 }
 
@@ -673,8 +711,8 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
 }
 
 Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk) {
-    if (_scanner->_json_paths.empty()) return _construct_row_without_jsonpath(row, chunk);
-
+    if (_scanner->_envelope == TEnvelope::DEBEZIUM) return _construct_row_by_debezium(row, chunk);
+    if (_scanner->_json_paths.empty()) return _construct_row_without_jsonpath(row, chunk, false);
     return _construct_row_with_jsonpath(row, chunk);
 }
 

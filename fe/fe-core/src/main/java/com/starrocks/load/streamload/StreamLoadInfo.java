@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TEnvelope;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -80,6 +81,7 @@ public class StreamLoadInfo {
     private boolean enableReplicatedStorage = false;
     private String confluentSchemaRegistryUrl;
     private long logRejectedRecordNum = 0;
+    private TEnvelope envelope = TEnvelope.UNKNOWN;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
@@ -241,6 +243,14 @@ public class StreamLoadInfo {
         return loadParallelRequestNum;
     }
 
+    public TEnvelope getEnvelope() {
+        return envelope;
+    }
+
+    public void setEnvelope(TEnvelope envelope) {
+        this.envelope = envelope;
+    }
+
     public long getLogRejectedRecordNum() {
         return logRejectedRecordNum;
     }
@@ -319,6 +329,9 @@ public class StreamLoadInfo {
         }
         if (context.loadDop != -1) {
             loadParallelRequestNum = context.loadDop;
+        }
+        if (context.envelope != null) {
+            envelope = context.envelope;
         }
         if (context.partialUpdateMode != null) {
             if (context.partialUpdateMode.equals("column")) {
@@ -466,6 +479,9 @@ public class StreamLoadInfo {
         }
         if (!routineLoadJob.getJsonRoot().isEmpty()) {
             jsonRoot = routineLoadJob.getJsonRoot();
+        }
+        if (routineLoadJob.getEnvelope() != null) {
+            envelope = routineLoadJob.getEnvelope();
         }
         stripOuterArray = routineLoadJob.isStripOuterArray();
         partialUpdate = routineLoadJob.isPartialUpdate();

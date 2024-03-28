@@ -110,6 +110,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
     public static final String JSONPATHS = "jsonpaths";
     public static final String JSONROOT = "json_root";
+    public static final String ENVELOPE = "envelope";
 
     // csv properties
     public static final String TRIMSPACE = "trim_space";
@@ -150,6 +151,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(JSONPATHS)
             .add(STRIP_OUTER_ARRAY)
             .add(JSONROOT)
+            .add(ENVELOPE)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .add(LoadStmt.PARTIAL_UPDATE)
@@ -213,6 +215,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private String format = ""; //default is csv.
     private String jsonPaths = "";
     private String jsonRoot = ""; // MUST be a jsonpath string
+    private String envelope = "";
     private boolean stripOuterArray = false;
 
     // for csv
@@ -392,6 +395,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public String getJsonRoot() {
         return jsonRoot;
+    }
+
+    public String getEnvelope() {
+        return envelope;
     }
 
     public String getKafkaBrokerList() {
@@ -584,6 +591,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 format = "json";
                 jsonPaths = jobProperties.get(JSONPATHS);
                 jsonRoot = jobProperties.get(JSONROOT);
+                envelope = jobProperties.get(ENVELOPE);
                 stripOuterArray = Boolean.valueOf(jobProperties.getOrDefault(STRIP_OUTER_ARRAY, "false"));
             } else if (format.equalsIgnoreCase("avro")) {
                 format = "avro";

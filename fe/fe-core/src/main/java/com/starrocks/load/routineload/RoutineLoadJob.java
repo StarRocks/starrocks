@@ -90,6 +90,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TEnvelope;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
@@ -238,6 +239,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private static final String PROPS_STRIP_OUTER_ARRAY = "strip_outer_array";
     private static final String PROPS_JSONPATHS = "jsonpaths";
     private static final String PROPS_JSONROOT = "json_root";
+    private static final String PROPS_ENVELOPE = "envelope";
 
     private String confluentSchemaRegistryUrl;
 
@@ -376,6 +378,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "false");
             jobProperties.put(PROPS_JSONPATHS, "");
             jobProperties.put(PROPS_JSONROOT, "");
+            jobProperties.put(PROPS_ENVELOPE, "");
             this.trimspace = stmt.isTrimspace();
             this.enclose = stmt.getEnclose();
             this.escape = stmt.getEscape();
@@ -390,6 +393,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 jobProperties.put(PROPS_JSONROOT, stmt.getJsonRoot());
             } else {
                 jobProperties.put(PROPS_JSONROOT, "");
+            }
+            if (!Strings.isNullOrEmpty(stmt.getEnvelope())) {
+                jobProperties.put(PROPS_ENVELOPE, stmt.getEnvelope());
+            } else {
+                jobProperties.put(PROPS_ENVELOPE, "");
             }
             if (stmt.isStripOuterArray()) {
                 jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "true");
@@ -664,6 +672,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             return "";
         }
         return value;
+    }
+    public TEnvelope getEnvelope() {
+        String value = jobProperties.get(PROPS_ENVELOPE);
+        if (value == null) {
+            return TEnvelope.UNKNOWN;
+        }
+        if (value.equalsIgnoreCase("debezium")) {
+            return TEnvelope.DEBEZIUM;
+        }
+        return TEnvelope.UNKNOWN;
     }
 
     public int getSizeOfRoutineLoadTaskInfoList() {

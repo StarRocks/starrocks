@@ -903,6 +903,74 @@ TEST_F(JsonScannerTest, test_load_native_json) {
     EXPECT_EQ(expected, chunk->debug_row(0));
 }
 
+TEST_F(JsonScannerTest, test_load_debezium_json) {
+    std::vector<TypeDescriptor> types;
+    constexpr int kNumColumns = 17;
+    // __op column is tinyint type
+    types.emplace_back(TypeDescriptor::create_tinyint_type());
+    for (int i = 1; i < kNumColumns; i++) {
+        types.emplace_back(TypeDescriptor::create_json_type());
+    }
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.strip_outer_array = true;
+    range.envelope = TEnvelope::DEBEZIUM;
+
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__isset.envelope = true;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_debezium_json_load.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(
+            types, ranges,
+            {"__op", "f_bool", "f_tinyint", "f_smallint", "f_int", "f_bigint", "f_float", "f_double", "f_varchar",
+             "f_date", "f_datetime", "f_array", "f_decimal", "f_char", "f_time", "f_nestarray", "f_object"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(kNumColumns, chunk->num_columns());
+    EXPECT_EQ(3, chunk->num_rows());
+
+    // insert
+    // __op = 0
+    auto expected =
+            "[0, true, 127, 32767, 2147483647, 9223372036854775807, 3.14, 3.14, \"starrocks\", "
+            "\"2021-12-09\", \"2021-12-09 10:00:00\", [1, 3, 5], "
+            "\"1234565789012345678901234567.123456789\", \"starrocks\", \"10:00:00\", "
+            "[[{\"k1\": 1, \"k2\": 2}, {\"k3\": 3}], [{\"k1\": 4, \"k2\": 5}, {\"k3\": 6}]], "
+            "{\"n1\": {\"n2\": {\"n3\": 1.1}}}]";
+
+    EXPECT_EQ(expected, chunk->debug_row(0));
+
+    // update
+    // __op = 0
+    expected =
+            "[0, true, 127, 32767, 2147483647, 9223372036854775807, 3.14, 3.14, \"starrocks\", "
+            "\"2021-12-09\", \"2021-12-09 10:00:00\", [1, 3, 5], "
+            "\"1234565789012345678901234567.123456789\", \"starrocks\", \"10:00:00\", "
+            "[[{\"k1\": 1, \"k2\": 2}, {\"k3\": 3}], [{\"k1\": 4, \"k2\": 5}, {\"k3\": 6}]], "
+            "{\"n1\": {\"n2\": {\"n3\": 1.1}}}]";
+    EXPECT_EQ(expected, chunk->debug_row(1));
+
+    // delete
+    // __op = 1
+    expected =
+            "[1, true, 127, 32767, 2147483647, 9223372036854775807, 3.14, 3.14, \"starrocks\", "
+            "\"2021-12-09\", \"2021-12-09 10:00:00\", [1, 3, 5], "
+            "\"1234565789012345678901234567.123456789\", \"starrocks\", \"10:00:00\", "
+            "[[{\"k1\": 1, \"k2\": 2}, {\"k3\": 3}], [{\"k1\": 4, \"k2\": 5}, {\"k3\": 6}]], "
+            "{\"n1\": {\"n2\": {\"n3\": 1.1}}}]";
+    EXPECT_EQ(expected, chunk->debug_row(2));
+}
+
 TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
     std::vector<TypeDescriptor> types;
     constexpr int kColumns = 4;
