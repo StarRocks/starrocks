@@ -127,7 +127,7 @@ public:
         }
         _big_query_profile_threshold_ns = factor * big_query_profile_threshold;
     }
-    int64_t get_big_query_profile_threshold_ns() { return _big_query_profile_threshold_ns; }
+    int64_t get_big_query_profile_threshold_ns() const { return _big_query_profile_threshold_ns; }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
         _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
     }
