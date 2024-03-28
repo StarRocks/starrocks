@@ -14,18 +14,26 @@
 
 package com.starrocks.lake.compaction;
 
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.Assert.assertEquals;
 
@@ -73,5 +81,28 @@ public class CompactionSchedulerTest {
         } catch (Exception e) {
             Assert.fail("Transaction failed for lake compaction");
         }
+    }
+
+    @Test
+    public void testExistCompaction() {
+        long txnId = 11111;
+        CompactionMgr compactionManager = new CompactionMgr();
+        CompactionScheduler compactionScheduler =
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
+                ConcurrentHashMap<PartitionIdentifier, CompactionJob> r = new ConcurrentHashMap<>();
+                PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
+                Database db = new Database();
+                Table table = new LakeTable();
+                PhysicalPartition partition = new Partition(123, "aaa", null, null);
+                CompactionJob job = new CompactionJob(db, table, partition, txnId);
+                r.put(partitionIdentifier, job);
+                return r;
+            }
+        };
+        assertEquals(true, compactionScheduler.existCompaction(txnId));
     }
 }
