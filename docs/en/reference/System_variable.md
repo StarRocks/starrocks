@@ -753,3 +753,7 @@ The StarRocks version. Cannot be changed.
 The number of seconds the server waits for activity on a noninteractive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
 
 Unit: seconds. Default value: 28800 (8 hours).
+
+### orc_use_column_names
+
+Set the Data Lake to read ORC file's behavior. Default value is `false`, columns in ORC files are accessed by their ordinal position in the Hive table definition. If set `true`, we will read columns by name.
