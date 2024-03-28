@@ -346,9 +346,9 @@ public:
 
     std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
-    const std::string& filename() const { return _name; }
+    const std::string& filename() const override { return _name; }
 
-    bool is_cache_hit() const { return _is_cache_hit; }
+    bool is_cache_hit() const override { return _is_cache_hit; }
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;

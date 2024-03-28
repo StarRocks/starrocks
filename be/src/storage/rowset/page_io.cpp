@@ -170,6 +170,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     Slice page_slice(page.get(), page_size);
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
+        // todo override is_cache_hit
         if (opts.read_file->is_cache_hit()) {
             RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, page_slice.data, page_slice.size));
             ++opts.stats->pages_from_local_disk;
