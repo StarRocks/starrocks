@@ -183,6 +183,9 @@ public class RangePartitionInfo extends PartitionInfo {
         if (newRange == null) /* the new range's upper value is larger than any existing ranges */ {
             newRange = checkNewRange(partKeyDesc, newRangeUpper, lastRange, currentRange);
         }
+        if (lastRange != null) {
+            RangeUtils.checkRangeIntersect(newRange, lastRange);
+        }
         return newRange;
     }
 
