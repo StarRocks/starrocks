@@ -42,6 +42,7 @@
 
 #include "common/compiler_util.h"
 #include "common/logging.h"
+#include "datasketches/hll.hpp"
 #include "gutil/macros.h"
 #include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/mem_chunk_allocator.h"
@@ -177,6 +178,79 @@ private:
         auto first_one_bit = (uint8_t)(__builtin_ctzl(hash_value) + 1);
         _registers.data[idx] = std::max((uint8_t)_registers.data[idx], first_one_bit);
     }
+};
+
+const static datasketches::target_hll_type HLL_TGT_TYPE = datasketches::HLL_6;
+
+class DataSketchesHll {
+public:
+    DataSketchesHll() = default;
+
+    DataSketchesHll(const DataSketchesHll& other) : _sketch(other._sketch) {}
+
+    DataSketchesHll& operator=(const DataSketchesHll& other) {
+        if (this != &other) {
+            this->_sketch = other._sketch;
+        }
+        return *this;
+    }
+
+    DataSketchesHll(DataSketchesHll&& other) noexcept : _sketch(std::move(other._sketch)) {}
+
+    DataSketchesHll& operator=(DataSketchesHll&& other) noexcept {
+        if (this != &other) {
+            this->_sketch = std::move(other._sketch);
+        }
+        return *this;
+    }
+
+    explicit DataSketchesHll(uint64_t hash_value) { this->_sketch.update(hash_value); }
+
+    explicit DataSketchesHll(const Slice& src);
+
+    ~DataSketchesHll() = default;
+
+    // Add a hash value to this HLL value
+    // NOTE: input must be a hash_value
+    void update(uint64_t hash_value);
+
+    void merge(const DataSketchesHll& other);
+
+    // Return max size of serialized binary
+    size_t max_serialized_size() const;
+
+    // Input slice should have enough capacity for serialize, which
+    // can be got through max_serialized_size(). If insufficient buffer
+    // is given, this will cause process crash.
+    // Return actual size of serialized binary.
+    size_t serialize(uint8_t* dst) const;
+
+    // Now, only empty HLL support this funciton.
+    bool deserialize(const Slice& slice);
+
+    int64_t estimate_cardinality() const;
+
+    static std::string empty() {
+        static DataSketchesHll hll;
+        std::string buf;
+        hll.serialize((uint8_t*)buf.c_str());
+        return buf;
+    }
+
+    // No need to check is_valid for datasketches HLL,
+    // return ture for compatibility.
+    static bool is_valid(const Slice& slice);
+
+    // only for debug
+    std::string to_string() const;
+
+    uint64_t serialize_size() const;
+
+    // common interface
+    void clear() { _sketch.reset(); }
+
+private:
+    datasketches::hll_sketch _sketch{HLL_LOG_K, HLL_TGT_TYPE};
 };
 
 } // namespace starrocks
