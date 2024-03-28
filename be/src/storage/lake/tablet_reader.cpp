@@ -14,6 +14,7 @@
 
 #include "storage/lake/tablet_reader.h"
 
+#include <future>
 #include <utility>
 
 #include "column/datum_convert.h"
@@ -149,9 +150,36 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+
+    std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
-        iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+        if (config::enable_load_segment_parallel) {
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
+                    [&, rowset]() { return enhance_error_prompt(rowset->read(schema(), rs_opts)); });
+
+            auto packaged_func = [task]() { (*task)(); };
+            if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+                !st.ok()) {
+                // try load rowset serially if sumbit_func failed
+                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+                             << ", try to load rowset serially, rowset_id: " << rowset->id();
+                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+                iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+            } else {
+                futures.push_back(task->get_future());
+            }
+        } else {
+            ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+            iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+        }
+    }
+
+    for (auto& future : futures) {
+        auto seg_iters_or = future.get();
+        if (!seg_iters_or.ok()) {
+            return seg_iters_or.status();
+        }
+        iters->insert(iters->end(), seg_iters_or.value().begin(), seg_iters_or.value().end());
     }
     return Status::OK();
 }

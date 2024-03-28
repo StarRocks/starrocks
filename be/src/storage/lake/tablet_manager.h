@@ -165,6 +165,16 @@ public:
     // updating the cache size where the cached object is not the one as expected.
     void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
 
+<<<<<<< HEAD
+=======
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
+                                      const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
+                                      TabletSchemaPtr tablet_schema);
+    // for load segment parallel
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
+                                      bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
+
+>>>>>>> a023e24a04 ([Enhancement] Support load segment parallel in shared_data (#36964))
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
