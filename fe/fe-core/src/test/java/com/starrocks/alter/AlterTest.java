@@ -58,6 +58,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -93,6 +95,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -2465,4 +2468,61 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
+    @Test
+    public void testAlterForeignKey() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        {
+            // inner table
+            starRocksAssert.useDatabase("test").withMaterializedView("create materialized view if not exists `fk_mv_1` " +
+                    "refresh manual " +
+                    "as " +
+                    "select t1.event_day, t1.site_id, t2.user_name " +
+                    "from site_access_date_trunc t1 join site_access_time_slice t2 " +
+                    "on t1.site_id = t2.site_id");
+            connectContext.executeSql("alter materialized view fk_mv_1 set " +
+                    "( 'unique_constraints'='site_access_date_trunc.site_id'); ");
+            connectContext.executeSql("alter materialized view fk_mv_1 set " +
+                    "( 'foreign_key_constraints'='site_access_time_slice(site_id)" +
+                    " REFERENCES site_access_date_trunc(site_id)'); ");
+            while (true) {
+                ModifyTablePropertyOperationLog modifyMvLog =
+                        (ModifyTablePropertyOperationLog) UtFrameUtils.PseudoJournalReplayer.
+                                replayNextJournal(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES);
+                Assert.assertNotNull(modifyMvLog);
+                if (modifyMvLog.getProperties().containsKey("foreign_key_constraints")) {
+                    Assert.assertEquals("default_catalog.10004.10136(site_id) " +
+                                    "REFERENCES default_catalog.10004.10121(site_id)",
+                            modifyMvLog.getProperties().get("foreign_key_constraints"));
+                    break;
+                }
+            }
+        }
+
+        {
+            // external table
+            starRocksAssert.withMaterializedView("create materialized view if not exists `fk_mv_2` " +
+                    "refresh manual " +
+                    "as " +
+                    "select t1.l_orderkey, t1.l_partkey, t2.o_totalprice " +
+                    "from hive0.tpch.lineitem t1 join hive0.tpch.orders t2 " +
+                    "on t1.l_orderkey = t2.o_orderkey");
+            connectContext.executeSql("alter materialized view fk_mv_2 set " +
+                    "( 'unique_constraints'='hive0.tpch.orders.o_orderkey'); ");
+            connectContext.executeSql("alter materialized view fk_mv_2 set " +
+                    "( 'foreign_key_constraints'='hive0.tpch.lineitem(l_orderkey) " +
+                    "REFERENCES hive0.tpch.orders(o_orderkey)'); ");
+            while (true) {
+                ModifyTablePropertyOperationLog modifyMvLog =
+                        (ModifyTablePropertyOperationLog) UtFrameUtils.PseudoJournalReplayer.
+                                replayNextJournal(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES);
+                Assert.assertNotNull(modifyMvLog);
+                if (modifyMvLog.getProperties().containsKey("foreign_key_constraints")) {
+                    Assert.assertEquals("hive0.tpch.lineitem:0(l_orderkey) REFERENCES hive0.tpch.orders:0(o_orderkey)",
+                            modifyMvLog.getProperties().get("foreign_key_constraints"));
+                    break;
+                }
+            }
+        }
+    }
 }
