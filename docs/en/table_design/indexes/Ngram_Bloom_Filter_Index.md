@@ -54,6 +54,7 @@ The parameters related to the index are explained as follows:
 | column_name      | Yes          | The name of the column for which the index is created. Only a single column name can be specified. In the example above, it is "k2". |
 | gram_num         | Yes          | The length of the substring when tokenizing a string column's data for the Ngram Bloom filter. In the example above, `gram_num` is 4. |
 | bloom_filter_fpp | No           | The false positive possibility of the Bloom filter, ranging from 0.0001 to 0.05. The default value is 0.05. A smaller value provides better filtering but incurs greater storage overhead. |
+| case_sensitive   |  No          | Whether this index is case sensitive or not. Default value is case sensitive|
 | COMMENT          | No           | Index comment.                                               |
 
 For other parameter explanations related to table creation, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)
@@ -88,7 +89,29 @@ You can add and delete ngram bloom filter indexes by using the [ALTER TABLE](../
 
 
 # Function Support
+## LIKE
+Ngram bloom filter index can be used for LIKE if "gram_num" is small enough, otherwise Ngram bloom filter index can't accelerate the query with LIKE.
+For example: if gram_num is 4, but query is select * from table where col1 like "%abc", because "abc" only has three charactors, this index is useless for this query. But if query is like "%abcd" or like "%abcde%" etc, then index can filter many data.
 
-Currently, Ngram Bloom filter indexes only support the `ngram_search` function. When using the `ngram_search` function, if the queried column has an Ngram Bloom filter index and the `gram_num` specified in the `ngram_search` function matches the `gram_num` of the Ngram Bloom filter index, the index will automatically filter out data with a string similarity of 0, significantly speeding up the function execution process.
+## ngram_search
+When using the `ngram_search` function, if the queried column has an Ngram Bloom filter index and the `gram_num` specified in the `ngram_search` function matches the `gram_num` of the Ngram Bloom filter index, the index will automatically filter out data with a string similarity of 0, significantly speeding up the function execution process.
 
-Ngram Bloom filter indexes currently do not support the `ngram_search_case_insensitive` function.
+## ngram_search_case_insensitive
+same as ngram_search, but when create ngram bloom filter index for case insensitive situation, you need to create index like below:
+```SQL
+CREATE TABLE test.table1
+(
+    k1 CHAR(10),
+    k2 CHAR(10),
+    v1 INT SUM,
+    INDEX index_name (k2) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.05", "case_sensitive" = "false") COMMENT ''
+)
+ENGINE = olap
+AGGREGATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1)
+PROPERTIES ("replication_num"= "1");
+```
+or alter index if already created one:
+  ```SQL
+  ALTER TABLE table1 ADD INDEX new_index_name(k1) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05","case_sensitive" = "false") COMMENT '';
+  ```

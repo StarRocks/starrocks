@@ -46,6 +46,7 @@ PROPERTIES ("replication_num"= "1");
   | column_name      | 是       | 创建索引的列名。只能指定单个列名, 上述例子中为"k2"。         |
   | gram_num         | 是       | Ngram bloom filter对字符串列的一行数据分词时, 字符串子串的长度。上述例子中gram_num为4。 |
   | bloom_filter_fpp | 否       | flase positive possibility, 即bloom filter的假阳率, 取值在[0.0001,0.05]。默认为0.05, 值越小, 过滤效果越好, 但是存储开销越大。 |
+  | case_sensitive   | 否       | 该索引是否大小写敏感.默认大小写敏感|
   | COMMENT          | 否       | 索引备注。                                                   |
 
   关于建表的其他参数说明，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
@@ -79,8 +80,28 @@ show index from table1;
 
 # 函数支持
 
-当前Ngram Bloom filter索引仅支持ngram_search函数, 当使用ngram_search函数时, 如果ngram_search函数查询的列存在Ngram Bloom filter索引,且ngram_search函数指定的gram_num和Ngram bloom filter索引的gram_num相同, 那么会自动使用该索引过滤掉部分字符串相似度为0的数据, 从而大大加速函数执行的过程。
+## LIKE
+如果索引的 "gram_num" 足够小，Ngram 布隆过滤器索引可以用于 LIKE 查询加速，否则不能加速相关的LIKE查询。例如：如果gram_num为 ，但查询是 `select * from table where col1 like "%abc"`，因为 "abc" 只有三个字符，所以该索引对于这个查询是无效的。但如果查询是类似 "%abcd" 或者 "%abcde%" 这样的，那么该索引可以过滤掉大量数据。
 
+## ngram_search
+在使用 `ngram_search` 函数时，如果查询的列具有 Ngram 布隆过滤器索引，并且在 `ngram_search` 函数中指定的 `gram_num` 与 Ngram 布隆过滤器索引的 `gram_num` 相同，索引将自动过滤掉字符串相似度为 0 的数据，加快函数执行过程。
 
-
-当前Ngram Bloom filter索引尚不不支持ngram_search_case_insensitive函数。
+## ngram_search_case_insensitive
+与 `ngram_search` 类似，但在为不区分大小写的情况下创建 Ngram 布隆过滤器索引时，需要按照以下方式创建索引：
+```SQL
+CREATE TABLE test.table1
+(
+    k1 CHAR(10),
+    k2 CHAR(10),
+    v1 INT SUM,
+    INDEX index_name (k2) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.05", "case_sensitive" = "false") COMMENT ''
+)
+ENGINE = olap
+AGGREGATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1)
+PROPERTIES ("replication_num"= "1");
+```
+或者如果已经创建了索引，则修改索引：
+```SQL
+ALTER TABLE table1 ADD INDEX new_index_name(k1) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05","case_sensitive" = "false") COMMENT '';
+```
