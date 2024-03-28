@@ -56,7 +56,7 @@ StatusOr<ConnectorChunkSink::Futures> HiveChunkSink::add(ChunkPtr chunk) {
                                                                    _partition_column_evaluators, chunk.get()));
     }
 
-    HIVE_PARTITIONING_STYLE_CONSUME_CHUNKS(partition, chunk);
+        HIVE_STYLE_PARTITIONING_CONSUME_CHUNK(partition, chunk);
 }
 
 ConnectorChunkSink::Futures HiveChunkSink::finish() {
