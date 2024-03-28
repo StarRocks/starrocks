@@ -26,7 +26,7 @@
 namespace orc {
 
 Int128 Int128::maximumValue() {
-    return {0x7fffffffffffffff, 0xfffffffffffffff};
+    return {0x7fffffffffffffff, 0xffffffffffffffff};
 }
 
 Int128 Int128::minimumValue() {
