@@ -74,6 +74,10 @@ public:
 
     Status clear_scan_context(const std::string& context_id);
 
+    std::vector<std::map<std::string, std::string>> get_active_contexts();
+
+    Status clear_inactive_scan_contexts(const int64_t inactive_time_s);
+
 private:
     ExecEnv* _exec_env;
     std::map<std::string, std::shared_ptr<ScanContext>> _active_contexts;

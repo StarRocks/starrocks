@@ -27,6 +27,7 @@
 #include "http/action/compaction_action.h"
 #include "io/io_profiler.h"
 #include "runtime/exec_env.h"
+#include "runtime/external_scan_context_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
@@ -180,6 +181,12 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcExt<&memtracker_debug_string>("toString");
     }
     {
+        auto& cls = m.klass<ExternalScanContextMgr>("ExternalScanContextMgr");
+        REG_METHOD(ExternalScanContextMgr, get_active_contexts);
+        REG_METHOD(ExternalScanContextMgr, clear_scan_context);
+        REG_METHOD(ExternalScanContextMgr, clear_inactive_scan_contexts);
+    }
+    {
         auto& cls = m.klass<FileWriteStat>("FileWriteStat");
         REG_VAR(FileWriteStat, open_time);
         REG_VAR(FileWriteStat, close_time);
@@ -201,6 +208,7 @@ void bind_exec_env(ForeignModule& m) {
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
+        REG_METHOD(ExecEnv, external_scan_context_mgr);
     }
     {
         auto& cls = m.klass<GlobalEnv>("GlobalEnv");
