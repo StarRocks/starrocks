@@ -168,6 +168,9 @@ public:
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                       TabletSchemaPtr tablet_schema);
+    // for load segment parallel
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
+                                      bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);

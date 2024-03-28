@@ -434,6 +434,26 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         _load_path_mgr = new LoadPathMgr(this);
     }
 
+    std::unique_ptr<ThreadPool> load_rowset_pool;
+    std::unique_ptr<ThreadPool> load_segment_pool;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_rowset_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_rowset_pool));
+    _load_rowset_thread_pool = load_rowset_pool.release();
+
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_segment_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_segment_pool));
+    _load_segment_thread_pool = load_segment_pool.release();
+
     _broker_mgr = new BrokerMgr(this);
 #ifndef BE_TEST
     _bfd_parser = BfdParser::create();
@@ -648,6 +668,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);
     SAFE_DELETE(_streaming_load_thread_pool);
+    SAFE_DELETE(_load_segment_thread_pool);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
