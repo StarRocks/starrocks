@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -59,7 +58,6 @@ public class MVColumnPruner {
         if (projection == null) {
             return optExpression;
         }
-        Preconditions.checkState(projection != null);
         requiredOutputColumns = new ColumnRefSet(projection.getOutputColumns());
         return optExpression.getOp().accept(new ColumnPruneVisitor(), optExpression, null);
     }

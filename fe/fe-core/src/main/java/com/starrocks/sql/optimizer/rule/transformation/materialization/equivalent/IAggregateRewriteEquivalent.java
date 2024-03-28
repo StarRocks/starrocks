@@ -14,8 +14,17 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
-public abstract class  IAggregateRewriteEquivalent implements IRewriteEquivalent {
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+
+public abstract class IAggregateRewriteEquivalent implements IRewriteEquivalent {
     public RewriteEquivalentType getRewriteEquivalentType() {
         return RewriteEquivalentType.AGGREGATE;
+    }
+
+    /**
+     * Whether the equivalent supports the input call to push down rewrite.
+     */
+    public boolean isSupportPushDownRewrite(CallOperator call) {
+        return false;
     }
 }

@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
@@ -52,12 +53,14 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.JoinHelper;
+import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -85,6 +88,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -108,10 +112,10 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
-
 
     public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
                                                       int maxLevel,
@@ -1246,6 +1250,21 @@ public class MvUtils {
         return scanMvOutputColumns;
     }
 
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        if (optExpression == null) {
+            return false;
+        }
+        if (optExpression.getOp().isOpRuleMaskSet(ruleMask)) {
+            return true;
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            if (isOptHasAppliedRule(child, ruleMask)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static ParseNode getQueryAst(String query) {
         try {
             List<StatementBase> statementBases =
@@ -1257,5 +1276,41 @@ public class MvUtils {
             LOG.warn("Parse query {} failed:{}", query, parsingException);
         }
         return null;
+    }
+
+    /**
+     * Return the query predicate split with/without compensate :
+     * - with compensate    : deducing from the selected partition ids.
+     * - without compensate : only get the partition predicate from pruned partitions of scan operator
+     * eg: for sync mv without partition columns, we always no need compensate partition predicates because
+     * mv and the base table are always synced.
+     */
+    public static PredicateSplit getQuerySplitPredicate(OptimizerContext optimizerContext,
+                                                        MaterializationContext mvContext,
+                                                        OptExpression queryExpression,
+                                                        ColumnRefFactory queryColumnRefFactory,
+                                                        ReplaceColumnRefRewriter queryColumnRefRewriter,
+                                                        Rule rule) {
+        // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
+        // query expressions are too complex.
+        final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
+                mvContext, queryColumnRefFactory, queryExpression);
+        if (queryPartitionPredicate == null) {
+            logMVRewrite(mvContext.getOptimizerContext(), rule, "Compensate query expression's partition " +
+                    "predicates from pruned partitions failed.");
+            return null;
+        }
+
+        Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
+        // only add valid predicates into query split predicate
+        if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
+            queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));
+        }
+
+        QueryMaterializationContext queryMaterializationContext = optimizerContext.getQueryMaterializationContext();
+        Cache<Object, Object> predicateSplitCache = queryMaterializationContext.getMvQueryContextCache();
+        Preconditions.checkArgument(predicateSplitCache != null);
+        // Cache predicate split for predicates because it's time costing if there are too many materialized views.
+        return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
     }
 }

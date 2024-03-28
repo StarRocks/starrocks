@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
 
 import java.util.List;
 
@@ -47,6 +48,7 @@ public class MvRewriteContext {
 
     private List<JoinDeriveContext> joinDeriveContexts;
 
+    private AggregatePushDownContext aggregatePushDownContext;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -116,5 +118,13 @@ public class MvRewriteContext {
 
     public void setEnforcedNonExistedColumns(List<ColumnRefOperator> enforcedNonExistedColumns) {
         this.enforcedNonExistedColumns = enforcedNonExistedColumns;
+    }
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
     }
 }
