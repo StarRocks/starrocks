@@ -21,7 +21,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -130,7 +129,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         if (aggOp.hasLimit()) {
             return false;
         }
-        calculateStatistics(input, context);
+        Utils.calculateStatistics(input, context);
 
         Statistics inputStatistics = input.inputAt(0).getStatistics();
         List<ColumnRefOperator> neededCols = Lists.newArrayList(aggOp.getGroupingKeys());
@@ -164,22 +163,5 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             return false;
         }
         return true;
-    }
-
-    private void calculateStatistics(OptExpression expr, OptimizerContext context) {
-        // Avoid repeated calculate
-        if (expr.getStatistics() != null) {
-            return;
-        }
-
-        for (OptExpression child : expr.getInputs()) {
-            calculateStatistics(child, context);
-        }
-
-        ExpressionContext expressionContext = new ExpressionContext(expr);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                expressionContext, context.getColumnRefFactory(), context);
-        statisticsCalculator.estimatorStats();
-        expr.setStatistics(expressionContext.getStatistics());
     }
 }
