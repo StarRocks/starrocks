@@ -594,8 +594,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -625,8 +625,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -656,8 +656,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -727,8 +727,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -813,8 +813,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -911,8 +911,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         param->min_max_conjunct_ctxs.push_back(ctx);
     }
 
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1010,8 +1010,8 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1132,8 +1132,8 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
             param->min_max_conjunct_ctxs.push_back(ctx);
         }
 
-        Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-        Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+        ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+        ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
         Status status = scanner->init(_runtime_state, *param);
@@ -1330,8 +1330,8 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1456,8 +1456,8 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        Expr::prepare(it.second, _runtime_state);
-        Expr::open(it.second, _runtime_state);
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1650,8 +1650,8 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     }
 
     param->min_max_tuple_desc = min_max_tuple_desc;
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2222,8 +2222,8 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
         param->conjunct_ctxs.push_back(ctx);
     }
 
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2388,8 +2388,8 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
         param->conjunct_ctxs.push_back(ctx);
     }
 
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2433,8 +2433,8 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         param->conjunct_ctxs.push_back(ctx);
     }
 
-    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
-    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
