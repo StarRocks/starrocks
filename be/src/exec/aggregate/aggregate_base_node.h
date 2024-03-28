@@ -31,6 +31,8 @@ public:
     void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
 
 protected:
+    bool _grouping_exprs_spillable() const;
+
     const TPlanNode& _tnode;
     // _group_by_expr_ctxs used by the pipeline execution engine to push down rf to children nodes before
     // pipeline decomposition.
