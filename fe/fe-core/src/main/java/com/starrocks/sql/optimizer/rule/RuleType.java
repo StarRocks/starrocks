@@ -190,6 +190,8 @@ public enum RuleType {
 
     TF_ELIMINATE_GROUP_BY_CONSTANT,
 
+    TF_PREDICATE_PROPAGATE,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,

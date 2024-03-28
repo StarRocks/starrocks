@@ -1,0 +1,246 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.optimizer.rule.transformation;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.RangeExtractor;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.sql.optimizer.rule.RuleType;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+public class JoinOnPredicatePropagateRule extends TransformationRule {
+
+    public static final JoinOnPredicatePropagateRule INSTANCE = new JoinOnPredicatePropagateRule(RuleType.TF_PREDICATE_PROPAGATE,
+            Pattern.create(OperatorType.LOGICAL_JOIN).
+                    addChildren(Pattern.create(OperatorType.PATTERN_LEAF), Pattern.create(OperatorType.PATTERN_LEAF)));
+
+    private JoinOnPredicatePropagateRule(RuleType type, Pattern pattern) {
+        super(type, pattern);
+    }
+
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalJoinOperator joinOperator = input.getOp().cast();
+        if (joinOperator.getJoinType().isFullOuterJoin() || joinOperator.getJoinType().isCrossJoin()) {
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        LogicalJoinOperator joinOperator = input.getOp().cast();
+        ScalarOperator onPredicate = joinOperator.getOnPredicate();
+
+        OptExpression leftChild = input.inputAt(0);
+        OptExpression rightChild = input.inputAt(1);
+
+        List<BinaryPredicateOperator> binaryPredicates = extractBinaryPredicates(onPredicate,
+                leftChild.getOutputColumns(), rightChild.getOutputColumns());
+        if (binaryPredicates.isEmpty()) {
+            return Lists.newArrayList();
+        }
+
+        ValueProperty leftValueProperty = leftChild.getValueProperty();
+        ValueProperty rightValueProperty = rightChild.getValueProperty();
+
+        OptExpression result = null;
+        if (joinOperator.getJoinType().isInnerJoin()) {
+            ScalarOperator toLeftPredicate = Utils.compoundAnd(binaryPredicates.stream()
+                    .map(e -> derivePredicate(e, rightValueProperty, true))
+                    .collect(Collectors.toList()));
+            ScalarOperator toRightPredicate = Utils.compoundAnd(binaryPredicates.stream()
+                    .map(e -> derivePredicate(e, leftValueProperty, false))
+                    .collect(Collectors.toList()));
+
+            if (toLeftPredicate == null && toRightPredicate == null) {
+                return Lists.newArrayList();
+            } else if (toLeftPredicate == null) {
+                LogicalFilterOperator filter = new LogicalFilterOperator(toRightPredicate);
+                result = OptExpression.create(joinOperator,
+                        Lists.newArrayList(input.inputAt(0), OptExpression.create(filter, input.inputAt(1)))
+                );
+            } else if (toRightPredicate == null) {
+                LogicalFilterOperator filter = new LogicalFilterOperator(toLeftPredicate);
+                result = OptExpression.create(joinOperator,
+                        Lists.newArrayList(OptExpression.create(filter, input.inputAt(0)), input.inputAt(1))
+                );
+            } else {
+                LogicalFilterOperator toLeftFilter = new LogicalFilterOperator(toLeftPredicate);
+                LogicalFilterOperator toRightFilter = new LogicalFilterOperator(toRightPredicate);
+                result = OptExpression.create(joinOperator,
+                        Lists.newArrayList(OptExpression.create(toLeftFilter, input.inputAt(0)),
+                                OptExpression.create(toRightFilter, input.inputAt(1)))
+                );
+            }
+        } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
+            ScalarOperator toRightPredicate = Utils.compoundAnd(binaryPredicates.stream()
+                    .map(e -> derivePredicate(e, leftValueProperty, false))
+                    .collect(Collectors.toList()));
+            if (toRightPredicate != null) {
+                LogicalFilterOperator filter = new LogicalFilterOperator(toRightPredicate);
+                result = OptExpression.create(joinOperator,
+                        Lists.newArrayList(input.inputAt(0), OptExpression.create(filter, input.inputAt(1)))
+                );
+            }
+        } else if (joinOperator.getJoinType().isRightOuterJoin()) {
+            ScalarOperator toLeftPredicate = Utils.compoundAnd(binaryPredicates.stream()
+                    .map(e -> derivePredicate(e, rightValueProperty, true))
+                    .collect(Collectors.toList()));
+            if (toLeftPredicate != null) {
+                LogicalFilterOperator filter = new LogicalFilterOperator(toLeftPredicate);
+                result = OptExpression.create(joinOperator,
+                        Lists.newArrayList(OptExpression.create(filter, input.inputAt(0)), input.inputAt(1))
+                );
+            }
+        }
+
+        return result == null ? Lists.newArrayList() : Lists.newArrayList(result);
+    }
+
+    private List<BinaryPredicateOperator> extractBinaryPredicates(ScalarOperator predicate,
+                                                                  ColumnRefSet leftCols, ColumnRefSet rightCols) {
+        List<BinaryPredicateOperator> result = Lists.newArrayList();
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        for (ScalarOperator conjunct : conjuncts) {
+            if (conjunct instanceof BinaryPredicateOperator) {
+                BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) conjunct;
+                if (binaryPredicate.getBinaryType().isEqualOrRange()) {
+                    ColumnRefSet leftUsedCols = binaryPredicate.getChild(0).getUsedColumns();
+                    ColumnRefSet rightUsedCols = binaryPredicate.getChild(1).getUsedColumns();
+                    if (leftCols.containsAll(leftUsedCols) && rightCols.containsAll(rightUsedCols)) {
+                        result.add(binaryPredicate);
+                    } else if (leftCols.containsAll(rightUsedCols) && rightCols.containsAll(leftUsedCols)) {
+                        result.add(binaryPredicate.commutative());
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private ScalarOperator derivePredicate(BinaryPredicateOperator binaryPredicate, ValueProperty valueProperty,
+                                           boolean toLeft) {
+        int idx = toLeft ? 1 : 0;
+        ScalarOperator seed = binaryPredicate.getChild(idx);
+        ScalarOperator offspring = binaryPredicate.getChild(1 - idx);
+        BinaryType binaryType = binaryPredicate.getBinaryType();
+        if (binaryType.isEqual()) {
+            if (valueProperty.contains(seed)) {
+                ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(seed, offspring));
+                return shuttle.rewrite(valueProperty.getPredicateDesc(seed));
+            }
+        } else if (binaryType == BinaryType.LT || binaryType == BinaryType.LE) {
+            if (valueProperty.contains(seed)) {
+                RangeExtractor.RangeDescriptor desc = valueProperty.getValueWrapper(seed).getValueDesc();
+                return deriveLessPredicate(offspring, desc.getRange(), toLeft);
+            }
+        } else if (binaryType == BinaryType.GT || binaryType == BinaryType.GT) {
+            if (valueProperty.contains(seed)) {
+                RangeExtractor.RangeDescriptor desc = valueProperty.getValueWrapper(seed).getValueDesc();
+                return deriveGreaterPredicate(offspring, desc.getRange(), toLeft);
+            }
+        }
+        return null;
+    }
+
+    // join on predicate left_tbl_col < right_tbl_col
+    // if we want to derive predicate to left, we need obtain the upper bound value of right_tbl_col
+    // if we want to derive predicate to right, we need obtain the lower bound value of left_tbl_col
+    private ScalarOperator deriveLessPredicate(ScalarOperator offspring,
+                                               Range<ConstantOperator> range, boolean toLeft) {
+        if (toLeft) {
+            if (range.hasUpperBound()) {
+                return new BinaryPredicateOperator(BinaryType.LE, offspring, range.upperEndpoint());
+            }
+        } else {
+            if (range.hasLowerBound()) {
+                return new BinaryPredicateOperator(BinaryType.GE, offspring, range.lowerEndpoint());
+            }
+        }
+        return null;
+    }
+
+    // join on predicate left_tbl_col > right_tbl_col
+    // if we want to derive predicate to left, we need obtain the lower bound value of right_tbl_col
+    // if we want to derive predicate to right, we need obtain the upper bound value of left_tbl_col
+    private ScalarOperator deriveGreaterPredicate(ScalarOperator offspring,
+                                                  Range<ConstantOperator> range, boolean toLeft) {
+        if (toLeft) {
+            if (range.hasLowerBound()) {
+                return new BinaryPredicateOperator(BinaryType.GE, offspring, range.lowerEndpoint());
+            }
+        } else {
+            if (range.hasUpperBound()) {
+                return new BinaryPredicateOperator(BinaryType.LE, offspring, range.upperEndpoint());
+            }
+        }
+        return null;
+    }
+
+    private static class ReplaceShuttle extends BaseScalarOperatorShuttle {
+        private Map<ScalarOperator, ScalarOperator> replaceMap;
+
+        public ReplaceShuttle(Map<ScalarOperator, ScalarOperator> replaceMap) {
+            this.replaceMap = replaceMap;
+        }
+
+        public ScalarOperator rewrite(ScalarOperator scalarOperator) {
+            ScalarOperator result = scalarOperator.accept(this, null);
+            // failed to replace the scalarOperator
+            if (scalarOperator.getUsedColumns().isIntersect(result.getUsedColumns())) {
+                return null;
+            }
+            return result;
+        }
+
+        @Override
+        public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+            if (replaceMap.containsKey(variable)) {
+                return replaceMap.get(variable);
+            }
+            return variable;
+        }
+
+        @Override
+        public ScalarOperator visitCall(CallOperator call, Void context) {
+            if (replaceMap.containsKey(call)) {
+                return replaceMap.get(call);
+            }
+            return call;
+        }
+    }
+
+}

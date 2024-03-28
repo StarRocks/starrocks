@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -31,6 +32,8 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -202,6 +205,16 @@ public class LogicalJoinOperator extends LogicalOperator {
             }
         }
         return new RowOutputInfo(entryList);
+    }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new ValueProperty(ImmutableMap.of());
+        }
+        ValueProperty leftValueProperty = inputs.get(0).getValueProperty();
+        ValueProperty rightValueProperty = inputs.get(1).getValueProperty();
+        return ValueProperty.mergeValueProperty(List.of(leftValueProperty, rightValueProperty));
     }
 
     @Override

@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -23,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
 
 import java.util.List;
 import java.util.Objects;
@@ -67,6 +69,8 @@ public abstract class Operator {
     // used by view based mv rewrite
     // eg: LogicalViewScanOperator is logically equivalent to the operator build from the view
     protected Operator equivalentOp;
+
+    protected ValueProperty valueProperty;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -181,8 +185,24 @@ public abstract class Operator {
         return rowOutputInfo;
     }
 
+    public ValueProperty getValueProperty(List<OptExpression> inputs) {
+        if (valueProperty == null) {
+            valueProperty = deriveValueProperty(inputs);
+        }
+
+        if (projection != null) {
+            valueProperty = valueProperty.projectValueProperty(projection.getColumnRefMap());
+        }
+
+        return valueProperty;
+    }
+
     protected RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         throw new UnsupportedOperationException();
+    }
+
+    protected ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        return new ValueProperty(ImmutableMap.of());
     }
 
     protected RowOutputInfo projectInputRow(RowOutputInfo inputRow) {
