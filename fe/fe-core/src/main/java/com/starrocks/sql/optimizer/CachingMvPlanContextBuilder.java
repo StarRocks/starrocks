@@ -91,6 +91,7 @@ public class CachingMvPlanContextBuilder {
         return Caffeine.newBuilder()
                 .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
                 .maximumSize(Config.mv_plan_cache_max_size)
+                .recordStats()
                 .build();
     }
 

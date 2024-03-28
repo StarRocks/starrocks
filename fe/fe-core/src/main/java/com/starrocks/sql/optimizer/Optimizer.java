@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateR
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
+import com.starrocks.sql.optimizer.rule.transformation.MaterializedViewTransparentRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
@@ -521,6 +522,13 @@ public class Optimizer {
         // because push down agg won't have array_distinct project
         if (sessionVariable.getEnableArrayDistinctAfterAggOpt()) {
             ruleRewriteOnlyOnce(tree, rootTaskContext, new ArrayDistinctAfterAggRule());
+        }
+
+        // rewrite transparent materialized view
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new MaterializedViewTransparentRewriteRule());
+        if (MvUtils.isOptHasAppliedRule(tree, Operator.OP_TRANSPARENT_MV_BIT)) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         }
 
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
