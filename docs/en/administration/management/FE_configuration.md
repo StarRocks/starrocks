@@ -2548,6 +2548,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The percentage threshold for determining whether the load of a BE is balanced. If a BE has a lower load than the average load of all BEs and the difference is greater than this value, this BE is in a low load state. On the contrary, if a BE has a higher load than the average load and the difference is greater than this value, this BE is in a high load state.
 - Introduced in: -
 
+##### tablet_sched_num_based_balance_threshold_ratio
+
+- Default: 0.5
+- Alias: -
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: Doing num based balance may break the disk size balance, but the maximum gap between disks cannot exceed tablet_sched_num_based_balance_threshold_ratio * tablet_sched_balance_load_score_threshold. If there are tablets in the cluster that are constantly balancing from A to B and B to A, reduce this value. If you want the tablet distribution to be more balanced, increase this value.
+- Introduced in: - 3.1
+
 ##### tablet_sched_balance_load_disk_safe_threshold
 
 - Default: 0.5

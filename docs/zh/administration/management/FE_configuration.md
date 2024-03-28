@@ -2550,6 +2550,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：用于判断 BE 负载是否均衡的百分比阈值。如果一个 BE 的负载低于所有 BE 的平均负载，且差值大于该阈值，则认为该 BE 处于低负载状态。相反，如果一个 BE 的负载比平均负载高且差值大于该阈值，则认为该 BE 处于高负载状态。
 - 引入版本：-
 
+##### tablet_sched_num_based_balance_threshold_ratio
+
+- 默认值：0.5
+- 别名：-
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：做分布均衡时可能会打破磁盘大小均衡，但磁盘间的最大差距不能超过tablet_sched_num_based_balance_threshold_ratio * table_sched_balance_load_score_threshold。 如果集群中存在不断从 A 到 B、从 B 到 A 的克隆，请减小该值。 如果希望tablet分布更加均衡，请调大该值。
+- 引入版本：3.1
+
 ##### tablet_sched_balance_load_disk_safe_threshold
 
 - 默认值：0.5
