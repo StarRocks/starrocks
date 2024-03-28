@@ -832,10 +832,8 @@ TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
     // null
     ASSERT_OK(list_builder->AppendNull());
     std::shared_ptr<arrow::Array> expect_array;
-    ASSERT_OK(map_builder->Finish(&expect_array));
+    ASSERT_OK(builder->Finish(&expect_array));
     ASSERT_TRUE(expect_array->Equals(array));
-    LOG(INFO) << "expected\n" << expect_array->ToString();
-    LOG(INFO) << "actual\n" << array->ToString();
 }
 
 } // namespace starrocks
