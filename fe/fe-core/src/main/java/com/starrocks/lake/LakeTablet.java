@@ -63,7 +63,7 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
-    private volatile long dataCacheSize = 0L;
+    private long dataCacheSize = 0L;
 
     public LakeTablet(long id) {
         super(id);
