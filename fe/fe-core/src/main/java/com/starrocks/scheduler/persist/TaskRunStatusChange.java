@@ -16,6 +16,7 @@
 package com.starrocks.scheduler.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -51,6 +52,15 @@ public class TaskRunStatusChange implements Writable {
     @SerializedName("extraMessage")
     private String extraMessage;
 
+    /**
+     * To make it compatible when turning on the TableBasedHistory
+     * on: only write edit-log but not record in the MemBasedHistory
+     * off: write edit-log and record in MemBasedHistory
+     * default: off
+     */
+    @SerializedName("useTableBasedHistory")
+    private boolean useTableBasedHistory = false;
+
     public TaskRunStatusChange(long taskId, TaskRunStatus status,
                                Constants.TaskRunState fromStatus,
                                Constants.TaskRunState toStatus) {
@@ -64,6 +74,7 @@ public class TaskRunStatusChange implements Writable {
             errorMessage = status.getErrorMessage();
         }
         this.extraMessage = status.getExtraMessage();
+        this.useTableBasedHistory = Config.use_table_based_task_run_history;
     }
 
     public long getTaskId() {
@@ -128,6 +139,14 @@ public class TaskRunStatusChange implements Writable {
 
     public void setExtraMessage(String extraMessage) {
         this.extraMessage = extraMessage;
+    }
+
+    public boolean isUseTableBasedHistory() {
+        return useTableBasedHistory;
+    }
+
+    public void setUseTableBasedHistory(boolean useTableBasedHistory) {
+        this.useTableBasedHistory = useTableBasedHistory;
     }
 
     public static TaskRunStatusChange read(DataInput in) throws IOException {

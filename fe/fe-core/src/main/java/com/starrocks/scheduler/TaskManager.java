@@ -27,12 +27,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -41,6 +39,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -52,13 +51,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -182,10 +178,8 @@ public class TaskManager implements MemoryTrackable {
                     taskRun.getStatus().setErrorMessage("Fe abort the task");
                     taskRun.getStatus().setErrorCode(-1);
                     taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
-                    taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
-                            Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                    taskRunManager.addTaskRunHistory(taskRun, Constants.TaskRunState.PENDING,
+                            Constants.TaskRunState.FAILED);
                 }
                 pendingIter.remove();
             }
@@ -197,10 +191,8 @@ public class TaskManager implements MemoryTrackable {
                 taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
                 taskRun.getStatus().setFinishTime(System.currentTimeMillis());
                 runningIter.remove();
-                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
-                TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
-                        Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                taskRunManager.addTaskRunHistory(taskRun, Constants.TaskRunState.RUNNING,
+                        Constants.TaskRunState.FAILED);
             }
         } finally {
             taskRunManager.taskRunUnlock();
@@ -548,33 +540,6 @@ public class TaskManager implements MemoryTrackable {
         return new ShowResultSet(builder.build(), result);
     }
 
-    public long loadTasks(DataInputStream dis, long checksum) throws IOException {
-        int taskCount = 0;
-        try {
-            String s = Text.readString(dis);
-            SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-            if (data != null) {
-                if (data.tasks != null) {
-                    for (Task task : data.tasks) {
-                        replayCreateTask(task);
-                    }
-                    taskCount = data.tasks.size();
-                }
-
-                if (data.runStatus != null) {
-                    for (TaskRunStatus runStatus : data.runStatus) {
-                        replayCreateTaskRun(runStatus);
-                    }
-                }
-            }
-            checksum ^= taskCount;
-            LOG.info("finished replaying TaskManager from image");
-        } catch (EOFException e) {
-            LOG.info("no TaskManager to replay.");
-        }
-        return checksum;
-    }
-
     public void loadTasksV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int size = reader.readInt();
@@ -588,26 +553,6 @@ public class TaskManager implements MemoryTrackable {
             TaskRunStatus status = reader.readJson(TaskRunStatus.class);
             replayCreateTaskRun(status);
         }
-    }
-
-    public long saveTasks(DataOutputStream dos, long checksum) throws IOException {
-        SerializeData data = new SerializeData();
-        data.tasks = new ArrayList<>(nameToTaskMap.values());
-        checksum ^= data.tasks.size();
-        data.runStatus = showTaskRunStatus(null);
-        int beforeSize = data.runStatus.size();
-        if (beforeSize >= Config.task_runs_max_history_number) {
-            taskRunManager.getTaskRunHistory().forceGC();
-            data.runStatus = showTaskRunStatus(null);
-            String s = GsonUtils.GSON.toJson(data);
-            LOG.warn("Too much task metadata triggers forced task_run GC, " +
-                    "size before GC:{}, size after GC:{}.", beforeSize, data.runStatus.size());
-            Text.writeString(dos, s);
-        } else {
-            String s = GsonUtils.GSON.toJson(data);
-            Text.writeString(dos, s);
-        }
-        return checksum;
     }
 
     public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
@@ -739,14 +684,14 @@ public class TaskManager implements MemoryTrackable {
             // this will happen in build image
             case RUNNING:
                 status.setState(Constants.TaskRunState.FAILED);
-                taskRunManager.getTaskRunHistory().addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status, true);
                 break;
             case FAILED:
-                taskRunManager.getTaskRunHistory().addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status, true);
                 break;
             case SUCCESS:
                 status.setProgress(100);
-                taskRunManager.getTaskRunHistory().addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status, true);
                 break;
         }
     }
@@ -797,7 +742,7 @@ public class TaskManager implements MemoryTrackable {
                 status.setErrorMessage(statusChange.getErrorMessage());
                 status.setErrorCode(statusChange.getErrorCode());
                 status.setState(Constants.TaskRunState.FAILED);
-                taskRunManager.getTaskRunHistory().addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status, true);
             }
             if (taskRunQueue.size() == 0) {
                 taskRunManager.getPendingTaskRunMap().remove(taskId);
@@ -819,17 +764,12 @@ public class TaskManager implements MemoryTrackable {
                     status.setProgress(100);
                     status.setFinishTime(statusChange.getFinishTime());
                     status.setExtraMessage(statusChange.getExtraMessage());
-                    taskRunManager.getTaskRunHistory().addHistory(status);
+                    taskRunManager.getTaskRunHistory().addHistory(status, true);
                 }
             } else {
                 // Find the task status from history map.
                 String queryId = statusChange.getQueryId();
-                TaskRunStatus status = taskRunManager.getTaskRunHistory().getTask(queryId);
-                if (status == null) {
-                    return;
-                }
-                // Do update extra message from change status.
-                status.setExtraMessage(statusChange.getExtraMessage());
+                taskRunManager.getTaskRunHistory().replayTaskRunChange(queryId, statusChange);
             }
         } else {
             LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
@@ -892,30 +832,14 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void removeExpiredTaskRuns() {
-        long currentTimeMs = System.currentTimeMillis();
-
-        List<String> historyToDelete = Lists.newArrayList();
-
         if (!taskRunManager.tryTaskRunLock()) {
             return;
         }
         try {
-            // only SUCCESS and FAILED in taskRunHistory
-            List<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
-            Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
-            while (iterator.hasNext()) {
-                TaskRunStatus taskRunStatus = iterator.next();
-                long expireTime = taskRunStatus.getExpireTime();
-                if (currentTimeMs > expireTime) {
-                    historyToDelete.add(taskRunStatus.getQueryId());
-                    taskRunManager.getTaskRunHistory().removeTask(taskRunStatus.getQueryId());
-                    iterator.remove();
-                }
-            }
+            taskRunManager.getTaskRunHistory().gc();
         } finally {
             taskRunManager.taskRunUnlock();
         }
-        LOG.info("remove run history:{}", historyToDelete);
     }
 
     @Override

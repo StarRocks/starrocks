@@ -301,6 +301,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
+        status.setUseTableBasedHistory(Config.use_table_based_task_run_history);
         status.setQueryId(queryId);
         status.setTaskId(task.getId());
         status.setTaskName(task.getName());

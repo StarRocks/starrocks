@@ -26,12 +26,15 @@ import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.history.MemBasedTaskRunHistory;
+import com.starrocks.scheduler.history.MergedTaskRunHistory;
+import com.starrocks.scheduler.history.TableBasedTaskRunHistory;
+import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -53,7 +56,9 @@ public class TaskRunManager implements MemoryTrackable {
     private final Map<Long, TaskRun> runningTaskRunMap = Maps.newConcurrentMap();
 
     // include SUCCESS/FAILED/CANCEL taskRun
-    private final TaskRunHistory taskRunHistory = new TaskRunHistory();
+    @Deprecated
+    private final MemBasedTaskRunHistory memBasedTaskRunHistory = new MemBasedTaskRunHistory();
+    private final TableBasedTaskRunHistory tableBasedTaskRunHistory = new TableBasedTaskRunHistory();
 
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
@@ -167,20 +172,6 @@ public class TaskRunManager implements MemoryTrackable {
         return true;
     }
 
-    // Because java PriorityQueue does not provide an interface for searching by element,
-    // so find it by code O(n), which can be optimized later
-    @Nullable
-    private TaskRun getTaskRun(PriorityBlockingQueue<TaskRun> taskRuns, TaskRun taskRun) {
-        TaskRun oldTaskRun = null;
-        for (TaskRun run : taskRuns) {
-            if (run.equals(taskRun)) {
-                oldTaskRun = run;
-                break;
-            }
-        }
-        return oldTaskRun;
-    }
-
     // check if a running TaskRun is complete and remove it from running TaskRun map
     public void checkRunningTaskRun() {
         Iterator<Long> runningIterator = runningTaskRunMap.keySet().iterator();
@@ -196,7 +187,7 @@ public class TaskRunManager implements MemoryTrackable {
             if (future.isDone()) {
                 runningIterator.remove();
                 LOG.info("Task run is done from state RUNNING to {}, {}", taskRun.getStatus().getState(), taskRun);
-                taskRunHistory.addHistory(taskRun.getStatus());
+                getTaskRunHistory().addHistory(taskRun.getStatus(), false);
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
@@ -288,7 +279,19 @@ public class TaskRunManager implements MemoryTrackable {
     }
 
     public TaskRunHistory getTaskRunHistory() {
-        return taskRunHistory;
+        return Config.use_table_based_task_run_history ?
+                new MergedTaskRunHistory(memBasedTaskRunHistory, tableBasedTaskRunHistory) : memBasedTaskRunHistory;
+    }
+
+    public void addTaskRunHistory(TaskRun taskRun, Constants.TaskRunState fromState, Constants.TaskRunState toState) {
+        try {
+            getTaskRunHistory().addHistory(taskRun.getStatus(), false);
+            TaskRunStatusChange statusChange =
+                    new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(), fromState, toState);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+        } catch (Throwable e) {
+            LOG.warn("addTaskRunHistory failed {}", taskRun, e);
+        }
     }
 
     public long getPendingTaskRunCount() {
@@ -316,7 +319,7 @@ public class TaskRunManager implements MemoryTrackable {
     }
 
     public long getHistoryTaskRunCount() {
-        return taskRunHistory.getTaskRunCount();
+        return getTaskRunHistory().getTaskRunCount();
     }
 
     @Override
@@ -331,7 +334,7 @@ public class TaskRunManager implements MemoryTrackable {
 
         return ImmutableMap.of("PendingTaskRun", validPendingCount,
                 "RunningTaskRun", (long) runningTaskRunMap.size(),
-                "HistoryTaskRun", taskRunHistory.getTaskRunCount());
+                "HistoryTaskRun", getTaskRunHistory().getTaskRunCount());
     }
   
     /**
