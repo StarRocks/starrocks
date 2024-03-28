@@ -142,6 +142,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
@@ -362,6 +363,9 @@ public class RuleSet {
                 new RewriteHllCountDistinctRule(),
                 new RewriteDuplicateAggregateFnRule(),
                 new RewriteSimpleAggToMetaScanRule(),
+                RewriteSimpleAggToHDFSScanRule.HIVE_SCAN,
+                RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN,
+                RewriteSimpleAggToHDFSScanRule.FILE_SCAN,
                 new RewriteSumByAssociativeRule(),
                 new RewriteCountIfFunction()
         ));
