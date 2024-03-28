@@ -792,7 +792,7 @@ public class BackupJob extends AbstractJob {
             replicaIds.add(replica.getId());
         }
 
-        Collections.sort(replicaIds);
+        Collections.shuffle(replicaIds);
         for (Long replicaId : replicaIds) {
             Replica replica = tablet.getReplicaById(replicaId);
             if (replica.getLastFailedVersion() < 0 && (replica.getVersion() >= visibleVersion)) {

@@ -266,22 +266,9 @@ public class BackupJobMaterializedViewTest {
         TStatus taskStatus = new TStatus(TStatusCode.OK);
         TBackend tBackend = new TBackend("", 0, 1);
 
-        // run task 1
-        {
-            AgentTask task = AgentTaskQueue.getTask(backendId, TTaskType.MAKE_SNAPSHOT, tabletId);
-            Assert.assertTrue(task instanceof SnapshotTask);
-            SnapshotTask snapshotTask = (SnapshotTask) task;
-            TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    snapshotTask.getSignature(), taskStatus);
-            request.setSnapshot_files(snapshotFiles);
-            request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
-            job.run();
-            Assert.assertEquals(Status.OK, job.getStatus());
-        }
-        // run task 2
-        {
-            AgentTask task = AgentTaskQueue.getTask(backendId, TTaskType.MAKE_SNAPSHOT, tabletId + 1);
+        // run tasks
+        List<AgentTask> tasks = UnitTestUtil.getTasksWithRandomBE(backendId, TTaskType.MAKE_SNAPSHOT, -1);
+        for (AgentTask task : tasks) {
             Assert.assertTrue(task instanceof SnapshotTask);
             SnapshotTask snapshotTask = (SnapshotTask) task;
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
@@ -299,17 +286,22 @@ public class BackupJobMaterializedViewTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum());
+        // when base table and mv task dispatch to different be nodes, then got two tasks.
+        Assert.assertTrue(1 == AgentTaskQueue.getTaskNum() || 2 == AgentTaskQueue.getTaskNum());
 
-        AgentTask task = AgentTaskQueue.getTask(backendId, TTaskType.UPLOAD, id.get() - 1);
-        Assert.assertTrue(task instanceof UploadTask);
-        UploadTask upTask = (UploadTask) task;
-
-        Assert.assertEquals(job.getJobId(), upTask.getJobId());
-        Map<String, String> srcToDest = upTask.getSrcToDestPath();
-        Assert.assertEquals(1, srcToDest.size());
-        String dest = srcToDest.get(snapshotPath + "/" + (tabletId + 1) + "/" + 0);
-        Assert.assertNotNull(dest);
+        UploadTask upTask = null;
+        tasks = UnitTestUtil.getTasksWithRandomBE(backendId, TTaskType.UPLOAD, -1);
+        for (AgentTask task : tasks) {
+            Assert.assertTrue(task instanceof UploadTask);
+            upTask = (UploadTask) task;
+            Assert.assertEquals(job.getJobId(), upTask.getJobId());
+            Map<String, String> srcToDest = upTask.getSrcToDestPath();
+            Assert.assertEquals(1, srcToDest.size());
+            String dest1 = srcToDest.get(snapshotPath + "/" + (tabletId) + "/" + 0);
+            String dest2 = srcToDest.get(snapshotPath + "/" + (tabletId + 1) + "/" + 0);
+            Assert.assertTrue(dest1 != null || dest2 != null);
+        }
+        Assert.assertNotNull(upTask);
 
         // 5. uploading
         job.run();
