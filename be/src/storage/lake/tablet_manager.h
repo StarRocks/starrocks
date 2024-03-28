@@ -27,6 +27,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
+#include "storage/rowset/base_rowset.h"
 
 namespace starrocks {
 struct FileInfo;
@@ -42,6 +43,7 @@ class MetadataIterator;
 class UpdateManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
+using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRowsetSharedPtr>>;
 
 class CompactionScheduler;
 class Metacache;
@@ -150,6 +152,8 @@ public:
 
     StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 
+    StatusOr<int64_t> get_tablet_num_rows(int64_t tablet_id, int64_t* version_hint);
+
     int64_t in_writing_data_size(int64_t tablet_id);
 
     void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
@@ -168,6 +172,8 @@ public:
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                       TabletSchemaPtr tablet_schema);
+
+    StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version, int64_t to_version);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);

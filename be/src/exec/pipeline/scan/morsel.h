@@ -30,10 +30,10 @@
 namespace starrocks {
 
 struct OlapScanRange;
-class Tablet;
-using TabletSharedPtr = std::shared_ptr<Tablet>;
-class Rowset;
-using RowsetSharedPtr = std::shared_ptr<Rowset>;
+class BaseTablet;
+using BaseTabletSharedPtr = std::shared_ptr<BaseTablet>;
+class BaseRowset;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 class Segment;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
 
@@ -83,9 +83,11 @@ public:
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
 
-    void set_rowsets(const std::vector<RowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
-    void set_delta_rowsets(std::vector<RowsetSharedPtr>&& delta_rowsets) { _delta_rowsets = std::move(delta_rowsets); }
-    const std::vector<RowsetSharedPtr>& rowsets() const {
+    void set_rowsets(const std::vector<BaseRowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
+    void set_delta_rowsets(std::vector<BaseRowsetSharedPtr>&& delta_rowsets) {
+        _delta_rowsets = std::move(delta_rowsets);
+    }
+    const std::vector<BaseRowsetSharedPtr>& rowsets() const {
         if (_delta_rowsets.has_value()) {
             return _delta_rowsets.value();
         } else {
@@ -102,10 +104,10 @@ private:
     int32_t _plan_node_id;
     int64_t _from_version = 0;
 
-    static const std::vector<RowsetSharedPtr> kEmptyRowsets;
+    static const std::vector<BaseRowsetSharedPtr> kEmptyRowsets;
     // _rowsets is owned by MorselQueue, whose lifecycle is longer than that of Morsel.
-    const std::vector<RowsetSharedPtr>* _rowsets = &kEmptyRowsets;
-    std::optional<std::vector<RowsetSharedPtr>> _delta_rowsets;
+    const std::vector<BaseRowsetSharedPtr>* _rowsets = &kEmptyRowsets;
+    std::optional<std::vector<BaseRowsetSharedPtr>> _delta_rowsets;
 };
 
 class ScanSplitContext {
@@ -272,8 +274,8 @@ public:
 
     virtual std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const;
     virtual void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {}
-    virtual void set_tablets(const std::vector<TabletSharedPtr>& tablets) { _tablets = tablets; }
-    virtual void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {
+    virtual void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) { _tablets = tablets; }
+    virtual void set_tablet_rowsets(const std::vector<std::vector<BaseRowsetSharedPtr>>& tablet_rowsets) {
         _tablet_rowsets = tablet_rowsets;
     }
     virtual void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) {}
@@ -293,8 +295,8 @@ protected:
     Morsels _morsels;
     size_t _num_morsels = 0;
     MorselPtr _unget_morsel = nullptr;
-    std::vector<TabletSharedPtr> _tablets;
-    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+    std::vector<BaseTabletSharedPtr> _tablets;
+    std::vector<std::vector<BaseRowsetSharedPtr>> _tablet_rowsets;
 };
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
@@ -321,9 +323,9 @@ public:
         _morsel_queue->set_key_ranges(key_ranges);
     }
 
-    void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _morsel_queue->set_tablets(tablets); }
+    void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) override { _morsel_queue->set_tablets(tablets); }
 
-    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
+    void set_tablet_rowsets(const std::vector<std::vector<BaseRowsetSharedPtr>>& tablet_rowsets) override {
         _morsel_queue->set_tablet_rowsets(tablet_rowsets);
     }
 
@@ -399,7 +401,7 @@ private:
     rowid_t _upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) const;
     bool _is_last_split_of_current_morsel();
 
-    Rowset* _cur_rowset();
+    BaseRowset* _cur_rowset();
     // Return nullptr, when _segment_idx exceeds the segments of the current rowset.
     Segment* _cur_segment();
 
@@ -451,9 +453,9 @@ public:
 private:
     bool _cur_tablet_finished() const;
 
-    Rowset* _find_largest_rowset(const std::vector<RowsetSharedPtr>& rowsets);
-    SegmentSharedPtr _find_largest_segment(Rowset* rowset) const;
-    StatusOr<SegmentGroupPtr> _create_segment_group(Rowset* rowset);
+    BaseRowset* _find_largest_rowset(const std::vector<BaseRowsetSharedPtr>& rowsets);
+    SegmentSharedPtr _find_largest_segment(BaseRowset* rowset) const;
+    StatusOr<SegmentGroupPtr> _create_segment_group(BaseRowset* rowset);
     bool _next_tablet();
     Status _init_tablet();
 
@@ -480,7 +482,7 @@ private:
     // Used to allocate memory for _tablet_seek_ranges.
     MemPool _mempool;
     std::vector<SeekRange> _tablet_seek_ranges;
-    Rowset* _largest_rowset = nullptr;
+    BaseRowset* _largest_rowset = nullptr;
     SegmentGroupPtr _segment_group = nullptr;
     SchemaPtr _short_key_schema = nullptr;
     int64_t _sample_splitted_scan_blocks = 0;

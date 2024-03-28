@@ -209,6 +209,25 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     return seg_iterators;
 }
 
+RowsetId Rowset::rowset_id() const {
+    RowsetId rowset_id;
+    rowset_id.init(id());
+    return rowset_id;
+}
+
+std::vector<SegmentSharedPtr> Rowset::get_segments() {
+    if (!_segments.empty()) {
+        return _segments;
+    }
+
+    auto segments_or = segments(true);
+    if (!segments_or.ok()) {
+        return std::vector<SegmentSharedPtr>();
+    }
+    _segments = std::move(segments_or.value());
+    return _segments;
+}
+
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
     LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache};
     return segments(lake_io_opts, fill_cache);

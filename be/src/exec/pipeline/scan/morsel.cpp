@@ -32,9 +32,7 @@
 namespace starrocks::pipeline {
 
 /// Morsel.
-
-const std::vector<RowsetSharedPtr> ScanMorselX::kEmptyRowsets;
-
+const std::vector<BaseRowsetSharedPtr> ScanMorselX::kEmptyRowsets;
 class PhysicalSplitScanMorsel final : public ScanMorsel {
 public:
     PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
@@ -380,12 +378,12 @@ rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const S
     return end;
 }
 
-Rowset* PhysicalSplitMorselQueue::_cur_rowset() {
+BaseRowset* PhysicalSplitMorselQueue::_cur_rowset() {
     return _tablet_rowsets[_tablet_idx][_rowset_idx].get();
 }
 
 Segment* PhysicalSplitMorselQueue::_cur_segment() {
-    const auto& segments = _cur_rowset()->segments();
+    const auto& segments = _cur_rowset()->get_segments();
     return _segment_idx >= segments.size() ? nullptr : segments[_segment_idx].get();
 }
 
@@ -410,7 +408,7 @@ bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
     }
 
     // Check if reach the last segment of the current rowset.
-    const size_t num_segments = _tablet_rowsets[_tablet_idx][_rowset_idx]->segments().size();
+    const size_t num_segments = _tablet_rowsets[_tablet_idx][_rowset_idx]->get_segments().size();
     if (_segment_idx + 1 < num_segments) {
         return false;
     }
@@ -424,7 +422,7 @@ bool PhysicalSplitMorselQueue::_next_segment() {
         _has_init_any_segment = true;
     } else {
         // Read the next segment of the current rowset.
-        if (++_segment_idx >= _cur_rowset()->segments().size()) {
+        if (++_segment_idx >= _cur_rowset()->get_segments().size()) {
             _segment_idx = 0;
             // Read the next rowset of the current tablet.
             if (++_rowset_idx >= _tablet_rowsets[_tablet_idx].size()) {
@@ -703,12 +701,12 @@ bool LogicalSplitMorselQueue::_cur_tablet_finished() const {
     return _range_idx >= _block_ranges_per_seek_range.size();
 }
 
-Rowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<RowsetSharedPtr>& rowsets) {
+BaseRowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<BaseRowsetSharedPtr>& rowsets) {
     if (rowsets.empty()) {
         return nullptr;
     }
 
-    Rowset* largest_rowset = rowsets[0].get();
+    BaseRowset* largest_rowset = rowsets[0].get();
     for (int i = 1; i < rowsets.size(); ++i) {
         if (largest_rowset->num_rows() < rowsets[i]->num_rows()) {
             largest_rowset = rowsets[i].get();
@@ -718,8 +716,8 @@ Rowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<RowsetSh
     return largest_rowset;
 }
 
-SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(Rowset* rowset) const {
-    const auto& segments = rowset->segments();
+SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(BaseRowset* rowset) const {
+    const auto& segments = rowset->get_segments();
     if (segments.empty()) {
         return nullptr;
     }
@@ -734,12 +732,12 @@ SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(Rowset* rowset) 
     return largest_segment;
 }
 
-StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(Rowset* rowset) {
+StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(BaseRowset* rowset) {
     std::vector<SegmentSharedPtr> segments;
-    if (rowset->rowset_meta()->is_segments_overlapping()) {
+    if (rowset->is_overlapped()) {
         segments.emplace_back(_find_largest_segment(rowset));
     } else {
-        segments = rowset->segments();
+        segments = rowset->get_segments();
     }
 
     for (const auto& segment : segments) {

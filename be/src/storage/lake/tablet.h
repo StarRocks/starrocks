@@ -20,6 +20,7 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/types.pb.h"
+#include "storage/base_tablet.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -45,21 +46,15 @@ using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 class UpdateManager;
 enum WriterType : int;
 
-class Tablet {
+class Tablet : public BaseTablet {
 public:
     explicit Tablet(TabletManager* mgr, int64_t id) : _mgr(mgr), _id(id) {}
 
-    ~Tablet() = default;
-
-    // Default copy and assign
-    Tablet(const Tablet&) = default;
-    Tablet& operator=(const Tablet&) = default;
-
-    // Default move copy and move assign
-    Tablet(Tablet&&) = default;
-    Tablet& operator=(Tablet&&) = default;
+    ~Tablet() override = default;
 
     [[nodiscard]] int64_t id() const { return _id; }
+
+    [[nodiscard]] int64_t tablet_id() const override { return _id; }
 
     [[nodiscard]] std::string root_location() const;
 
@@ -88,6 +83,8 @@ public:
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0,
                                                        ThreadPool* flush_pool = nullptr);
+
+    const std::shared_ptr<const TabletSchema> tablet_schema() const override;
 
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
@@ -118,6 +115,16 @@ public:
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
+    StatusOr<bool> has_delete_predicates(const Version& version) override {
+        for (int64_t from_version = version.first; from_version < version.second; from_version++) {
+            auto status = has_delete_predicates(from_version);
+            if ((status.ok() && status.value() == true) || !status.ok()) {
+                return status;
+            }
+        };
+        return false;
+    }
+
     UpdateManager* update_mgr() const { return _mgr->update_mgr(); }
 
     TabletManager* tablet_mgr() const { return _mgr; }
@@ -133,6 +140,8 @@ public:
     void set_version_hint(int64_t version_hint) { _version_hint = version_hint; }
 
     int64_t data_size();
+
+    size_t num_rows() const override;
 
 private:
     TabletManager* _mgr;

@@ -387,6 +387,35 @@ StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t
     return size;
 }
 
+StatusOr<int64_t> TabletManager::get_tablet_num_rows(int64_t tablet_id, int64_t* version_hint) {
+    int64_t num_rows = 0;
+    TabletMetadataPtr metadata;
+    if (version_hint != nullptr && *version_hint > 0) {
+        ASSIGN_OR_RETURN(metadata, get_tablet_metadata(tablet_id, *version_hint));
+        for (const auto& rowset : metadata->rowsets()) {
+            num_rows += rowset.num_rows();
+        }
+        VLOG(2) << "get tablet " << tablet_id << " num_rows from version hint: " << *version_hint
+                << ", num_rows: " << num_rows;
+    } else {
+        ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, list_tablet_metadata(tablet_id, true));
+        if (!metadata_iter.has_next()) {
+            return Status::NotFound(fmt::format("tablet {} metadata not found", tablet_id));
+        }
+        ASSIGN_OR_RETURN(metadata, metadata_iter.next());
+        if (version_hint != nullptr) {
+            *version_hint = metadata->version();
+        }
+        for (const auto& rowset : metadata->rowsets()) {
+            num_rows += rowset.num_rows();
+        }
+        VLOG(2) << "get tablet " << tablet_id << " num_rows from version : " << metadata->version()
+                << ", num_rows: " << num_rows;
+    }
+
+    return num_rows;
+}
+
 #ifdef USE_STAROS
 bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
     bool in_worker = true;
@@ -595,6 +624,37 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     // and many temporary segment objects generation when loading the same segment concurrently.
     RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts));
     return segment;
+}
+
+StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version,
+                                                                     int64_t to_version) {
+    auto tablet_ptr = std::make_shared<Tablet>(this, tablet_id);
+
+    std::vector<std::shared_ptr<BaseRowset>> rowsets;
+
+    std::vector<RowsetPtr> from_rowsets;
+    std::vector<RowsetPtr> to_rowsets;
+    if (from_version != 0) {
+        auto tablet_meta_from_version = get_tablet_metadata(tablet_id, from_version).value();
+        from_rowsets = Rowset::get_rowsets(this, tablet_meta_from_version);
+    }
+
+    auto tablet_meta_to_version = get_tablet_metadata(tablet_id, to_version).value();
+    to_rowsets = Rowset::get_rowsets(this, tablet_meta_to_version);
+
+    std::unordered_map<int64_t, std::shared_ptr<Rowset>> distinct_rowset;
+    for (const auto& rowset : from_rowsets) {
+        distinct_rowset[rowset->id()] = std::move(rowset);
+    }
+
+    for (const auto& rowset : to_rowsets) {
+        if (distinct_rowset.find(rowset->id()) != distinct_rowset.end()) {
+            auto base_rowset_ptr = std::static_pointer_cast<BaseRowset>(rowset);
+            rowsets.emplace_back(base_rowset_ptr);
+        }
+    }
+
+    return std::make_tuple(std::move(tablet_ptr), std::move(rowsets));
 }
 
 } // namespace starrocks::lake
