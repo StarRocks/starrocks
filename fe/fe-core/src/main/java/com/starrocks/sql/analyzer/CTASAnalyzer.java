@@ -22,9 +22,12 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -98,7 +101,20 @@ public class CTASAnalyzer {
         }
 
         for (int i = 0; i < allFields.size(); i++) {
-            Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType());
+            boolean isConnectorTable = false;
+            try {
+                Table connectorTable = tableRefToTable.get(allFields.get(i).getRelationAlias().getTbl());
+                if (connectorTable != null) {
+                    isConnectorTable = connectorTable instanceof HiveTable
+                            || connectorTable instanceof TableFunctionTable
+                            || connectorTable instanceof IcebergTable;
+                }
+            } catch (NullPointerException ignored) {
+                // skip if nullPointer called
+            }
+            Type type = isConnectorTable
+                    ? AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(), false)
+                    : AnalyzerUtils.transformTableColumnType(allFields.get(i).getType());
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
