@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
 import java.util.Map;
 
 // clause which is used to add one column to
@@ -27,6 +28,8 @@ public class DropPartitionClause extends AlterTableClause {
     // true if this is to drop a temp partition
     private final boolean isTempPartition;
     private final boolean forceDrop;
+    private final PartitionDesc partitionDesc;
+    private final List<String> partitionNames;
 
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition, boolean forceDrop) {
         this(ifExists, partitionName, isTempPartition, forceDrop, NodePosition.ZERO);
@@ -40,6 +43,32 @@ public class DropPartitionClause extends AlterTableClause {
         this.isTempPartition = isTempPartition;
         this.needTableStable = false;
         this.forceDrop = forceDrop;
+        this.partitionDesc = null;
+        this.partitionNames = null;
+    }
+
+    public DropPartitionClause(boolean ifExists, List<String> partitionNames, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.needTableStable = false;
+        this.forceDrop = forceDrop;
+        this.partitionDesc = null;
+        this.partitionNames = partitionNames;
+    }
+
+    public DropPartitionClause(boolean ifExists, PartitionDesc partitionDesc, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.needTableStable = false;
+        this.forceDrop = forceDrop;
+        this.partitionDesc = partitionDesc;
+        this.partitionNames = null;
     }
 
     public boolean isSetIfExists() {
@@ -63,8 +92,21 @@ public class DropPartitionClause extends AlterTableClause {
         return null;
     }
 
+    public PartitionDesc getPartitionDesc() {
+        return partitionDesc;
+    }
+
+    public boolean hasMultiPartitions() {
+        return partitionDesc != null;
+    }
+
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropPartitionClause(this, context);
     }
+
 }

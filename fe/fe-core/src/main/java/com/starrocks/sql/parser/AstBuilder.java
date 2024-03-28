@@ -1026,9 +1026,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 null,
                 context.orderByDesc() == null ? null :
-                    visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                        .stream().map(Identifier::getValue).collect(toList())
-                );
+                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                .stream().map(Identifier::getValue).collect(toList())
+        );
 
         List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
         return new CreateTableAsSelectStmt(
@@ -4037,11 +4037,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropPartitionClause(StarRocksParser.DropPartitionClauseContext context) {
-        String partitionName = ((Identifier) visit(context.identifier())).getValue();
         boolean temp = context.TEMPORARY() != null;
         boolean force = context.FORCE() != null;
         boolean exists = context.EXISTS() != null;
-        return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
+        Identifier identifier = (Identifier) visit(context.identifier());
+        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+        if (context.multiRangePartition() != null) {
+            PartitionDesc partitionDesc = (PartitionDesc) visitMultiRangePartition(context.multiRangePartition());
+            return new DropPartitionClause(exists, partitionDesc, temp, force, createPos(context));
+        } else if (identifier != null) {
+
+            String partitionName = ((Identifier) visit(context.identifier())).getValue();
+            return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
+        } else {
+            if (CollectionUtils.isNotEmpty(identifierList)) {
+                List<String> partitionNames = identifierList.stream().map(i -> i.getValue()).collect(toList());
+                return new DropPartitionClause(exists, partitionNames, temp, force, createPos(context));
+            }
+        }
+        return null;
     }
 
     @Override

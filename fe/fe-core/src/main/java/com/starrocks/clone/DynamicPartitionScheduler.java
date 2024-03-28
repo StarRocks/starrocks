@@ -439,7 +439,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 clearDropPartitionFailedMsg(tableName);
-            } catch (DdlException e) {
+            } catch (DdlException | AnalysisException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
             } finally {
                 locker.unLockDatabase(db, LockType.WRITE);
@@ -528,7 +528,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 try {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
-                } catch (DdlException e) {
+                } catch (DdlException | AnalysisException e) {
                     recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
                 } finally {
                     locker.unLockDatabase(db, LockType.WRITE);
