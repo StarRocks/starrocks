@@ -27,6 +27,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -331,6 +332,15 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                                                ScalarOperatorRewriteContext context) {
         ScalarOperator left = predicate.getChild(0);
         ScalarOperator right = predicate.getChild(1);
+        if (predicate.getBinaryType().isEqual() && left.isColumnRef() &&
+                ((ColumnRefOperator) left).hasGinIndex() &&
+                    left.getType().isStringType() && right.getType().isStringType()) {
+            // forcely rewrite Eq predicate into LIKE predicate (without any wildcard)
+            // for the column with GIN index. Ensure there are no semantic inconsistencies
+            // for GIN index.
+            return new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE, left, right); 
+        }
+
         if (left.isVariable() && left.equals(right)) {
             if (predicate.getBinaryType().equals(BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
@@ -393,6 +403,12 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         // make sure it didn't contain '%' and '_' both
         String likeString =  ((ConstantOperator) predicate.getChild(1)).getVarchar();
         if (likeString.contains("%") || likeString.contains("_")) {
+            return predicate;
+        }
+
+        if (predicate.getChild(0).isColumnRef() &&
+                ((ColumnRefOperator) predicate.getChild(0)).hasGinIndex()) {
+            // skip rewrite into binary predicate if it is column with GIN
             return predicate;
         }
 

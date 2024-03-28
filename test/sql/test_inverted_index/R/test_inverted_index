@@ -840,3 +840,49 @@ SELECT * FROM t_clone_for_gin ORDER BY id1;
 1	abc
 2	ABC
 -- !result
+-- name: test_predicate_rewrite_for_gin
+CREATE TABLE `t_predicate_rewrite_for_gin` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_english (`text_column`) USING GIN ("parser" = "english") COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_predicate_rewrite_for_gin VALUES (1, "starrocks is olap database");
+-- result:
+-- !result
+INSERT INTO t_predicate_rewrite_for_gin VALUES (2, "starrocks is database");
+-- result:
+-- !result
+SELECT * FROM t_predicate_rewrite_for_gin WHERE text_column LIKE "database" AND text_column LIKE "starrocks";
+-- result:
+1	starrocks is olap database
+2	starrocks is database
+-- !result
+SELECT * FROM t_predicate_rewrite_for_gin WHERE text_column = "database" AND text_column = "starrocks";
+-- result:
+1	starrocks is olap database
+2	starrocks is database
+-- !result
+SELECT * FROM t_predicate_rewrite_for_gin WHERE text_column = "database" AND text_column = "starrocks" AND id1 = 1;
+-- result:
+1	starrocks is olap database
+-- !result
+SELECT * FROM t_predicate_rewrite_for_gin WHERE text_column = "database" AND text_column = "starrocks" AND id1 = 2;
+-- result:
+2	starrocks is database
+-- !result
+SELECT * FROM t_predicate_rewrite_for_gin WHERE text_column = "database" AND text_column = "starrocks" AND id1 = 1 AND id1 = 2;
+-- result:
+-- !result
+DROP TABLE t_predicate_rewrite_for_gin;
+-- result:
+-- !result
