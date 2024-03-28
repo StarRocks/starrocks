@@ -37,7 +37,7 @@ using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
 // LogBlockManager contains multiple LogBlockContainers,
 // when a new block application arrives, it will first determine the directory to place the Block through DirManager,
 // and then try to select one of the existing available containers to place the Block,
-// if there is no avaiable container, it will create a new one.
+// if there is no available container, it will create a new one.
 
 // When Block writing is completed, the upper layer returns the Block to LogBlockManager by calling `release_block`.
 // If the corresponding container is not full, LogBlockManager will save it for reuse.
