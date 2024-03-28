@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 
+import com.google.common.collect.Table;
 import com.starrocks.common.util.UUIDUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -22,7 +23,6 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -55,14 +55,19 @@ public class TemporaryTableMgrTest {
         }
 
         {
-            Set<Long> dbIds = new HashSet<>(Arrays.asList(1L));
-            Map<Long, Map<UUID, Long>> actual = temporaryTableMgr.getAllTemporaryTables(dbIds);
+            List<String> tables = temporaryTableMgr.listTemporaryTables(sessionId1, 3L);
+            Assert.assertTrue(tables.isEmpty());
+        }
 
-            Assert.assertTrue(actual.size() == 1);
-            Assert.assertTrue(actual.containsKey(1L));
-            Assert.assertTrue(actual.get(1L).size() == 2);
-            Assert.assertTrue(actual.get(1L).get(sessionId1) == 1L);
-            Assert.assertTrue(actual.get(1L).get(sessionId2) == 3L);
+        {
+            Set<Long> dbIds = new HashSet<>(Arrays.asList(1L));
+            Table<Long, UUID, Long> actual = temporaryTableMgr.getAllTemporaryTables(dbIds);
+
+            Assert.assertEquals(actual.size(), 2);
+            Assert.assertTrue(actual.containsRow(1L));
+            Assert.assertTrue(actual.row(1L).size() == 2);
+            Assert.assertTrue(actual.row(1L).get(sessionId1) == 1L);
+            Assert.assertTrue(actual.row(1L).get(sessionId2) == 3L);
         }
 
         Assert.assertEquals(temporaryTableMgr.listSessions().size(), 2);
@@ -72,7 +77,7 @@ public class TemporaryTableMgrTest {
 
         temporaryTableMgr.dropTemporaryTable(UUIDUtil.genUUID(), 1L, "table1");
 
-        temporaryTableMgr.removeSession(sessionId1);
+        temporaryTableMgr.removeTemporaryTables(sessionId1);
 
         Assert.assertEquals(temporaryTableMgr.listSessions().size(), 1);
 

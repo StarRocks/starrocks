@@ -15,99 +15,154 @@
 package com.starrocks.server;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Table;
+import com.starrocks.common.CloseableLock;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-// used for temporary tables to store all temporary table related Sessions in the cluster
-// maintain the mapping relationship of sessionId -> Session
+// TemporaryTableMgr is used to manage all temporary tables in the cluster,
+// all interfaces are thread-safe.
 public class TemporaryTableMgr {
-    private Map<UUID, Session> sessionMap = Maps.newConcurrentMap();
+    private static final Logger LOG = LogManager.getLogger(TemporaryTableMgr.class);
 
-    public TemporaryTableMgr() {
-    }
+    // TemporaryTableTable is used to manage all temporary tables created by a session,
+    // all interfaces are thread-safe
+    private static class TemporaryTableTable {
+        // database id, table name, table id
+        private Table<Long, String, Long> temporaryTables = HashBasedTable.create();
 
-    public void addTemporaryTable(UUID sessionId, long databaseId, String tblName, long tableId) {
-        if (!sessionMap.containsKey(sessionId)) {
-            sessionMap.put(sessionId, new Session(sessionId));
+        private ReadWriteLock rwLock = new ReentrantReadWriteLock();
+
+        public Long getTableId(Long databaseId, String tableName) {
+            try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+                return temporaryTables.get(databaseId, tableName);
+            }
         }
-        Session session = sessionMap.get(sessionId);
-        session.addTemporaryTable(databaseId, tblName, tableId);
+
+        public void addTable(Long databaseId, String tableName, Long tableId) {
+            try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+                Preconditions.checkArgument(!temporaryTables.contains(databaseId, tableName), "table already exists");
+                temporaryTables.put(databaseId, tableName, tableId);
+            }
+        }
+
+        public void removeTable(Long databaseId, String tableName) {
+            try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+                temporaryTables.remove(databaseId, tableName);
+            }
+        }
+
+        public Table<Long, String, Long> getAllTables() {
+            try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+                return HashBasedTable.create(temporaryTables);
+            }
+        }
+
+        public List<String> listTables(long databaseId) {
+            try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+                Map<String, Long> row = temporaryTables.row(databaseId);
+                if (row == null) {
+                    return Lists.newArrayList();
+                }
+                return new ArrayList<>(row.keySet());
+            }
+        }
+
     }
 
-    public Long getTable(UUID sessionId, long databaseId, String tblName) {
-        if (!sessionMap.containsKey(sessionId)) {
+    // session id -> TemporaryTableTable
+    private Map<UUID, TemporaryTableTable> tablesMap = Maps.newConcurrentMap();
+
+    public void addTemporaryTable(UUID sessionId, long databaseId, String tableName, long tableId) {
+        tablesMap.putIfAbsent(sessionId, new TemporaryTableTable());
+        TemporaryTableTable tables = tablesMap.get(sessionId);
+        tables.addTable(databaseId, tableName, tableId);
+        LOG.info("add temporary table, session[{}], db id[{}], table name[{}], table id[{}]",
+                sessionId.toString(), databaseId, tableName, tableId);
+    }
+
+    public Long getTable(UUID sessionId, long databaseId, String tableName) {
+        if (!tablesMap.containsKey(sessionId)) {
             return null;
         }
-        Session session = sessionMap.get(sessionId);
-        return session.getTemporaryTableId(databaseId, tblName);
+        return tablesMap.get(sessionId).getTableId(databaseId, tableName);
     }
 
     public boolean tableExists(UUID sessionId, long databaseId, String tblName) {
-        if (!sessionMap.containsKey(sessionId)) {
+        if (!tablesMap.containsKey(sessionId)) {
             return false;
         }
-        Session session = sessionMap.get(sessionId);
-        return session.getTemporaryTableId(databaseId, tblName) != null;
+        return tablesMap.get(sessionId).getTableId(databaseId, tblName) != null;
     }
 
-    public void dropTemporaryTable(UUID sessionId, long databaseId, String tblName) {
-        Session session = sessionMap.get(sessionId);
-        if (session == null) {
+    public void dropTemporaryTable(UUID sessionId, long databaseId, String tableName) {
+        TemporaryTableTable tables = tablesMap.get(sessionId);
+        if (tables == null) {
             return;
         }
-        session.removeTemporaryTable(databaseId, tblName);
+        tables.removeTable(databaseId, tableName);
+        LOG.info("drop temporary table, session[{}], db id[{}], table name[{}]",
+                sessionId.toString(), databaseId, tableName);
     }
 
-    public Session getSession(UUID sessionId) {
-        return sessionMap.getOrDefault(sessionId, null);
+    public Table<Long, String, Long> getTemporaryTables(UUID sessionId) {
+        TemporaryTableTable tables = tablesMap.get(sessionId);
+        if (tables == null) {
+            return HashBasedTable.create();
+        }
+        return tables.getAllTables();
     }
 
-    public void removeSession(UUID sessionId) {
-        sessionMap.remove(sessionId);
+    public void removeTemporaryTables(UUID sessionId) {
+        tablesMap.remove(sessionId);
+        LOG.info("remove all temporary tables in session[{}]", sessionId.toString());
     }
 
     public List<String> listTemporaryTables(UUID sessionId, long databaseId) {
-        if (sessionMap.containsKey(sessionId)) {
-            return sessionMap.get(sessionId).listTemporaryTables(databaseId);
+        TemporaryTableTable tables = tablesMap.get(sessionId);
+        if (tables == null) {
+            return Lists.newArrayList();
         }
-        return Lists.newArrayList();
+        return tables.listTables(databaseId);
     }
 
-    // db -> session -> table
-    public Map<Long, Map<UUID, Long>> getAllTemporaryTables(Set<Long> requiredDbIds) {
-        Map<Long, Map<UUID, Long>> result = Maps.newHashMap();
-        sessionMap.values().forEach(session -> {
-            UUID sessionId = session.getId();
-            Map<Long, Map<String, Long>> allTables = session.getAllTemporaryTables();
-            allTables.forEach((databaseId, tableMap) -> {
-                if (!requiredDbIds.contains(databaseId)) {
-                    return;
+    // get all temporary tables under specific databases, return a Table<databaseId, sessionId, tableId>
+    public Table<Long, UUID, Long> getAllTemporaryTables(Set<Long> requiredDatabaseIds) {
+        Table<Long, UUID, Long> result = HashBasedTable.create();
+        tablesMap.forEach((sessionId, tables) -> {
+            // db id -> table name -> table id
+            Table<Long, String, Long> allTables = tables.getAllTables();
+            for (Table.Cell<Long, String, Long> cell : allTables.cellSet()) {
+                if (requiredDatabaseIds.contains(cell.getRowKey())) {
+                    result.put(cell.getRowKey(), sessionId, cell.getValue());
                 }
-                if (!result.containsKey(databaseId)) {
-                    result.put(databaseId, Maps.newHashMap());
-                }
-                tableMap.values().stream().forEach(tableId -> {
-                    result.get(databaseId).put(sessionId, tableId);
-                });
-            });
+            }
+
         });
         return result;
     }
 
     public Set<UUID> listSessions() {
-        return sessionMap.keySet();
+        return tablesMap.keySet();
     }
 
 
     @VisibleForTesting
     public void clear() {
-        if (sessionMap != null) {
-            sessionMap.clear();
+        if (tablesMap != null) {
+            tablesMap.clear();
         }
         System.gc();
     }
