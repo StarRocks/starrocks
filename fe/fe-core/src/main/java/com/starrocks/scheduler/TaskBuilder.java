@@ -70,6 +70,9 @@ public class TaskBuilder {
         } else if (submitTaskStmt.getCreateTableAsSelectStmt() != null) {
             taskNamePrefix = "ctas-";
             taskSource = Constants.TaskSource.CTAS;
+        } else if (submitTaskStmt.getDataCacheSelectStmt() != null) {
+            taskNamePrefix = "DataCacheSelect-";
+            taskSource = Constants.TaskSource.DATACACHE_SELECT;
         } else {
             throw new SemanticException("Submit task statement is not supported");
         }

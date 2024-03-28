@@ -791,6 +791,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitDataCacheSelectStatement(DataCacheSelectStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // --------------------------------------- Export Statement --------------------------------------------------------
 
     default R visitExportStatement(ExportStmt statement, C context) {

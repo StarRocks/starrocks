@@ -36,6 +36,7 @@ public class SubmitTaskStmt extends DdlStmt {
     private TaskSchedule schedule;
 
     private CreateTableAsSelectStmt createTableAsSelectStmt;
+    private DataCacheSelectStatement dataCacheSelectStmt;
     private InsertStmt insertStmt;
 
     public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, CreateTableAsSelectStmt createTableAsSelectStmt,
@@ -45,6 +46,15 @@ public class SubmitTaskStmt extends DdlStmt {
         this.taskName = taskName.getName();
         this.sqlBeginIndex = sqlBeginIndex;
         this.createTableAsSelectStmt = createTableAsSelectStmt;
+    }
+
+    public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, DataCacheSelectStatement dataCacheSelectStatement,
+                          NodePosition pos) {
+        super(pos);
+        this.dbName = taskName.getDbName();
+        this.taskName = taskName.getName();
+        this.sqlBeginIndex = sqlBeginIndex;
+        this.dataCacheSelectStmt = dataCacheSelectStatement;
     }
 
     public SubmitTaskStmt(TaskName taskName, int sqlBeginIndex, InsertStmt insertStmt, NodePosition pos) {
@@ -113,6 +123,10 @@ public class SubmitTaskStmt extends DdlStmt {
 
     public InsertStmt getInsertStmt() {
         return insertStmt;
+    }
+
+    public DataCacheSelectStatement getDataCacheSelectStmt() {
+        return dataCacheSelectStmt;
     }
 
     public void setInsertStmt(InsertStmt insertStmt) {
