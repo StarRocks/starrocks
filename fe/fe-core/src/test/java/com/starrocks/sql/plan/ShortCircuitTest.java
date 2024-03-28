@@ -21,6 +21,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
@@ -99,7 +100,8 @@ public class ShortCircuitTest extends PlanTestBase {
         tupleDescriptor.setTable(getTable("tprimary"));
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
-                "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations));
+                "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         List<Long> selectPartitionIds = ImmutableList.of(1L);
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
@@ -123,7 +125,8 @@ public class ShortCircuitTest extends PlanTestBase {
         tupleDescriptor.setTable(getTable("tprimary"));
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
-                "OlapScanNodeForShortCircuit", ImmutableList.of());
+                "OlapScanNodeForShortCircuit", ImmutableList.of(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());

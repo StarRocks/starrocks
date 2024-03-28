@@ -37,6 +37,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -250,7 +251,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
-                            finishedTimeMs / 1000);
+                            finishedTimeMs / 1000, WarehouseManager.DEFAULT_WAREHOUSE_ID);
                 }
             }
             return true;
@@ -308,8 +309,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             locker.unLockDatabase(db, LockType.READ);
         }
 
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Tablet tablet : tablets) {
-            Long backendId = Utils.chooseNodeId((LakeTablet) tablet);
+            Long backendId = warehouseManager.getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                    (LakeTablet) tablet);
             if (backendId == null) {
                 throw new AlterCancelException("no alive node");
             }

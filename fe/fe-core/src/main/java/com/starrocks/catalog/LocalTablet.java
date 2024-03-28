@@ -46,6 +46,7 @@ import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
@@ -314,6 +315,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 }
             }
         }
+    }
+
+    @Override
+    public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
+                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
+        throw new SemanticException("not implemented");
     }
 
     public int getQueryableReplicasSize(long visibleVersion, int schemaHash) {

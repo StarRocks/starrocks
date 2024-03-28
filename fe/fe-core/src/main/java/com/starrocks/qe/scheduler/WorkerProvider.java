@@ -39,7 +39,8 @@ public interface WorkerProvider {
          */
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
-                                               int numUsedComputeNodes);
+                                               int numUsedComputeNodes,
+                                               long warehouseId);
     }
 
     /**

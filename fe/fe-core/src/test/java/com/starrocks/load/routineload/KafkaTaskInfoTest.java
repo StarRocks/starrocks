@@ -46,7 +46,8 @@ public class KafkaTaskInfoTest {
             @Mock
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       List<Integer> partitions) throws UserException {
+                                                       List<Integer> partitions,
+                                                       long warehouseId) throws UserException {
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);
@@ -113,7 +114,8 @@ public class KafkaTaskInfoTest {
             @Mock
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       List<Integer> partitions) throws UserException {
+                                                       List<Integer> partitions,
+                                                       long warehouseId) throws UserException {
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);
