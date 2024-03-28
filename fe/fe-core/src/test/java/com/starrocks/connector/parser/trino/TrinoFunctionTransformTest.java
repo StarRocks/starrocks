@@ -91,6 +91,24 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testMapFnTransform() throws Exception {
+        String sql = "select map()";
+        assertPlanContains(sql, "map{}");
+
+        sql = "select map(1,'2')";
+        assertPlanContains(sql, "map{1:'2'}");
+
+        sql = "select map(1,'2',3,4)";
+        assertPlanContains(sql, "map{1:'2',3:'4'}");
+
+        sql = "select map(array[1,2], array['3','4'])";
+        assertPlanContains(sql, "map_from_arrays([1,2], ['3','4'])");
+
+        sql = "select map(1,2,3)";
+        analyzeFail(sql, "Incorrect number 3 of arguments in expr 'map()', Arguments must be in key/value pairs");
+    }
+
+    @Test
     public void testArrayFnWithLambdaExpr() throws Exception {
         String sql = "select filter(array[], x -> true);";
         assertPlanContains(sql, "array_filter(CAST([] AS ARRAY<BOOLEAN>), array_map(<slot 2> -> TRUE, []))");

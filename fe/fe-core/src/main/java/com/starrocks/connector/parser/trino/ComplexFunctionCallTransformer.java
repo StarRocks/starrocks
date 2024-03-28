@@ -31,9 +31,13 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.MapExpr;
+import com.starrocks.sql.parser.ParsingException;
 
 import java.util.Collections;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class ComplexFunctionCallTransformer {
     public static Expr transform(String functionName, Expr... args) {
@@ -115,6 +119,20 @@ public class ComplexFunctionCallTransformer {
                 throw new SemanticException("isnotnull function must have 1 argument");
             }
             return new IsNullPredicate(args[0], true);
+        } else if (functionName.equalsIgnoreCase(FunctionSet.MAP)) {
+            if (args.length == 2 && args[0] instanceof ArrayExpr && args[1] instanceof ArrayExpr) {
+                return new FunctionCallExpr("map_from_arrays", ImmutableList.of(args[0], args[1]));
+            }
+            if (args.length != 0) {
+                int num = args.length;
+                if (num % 2 == 1) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(num, "map()",
+                            "Arguments must be in key/value pairs"));
+                }
+                return new MapExpr(Type.ANY_MAP, ImmutableList.copyOf(args));
+            } else {
+                return new MapExpr(Type.ANY_MAP, ImmutableList.of());
+            }
         }
         return null;
     }
