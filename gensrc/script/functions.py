@@ -722,6 +722,13 @@ vectorized_functions = [
     [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
 
     # json string function
+    [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",
+    "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110023, "get_json_int", False, False, "BIGINT", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_bigint",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+
+    # deprecated INT version, use BIGINT version
+    # FE find function by signature order
     [110000, "get_json_int", False, False, "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110001, "get_json_double", False, False, "DOUBLE", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_double",
@@ -738,6 +745,9 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110020, "get_json_object", False, True, "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110021, "get_json_bool", False, False, "BOOLEAN", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_bool",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+
 
     # json type function
     [110003, "parse_json", False, False, "JSON", ["VARCHAR"], "JsonFunctions::parse_json"],

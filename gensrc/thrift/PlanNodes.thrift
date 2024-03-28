@@ -495,6 +495,7 @@ struct TColumnAccessPath {
     2: optional Exprs.TExpr path
     3: optional list<TColumnAccessPath> children
     4: optional bool from_predicate
+    5: optional Types.TTypeDesc type_desc
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
