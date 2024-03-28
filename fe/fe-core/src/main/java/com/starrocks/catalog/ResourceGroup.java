@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupType;
 
@@ -56,9 +57,17 @@ public class ResourceGroup {
     static {
         DEFAULT_WG.setId(DEFAULT_WG_ID);
         DEFAULT_WG.setName(DEFAULT_RESOURCE_GROUP_NAME);
+        DEFAULT_WG.setResourceGroupType(TWorkGroupType.WG_DEFAULT);
+        DEFAULT_WG.setConcurrencyLimit(0);
+        DEFAULT_WG.setMemLimit(1.0);
+        DEFAULT_WG.setCpuCoreLimit(BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        DEFAULT_WG.setMaxCpuCores(BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
 
         DEFAULT_MV_WG.setId(DEFAULT_MV_WG_ID);
         DEFAULT_MV_WG.setName(DEFAULT_MV_RESOURCE_GROUP_NAME);
+        DEFAULT_MV_WG.setResourceGroupType(TWorkGroupType.WG_MV);
+        DEFAULT_MV_WG.setCpuCoreLimit(BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
+        DEFAULT_MV_WG.setMaxCpuCores(BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
     }
 
     public static final ShowResultSetMetaData META_DATA =
@@ -111,37 +120,28 @@ public class ResourceGroup {
     private List<String> showClassifier(ResourceGroupClassifier classifier) {
         List<String> row = new ArrayList<>();
         row.add(this.name);
-        row.add("" + this.id);
-        row.add("" + cpuCoreLimit);
-        row.add("" + (memLimit * 100) + "%");
-        row.add("" + maxCpuCores);
-        if (bigQueryCpuSecondLimit != null) {
-            row.add("" + bigQueryCpuSecondLimit);
-        } else {
-            row.add("" + 0);
-        }
-        if (bigQueryScanRowsLimit != null) {
-            row.add("" + bigQueryScanRowsLimit);
-        } else {
-            row.add("" + 0);
-        }
-        if (bigQueryMemLimit != null) {
-            row.add("" + bigQueryMemLimit);
-        } else {
-            row.add("" + 0);
-        }
-        row.add("" + concurrencyLimit);
+        row.add(String.valueOf(this.id));
+        row.add(String.valueOf(cpuCoreLimit));
+        row.add(memLimit == null ?  null : (memLimit * 100) + "%");
+        row.add(String.valueOf(maxCpuCores));
+        row.add(String.valueOf(Objects.requireNonNullElse(bigQueryCpuSecondLimit, 0)));
+        row.add(String.valueOf(Objects.requireNonNullElse(bigQueryScanRowsLimit, 0)));
+        row.add(String.valueOf(Objects.requireNonNullElse(bigQueryMemLimit, 0)));
+        row.add(String.valueOf(concurrencyLimit));
         if (spillMemLimitThreshold != null) {
-            row.add("" + (spillMemLimitThreshold * 100) + "%");
+            row.add((spillMemLimitThreshold * 100) + "%");
         } else {
-            row.add("" + "100%");
+            row.add("100%");
         }
-        row.add("" + resourceGroupType.name().substring("WG_".length()));
+        row.add(resourceGroupType.name().substring("WG_".length()));
         row.add(classifier.toString());
         return row;
     }
 
     public List<List<String>> showVisible(String user, List<String> activeRoles, String ip) {
+        if (classifiers == null) {
+            return Collections.singletonList(new ArrayList<>());
+        }
         return classifiers.stream().filter(c -> c.isVisible(user, activeRoles, ip))
                 .map(this::showClassifier).collect(Collectors.toList());
     }
@@ -155,7 +155,7 @@ public class ResourceGroup {
     }
 
     public List<List<String>> show() {
-        if (classifiers.isEmpty()) {
+        if (classifiers == null || classifiers.isEmpty()) {
             return Collections.singletonList(showClassifier(new ResourceGroupClassifier()));
         }
         return classifiers.stream().map(this::showClassifier).collect(Collectors.toList());
@@ -304,6 +304,29 @@ public class ResourceGroup {
 
     public void setClassifiers(List<ResourceGroupClassifier> classifiers) {
         this.classifiers = classifiers;
+    }
+
+    public static boolean isDefault(String rgName) {
+        if (DEFAULT_RESOURCE_GROUP_NAME.equals(rgName)) {
+            return true;
+        }
+        return DEFAULT_MV_RESOURCE_GROUP_NAME.equals(rgName);
+    }
+
+    public static void fillDefaultConfig(TWorkGroup twg) {
+        ResourceGroup defaultRg = null;
+        if (twg.getId() == DEFAULT_MV_WG_ID) {
+            defaultRg = DEFAULT_MV_WG;
+        } else if (twg.getId() == DEFAULT_WG_ID) {
+            defaultRg = DEFAULT_WG;
+        }
+        if (defaultRg != null) {
+            defaultRg.setMemLimit(twg.getMem_limit());
+            defaultRg.setConcurrencyLimit(twg.getConcurrency_limit());
+            defaultRg.setCpuCoreLimit(twg.getCpu_core_limit());
+            defaultRg.setMaxCpuCores(twg.getMax_cpu_cores());
+        }
+
     }
 
     @Override
