@@ -45,7 +45,7 @@ public class SkewJoinTest extends PlanTestBase {
     public void testSkewJoin() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, " equal join conjunct: 7: rand_col = 15: cast\n" +
+        assertCContains(sqlPlan, " equal join conjunct: 7: rand_col = 14: rand_col\n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4");
         assertCContains(sqlPlan, "  |  <slot 10> : 10: unnest\n" +
                 "  |  <slot 11> : 0\n" +
@@ -129,7 +129,7 @@ public class SkewJoinTest extends PlanTestBase {
         String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew|t1.c1(1,2)] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1";
         String sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, " equal join conjunct: 9: rand_col = 17: cast\n" +
+        assertCContains(sqlPlan, " equal join conjunct: 9: rand_col = 16: rand_col\n" +
                 "  |  equal join conjunct: 1: c1 = 5: c1");
         assertCContains(sqlPlan, " 5:Project\n" +
                 "  |  <slot 11> : [1,2]");
@@ -148,6 +148,7 @@ public class SkewJoinTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
+<<<<<<< HEAD
                 "  |  <slot 10> : CASE WHEN 2: c1.a IS NULL THEN 26: round " +
                 "WHEN 2: c1.a IN (1, 2) THEN 26: round ELSE 0 END\n" +
                 "  |  <slot 19> : 2: c1.a\n" +
@@ -157,6 +158,17 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  <slot 24> : rand()\n" +
                 "  |  <slot 25> : 24: rand * 1000.0\n" +
                 "  |  <slot 26> : round(25: multiply)");
+=======
+                "  |  <slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN " +
+                "24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: round ELSE 0 END\n" +
+                "  |  <slot 18> : 2: c1.a[true]\n" +
+                "  |  <slot 19> : 3: c2.a[false]\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 21> : 2: c1.a[true]\n" +
+                "  |  <slot 22> : rand()\n" +
+                "  |  <slot 23> : 22: rand * 1000.0\n" +
+                "  |  <slot 24> : round(23: multiply)");
+>>>>>>> 2aec922d11 ([BugFix] Fix some problems of skew join (#43199))
     }
 
     @Test
@@ -169,9 +181,9 @@ public class SkewJoinTest extends PlanTestBase {
         sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew|t1.c1(1,2)] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1 join[skew|t1.c2('a','b','c')] hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
         sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 30: cast\n" +
+        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
                 "  |  equal join conjunct: 1: c1 = 5: c1");
-        assertCContains(sqlPlan, "equal join conjunct: 13: rand_col = 29: cast\n" +
+        assertCContains(sqlPlan, "equal join conjunct: 13: rand_col = 20: rand_col\n" +
                 "  |  equal join conjunct: 2: c2 = 10: c2");
     }
 }
