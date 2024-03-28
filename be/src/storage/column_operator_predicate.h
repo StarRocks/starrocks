@@ -163,12 +163,12 @@ public:
         return _predicate_operator.seek_bitmap_dictionary(iter, range);
     }
 
-    bool support_bloom_filter() const override { return SpecColumnOperator::support_bloom_filter(); }
+    bool support_original_bloom_filter() const override { return SpecColumnOperator::support_original_bloom_filter(); }
 
-    bool bloom_filter(const BloomFilter* bf) const override {
-        DCHECK(support_bloom_filter()) << "Not support bloom filter";
-        if constexpr (SpecColumnOperator::support_bloom_filter()) {
-            return _predicate_operator.bloom_filter(bf);
+    bool original_bloom_filter(const BloomFilter* bf) const override {
+        DCHECK(support_original_bloom_filter()) << "Not support bloom filter";
+        if constexpr (SpecColumnOperator::support_original_bloom_filter()) {
+            return _predicate_operator.original_bloom_filter(bf);
         }
         return true;
     }

@@ -107,15 +107,15 @@ inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppTy
 // Meanswhile, It adds an ordinal index to load bloom filter index according to requirement.
 //
 template <LogicalType field_type>
-class BloomFilterIndexWriterImpl : public BloomFilterIndexWriter {
+class OridinaryBloomFilterIndexWriterImpl : public BloomFilterIndexWriter {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
 
-    explicit BloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
+    explicit OridinaryBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : _bf_options(bf_options), _typeinfo(std::move(typeinfo)) {}
 
-    ~BloomFilterIndexWriterImpl() override = default;
+    ~OridinaryBloomFilterIndexWriterImpl() override = default;
 
     void add_values(const void* values, size_t count) override {
         const auto* v = (const CppType*)values;
@@ -186,27 +186,26 @@ private:
     std::vector<std::unique_ptr<BloomFilter>> _bfs;
 };
 
-// handle most cases
 template <LogicalType field_type, typename Enable = void>
-class NgramBloomFilterIndexWriterImpl : public BloomFilterIndexWriterImpl<field_type> {
+class NgramBloomFilterIndexWriterImpl : public OridinaryBloomFilterIndexWriterImpl<field_type> {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
-    using BloomFilterIndexWriterImpl<field_type>::_values;
+    using OridinaryBloomFilterIndexWriterImpl<field_type>::_values;
 
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : BloomFilterIndexWriterImpl<field_type>(bf_options, typeinfo) {}
+            : OridinaryBloomFilterIndexWriterImpl<field_type>(bf_options, typeinfo) {}
 
     void add_values(const void* values, size_t count) override { return; }
 };
 
 template <LogicalType field_type>
 class NgramBloomFilterIndexWriterImpl<field_type, std::enable_if_t<is_slice_type<field_type>()>>
-        : public BloomFilterIndexWriterImpl<field_type> {
+        : public OridinaryBloomFilterIndexWriterImpl<field_type> {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
-    using BloomFilterIndexWriterImpl<field_type>::_values;
+    using OridinaryBloomFilterIndexWriterImpl<field_type>::_values;
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : BloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
+            : OridinaryBloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
 
     void add_values(const void* values, size_t count) override {
         size_t gram_num = this->_bf_options.gram_num;
@@ -248,7 +247,7 @@ struct BloomFilterBuilderFunctor {
         if (bf_options.use_ngram) {
             *res = std::make_unique<NgramBloomFilterIndexWriterImpl<ftype>>(bf_options, typeinfo);
         } else {
-            *res = std::make_unique<BloomFilterIndexWriterImpl<ftype>>(bf_options, typeinfo);
+            *res = std::make_unique<OridinaryBloomFilterIndexWriterImpl<ftype>>(bf_options, typeinfo);
         }
         return Status::OK();
     }

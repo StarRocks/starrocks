@@ -341,7 +341,7 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail)
     return Status::OK();
 }
 
-// prerequisite: at least one predicate in |predicates| support bloom filter.
+template <bool is_original_bf>
 Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
                                   const IndexReadOptions& opts) {
     RETURN_IF_ERROR(_load_bloom_filter_index(opts));
@@ -366,16 +366,33 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
         std::unique_ptr<BloomFilter> bf;
         RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
         for (const auto* pred : predicates) {
-            if ((pred->support_bloom_filter() && pred->bloom_filter(bf.get())) ||
-                (pred->support_ngram_bloom_filter() &&
-                 pred->ngram_bloom_filter(bf.get(), _get_reader_options_for_ngram()))) {
-                bf_row_ranges.add(
-                        Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+            if constexpr (is_original_bf) {
+                if (pred->support_original_bloom_filter() && pred->original_bloom_filter(bf.get())) {
+                    bf_row_ranges.add(
+                            Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+                }
+            } else {
+                if (pred->support_ngram_bloom_filter() &&
+                    pred->ngram_bloom_filter(bf.get(), _get_reader_options_for_ngram())) {
+                    bf_row_ranges.add(
+                            Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+                }
             }
         }
     }
     *row_ranges = row_ranges->intersection(bf_row_ranges);
     return Status::OK();
+}
+
+// prerequisite: at least one predicate in |predicates| support bloom filter.
+Status ColumnReader::original_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                           SparseRange<>* row_ranges, const IndexReadOptions& opts) {
+    return bloom_filter<true>(predicates, row_ranges, opts);
+}
+
+Status ColumnReader::ngram_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
+                                        SparseRange<>* ranges, const IndexReadOptions& opts) {
+    return bloom_filter<false>(p, ranges, opts);
 }
 
 Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {

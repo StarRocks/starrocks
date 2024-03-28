@@ -398,12 +398,15 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
                                                             SparseRange<>* row_ranges) {
     RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
     bool support = false;
+    bool support_original_bloom_filter = false;
+    bool support_ngram_bloom_filter = false;
 
     for (const auto* pred : predicates) {
         // bloom filter index can only be either original bloom filter or ngram bloom filter
-        // pred->support_bloom_filter only works for original bloom filter and pred->support_ngram_bloom_filter only works for ngram bloom filter
-        support = support || (pred->support_bloom_filter() && (!_reader->has_ngram_bloom_filter_index())) ||
-                  (pred->support_ngram_bloom_filter() && _reader->has_ngram_bloom_filter_index());
+        support_original_bloom_filter =
+                pred->support_original_bloom_filter() && _reader->has_original_bloom_filter_index();
+        support_ngram_bloom_filter = pred->support_ngram_bloom_filter() && _reader->has_ngram_bloom_filter_index();
+        support = support | support_original_bloom_filter | support_ngram_bloom_filter;
     }
     RETURN_IF(!support, Status::OK());
 
@@ -414,7 +417,11 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
     // filter data using bloom filter or ngram bloom filter
-    RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
+    if (support_original_bloom_filter) {
+        RETURN_IF_ERROR(_reader->original_bloom_filter(predicates, row_ranges, opts));
+    } else {
+        RETURN_IF_ERROR(_reader->ngram_bloom_filter(predicates, row_ranges, opts));
+    }
     return Status::OK();
 }
 
