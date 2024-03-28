@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.common.Pair;
@@ -27,6 +28,8 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -110,6 +113,16 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         }
         return new RowOutputInfo(outputInfoList, fnResultColRefs);
     }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new ValueProperty(ImmutableMap.of());
+        }
+        return inputs.get(0).getValueProperty();
+    }
+
+
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {

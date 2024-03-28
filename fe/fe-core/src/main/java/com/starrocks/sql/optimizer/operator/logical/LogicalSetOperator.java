@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +69,11 @@ public abstract class LogicalSetOperator extends LogicalOperator {
         List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
         outputColumnRefOp.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
         return new RowOutputInfo(columnOutputInfoList, outputColumnRefOp);
+    }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        return new ValueProperty(ImmutableMap.of());
     }
 
     @Override
