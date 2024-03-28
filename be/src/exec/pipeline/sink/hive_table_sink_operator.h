@@ -87,6 +87,7 @@ private:
     std::vector<ExprContext*> _partition_expr;
     std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
     std::atomic<bool> _is_finished = false;
+    std::atomic<bool> _rollback = false;
     bool _is_static_partition_insert = false;
     std::vector<std::string> _partition_column_names;
     std::vector<std::string> _data_column_names;
