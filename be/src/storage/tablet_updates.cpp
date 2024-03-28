@@ -573,8 +573,15 @@ void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& edit_version
                                                      compaction_info_pb.inputs().end());
         edit_version_info->compaction->output = compaction_info_pb.outputs()[0];
     }
+    edit_version_info->gtid = edit_version_meta_pb.gtid();
+    _gtid_to_version_map[edit_version_meta_pb.gtid()] = edit_version_info->version.major_number();
     _edit_version_infos.emplace_back(std::move(edit_version_info));
     _next_rowset_id += edit_version_meta_pb.rowsetid_add();
+
+    VLOG(1) << "redo edit version log tablet:" << _tablet.tablet_id() << " version:" << edit_version_meta_pb.version()
+            << " rowsets:" << JoinInts(edit_version_meta_pb.rowsets(), ",")
+            << " deltas:" << JoinInts(edit_version_meta_pb.deltas(), ",")
+            << " rowsetid_add:" << edit_version_meta_pb.rowsetid_add() << " gtid:" << edit_version_meta_pb.gtid();
 }
 
 Status TabletUpdates::get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
@@ -717,6 +724,7 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
         }
     }
     edit.add_deltas(rowsetid);
+    edit.set_gtid(rowset->rowset_meta()->gtid());
     // reserve id if .upt files exist, because we may transfer them to .dat files later.
     uint32_t rowsetid_add =
             std::max(std::max(1U, (uint32_t)rowset->num_update_files()), (uint32_t)rowset->num_segments());
@@ -740,9 +748,11 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     std::unique_ptr<EditVersionInfo> edit_version_info = std::make_unique<EditVersionInfo>();
     edit_version_info->version = EditVersion(version, 0);
     edit_version_info->creation_time = creation_time;
+    edit_version_info->gtid = rowset->rowset_meta()->gtid();
     edit_version_info->rowsets.swap(nrs);
     edit_version_info->deltas.push_back(rowsetid);
     _edit_version_infos.emplace_back(std::move(edit_version_info));
+    _gtid_to_version_map[rowset->rowset_meta()->gtid()] = version;
     _check_creation_time_increasing();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
@@ -1758,6 +1768,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     int64_t input_rowsets_size = 0;
     int64_t input_row_num = 0;
     size_t num_segments = 0;
+    int64_t max_gtid = 0;
     auto info = (*pinfo).get();
     vector<RowsetSharedPtr> input_rowsets(info->inputs.size());
     {
@@ -1776,6 +1787,9 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
                 input_rowsets_size += input_rowsets[i]->data_disk_size();
                 input_row_num += input_rowsets[i]->num_rows();
                 num_segments += input_rowsets[i]->num_segments();
+                if (input_rowsets[i]->rowset_meta()->gtid() > max_gtid) {
+                    max_gtid = input_rowsets[i]->rowset_meta()->gtid();
+                }
             }
         }
     }
@@ -1798,6 +1812,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, input_row_num, input_rowsets_size);
     context.writer_type =
             (algorithm == VERTICAL_COMPACTION ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
+    // use max gtid as the gtid of new rowset
+    context.gtid = max_gtid;
     std::unique_ptr<RowsetWriter> rowset_writer;
     Status st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
     if (!st.ok()) {
@@ -1963,11 +1979,13 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     std::unique_ptr<EditVersionInfo> edit_version_info = std::make_unique<EditVersionInfo>();
     edit_version_info->version = EditVersion(edit_version_pb->major_number(), edit_version_pb->minor_number());
     edit_version_info->creation_time = creation_time;
+    edit_version_info->gtid = lastv->gtid;
     edit_version_info->rowsets.swap(nrs);
     edit_version_info->compaction.swap(*pinfo);
     _edit_version_infos.emplace_back(std::move(edit_version_info));
     _check_creation_time_increasing();
     auto edit_version_info_ptr = _edit_version_infos.back().get();
+    _gtid_to_version_map[edit_version_info_ptr->gtid] = edit_version_pb->major_number();
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
@@ -1984,7 +2002,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         std::lock_guard lg(_rowset_stats_lock);
         _rowset_stats.emplace(rowsetid, std::move(rowset_stats));
     }
-    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id()
+    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
               << " version:" << edit_version_info_ptr->version.to_string() << " rowset:" << rowsetid
               << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
               << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
@@ -2365,6 +2383,9 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         }
         num_version_removed = keep_index_min;
         if (num_version_removed > 0) {
+            for (size_t i = 0; i < num_version_removed; i++) {
+                _gtid_to_version_map.erase(_edit_version_infos[i]->gtid);
+            }
             _edit_version_infos.erase(_edit_version_infos.begin(), _edit_version_infos.begin() + num_version_removed);
             _apply_version_idx -= num_version_removed;
             // remove non-referenced rowsets
@@ -3446,6 +3467,35 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
     return nullptr;
 }
 
+Status TabletUpdates::get_applied_rowsets_by_gtid(int64_t gtid, std::vector<RowsetSharedPtr>* rowsets,
+                                                  EditVersion* full_edit_version) {
+    int64_t begin_ms = MonotonicMillis();
+    if (_error) {
+        return Status::InternalError(
+                strings::Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
+                                    _tablet.tablet_id(), _error_msg));
+    }
+    std::unique_lock<std::mutex> ul(_lock);
+    int64_t version = 0;
+    auto it = _gtid_to_version_map.upper_bound(gtid);
+    if (it != _gtid_to_version_map.begin()) {
+        --it;
+        version = it->second;
+    } else {
+        std::stringstream ss;
+        ss << "no rowset before gtid " << gtid;
+        if (!_gtid_to_version_map.empty()) {
+            ss << ", first gtid is " << _gtid_to_version_map.begin()->first << " version is "
+               << _gtid_to_version_map.begin()->second;
+        }
+        return Status::InvalidArgument(ss.str());
+    }
+    VLOG(1) << "get_applied_rowsets: tablet_id: " << _tablet.tablet_id() << " gtid: " << gtid
+            << " version: " << version;
+
+    return _get_applied_rowsets(version, rowsets, full_edit_version, ul, begin_ms);
+}
+
 Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                           EditVersion* full_edit_version) {
     int64_t begin_ms = MonotonicMillis();
@@ -3455,6 +3505,12 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                                     _tablet.tablet_id(), _error_msg));
     }
     std::unique_lock<std::mutex> ul(_lock);
+    return _get_applied_rowsets(version, rowsets, full_edit_version, ul, begin_ms);
+}
+
+Status TabletUpdates::_get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
+                                           EditVersion* full_edit_version, std::unique_lock<std::mutex>& ul,
+                                           int64_t begin_ms) {
     int64_t get_lock_ms = MonotonicMillis();
     // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
@@ -3494,6 +3550,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                                                  get_lock_ms - begin_ms, wait_ver_ms - get_lock_ms,
                                                  end_ms - wait_ver_ms);
             }
+            VLOG(1) << "get_applied_rowsets: tablet_id: " << _tablet.tablet_id() << " version: " << version
+                    << " rowsets: " << rowsets->size();
             return Status::OK();
         }
     }
@@ -3560,9 +3618,15 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
     size_t total_bytes = 0;
     size_t total_rows = 0;
     size_t total_files = 0;
+    int64_t gtid = 0;
     vector<RowsetLoadInfo> new_rowsets(rowsets.size());
     for (int i = 0; i < rowsets.size(); i++) {
         auto& src_rowset = *rowsets[i];
+
+        if (src_rowset.rowset_meta()->gtid() > gtid) {
+            gtid = src_rowset.rowset_meta()->gtid();
+        }
+
         RowsetId rid = StorageEngine::instance()->next_rowset_id();
         auto st = src_rowset.link_files_to(base_tablet->data_dir()->get_meta(), _tablet.schema_hash_path(), rid,
                                            version.major_number());
@@ -3654,6 +3718,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
     version_pb->mutable_version()->set_minor_number(version.minor_number());
     int64_t creation_time = time(nullptr);
     version_pb->set_creation_time(creation_time);
+    version_pb->set_gtid(gtid);
     for (auto& new_rowset : new_rowsets) {
         version_pb->mutable_rowsets()->Add(new_rowset.rowset_id);
     }
@@ -3781,8 +3846,13 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     size_t total_bytes = 0;
     size_t total_rows = 0;
     size_t total_files = 0;
+    int64_t gtid = 0;
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
+
+        if (src_rowset->rowset_meta()->gtid() > gtid) {
+            gtid = src_rowset->rowset_meta()->gtid();
+        }
 
         RowsetReleaseGuard guard(src_rowset->shared_from_this());
         auto res = src_rowset->get_segment_iterators2(
@@ -3804,6 +3874,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
         writer_context.segments_overlap = NONOVERLAPPING;
+        writer_context.gtid = src_rowset->rowset_meta()->gtid();
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
@@ -3868,6 +3939,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     version_pb->mutable_version()->set_minor_number(version.minor_number());
     int64_t creation_time = time(nullptr);
     version_pb->set_creation_time(creation_time);
+    version_pb->set_gtid(gtid);
     for (auto& new_rowset_load_info : new_rowset_load_infos) {
         version_pb->mutable_rowsets()->Add(new_rowset_load_info.rowset_id);
     }
@@ -4034,6 +4106,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     size_t total_bytes = 0;
     size_t total_rows = 0;
     size_t total_files = 0;
+    int64_t gtid = 0;
     auto tschema = _tablet.tablet_schema();
     std::vector<ColumnId> cids;
     for (size_t i = 0; i < tschema->num_columns(); i++) {
@@ -4045,6 +4118,10 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     Schema new_schema = ChunkHelper::convert_schema(tschema, cids);
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
+
+        if (src_rowset->rowset_meta()->gtid() > gtid) {
+            gtid = src_rowset->rowset_meta()->gtid();
+        }
 
         RowsetReleaseGuard guard(src_rowset->shared_from_this());
         auto res = src_rowset->get_segment_iterators2(
@@ -4068,6 +4145,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.version = src_rowset->version();
         writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
         writer_context.schema_change_sorting = true;
+        writer_context.gtid = src_rowset->rowset_meta()->gtid();
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
@@ -4175,6 +4253,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     version_pb->mutable_version()->set_minor_number(version.minor_number());
     int64_t creation_time = time(nullptr);
     version_pb->set_creation_time(creation_time);
+    version_pb->set_gtid(gtid);
     for (auto& new_rowset_load_info : new_rowset_load_infos) {
         version_pb->mutable_rowsets()->Add(new_rowset_load_info.rowset_id);
     }
@@ -4399,6 +4478,8 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
         version_pb->mutable_version()->set_minor_number(version->version.minor_number());
         // creation_time
         version_pb->set_creation_time(version->creation_time);
+        // gtid
+        version_pb->set_gtid(version->gtid);
         // rowsets
         repeated_field_add(version_pb->mutable_rowsets(), version->rowsets.begin(), version->rowsets.end());
         // deltas

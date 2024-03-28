@@ -207,6 +207,7 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.Warehouse;
@@ -455,6 +456,7 @@ public class GlobalStateMgr {
     private MemoryUsageTracker memoryUsageTracker;
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+    private final GtidGenerator gtidGenerator;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -683,6 +685,8 @@ public class GlobalStateMgr {
         }
 
         this.lockManager = new LockManager();
+
+        this.gtidGenerator = new GtidGenerator();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -916,6 +920,10 @@ public class GlobalStateMgr {
 
     public void setLockManager(LockManager lockManager) {
         this.lockManager = lockManager;
+    }
+
+    public GtidGenerator getGtidGenerator() {
+        return gtidGenerator;
     }
 
     // Use tryLock to avoid potential deadlock
