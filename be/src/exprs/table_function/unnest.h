@@ -40,41 +40,39 @@ public:
         Columns result;
         if (arg0->has_null() || state->get_is_left_join()) {
             auto offset_column = col_array->offsets_column();
-            auto compacted_offset_column = UInt32Column::create();
-            compacted_offset_column->append_datum(Datum(0));
+            auto copy_count_column = UInt32Column::create();
+            copy_count_column->append(0);
 
-            ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();
-            int compact_offset = 0;
+            ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
 
+            uint32_t offset = 0;
             for (int row_idx = 0; row_idx < arg0->size(); ++row_idx) {
                 if (arg0->is_null(row_idx)) {
                     if (state->get_is_left_join()) {
                         // to support unnest with null.
-                        compact_offset -= 1;
-                        compacted_array_elements->append_nulls(1);
+                        unnested_array_elements->append_nulls(1);
+                        offset += 1;
                     }
-                    compact_offset +=
-                            offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
-                    int32 offset = offset_column->get(row_idx + 1).get_int32();
-                    compacted_offset_column->append_datum(offset - compact_offset);
+                    copy_count_column->append(offset);
                 } else {
                     if (offset_column->get(row_idx + 1).get_int32() == offset_column->get(row_idx).get_int32() &&
                         state->get_is_left_join()) {
                         // to support unnest with null.
-                        compact_offset -= 1;
-                        compacted_array_elements->append_nulls(1);
+                        unnested_array_elements->append_nulls(1);
+                        offset += 1;
                     } else {
-                        compacted_array_elements->append(
-                                *(col_array->elements_column()), offset_column->get(row_idx).get_int32(),
-                                offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32());
+                        auto length =
+                                offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
+                        unnested_array_elements->append(*(col_array->elements_column()),
+                                                        offset_column->get(row_idx).get_int32(), length);
+                        offset += length;
                     }
-                    int32 offset = offset_column->get(row_idx + 1).get_int32();
-                    compacted_offset_column->append_datum(offset - compact_offset);
+                    copy_count_column->append(offset);
                 }
             }
 
-            result.emplace_back(compacted_array_elements);
-            return std::make_pair(result, compacted_offset_column);
+            result.emplace_back(unnested_array_elements);
+            return std::make_pair(result, copy_count_column);
         } else {
             result.emplace_back(col_array->elements_column());
             return std::make_pair(result, col_array->offsets_column());
