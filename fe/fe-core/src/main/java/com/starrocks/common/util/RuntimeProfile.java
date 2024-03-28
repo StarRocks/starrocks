@@ -54,8 +54,10 @@ import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Formatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -89,6 +91,9 @@ public class RuntimeProfile {
 
     private String name;
     private double localTimePercent;
+    // The version of this profile. It is used to prevent updating this profile
+    // from an old one.
+    private volatile long version = 0;
 
     public RuntimeProfile(String name) {
         this();
@@ -232,18 +237,37 @@ public class RuntimeProfile {
         }
     }
 
+    public long getVersion() {
+        return version;
+    }
+
     public void update(final TRuntimeProfileTree thriftProfile) {
         Reference<Integer> idx = new Reference<>(0);
-        update(thriftProfile.nodes, idx);
+        update(thriftProfile.nodes, idx, false);
         Preconditions.checkState(idx.getRef().equals(thriftProfile.nodes.size()));
     }
 
-    // preorder traversal, idx should be modified in the traversal process
-    private void update(List<TRuntimeProfileNode> nodes, Reference<Integer> idx) {
+    // Update a subtree of profiles from nodes, rooted at idx. It will do a preorder
+    // traversal, and modify idx in the traversal process. idx will point to the node
+    // immediately following this subtree after the traversal. If the version of the
+    // parent node, or the version of root node for this subtree is older, skip to update
+    // the profile of subtree, but still traverse the nodes to get the node immediately
+    // following this subtree.
+    private void update(List<TRuntimeProfileNode> nodes, Reference<Integer> idx, boolean isParentNodeOld) {
         TRuntimeProfileNode node = nodes.get(idx.getRef());
 
+        boolean isNodeOld;
+        if (isParentNodeOld || (node.isSetVersion() && node.version < version)) {
+            isNodeOld = true;
+        } else {
+            isNodeOld = false;
+            if (node.isSetVersion()) {
+                version = node.version;
+            }
+        }
+
         // update this level's counters
-        if (node.counters != null) {
+        if (!isNodeOld && node.counters != null) {
             // mapping from counterName to parentCounterName
             Map<String, String> child2ParentMap = Maps.newHashMap();
             if (node.child_counters_map != null) {
@@ -311,7 +335,7 @@ public class RuntimeProfile {
             }
         }
 
-        if (node.info_strings_display_order != null) {
+        if (!isNodeOld && node.info_strings_display_order != null) {
             Map<String, String> nodeInfoStrings = node.info_strings;
             for (String key : node.info_strings_display_order) {
                 String value = nodeInfoStrings.get(key);
@@ -330,7 +354,7 @@ public class RuntimeProfile {
                 childProfile = new RuntimeProfile(childName);
                 addChild(childProfile);
             }
-            childProfile.update(nodes, idx);
+            childProfile.update(nodes, idx, isNodeOld);
         }
     }
 
@@ -549,6 +573,48 @@ public class RuntimeProfile {
     // or null if this map contains no mapping for the key.
     public String getInfoString(String key) {
         return infoStrings.get(key);
+    }
+
+    // Serializes profile to thrift. Not threadsafe.
+    public TRuntimeProfileTree toThrift() {
+        TRuntimeProfileTree profileTree = new TRuntimeProfileTree();
+        profileTree.setNodes(new ArrayList<>());
+        toThrift(profileTree.nodes);
+        return profileTree;
+    }
+
+    // Flatten the tree of runtime profiles by in-order traversal. Not threadsafe.
+    private void toThrift(List<TRuntimeProfileNode> nodes) {
+        TRuntimeProfileNode node = new TRuntimeProfileNode();
+        nodes.add(node);
+
+        node.setName(name);
+        node.setNum_children(childMap.size());
+        node.setIndent(true);
+        node.setVersion(version);
+
+        for (Map.Entry<String, Pair<Counter, String>> entry : counterMap.entrySet()) {
+            Counter counter = entry.getValue().first;
+            TCounter tCounter = new TCounter();
+            tCounter.setName(entry.getKey());
+            tCounter.setValue(counter.getValue());
+            tCounter.setType(counter.getType());
+            tCounter.setStrategy(counter.getStrategy());
+            node.addToCounters(tCounter);
+        }
+
+        for (Map.Entry<String, Set<String>> entry : childCounterMap.entrySet()) {
+            node.putToChild_counters_map(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+
+        for (Map.Entry<String, String> entry : infoStrings.entrySet()) {
+            node.putToInfo_strings(entry.getKey(), entry.getValue());
+            node.addToInfo_strings_display_order(entry.getKey());
+        }
+
+        for (RuntimeProfile child : childMap.values()) {
+            child.toThrift(nodes);
+        }
     }
 
     // Merge all the isomorphic sub profiles and the caller must know for sure

@@ -158,6 +158,9 @@ public:
     RuntimeProfile* runtime_profile() { return _profile.get(); }
     std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _profile; }
 
+    RuntimeProfile* load_channel_profile() { return _load_channel_profile.get(); }
+    std::shared_ptr<RuntimeProfile> load_channel_profile_ptr() { return _load_channel_profile; }
+
     [[nodiscard]] Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
@@ -471,6 +474,7 @@ private:
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
     std::shared_ptr<RuntimeProfile> _profile;
+    std::shared_ptr<RuntimeProfile> _load_channel_profile;
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
     int _func_version = 0;

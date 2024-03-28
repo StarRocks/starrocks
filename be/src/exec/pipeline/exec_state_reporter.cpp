@@ -44,6 +44,7 @@ std::string to_http_path(const std::string& token, const std::string& file_name)
 TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(QueryContext* query_ctx,
                                                                             FragmentContext* fragment_ctx,
                                                                             RuntimeProfile* profile,
+                                                                            RuntimeProfile* load_channel_profile,
                                                                             const Status& status, bool done) {
     TReportExecStatusParams params;
     auto* runtime_state = fragment_ctx->runtime_state();
@@ -66,6 +67,9 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         if (query_ctx->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
+
+            load_channel_profile->to_thrift(&params.load_channel_profile);
+            params.__isset.load_channel_profile = true;
         }
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
@@ -75,6 +79,11 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         if (query_ctx->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
+
+            if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                load_channel_profile->to_thrift(&params.load_channel_profile);
+                params.__isset.load_channel_profile = true;
+            }
         }
 
         if (!runtime_state->output_files().empty()) {

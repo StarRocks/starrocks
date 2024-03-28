@@ -61,6 +61,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.starrocks.qe.scheduler.QueryRuntimeProfile.LOAD_CHANNEL_PROFILE_NAME;
+
 public class ExplainAnalyzer {
     private static final Logger LOG = LogManager.getLogger(ExplainAnalyzer.class);
 
@@ -194,6 +196,10 @@ public class ExplainAnalyzer {
 
         for (int i = 0; i < executionProfile.getChildList().size(); i++) {
             RuntimeProfile fragmentProfile = executionProfile.getChildList().get(i).first;
+            // TODO support analyze load channel profile
+            if (LOAD_CHANNEL_PROFILE_NAME.equals(fragmentProfile.getName())) {
+                continue;
+            }
 
             ProfileNodeParser parser = new ProfileNodeParser(isRuntimeProfile, fragmentProfile);
             Map<Integer, NodeInfo> nodeInfos = parser.parse();

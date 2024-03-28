@@ -32,6 +32,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
 #include "util/thrift_rpc_helper.h"
+#include "util/thrift_util.h"
 
 namespace starrocks::stream_load {
 
@@ -192,6 +193,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // we need use is_vectorized to make other BE open vectorized delta writer
     request.set_is_vectorized(true);
     request.set_timeout_ms(_rpc_timeout_ms);
+    request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
@@ -756,6 +758,19 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         JoinInts(tablet_ids, ",", &commit_tablet_id_list_str);
         LOG(INFO) << "OlapTableSink txn_id: " << _parent->_txn_id << " load_id: " << print_id(_parent->_load_id)
                   << " commit " << _tablet_commit_infos.size() << " tablets: " << commit_tablet_id_list_str;
+    }
+
+    if (closure->result.has_load_channel_profile()) {
+        const auto* buf = (const uint8_t*)(closure->result.load_channel_profile().data());
+        uint32_t len = closure->result.load_channel_profile().size();
+        TRuntimeProfileTree thrift_profile;
+        auto profile_st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &thrift_profile);
+        if (!profile_st.ok()) {
+            LOG(ERROR) << "Failed to deserialize LoadChannel profile, NodeChannel[" << _load_info << "] from ["
+                       << _node_info->host << ":" << _node_info->brpc_port << "], status: " << profile_st;
+        } else {
+            _runtime_state->load_channel_profile()->update(thrift_profile);
+        }
     }
 
     return Status::OK();
