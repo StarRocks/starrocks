@@ -164,6 +164,8 @@ public class FrontendOptionsTest {
 
     @Test(expected = IllegalAccessException.class)
     public void testGetStartWithFQDNThrowUnknownHostException() {
+        String oldVal = Config.priority_networks;
+        Config.priority_networks = "";
         testInitAddrUseFqdnCommonMock();
         List<InetAddress> hosts = NetUtils.getHosts();
         new MockUp<InetAddress>() {
@@ -173,6 +175,7 @@ public class FrontendOptionsTest {
             }
         };
         FrontendOptions.initAddrUseFqdn(hosts);
+        Config.priority_networks = oldVal;
     }
 
     @Test(expected = IllegalAccessException.class)

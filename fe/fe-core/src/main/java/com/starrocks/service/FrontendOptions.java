@@ -321,6 +321,7 @@ public class FrontendOptions {
     private static void analyzePriorityCidrs() {
         String priorCidrs = Config.priority_networks;
         if (Strings.isNullOrEmpty(priorCidrs)) {
+            PRIORITY_CIDRS.clear();
             return;
         }
         LOG.info("configured prior_cidrs value: {}", priorCidrs);
