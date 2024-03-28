@@ -212,6 +212,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1789,6 +1790,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
+        MetaUtils.checkNotSupportCatalog(context.getCurrentCatalog(), "TRUNCATE");
         try {
             Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     new TableName(context.getCurrentCatalog(), statement.getDbName(), statement.getTblName()),
