@@ -87,4 +87,9 @@ public class HelpStmt extends ShowStmt {
     public ShowResultSetMetaData getKeywordMetaData() {
         return KEYWORD_META_DATA;
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitHelpStatement(this, context);
+    }
 }
