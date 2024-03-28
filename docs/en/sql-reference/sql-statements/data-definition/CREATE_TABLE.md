@@ -391,6 +391,10 @@ Since version 3.0, the primary key and sort key are decoupled in the Primary Key
 >
 > If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
 
+Since version 3.3, non-primary key tables also support sorting keys, which are specified using ORDER BY clause. There are the following restrictions on sorting keys for different types of tables:
+- For DUPLICATE tables, the sorting key can be any combination of columns.
+- For AGGREGATE and UNIQUE tables, the sorting key must be the same as the dimension columns, but it can have a different order from the dimension columns specified when creating the table
+
 ### PROPERTIES
 
 #### Specify initial storage medium, automatic storage cooldown time, replica number
@@ -994,6 +998,24 @@ ORDER BY(`address`,`last_active`)
 PROPERTIES(
     "replication_num" = "3",
     "enable_persistent_index" = "true"
+);
+```
+### Create a Aggregate Key table and specify the sort key
+
+Assuming the order of dimension columns is `site_id`, `date`, `city_code`, but you want to organize data sorting in the order of `date`, `city_code`, `site_id`, you can use `ORDER BY` to specify the sort key order.
+
+```SQL
+create table IF aggregate_tbl (
+    site_id LARGEINT NOT NULL COMMENT "id of site",
+    date DATE NOT NULL COMMENT "time of event",
+    city_code VARCHAR(20) COMMENT "city_code of user",
+    pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
+)
+AGGREGATE KEY(site_id, date, city_code)
+DISTRIBUTED BY HASH(site_id)
+ORDER BY (date, city_code, site_id)
+PROPERTIES (
+    "replication_num" = "3"
 );
 ```
 
