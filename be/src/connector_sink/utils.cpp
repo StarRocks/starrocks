@@ -113,7 +113,7 @@ StatusOr<ConnectorChunkSink::Futures> HiveUtils::hive_style_partitioning_write_c
         bool partitioned, const std::string& partition,
         std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers,
         LocationProvider* location_provider, formats::FileWriterFactory* file_writer_factory, int64_t max_file_size,
-        ChunkPtr chunk) {
+        const ChunkPtr& chunk) {
     ConnectorChunkSink::Futures futures;
     auto it = partition_writers.find(partition);
     if (it != partition_writers.end()) {

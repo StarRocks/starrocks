@@ -43,7 +43,7 @@ public:
             bool partitioned, const std::string& partition,
             std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers,
             LocationProvider* location_provider, formats::FileWriterFactory* file_writer_factory, int64_t max_file_size,
-            ChunkPtr chunk);
+            const ChunkPtr& chunk);
 
 private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
