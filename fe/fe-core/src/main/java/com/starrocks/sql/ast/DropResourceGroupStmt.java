@@ -19,15 +19,22 @@ import com.starrocks.sql.parser.NodePosition;
 // Drop ResourceGroup specified by name
 // DROP RESOURCE GROUP <name>
 public class DropResourceGroupStmt extends DdlStmt {
+    private final boolean ifExists;
+
     private final String name;
 
-    public DropResourceGroupStmt(String name) {
-        this(name, NodePosition.ZERO);
+    public DropResourceGroupStmt(boolean ifExists, String name) {
+        this(ifExists, name, NodePosition.ZERO);
     }
 
-    public DropResourceGroupStmt(String name, NodePosition pos) {
+    public DropResourceGroupStmt(boolean ifExists, String name, NodePosition pos) {
         super(pos);
+        this.ifExists = ifExists;
         this.name = name;
+    }
+
+    public boolean isSetIfExists() {
+        return ifExists;
     }
 
     public String getName() {
