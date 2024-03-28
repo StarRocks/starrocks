@@ -36,7 +36,6 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.PartitionsProcDir;
-import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
@@ -47,12 +46,10 @@ import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
-import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -69,10 +66,8 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class InformationSchemaDataSource {
 
@@ -85,7 +80,6 @@ public class InformationSchemaDataSource {
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
-
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
@@ -144,7 +138,6 @@ public class InformationSchemaDataSource {
     // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
             throws TException {
-
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
         List<TTableConfigInfo> tList = new ArrayList<>();
 
@@ -162,6 +155,7 @@ public class InformationSchemaDataSource {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
                                     null, dbName, table);
                         } catch (AccessDeniedException e) {
+                            LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
                             continue;
                         }
 
@@ -194,81 +188,14 @@ public class InformationSchemaDataSource {
             MaterializedView mv = (MaterializedView) table;
             return mv.getMaterializedViewPropMap();
         }
-
-        OlapTable olapTable = (OlapTable) table;
-        Map<String, String> propsMap = new HashMap<>();
-
-        propsMap.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(olapTable.getDefaultReplicationNum()));
-
-        // bloom filter
-        Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
-        if (bfColumnNames != null) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ")
-                    .join(olapTable.getCopiedBfColumns()));
-        }
-
-        // colocateTable
-        String colocateTable = olapTable.getColocateGroup();
-        if (colocateTable != null) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateTable);
-        }
-
-        // dynamic partition
-        if (olapTable.dynamicPartitionExists()) {
-            propsMap.put("dynamic_partition", olapTable.getTableProperty()
-                    .getDynamicPartitionProperty().getPropString());
-        }
-
-        // in memory
-        propsMap.put(PropertyAnalyzer.PROPERTIES_INMEMORY, String.valueOf(olapTable.isInMemory()));
-
-        if (table.isCloudNativeTable()) {
-            Map<String, String> storageProperties = olapTable.getProperties();
-            propsMap.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE));
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
-                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK));
-        }
-
-        // enable_persistent_index
-        propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
-                String.valueOf(olapTable.enablePersistentIndex()));
-
-        // primary index cache expire sec
-        if (olapTable.primaryIndexCacheExpireSec() > 0) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC,
-                    String.valueOf(olapTable.primaryIndexCacheExpireSec()));
-        }
-
-        // compression type
-        if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME ||
-                olapTable.getCompressionType() == TCompressionType.LZ4) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "LZ4");
-        } else {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, olapTable.getCompressionType().name());
-        }
-
-        // storage media
-        Map<String, String> properties = olapTable.getTableProperty().getProperties();
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                    properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
-        }
-
-        if (RunMode.isSharedDataMode()) {
-            String sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(table.getId());
-            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, sv);
-        }
-        return propsMap;
+        return table.getProperties();
     }
 
     private static TTableConfigInfo genNormalTableConfigInfo(Table table, TTableConfigInfo tableConfigInfo) {
         OlapTable olapTable = (OlapTable) table;
         tableConfigInfo.setTable_engine(olapTable.getType().toString());
         tableConfigInfo.setTable_model(olapTable.getKeysType().toString());
-        // Distribution info
-        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-        String distributeKey = distributionInfo.getDistributionKey();
+
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
@@ -296,9 +223,12 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
                 || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
+
+        // Distribution info
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
-        tableConfigInfo.setDistribute_type("HASH");
-        tableConfigInfo.setDistribute_key(distributeKey);
+        tableConfigInfo.setDistribute_type(distributionInfo.getType().name());
+        tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey());
 
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -335,6 +265,7 @@ public class InformationSchemaDataSource {
                     Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
                             null, dbName, table);
                 } catch (AccessDeniedException e) {
+                    LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
                     continue;
                 }
                 if (!table.isNativeTableOrMaterializedView()) {
