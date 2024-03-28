@@ -97,7 +97,7 @@ jobs:
   feature-review:
     needs: info
     runs-on: [ self-hosted, normal ]
-    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'feature') && !contains(needs.info.outputs.LABELS, 'sync') && !startsWith(needs.info.outputs.HEAD_REF, 'mergify/')
+    if: github.event_name == 'pull_request_review' && contains(needs.info.outputs.LABELS, 'feature') && !contains(needs.info.outputs.LABELS, 'sync')
     name: FEATURE-REVIEW
 
     env:
