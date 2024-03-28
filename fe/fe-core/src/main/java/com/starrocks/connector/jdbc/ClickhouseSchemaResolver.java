@@ -384,26 +384,4 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
             return nonPartitionQuery;
         }
     }
-
-    public static void main(String[] args) {
-        Map<String, String> props = new HashMap<>();
-        ClickhouseSchemaResolver chr = new ClickhouseSchemaResolver(props);
-        String connectionStr = "jdbc:clickhouse://com.tme.di.feitian.production.polaris:8080/qqmusic_log";
-        //        String connectionStr = "jdbc:clickhouse://fetian.gateway.tme.woa.com:80/qqmusic_log";
-        //        String connectionStr = "jdbc:clickhouse://samcchen-debug.tme.woa.com:80/qqmusic_log";
-        Properties properties = new Properties();
-        Connection conn;
-        try {
-            conn = DriverManager.getConnection(connectionStr, "default", "bi4A1l");
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        try {
-            ResultSet rs = chr.getTables(conn, "qqmusic_Log");
-            rs.next();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-    }
 }
