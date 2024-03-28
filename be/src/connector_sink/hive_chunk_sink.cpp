@@ -57,10 +57,10 @@ StatusOr<ConnectorChunkSink::Futures> HiveChunkSink::add(ChunkPtr chunk) {
     }
 
     // create writer if not found
-    if (_partition_writers[partition] == nullptr) {
+    if (!_partition_writers.contains(partition)) {
         auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
         ASSIGN_OR_RETURN(auto writer, _file_writer_factory->create(path));
-        RETURN_IF_ERROR(_partition_writers[partition]->init());
+        RETURN_IF_ERROR(writer->init());
         _partition_writers[partition] = writer;
     }
 
