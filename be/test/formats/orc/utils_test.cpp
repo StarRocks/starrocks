@@ -170,6 +170,7 @@ TEST(Decimal, testDecimalComparison) {
 
     // more tests
     EXPECT_TRUE(compare(Decimal(Int128("-99999999999999999999999999999999999999"), 38), Decimal(Int128(100), 0)));
+    EXPECT_FALSE(compare(Decimal(Int128(0), 38), Decimal(Int128(Int128::minimumValue()), 37)));
 }
 
 } // namespace orc

@@ -19,6 +19,7 @@
 #pragma once
 
 #include <string>
+#include <glog/logging.h>
 
 #include "orc/Exceptions.hh"
 #include "orc/Type.hh"
@@ -221,29 +222,29 @@ inline bool compare(Decimal val1, Decimal val2) {
         return val1.value < val2.value;
     }
 
-    int128_t value1, value2, res;
-    int32_t delta;
-    bool overflow;
-    if (val1.scale > val2.scale) {
-        value1 = (static_cast<int128_t>(val1.value.getHighBits()) << 64) + val1.value.getLowBits();
-        value2 = (static_cast<int128_t>(val2.value.getHighBits()) << 64) + val2.value.getLowBits();
-        delta = val1.scale - val2.scale;
-        overflow = starrocks::mul_overflow(value2, starrocks::exp10_int128(delta), &res);
+    // three-way comparison
+    // requires val1.scale < val2.scale
+    // returns negative iff x < y
+    // returns zero iff x = y
+    // returns positive iff x > y
+    auto cmp = [](Decimal& val1, Decimal& val2) -> int128_t {
+        DCHECK(val1.scale < val2.scale);
+        int128_t value1 = (static_cast<int128_t>(val1.value.getHighBits()) << 64) + val1.value.getLowBits();
+        int128_t value2 = (static_cast<int128_t>(val2.value.getHighBits()) << 64) + val2.value.getLowBits();
+        int32_t delta = val2.scale - val1.scale;
+        int128_t res;
+        bool overflow = starrocks::mul_overflow(value1, starrocks::exp10_int128(delta), &res);
         if (overflow) {
-            return value2 >= 0;
+            return value1;
         } else {
-            return value1 < res;
+            return res - value2;
         }
+    };
+
+    if (val1.scale < val2.scale) {
+        return cmp(val1, val2) < 0;
     } else {
-        value1 = (static_cast<int128_t>(val1.value.getHighBits()) << 64) + val1.value.getLowBits();
-        value2 = (static_cast<int128_t>(val2.value.getHighBits()) << 64) + val2.value.getLowBits();
-        delta = val2.scale - val1.scale;
-        overflow = starrocks::mul_overflow(value1, starrocks::exp10_int128(delta), &res);
-        if (overflow) {
-            return value1 < 0;
-        } else {
-            return res < value2;
-        }
+        return cmp(val2, val1) > 0;
     }
 }
 
