@@ -469,7 +469,6 @@ void* valloc(size_t size) __THROW ALIAS(my_valloc);
 void* pvalloc(size_t size) __THROW ALIAS(my_pvalloc);
 int posix_memalign(void** r, size_t a, size_t s) __THROW ALIAS(my_posix_memalign);
 size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
-<<<<<<< HEAD
 
 // This is the bug of glibc: https://sourceware.org/bugzilla/show_bug.cgi?id=17730,
 // some version of glibc will alloc thread local storage using __libc_memalign
@@ -479,7 +478,4 @@ size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
 void* __libc_memalign(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
-#endif
-=======
->>>>>>> 34e45a782b ([Refactor] Remove tcmalloc (#27130))
 }

@@ -102,15 +102,8 @@ void gc_memory(void* arg_this) {
 
     auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
-<<<<<<< HEAD
         nap_sleep(config::memory_maintenance_sleep_time_s, [daemon] { return daemon->stopped(); });
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
-        MallocExtension::instance()->MarkThreadBusy();
-#endif
-=======
-        sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
 
->>>>>>> 34e45a782b ([Refactor] Remove tcmalloc (#27130))
         ReleaseColumnPool releaser(kFreeRatio);
         ForEach<ColumnPoolList>(releaser);
         LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";

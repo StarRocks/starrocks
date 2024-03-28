@@ -238,11 +238,6 @@ echo "Get params:
     USE_SSE4_2          -- $USE_SSE4_2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-<<<<<<< HEAD
-    USE_JEMALLOC        -- $USE_JEMALLOC
-=======
-    WITH_CACHELIB       -- $WITH_CACHELIB
->>>>>>> 34e45a782b ([Refactor] Remove tcmalloc (#27130))
 "
 
 check_tool()

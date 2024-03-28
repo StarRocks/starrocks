@@ -48,11 +48,8 @@
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-<<<<<<< HEAD
 #include "io/io_profiler.h"
-=======
 #include "jemalloc/jemalloc.h"
->>>>>>> 34e45a782b ([Refactor] Remove tcmalloc (#27130))
 #include "util/bfd_parser.h"
 
 namespace starrocks {
@@ -72,7 +69,6 @@ void HeapAction::handle(HttpRequest* req) {
 
     HttpChannel::send_reply(req, str);
 #else
-<<<<<<< HEAD
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
     std::string str = HeapProf::getInstance().snapshot();
 
@@ -81,24 +77,6 @@ void HeapAction::handle(HttpRequest* req) {
     } else {
         std::ifstream f(str);
         str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-=======
-    (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
-
-    std::lock_guard<std::mutex> lock(kPprofActionMutex);
-    std::string str;
-    std::stringstream tmp_prof_file_name;
-    tmp_prof_file_name << config::pprof_profile_dir << "/heap_profile." << getpid() << "." << rand();
-
-    // NOTE: Use fname to make the content which fname_cstr references to is still valid
-    // when je_mallctl is executing
-    auto fname = tmp_prof_file_name.str();
-    const char* fname_cstr = fname.c_str();
-    if (je_mallctl("prof.dump", nullptr, nullptr, &fname_cstr, sizeof(const char*)) == 0) {
-        std::ifstream f(fname_cstr);
-        str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-    } else {
-        str = "dump jemalloc prof file failed";
->>>>>>> 34e45a782b ([Refactor] Remove tcmalloc (#27130))
     }
     HttpChannel::send_reply(req, str);
 #endif
