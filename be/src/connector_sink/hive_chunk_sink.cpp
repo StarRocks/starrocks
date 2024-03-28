@@ -56,28 +56,30 @@ StatusOr<ConnectorChunkSink::Futures> HiveChunkSink::add(ChunkPtr chunk) {
                                                                    _partition_column_evaluators, chunk.get()));
     }
 
-    // create writer if not found
-    if (!_partition_writers.contains(partition)) {
-        auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
-        ASSIGN_OR_RETURN(auto writer, _file_writer_factory->create(path));
-        RETURN_IF_ERROR(writer->init());
-        _partition_writers[partition] = writer;
-    }
-
     Futures futures;
-    auto writer = _partition_writers[partition];
-    if (writer->get_written_bytes() >= _max_file_size) {
-        auto f = writer->commit();
-        futures.commit_file_futures.push_back(std::move(f));
-        _partition_writers.erase(partition);
+    auto it = _partition_writers.find(partition);
+    if (it != _partition_writers.end()) {
+        auto writer = it->second;
+        if (writer->get_written_bytes() >= _max_file_size) {
+            // commit writer and create a new one
+            futures.commit_file_futures.push_back(writer->commit());
+            _partition_writers.erase(it);
+            auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
+            ASSIGN_OR_RETURN(auto new_writer, _file_writer_factory->create(path));
+            RETURN_IF_ERROR(new_writer->init());
+            futures.add_chunk_futures.push_back(new_writer->write(chunk));
+            _partition_writers[partition] = new_writer;
+        } else {
+            futures.add_chunk_futures.push_back(writer->write(chunk));
+        }
+    } else { // not found writer
         auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
-        ASSIGN_OR_RETURN(writer, _file_writer_factory->create(path));
-        RETURN_IF_ERROR(writer->init());
-        _partition_writers[partition] = writer;
+        ASSIGN_OR_RETURN(auto new_writer, _file_writer_factory->create(path));
+        RETURN_IF_ERROR(new_writer->init());
+        futures.add_chunk_futures.push_back(new_writer->write(chunk));
+        _partition_writers[partition] = new_writer;
     }
 
-    auto f = writer->write(chunk);
-    futures.add_chunk_futures.push_back(std::move(f));
     return futures;
 }
 
