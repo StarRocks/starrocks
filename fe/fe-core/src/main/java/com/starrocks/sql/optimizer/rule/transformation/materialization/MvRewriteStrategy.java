@@ -37,7 +37,6 @@ public class MvRewriteStrategy {
 
     // cbo config
     public boolean enableCBORewrite = false;
-    public boolean enableCBOSingleTableRewrite = false;
 
     static class MvStrategyArbitrator {
         private final OptimizerConfig optimizerConfig;
@@ -91,19 +90,11 @@ public class MvRewriteStrategy {
             }
             // If view delta is enabled and there are multi-table mvs, return false.
             // if mv has multi table sources, we will process it in memo to support view delta join rewrite
-            if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
+            if (!sessionVariable.isEnableRuleBasedMaterializedViewRewrite() &&
                     optimizerContext.getCandidateMvs().stream().anyMatch(MaterializationContext::hasMultiTables)) {
                 return false;
             }
             return true;
-        }
-
-        private boolean isEnableCBOSingleTableRewrite() {
-            if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
-                    optimizerContext.getCandidateMvs().stream().anyMatch(MaterializationContext::hasMultiTables)) {
-                return true;
-            }
-            return false;
         }
 
         private boolean isEnableCBOMultiTableRewrite(OptExpression queryPlan) {
@@ -142,6 +133,5 @@ public class MvRewriteStrategy {
 
         // cbo strategies
         strategy.enableCBORewrite = arbitrator.isEnableCBOMultiTableRewrite(queryPlan);
-        strategy.enableCBOSingleTableRewrite = arbitrator.isEnableCBOSingleTableRewrite();
     }
 }
