@@ -180,8 +180,4 @@ EXECUTE select_by_id_stmt USING @id2;
 - 行列混存表会增加数据导入耗时和资源占用。
 - 如果业务场景中有在线服务的需求，行列混存表可以作为一种可行的解决方案，但其性能可能无法与成熟 OLTP 数据库竞争。
 - 行列混存表不支持列模式部分更新等依赖按列存储的特性。
-<<<<<<< HEAD
-- 仅适用于主键模型表。
-=======
 - 仅适用于主键表。
->>>>>>> baf03502f9 ([Doc]change table format to list format in hybrid-table (#43308))
