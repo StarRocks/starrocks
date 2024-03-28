@@ -264,4 +264,12 @@ public class InsertLoadJob extends LoadJob {
     public void setInsertProperties(Map<String, String> properties) throws DdlException {
         super.setJobProperties(properties);
     }
+
+    public boolean checkDataQuality() {
+        return super.checkDataQuality();
+    }
+
+    public void updateLoadingStatus(Map<String, String> counters) {
+        this.loadingStatus.getCounters().putAll(counters);
+    }
 }

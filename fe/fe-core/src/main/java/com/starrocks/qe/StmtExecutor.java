@@ -1993,6 +1993,7 @@ public class StmtExecutor {
             }
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
+            InsertLoadJob loadJob = null;
             if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                     targetTable.isBlackHoleTable())) {
                 // get db id
@@ -2001,7 +2002,7 @@ public class StmtExecutor {
                     throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
                 }
 
-                InsertLoadJob loadJob = new InsertLoadJob(label, db.getId(), targetTable.getId(), createTime,
+                loadJob = new InsertLoadJob(label, db.getId(), targetTable.getId(), createTime,
                         type, ConnectContext.get().getSessionVariable().getQueryTimeoutS());
                 loadJob.setLoadFileInfo(estimateFileNum, estimateScanFileSize);
                 loadJob.setEstimateScanRow(estimateScanRows);
@@ -2089,7 +2090,10 @@ public class StmtExecutor {
 
             // if in strict mode, insert will fail if there are filtered rows
             if (context.getSessionVariable().getEnableInsertStrict()) {
-                if (filteredRows > 0) {
+                if (loadJob != null) {
+                    loadJob.updateLoadingStatus(coord.getLoadCounters());
+                }
+                if (loadJob != null && !loadJob.checkDataQuality() || (loadJob == null && filteredRows > 0)) {
                     if (targetTable instanceof ExternalOlapTable) {
                         ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                         RemoteTransactionMgr.abortRemoteTransaction(

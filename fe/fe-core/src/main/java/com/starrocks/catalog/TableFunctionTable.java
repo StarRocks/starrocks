@@ -93,6 +93,7 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
     public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
     public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+    public static final String PROPERTY_STRICT_MDDE = "strict_mode";
 
     private String path;
     private String format;
@@ -116,6 +117,7 @@ public class TableFunctionTable extends Table {
     private long csvSkipHeader;
     private boolean csvTrimSpace;
 
+    private boolean strictMode;
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
@@ -286,6 +288,10 @@ public class TableFunctionTable extends Table {
 
         if (properties.containsKey(PROPERTY_CSV_TRIM_SPACE)) {
             csvTrimSpace = Boolean.parseBoolean(properties.get(PROPERTY_CSV_TRIM_SPACE));
+        }
+
+        if (properties.containsKey(PROPERTY_STRICT_MDDE)) {
+            strictMode = Boolean.parseBoolean(properties.get(PROPERTY_STRICT_MDDE));
         }
     }
 
@@ -503,5 +509,8 @@ public class TableFunctionTable extends Table {
 
     public Boolean getCsvTrimSpace() {
         return csvTrimSpace;
+    }
+    public boolean getStrictMode() {
+        return strictMode;
     }
 }

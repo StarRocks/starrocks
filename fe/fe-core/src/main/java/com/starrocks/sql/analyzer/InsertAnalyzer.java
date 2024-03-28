@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -35,9 +36,11 @@ import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 
@@ -53,10 +56,28 @@ import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
+    private static final ImmutableList<String> PUSH_DOWN_PROPERTIES_SET = new ImmutableList.Builder<String>()
+            .add("strict_mode")
+            .build();
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
         InsertStmt.checkInsertProperties(insertStmt.getInsertProperties());
 
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
+
+        // push down some properties to file table function
+        if (query != null && query instanceof SelectRelation) {
+            if (((SelectRelation) query).getRelation() != null &&
+                    ((SelectRelation) query).getRelation() instanceof FileTableFunctionRelation) {
+                Map<String, String> properties = ((FileTableFunctionRelation)
+                        ((SelectRelation) query).getRelation()).getProperties();
+                for (String property : PUSH_DOWN_PROPERTIES_SET) {
+                    if (insertStmt.getInsertProperties().containsKey(property)) {
+                        properties.put(property, insertStmt.getInsertProperties().get(property));
+                    }
+                }
+            }
+        }
+
         new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
 
         List<Table> tables = new ArrayList<>();
@@ -165,7 +186,7 @@ public class InsertAnalyzer {
                 targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn());
                 mentionedColumns =
                         ((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream()
-                            .map(Column::getName).collect(Collectors.toSet());
+                                .map(Column::getName).collect(Collectors.toSet());
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
                 mentionedColumns =
