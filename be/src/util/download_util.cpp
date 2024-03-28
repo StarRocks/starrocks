@@ -41,10 +41,10 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
     });
 
     if (fp == nullptr) {
-        int errnum = errno;
-        LOG(ERROR) << fmt::format("fail to open file. file = {}, error = {}", tmp_file, strerror(errnum));
+        std::string errmsg = strerror(errno);
+        LOG(ERROR) << fmt::format("fail to open file. file = {}, error = {}", tmp_file, errmsg);
         return Status::InternalError(
-                fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, strerror(errnum)));
+                fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, errmsg));
     }
 
     Md5Digest digest;
