@@ -628,11 +628,23 @@ public class QueryAnalyzer {
                         throw new SemanticException("Skew join column must be a column reference");
                     }
                     analyzeExpression(join.getSkewColumn(), new AnalyzeState(), join.getLeft().getScope());
+                } else {
+                    throw new SemanticException("Skew join column must be specified");
                 }
                 if (join.getSkewValues() != null) {
                     if (join.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
                         throw new SemanticException("skew join values must be constant");
                     }
+<<<<<<< HEAD
+=======
+                    List<Expr> newSkewValues = new ArrayList<>();
+                    for (Expr expr : join.getSkewValues()) {
+                        newSkewValues.add(TypeManager.addCastExpr(expr, join.getSkewColumn().getType()));
+                    }
+                    join.setSkewValues(newSkewValues);
+                } else {
+                    throw new SemanticException("Skew join values must be specified");
+>>>>>>> dda253e4f8 ([BugFix] Fix skew join unknown error when use skew join hint (#43319))
                 }
             } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());

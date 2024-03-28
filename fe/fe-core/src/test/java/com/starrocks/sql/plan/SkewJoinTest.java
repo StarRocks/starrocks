@@ -125,6 +125,15 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
+    public void testSkewJoinWithException7() throws Exception {
+        String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew] hive0.partitioned_db.t3" +
+                " on t1.c1 = t3.c1";
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("Skew join column must be specified");
+        getFragmentPlan(sql);
+    }
+
+    @Test
     public void testSkewJoinWithHiveTable() throws Exception {
         String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew|t1.c1(1,2)] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1";
