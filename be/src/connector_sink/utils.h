@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "connector_chunk_sink.h"
 #include "exprs/expr_context.h"
 #include "fmt/format.h"
 #include "formats/column_evaluator.h"
@@ -25,6 +26,8 @@
 #include "runtime/types.h"
 
 namespace starrocks::connector {
+
+class LocationProvider;
 
 class HiveUtils {
 public:
@@ -35,6 +38,12 @@ public:
     static StatusOr<std::string> make_partition_name_nullable(
             const std::vector<std::string>& column_names,
             const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
+
+    static StatusOr<ConnectorChunkSink::Futures> hive_style_partitioning_write_chunk(
+            bool partitioned, const std::string& partition,
+            std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers,
+            LocationProvider* location_provider, formats::FileWriterFactory* file_writer_factory, int64_t max_file_size,
+            const ChunkPtr& chunk);
 
 private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
