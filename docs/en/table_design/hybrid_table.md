@@ -14,7 +14,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
    ![img](../assets/table_design/hybrid_table.png)
 
-- Scenarios: supports the user scenarios of both rowstore and columnar storage, but incurs additional storage costs.<ul><li>User scenarios of rowstore:</li><ul><li>High-concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>User scenarios of columnar storage: Complex data analysis.</li></ul>
+- Scenarios: supports the user scenarios of both row-by-row and column-by-column storage, but incurs additional storage costs.<ul><li>User scenarios of row-by-row storage:</li><ul><li>High-concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>User scenarios of column-by-column storage: Complex data analysis.</li></ul>
 
 **Column-oriented**
 
