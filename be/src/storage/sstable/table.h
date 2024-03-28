@@ -11,7 +11,7 @@ namespace starrocks {
 class Slice;
 class RandomAccessFile;
 namespace sstable {
-using KeyIndex = uint32_t;
+using IndexType = size_t;
 class Block;
 class BlockHandle;
 class Footer;
@@ -51,7 +51,7 @@ public:
     // Calls (*handle_result)(arg, ...) with the entry found after a call
     // to Seek(key).  May not make such a call if filter policy says
     // that key is not present.
-    Status MultiGet(const ReadOptions&, const Slice* keys, const std::set<KeyIndex>& key_indexes,
+    Status MultiGet(const ReadOptions&, const Slice* keys, std::iterator<IndexType> begin, std::iterator<IndexType> end,
                     std::vector<std::string>* values);
 
 private:

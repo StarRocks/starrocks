@@ -232,14 +232,14 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
                                const_cast<Table*>(this), options);
 }
 
-Status Table::MultiGet(const ReadOptions& options, const Slice* keys, const std::set<KeyIndex>& key_indexes,
-                       std::vector<std::string>* values) {
+Status Table::MultiGet(const ReadOptions& options, const Slice* keys, std::iterator<IndexType> begin,
+                       std::iterator<IndexType> end, std::vector<std::string>* values) {
     Status s;
     Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
     std::unique_ptr<Iterator> current_block_itr_ptr;
 
     // return true if find k
-    auto search_in_block = [&](const Slice& k, const KeyIndex& index) {
+    auto search_in_block = [&](const Slice& k, const IndexType& index) {
         current_block_itr_ptr->Seek(k);
         if (current_block_itr_ptr->Valid() && k == current_block_itr_ptr->key()) {
             (*values)[index] = current_block_itr_ptr->value().to_string();
@@ -249,8 +249,8 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, const std:
         return false;
     };
 
-    for (auto& key_index : key_indexes) {
-        auto& k = keys[key_index];
+    for (auto it = begin; it != end; ++it) {
+        auto& k = keys[*it];
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
             if (search_in_block(k, key_index)) {

@@ -42,7 +42,7 @@ void LakePersistentIndex::set_difference(std::set<KeyIndex>* key_indexes, const 
 
 bool LakePersistentIndex::is_memtable_full() {
     const auto memtable_mem_size = _memtable->memory_usage();
-    return memtable_mem_size >= config::lake_persistent_index_memtable_size;
+    return memtable_mem_size >= config::l0_max_mem_usage / 2;
 }
 
 Status LakePersistentIndex::minor_compact() {
@@ -113,7 +113,7 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
     size_t num_found;
     // Assuming we always want the latest value now
     RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, &num_found, -1));
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, values, &not_founds, -1));
+    RETURN_IF_ERROR(get_from_immutable_memtable(keys, values, &key_wanted, -1));
     RETURN_IF_ERROR(get_from_sstables(n, keys, values, &not_founds, -1));
     return Status::OK();
 }

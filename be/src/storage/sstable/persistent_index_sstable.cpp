@@ -59,16 +59,18 @@ Status PersistentIndexSstable::build_sstable(
 
 Status PersistentIndexSstable::multi_get(size_t n, const Slice* keys, const std::set<KeyIndex>& key_indexes,
                                          int64_t version, IndexValue* values, std::set<KeyIndex>* found_key_indexes) {
-    std::vector<std::string> index_value_infos(n);
+    std::vector<std::string> index_value_infos(key_indexes.size());
     ReadOptions options;
     auto start_ts = butil::gettimeofday_us();
-    RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes, &index_value_infos));
+    RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_infos));
     auto end_ts = butil::gettimeofday_us();
     TRACE_COUNTER_INCREMENT("multi_get", end_ts - start_ts);
+    size_t i = 0;
     for (auto& key_index : key_indexes) {
-        if (!index_value_infos[key_index].empty()) {
+        // If index_value_infos is empty, value is not found in sst
+        if (!index_value_infos[i].empty()) {
             IndexValueWithVerPB index_value_with_ver_pb;
-            if (!index_value_with_ver_pb.ParseFromString(index_value_infos[key_index])) {
+            if (!index_value_with_ver_pb.ParseFromString(index_value_infos[i])) {
                 return Status::InternalError("parse index value info failed");
             }
             if (version < 0 && index_value_with_ver_pb.values_size() > 0) {
@@ -84,6 +86,7 @@ Status PersistentIndexSstable::multi_get(size_t n, const Slice* keys, const std:
                 }
             }
         }
+        ++i;
     }
     return Status::OK();
 }
