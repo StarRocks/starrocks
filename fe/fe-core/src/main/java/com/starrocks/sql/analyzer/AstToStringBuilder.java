@@ -629,7 +629,14 @@ public class AstToStringBuilder {
                 sqlBuilder.append(relation.getJoinOp());
             }
             if (relation.getJoinHint() != null && !relation.getJoinHint().isEmpty()) {
-                sqlBuilder.append(" [").append(relation.getJoinHint()).append("]");
+                StringBuilder sb = new StringBuilder();
+                sb.append(relation.getJoinHint());
+                if (relation.getSkewColumn() != null) {
+                    sb.append("|").append(visit(relation.getSkewColumn())).append("(").append(
+                            relation.getSkewValues().stream().map(this::visit).
+                                    collect(Collectors.joining(","))).append(")");
+                }
+                sqlBuilder.append(" [").append(sb).append("]");
             }
             sqlBuilder.append(" ");
             if (relation.isLateral()) {
