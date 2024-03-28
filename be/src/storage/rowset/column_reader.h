@@ -124,7 +124,10 @@ public:
 
     bool has_zone_map() const { return _zonemap_index != nullptr; }
     bool has_bitmap_index() const { return _bitmap_index != nullptr; }
-    bool has_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
+    bool has_bloom_filter_index_or_ngram_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
+    bool has_bloom_filter_index() const {
+        return _bloom_filter_index != nullptr && (!_segment->tablet_schema().has_index(_column_unique_id, NGRAMBF));
+    }
     bool has_ngram_bloom_filter_index() const {
         return _bloom_filter_index != nullptr && _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
     }
@@ -155,6 +158,9 @@ public:
     Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
                         const IndexReadOptions& opts);
 
+    Status ngram_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange<>* ranges,
+                              const IndexReadOptions& opts);
+
     Status load_ordinal_index(const IndexReadOptions& opts);
 
     Status new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedIndexIterator** iterator,
@@ -168,7 +174,9 @@ public:
 
 private:
     const std::string& file_name() const { return _segment->file_name(); }
-
+    template <bool is_bf>
+    Status bloom_filter_or_ngram_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<>* row_ranges, const IndexReadOptions& opts);
     struct private_type {
         explicit private_type(int) {}
     };

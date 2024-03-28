@@ -67,8 +67,8 @@ public:
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* range) override;
 
-    [[nodiscard]] Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                        SparseRange<>* range) override;
+    [[nodiscard]] Status get_row_ranges_by_bloom_filter_or_ngram_bloom_filter(
+            const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* range) override;
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
