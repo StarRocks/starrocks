@@ -180,10 +180,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                 if (idx == -1) {
                     throw new DdlException("Invalid column '" + column + "': not exists in all columns.");
                 }
-                if (addedSortKey.contains(idx)) {
+                if (!addedSortKey.add(idx)) {
                     throw new DdlException("Duplicate sort key column " + column + " is not allowed.");
                 }
-                addedSortKey.add(idx);
                 sortKeyIdxes.add(idx);
             }
             shortKeyColumnCount =
