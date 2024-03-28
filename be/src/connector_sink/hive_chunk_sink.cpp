@@ -64,7 +64,8 @@ StatusOr<ConnectorChunkSink::Futures> HiveChunkSink::add(ChunkPtr chunk) {
             // commit writer and create a new one
             futures.commit_file_futures.push_back(writer->commit());
             _partition_writers.erase(it);
-            auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
+            auto path =
+                    _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
             ASSIGN_OR_RETURN(auto new_writer, _file_writer_factory->create(path));
             RETURN_IF_ERROR(new_writer->init());
             futures.add_chunk_futures.push_back(new_writer->write(chunk));
