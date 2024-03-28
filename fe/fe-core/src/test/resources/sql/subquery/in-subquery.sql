@@ -709,18 +709,18 @@ LEFT SEMI JOIN (join-predicate [9: add = 7: expr AND 10: add = 5: v5] post-join-
 [sql]
 select 1 from customer where (C_NATIONKEY, C_NAME) IN (select P_NAME, P_RETAILPRICE from part)
 [result]
-RIGHT SEMI JOIN (join-predicate [11: P_NAME = 22: cast AND 17: P_RETAILPRICE = 23: cast] post-join-predicate [null])
-    EXCHANGE SHUFFLE[11, 17]
-        SCAN (columns[17: P_RETAILPRICE, 11: P_NAME] predicate[null])
-    EXCHANGE SHUFFLE[22, 23]
-        SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
+LEFT SEMI JOIN (join-predicate [22: cast = 23: cast AND 24: cast = 17: P_RETAILPRICE] post-join-predicate [null])
+    SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
+    EXCHANGE BROADCAST
+        SCAN (columns[17: P_RETAILPRICE, 11: P_NAME] predicate[cast(11: P_NAME as double) IS NOT NULL])
 [end]
 
 [sql]
 select 1 from customer where (C_NATIONKEY, C_NAME) IN (select "aa", 123.45)
 [result]
-LEFT SEMI JOIN (join-predicate [15: cast = 11: expr AND 2: C_NAME = 16: cast] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 17: cast = 18: cast] post-join-predicate [null])
     SCAN (columns[2: C_NAME, 4: C_NATIONKEY] predicate[null])
     EXCHANGE BROADCAST
-        VALUES (null)
+        PREDICATE cast(aa as double) IS NOT NULL
+            VALUES (null)
 [end]
