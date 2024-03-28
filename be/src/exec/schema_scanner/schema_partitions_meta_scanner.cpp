@@ -51,6 +51,7 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"P50_CS", TYPE_DOUBLE, sizeof(double), false},
         {"MAX_CS", TYPE_DOUBLE, sizeof(double), false},
         {"STORAGE_PATH", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATA_CACHE_SIZE", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaPartitionsMetaScanner::SchemaPartitionsMetaScanner()
@@ -110,7 +111,7 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
     const TPartitionMetaInfo& info = _partitions_meta_response.partitions_meta_infos[_partitions_meta_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
-        if (slot_id < 1 || slot_id > 25) {
+        if (slot_id < 1 || slot_id > 26) {
             return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
         }
         ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -266,6 +267,12 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             // STORAGE_PATH
             Slice storage_path = Slice(info.storage_path);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&storage_path);
+            break;
+        }
+        case 26: {
+            // DATA_CACHE_SIZE
+            Slice data_cache_size = Slice(info.data_cache_size);
+            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&data_cache_size);
             break;
         }
         default:

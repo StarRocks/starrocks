@@ -286,6 +286,11 @@ public:
     // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
     virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
 
+    // Collect cache size for the specified file, only support filesystem need to cache data in local cache, such as StarletFileSystem etc.
+    virtual StatusOr<int64_t> collect_cache_size(const std::string& path, int64_t file_size) {
+        return Status::NotSupported("FileSystem::collect_cache_size()");
+    }
+
     // Batch delete the given files.
     // return ok if all success (not found error ignored), error if any failed and the message indicates the fail message
     // possibly stop at the first error if is simulating batch deletes.

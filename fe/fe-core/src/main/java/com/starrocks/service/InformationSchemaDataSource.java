@@ -406,6 +406,9 @@ public class InformationSchemaDataSource {
         // DATA_SIZE
         ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
         partitionMetaInfo.setData_size(byteSizeValue.toString());
+        // DATA_CACHE_SIZE
+        ByteSizeValue dataCacheByteSizeValue = new ByteSizeValue(physicalPartition.dataCacheSize());
+        partitionMetaInfo.setData_cache_size(dataCacheByteSizeValue.toString());
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
         partitionMetaInfo.setStorage_medium(dataProperty.getStorageMedium().name());
