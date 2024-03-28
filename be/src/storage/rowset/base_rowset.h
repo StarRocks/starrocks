@@ -15,28 +15,23 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
-#include "common/status.h"
-#include "gutil/macros.h"
-#include "storage/lake/tablet_metadata.h"
-namespace starrocks::lake {
+#include "storage/olap_common.h"
 
-class Tablet;
-class TxnLogPB;
-class TabletMetadataPB;
+namespace starrocks {
+class Segment;
+using SegmentSharedPtr = std::shared_ptr<Segment>;
 
-class TxnLogApplier {
+class BaseRowset {
 public:
-    virtual ~TxnLogApplier() = default;
-
-    virtual Status init() { return Status::OK(); }
-
-    virtual Status apply(const TxnLogPB& tnx_log) = 0;
-
-    virtual Status finish() = 0;
+    virtual ~BaseRowset() = default;
+    virtual RowsetId rowset_id() const = 0;
+    virtual int64_t num_rows() const = 0;
+    virtual bool is_overlapped() const = 0;
+    //virtual StatusOr<std::vector<SegmentSharedPtr>> get_segments() = 0;
+    virtual std::vector<SegmentSharedPtr> get_segments() = 0;
+    virtual Status load() { return Status::OK(); };
 };
 
-std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
-                                                   int64_t new_version);
-
-} // namespace starrocks::lake
+} // namespace starrocks

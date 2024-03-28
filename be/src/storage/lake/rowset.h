@@ -20,13 +20,14 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/rowset/base_rowset.h"
 
 namespace starrocks::lake {
 
 class MetaFileBuilder;
 class TabletManager;
 
-class Rowset {
+class Rowset : public BaseRowset {
 public:
     static std::vector<RowsetPtr> get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata);
 
@@ -45,7 +46,7 @@ public:
     //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index);
 
-    ~Rowset();
+    virtual ~Rowset();
 
     DISALLOW_COPY_AND_MOVE(Rowset);
 
@@ -72,11 +73,11 @@ public:
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
             const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats);
 
-    [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
+    [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
     [[nodiscard]] int64_t num_segments() const { return metadata().segments_size(); }
 
-    [[nodiscard]] int64_t num_rows() const { return metadata().num_rows(); }
+    [[nodiscard]] int64_t num_rows() const override { return metadata().num_rows(); }
 
     [[nodiscard]] int64_t num_dels() const { return metadata().num_dels(); }
 
@@ -84,9 +85,13 @@ public:
 
     [[nodiscard]] uint32_t id() const { return metadata().id(); }
 
+    [[nodiscard]] RowsetId rowset_id() const override;
+
     [[nodiscard]] int index() const { return _index; }
 
     [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
+
+    [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
@@ -108,6 +113,7 @@ private:
     int _index;
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
+    std::vector<SegmentSharedPtr> _segments;
 };
 
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {

@@ -26,6 +26,8 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/rowset/common.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -518,6 +520,187 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
 
     reader->close();
+}
+
+class LakeTabletReaderSpit : public TestBase {
+public:
+    LakeTabletReaderSpit() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+    TabletReaderParams generate_tablet_reader_params(TScanRange* scan_range) {
+        TabletReaderParams params;
+        params.splitted_scan_rows = 4;
+        params.scan_dop = 4;
+        params.plan_node_id = 1;
+        params.start_key = std::vector<OlapTuple>();
+        params.end_key = std::vector<OlapTuple>();
+        params.scan_range = scan_range;
+        return params;
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_tablet_reader_split";
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    std::shared_ptr<TScanRange> _scan_range;
+};
+
+TEST_F(LakeTabletReaderSpit, test_reader_split) {
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
+    std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto c2 = Int32Column::create();
+    auto c3 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    c2->append_numbers(k1.data(), k1.size() * sizeof(int));
+    c3->append_numbers(v1.data(), v1.size() * sizeof(int));
+
+    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk1({c2, c3}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+    {
+        // write rowset 1 with 2 segments
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+
+        // write rowset data
+        // segment #1
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->write(chunk1));
+        ASSERT_OK(writer->finish());
+
+        // segment #2
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->write(chunk1));
+        ASSERT_OK(writer->finish());
+
+        auto files = writer->files();
+        ASSERT_EQ(2, files.size());
+
+        // add rowset metadata
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (auto& file : writer->files()) {
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
+        }
+
+        writer->close();
+    }
+
+    {
+        // write rowset 2 with 1 segment
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+
+        // write rowset data
+        // segment #1
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->write(chunk1));
+        ASSERT_OK(writer->finish());
+
+        auto files = writer->files();
+        ASSERT_EQ(1, files.size());
+
+        // add rowset metadata
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(2);
+        rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (auto& file : writer->files()) {
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
+        }
+
+        writer->close();
+    }
+
+    // write tablet metadata
+    _tablet_metadata->set_version(3);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, true, true);
+
+        // construct scan_range
+        TInternalScanRange internal_scan_range;
+        internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+        internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+        TScanRange scan_range;
+        scan_range.__set_internal_scan_range(internal_scan_range);
+        auto params = generate_tablet_reader_params(&scan_range);
+
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        reader->get_split_tasks(&split_tasks);
+        ASSERT_GT(split_tasks.size(), 0);
+
+        reader->close();
+    }
+
+    {
+        // test read data
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, false, false);
+
+        // construct scan_range
+        TInternalScanRange internal_scan_range;
+        internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+        internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+        TScanRange scan_range;
+        scan_range.__set_internal_scan_range(internal_scan_range);
+        auto params = generate_tablet_reader_params(&scan_range);
+
+        // construct rowid_range_option
+        auto rowid_range_option = std::make_shared<RowidRangeOption>();
+        Rowset rowset(_tablet_mgr.get(), _tablet_metadata, 1);
+        auto segment = rowset.get_segments().back();
+        auto sparse_range = std::make_shared<SparseRange<rowid_t>>(1, 21);
+        rowid_range_option->add(&rowset, segment.get(), sparse_range, true);
+        params.rowid_range_option = rowid_range_option;
+
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+
+        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        read_chunk_ptr->reset();
+        ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
+        ASSERT_EQ(20, read_chunk_ptr->num_rows());
+
+        read_chunk_ptr->reset();
+        ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+
+        reader->close();
+    }
 }
 
 class LakeLoadSegmentParallelTest : public TestBase {

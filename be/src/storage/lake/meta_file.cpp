@@ -36,7 +36,7 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     return cache_key_pb.SerializeAsString();
 }
 
-MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
+MetaFileBuilder::MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata)
         : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
 
 void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {

@@ -106,4 +106,22 @@ void DataSource::update_profile(const Profile& profile) {
     mem_alloc_failed_counter->update(profile.mem_alloc_failed_count);
 }
 
+StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+        bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+        size_t num_total_scan_ranges) {
+    peek_scan_ranges(scan_ranges);
+
+    pipeline::Morsels morsels;
+    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
+    if (!accept_empty_scan_ranges() && scan_ranges.empty()) {
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
+    } else {
+        for (const auto& scan_range : scan_ranges) {
+            morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
+        }
+    }
+    return std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels));
+}
+
 } // namespace starrocks::connector

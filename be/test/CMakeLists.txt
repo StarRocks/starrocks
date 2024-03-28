@@ -229,6 +229,8 @@ set(EXEC_FILES
         ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/rowset_test.cpp
+        ./storage/lake/tablet_test.cpp
+        ./storage/lake/lake_scan_node_test.cpp
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/alter_tablet_meta_test.cpp
         ./storage/lake/tablet_manager_test.cpp
