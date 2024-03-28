@@ -334,6 +334,9 @@ public class QueryRuntimeProfile {
         if (params.isSetSink_commit_infos()) {
             sinkCommitInfos.addAll(params.getSink_commit_infos());
         }
+        if (params.isSetLoad_datacache_metrics()) {
+            updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
+        }
     }
 
     public RuntimeProfile buildQueryProfile(boolean needMerge) {

@@ -20,11 +20,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Map;
 import java.util.Optional;
 
 public class DataCacheExecutor {
@@ -57,8 +61,23 @@ public class DataCacheExecutor {
         coordinator.join(connectContext.getSessionVariable().getQueryTimeoutS());
         if (coordinator.isDone()) {
             metrics = stmtExecutor.getCoordinator().getDataCacheSelectMetrics();
+            if (metrics != null) {
+                updateBackendEndDataCacheMetrics(metrics);
+            }
         }
         connectContext.setSessionVariable(sessionVariableBackup);
         return Optional.ofNullable(metrics);
+    }
+
+    // update BE's datacache metrics after cache select
+    private static void updateBackendEndDataCacheMetrics(DataCacheSelectMetrics metrics) {
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Map.Entry<Long, LoadDataCacheMetrics> metric : metrics.getBeMetrics().entrySet()) {
+            Backend backend = clusterInfoService.getBackend(metric.getKey());
+            if (backend == null) {
+                continue;
+            }
+            backend.updateDataCacheMetrics(metric.getValue().getLastDataCacheMetrics());
+        }
     }
 }

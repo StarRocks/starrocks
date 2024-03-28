@@ -924,9 +924,6 @@ public class DefaultCoordinator extends Coordinator {
             lock();
             try {
                 queryProfile.updateLoadInformation(execState, params);
-                if (params.isSetLoad_datacache_metrics()) {
-                    queryProfile.updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
-                }
             } finally {
                 unlock();
             }

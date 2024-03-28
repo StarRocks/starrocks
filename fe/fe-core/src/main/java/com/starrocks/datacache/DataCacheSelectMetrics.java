@@ -48,18 +48,18 @@ public class DataCacheSelectMetrics {
             .addColumn(new Column("TOTAL_CACHE_USAGE", ScalarType.createVarcharType()))
             .build();
 
-    private final Map<Long, LoadDataCacheMetrics> map;
+    private final Map<Long, LoadDataCacheMetrics> beMetrics;
 
     public DataCacheSelectMetrics() {
-        map = new HashMap<>();
+        beMetrics = new HashMap<>();
     }
 
     public void updateLoadDataCacheMetrics(long backendId, LoadDataCacheMetrics metrics) {
-        LoadDataCacheMetrics originMetrics = map.get(backendId);
+        LoadDataCacheMetrics originMetrics = beMetrics.get(backendId);
         if (originMetrics == null) {
-            map.put(backendId, metrics);
+            beMetrics.put(backendId, metrics);
         } else {
-            map.put(backendId, LoadDataCacheMetrics.mergeMetrics(originMetrics, metrics));
+            beMetrics.put(backendId, LoadDataCacheMetrics.mergeMetrics(originMetrics, metrics));
         }
     }
 
@@ -71,10 +71,14 @@ public class DataCacheSelectMetrics {
         }
     }
 
+    public Map<Long, LoadDataCacheMetrics> getBeMetrics() {
+        return beMetrics;
+    }
+
     private ShowResultSet getVerboseShowResultSet() {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<List<String>> rows = Lists.newArrayList();
-        for (Map.Entry<Long, LoadDataCacheMetrics> entry : map.entrySet()) {
+        for (Map.Entry<Long, LoadDataCacheMetrics> entry : beMetrics.entrySet()) {
             List<String> row = Lists.newArrayList();
             LoadDataCacheMetrics metrics = entry.getValue();
 
@@ -105,7 +109,7 @@ public class DataCacheSelectMetrics {
         long totalCacheSize = 0;
         long totalUsedCacheSize = 0;
 
-        for (Map.Entry<Long, LoadDataCacheMetrics> entry : map.entrySet()) {
+        for (Map.Entry<Long, LoadDataCacheMetrics> entry : beMetrics.entrySet()) {
             LoadDataCacheMetrics metrics = entry.getValue();
             alreadyCachedSize += metrics.getReadBytes().getBytes();
             writeCacheSize += metrics.getWriteBytes().getBytes();

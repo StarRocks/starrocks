@@ -14,9 +14,8 @@
 
 #pragma once
 
-#include "gen_cpp/DataCache_types.h"
-
 #include "block_cache/kv_cache.h"
+#include "gen_cpp/DataCache_types.h"
 
 namespace starrocks {
 

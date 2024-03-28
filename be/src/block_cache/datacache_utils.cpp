@@ -27,6 +27,7 @@ TDataCacheMetrics DataCacheUtils::convertMetricsToThrift(const DataCacheMetrics&
         break;
     case starcache::CacheStatus::LOADING:
         t_metrics.__set_status(TDataCacheStatus::LOADING);
+        break;
     default:
         t_metrics.__set_status(TDataCacheStatus::ABNORMAL);
     }
