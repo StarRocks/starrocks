@@ -270,22 +270,24 @@ import static com.starrocks.catalog.Table.TableType.JDBC;
 public class ShowExecutor {
     private static final Logger LOG = LogManager.getLogger(ShowExecutor.class);
     private static final List<List<String>> EMPTY_SET = Lists.newArrayList();
+    private final ShowExecutorVisitor showExecutorVisitor;
 
-    public ShowExecutor() {
+    public ShowExecutor(ShowExecutorVisitor showExecutorVisitor) {
+        this.showExecutorVisitor = showExecutorVisitor;
     }
 
-    public ShowResultSet execute(ShowStmt statement, ConnectContext context) {
-        return statement.accept(ShowExecutorVisitor.getInstance(), context);
+    public static ShowResultSet execute(ShowStmt statement, ConnectContext context) {
+        return GlobalStateMgr.getCurrentState().getShowExecutor().showExecutorVisitor.visit(statement, context);
     }
 
-    protected static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
-
+    public static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(ShowExecutor.ShowExecutorVisitor.class);
-
         private static final ShowExecutor.ShowExecutorVisitor INSTANCE = new ShowExecutor.ShowExecutorVisitor();
-
         public static ShowExecutor.ShowExecutorVisitor getInstance() {
             return INSTANCE;
+        }
+
+        protected ShowExecutorVisitor() {
         }
 
         @Override

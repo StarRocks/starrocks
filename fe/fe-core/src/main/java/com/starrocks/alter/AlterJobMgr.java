@@ -78,7 +78,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
-import com.starrocks.epack.alter.SystemHandlerEPack;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
@@ -154,13 +153,16 @@ public class AlterJobMgr {
     private final SchemaChangeHandler schemaChangeHandler;
     private final MaterializedViewHandler materializedViewHandler;
     private final SystemHandler clusterHandler;
-    private CompactionHandler compactionHandler;
+    private final CompactionHandler compactionHandler;
 
-    public AlterJobMgr() {
-        schemaChangeHandler = new SchemaChangeHandler();
-        materializedViewHandler = new MaterializedViewHandler();
-        clusterHandler = new SystemHandlerEPack();
-        compactionHandler = new CompactionHandler();
+    public AlterJobMgr(SchemaChangeHandler schemaChangeHandler,
+                       MaterializedViewHandler materializedViewHandler,
+                       SystemHandler systemHandler,
+                       CompactionHandler compactionHandler) {
+        this.schemaChangeHandler = schemaChangeHandler;
+        this.materializedViewHandler = materializedViewHandler;
+        this.clusterHandler = systemHandler;
+        this.compactionHandler = compactionHandler;
     }
 
     public void start() {

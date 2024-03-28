@@ -41,6 +41,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.CompactionHandler;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.LiteralExpr;
@@ -112,15 +113,25 @@ import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.epack.alter.SystemHandlerEPack;
 import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.lake.StarOSAgentEpack;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.AuthorizationProviderEPack;
+import com.starrocks.epack.privilege.AuthorizerEPack;
+import com.starrocks.epack.privilege.NativeAccessControllerEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
+import com.starrocks.epack.privilege.ranger.starrocks.RangerStarRocksAccessControllerEPack;
+import com.starrocks.epack.qe.DDLStmtExecutorVisitorEPack;
+import com.starrocks.epack.qe.ShowExecutorVisitorEPack;
 import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.sql.analyzer.AnalyzerVisitorEPack;
+import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
+import com.starrocks.epack.sql.parser.AstBuilderEPack;
 import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -175,12 +186,15 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
@@ -193,11 +207,14 @@ import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -473,6 +490,12 @@ public class GlobalStateMgr {
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
+    private final SqlParser sqlParser;
+    private final Analyzer analyzer;
+    private final Authorizer authorizer;
+    private final DDLStmtExecutor ddlStmtExecutor;
+    private final ShowExecutor showExecutor;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -590,7 +613,11 @@ public class GlobalStateMgr {
         this.portConnectivityChecker = new PortConnectivityChecker();
 
         // Alter Job Manager
-        this.alterJobMgr = new AlterJobMgr();
+        this.alterJobMgr = new AlterJobMgr(
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandlerEPack(),
+                new CompactionHandler());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -739,6 +766,20 @@ public class GlobalStateMgr {
         nodeMgr.registerLeaderChangeListener(globalSlotProvider::leaderChangeListener);
 
         this.memoryUsageTracker = new MemoryUsageTracker();
+
+        this.sqlParser = new SqlParser(AstBuilderEPack.getInstance());
+        this.analyzer = new Analyzer(AnalyzerVisitorEPack.getInstance());
+        AccessControlProvider accessControlProvider;
+        if (Config.access_control.equals("ranger")) {
+            accessControlProvider = new AccessControlProvider(
+                    new AuthorizerStmtVisitorEPack(), new RangerStarRocksAccessControllerEPack());
+        } else {
+            accessControlProvider = new AccessControlProvider(
+                    new AuthorizerStmtVisitorEPack(), new NativeAccessControllerEPack());
+        }
+        this.authorizer = new AuthorizerEPack(accessControlProvider);
+        this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutorVisitorEPack.getInstance());
+        this.showExecutor = new ShowExecutor(ShowExecutorVisitorEPack.getInstance());
     }
 
     public static void destroyCheckpoint() {
@@ -993,6 +1034,26 @@ public class GlobalStateMgr {
         return failoverGroupMgr;
     }
 
+    public SqlParser getSqlParser() {
+        return sqlParser;
+    }
+
+    public Analyzer getAnalyzer() {
+        return analyzer;
+    }
+
+    public Authorizer getAuthorizer() {
+        return authorizer;
+    }
+
+    public DDLStmtExecutor getDdlStmtExecutor() {
+        return ddlStmtExecutor;
+    }
+
+    public ShowExecutor getShowExecutor() {
+        return showExecutor;
+    }
+
     // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -1107,7 +1168,7 @@ public class GlobalStateMgr {
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
 
-        editLog = new EditLog(journalQueue);
+        editLog = new EditLogEPack(journalQueue);
     }
 
     // wait until FE is ready.
@@ -1857,7 +1918,7 @@ public class GlobalStateMgr {
                 readSucc = true;
 
                 // apply
-                EditLog.loadJournal(this, entity);
+                editLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",

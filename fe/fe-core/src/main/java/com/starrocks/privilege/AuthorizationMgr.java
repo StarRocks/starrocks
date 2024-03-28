@@ -290,7 +290,7 @@ public class AuthorizationMgr {
     }
 
     // called by initBuiltinRolesAndUsers()
-    private void initPrivilegeCollectionAllObjects(
+    protected void initPrivilegeCollectionAllObjects(
             PrivilegeCollectionV2 collection, ObjectType objectType, List<PrivilegeType> actionList)
             throws PrivilegeException {
         List<PEntryObject> objects = new ArrayList<>();

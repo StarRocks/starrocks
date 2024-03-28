@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
@@ -39,6 +38,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
@@ -126,6 +126,8 @@ public class DeleteHandlerTest {
             }
         };
 
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+
         new Expectations() {
             {
                 globalStateMgr.getDb(anyString);
@@ -176,6 +178,10 @@ public class DeleteHandlerTest {
                 AgentTaskQueue.addTask((AgentTask) any);
                 minTimes = 0;
                 result = true;
+
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+                minTimes = 0;
             }
         };
     }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
@@ -20,8 +19,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -46,7 +47,16 @@ public class HiveResourceTest {
         properties.put("type", type);
         properties.put("hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        // drop repo
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+
+        Analyzer.analyze(stmt, connectContext);
         HiveResource resource = (HiveResource) Resource.fromStmt(stmt);
         Assert.assertEquals("hive0", resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());

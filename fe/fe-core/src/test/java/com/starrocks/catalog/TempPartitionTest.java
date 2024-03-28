@@ -102,8 +102,7 @@ public class TempPartitionTest {
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet showResultSet = executor.execute(showStmt, ctx);
+        ShowResultSet showResultSet = ShowExecutor.execute(showStmt, ctx);
         List<List<String>> rows = showResultSet.getResultRows();
         Assert.assertEquals(expected, rows.size());
         return rows;
@@ -129,8 +128,7 @@ public class TempPartitionTest {
             throws Exception {
         String showStr = "show tablet from " + tbl + (isTemp ? " temporary" : "") + " partition (" + partitions + ");";
         ShowTabletStmt showStmt = (ShowTabletStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet showResultSet = executor.execute(showStmt, ctx);
+        ShowResultSet showResultSet = ShowExecutor.execute(showStmt, ctx);
         List<List<String>> rows = showResultSet.getResultRows();
         if (expected != -1) {
             Assert.assertEquals(expected, rows.size());
@@ -152,8 +150,7 @@ public class TempPartitionTest {
         partNameToTabletId.clear();
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet showResultSet = executor.execute(showStmt, ctx);
+        ShowResultSet showResultSet = ShowExecutor.execute(showStmt, ctx);
         List<List<String>> rows = showResultSet.getResultRows();
         Map<Long, String> partIdToName = Maps.newHashMap();
         for (List<String> row : rows) {

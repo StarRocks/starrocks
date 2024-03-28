@@ -261,8 +261,7 @@ public class MaterializedViewAnalyzerTest {
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
                         "AS SELECT k1, k2, v1 from test.tbl1");
-        ShowExecutor showExecutor = new ShowExecutor();
-        ShowResultSet showResultSet = showExecutor.execute((ShowStmt) analyzeSuccess("show full columns from mv1"),
+        ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) analyzeSuccess("show full columns from mv1"),
                 starRocksAssert.getCtx());
         Assert.assertEquals("[[a, date, , YES, YES, null, , , a1]," +
                         " [b, int, , YES, YES, null, , , b2]," +

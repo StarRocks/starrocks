@@ -83,8 +83,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.epack.qe.DDLStmtExecutorEPack;
-import com.starrocks.epack.qe.ShowExecutorEPack;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
@@ -1257,10 +1255,10 @@ public class StmtExecutor {
         if (analyzeStmt.isExternal()) {
             if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
-                    new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
-                            db, table, analyzeStmt.getColumnNames(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
+                        new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
+                                db, table, analyzeStmt.getColumnNames(),
+                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties()),
                         analyzeStatus,
                         false);
             } else {
@@ -1586,8 +1584,7 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
-        ShowExecutor executor = new ShowExecutorEPack();
-        ShowResultSet resultSet = executor.execute((ShowStmt) parsedStmt, context);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute((ShowStmt) parsedStmt, context);
         if (resultSet == null) {
             // state changed in execute
             return;
@@ -1661,7 +1658,7 @@ public class StmtExecutor {
 
     private void handleDdlStmt() throws DdlException {
         try {
-            ShowResultSet resultSet = DDLStmtExecutorEPack.execute(parsedStmt, context);
+            ShowResultSet resultSet = DDLStmtExecutor.execute(parsedStmt, context);
             if (resultSet == null) {
                 context.getState().setOk();
             } else {
@@ -1732,8 +1729,7 @@ public class StmtExecutor {
                 com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
         ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
         showExportStmt.setQueryId(queryId);
-        ShowExecutor executor = new ShowExecutorEPack();
-        ShowResultSet resultSet = executor.execute(showExportStmt, context);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showExportStmt, context);
         if (resultSet == null) {
             // state changed in execute
             return;
@@ -2015,7 +2011,7 @@ public class StmtExecutor {
                 }
                 if (scanNode instanceof FileScanNode) {
                     estimateFileNum += ((FileScanNode) scanNode).getFileNum();
-                    estimateScanFileSize += ((FileScanNode ) scanNode).getFileTotalSize();
+                    estimateScanFileSize += ((FileScanNode) scanNode).getFileTotalSize();
                     needQuery = true;
                 }
             }

@@ -15,8 +15,8 @@
 package com.starrocks.epack.policy;
 
 import com.starrocks.common.DdlException;
-import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -41,12 +41,12 @@ public class CreatePolicyTest {
     public void testCreatePolicy() throws Exception {
         CreatePolicyStmt createPolicyStmt = (CreatePolicyStmt) analyzeSuccess(
                 "create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1");
-        DDLStmtExecutorEPack.execute(createPolicyStmt, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(createPolicyStmt, starRocksAssert.getCtx());
 
         assertThrows("Policy mp already exists", DdlException.class, () ->
-                DDLStmtExecutorEPack.execute(createPolicyStmt, starRocksAssert.getCtx()));
+                DDLStmtExecutor.execute(createPolicyStmt, starRocksAssert.getCtx()));
 
-        DDLStmtExecutorEPack.execute(analyzeSuccess(
+        DDLStmtExecutor.execute(analyzeSuccess(
                         "create masking policy if not exists mp as ( v1 bigint) returns bigint -> v1 + 1"),
                 starRocksAssert.getCtx());
     }

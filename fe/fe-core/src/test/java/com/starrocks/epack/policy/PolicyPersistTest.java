@@ -16,8 +16,8 @@ package com.starrocks.epack.policy;
 import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.DropPolicyLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
-import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -50,12 +50,12 @@ public class PolicyPersistTest {
         String sql = "create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1";
         CreatePolicyStmt createPolicyStmt = (CreatePolicyStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 starRocksAssert.getCtx());
-        DDLStmtExecutorEPack.execute(createPolicyStmt, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(createPolicyStmt, starRocksAssert.getCtx());
         CreatePolicyLog createPolicyLog = (CreatePolicyLog)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_MASKING_POLICY);
         Assert.assertEquals("mp", createPolicyLog.getName());
 
-        DDLStmtExecutorEPack.execute(analyzeSuccess("drop masking policy mp"), starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(analyzeSuccess("drop masking policy mp"), starRocksAssert.getCtx());
 
         DropPolicyLog dropPolicyLog = (DropPolicyLog)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_DROP_POLICY);

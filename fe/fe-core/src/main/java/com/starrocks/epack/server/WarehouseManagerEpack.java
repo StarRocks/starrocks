@@ -9,6 +9,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.DropWarehouseLog;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
@@ -86,7 +87,8 @@ public class WarehouseManagerEpack extends WarehouseManager {
 
             nameToWh.put(wh.getName(), wh);
             idToWh.put(wh.getId(), wh);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateWarehouse(wh);
+            EditLogEPack editLog = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logCreateWarehouse(wh);
             LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id + ", " +
                     "comment = " + comment);
         }
@@ -120,8 +122,8 @@ public class WarehouseManagerEpack extends WarehouseManager {
             nameToWh.remove(warehouseName);
             idToWh.remove(warehouse.getId());
             warehouse.dropSelf();
-            GlobalStateMgr.getCurrentState().getEditLog().
-                    logDropWarehouse(new DropWarehouseLog(warehouseName));
+            EditLogEPack editLog = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logDropWarehouse(new DropWarehouseLog(warehouseName));
         }
     }
 
@@ -150,7 +152,8 @@ public class WarehouseManagerEpack extends WarehouseManager {
                 ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouseName);
             }
             warehouse.suspendSelf();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterWarehouse(warehouse);
+            EditLogEPack editLog = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logAlterWarehouse(warehouse);
         }
     }
 
@@ -175,7 +178,8 @@ public class WarehouseManagerEpack extends WarehouseManager {
                 ErrorReport.reportDdlException("Can't resume an available warehouse");
             }
             warehouse.resumeSelf();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterWarehouse(warehouse);
+            EditLogEPack editLog = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logAlterWarehouse(warehouse);
         }
     }
 

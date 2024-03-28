@@ -46,7 +46,6 @@ import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
-import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.lake.StarOSAgent;
@@ -260,8 +259,7 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(statement, starRocksAssert.getCtx());
         String showBackupSql = "SHOW BACKUP FROM " + dbName + ";";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet set = executor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         Assert.assertTrue(set.getResultRows().size() > 0);
     }
 
@@ -536,7 +534,7 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on catalog test_ex_catalog3 to test", ctx), ctx);
         ctxToTestUser();
-        ShowResultSet res = new ShowExecutor().execute(
+        ShowResultSet res = ShowExecutor.execute(
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx), ctx);
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
@@ -1177,8 +1175,7 @@ public class PrivilegeCheckerTest {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser("show table status from db1", ctx);
         grantRevokeSqlAsRoot("grant SELECT on db1.tbl2 to test");
         ctxToTestUser();
-        ShowExecutor showExecutor = new ShowExecutor();
-        ShowResultSet showResultSet = showExecutor.execute((ShowStmt) statement, ctx);
+        ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) statement, ctx);
         grantRevokeSqlAsRoot("revoke SELECT on db1.tbl2 from test");
         List<List<String>> resultRows = showResultSet.getResultRows();
         System.out.println(resultRows);
@@ -1232,8 +1229,7 @@ public class PrivilegeCheckerTest {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SHOW DYNAMIC PARTITION TABLES from db1", ctx);
         grantRevokeSqlAsRoot("grant SELECT on db1.tbl1 to test");
         ctxToTestUser();
-        ShowExecutor showExecutor = new ShowExecutor();
-        ShowResultSet showResultSet = showExecutor.execute((ShowStmt) statement, ctx);
+        ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) statement, ctx);
         grantRevokeSqlAsRoot("revoke SELECT on db1.tbl1 from test");
         List<List<String>> resultRows = showResultSet.getResultRows();
         System.out.println(resultRows);
@@ -1799,21 +1795,20 @@ public class PrivilegeCheckerTest {
         String showTabletSql = "show tablet from db1.tbl1";
         StatementBase showTabletStmt =
                 UtFrameUtils.parseStmtWithNewParser(showTabletSql, starRocksAssert.getCtx());
-        ShowExecutor executor = new ShowExecutor();
         try {
-            executor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+            ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied"));
         }
         // show table from tbl
         // test any priv, can show tablet, but ip:port is hidden
         grantRevokeSqlAsRoot("grant SELECT on TABLE db1.tbl1 to test");
-        ShowResultSet showResultSet = executor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+        ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("*:0"));
 
         // test OPERATE priv, can show tablet, ip:port is not hidden
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
-        showResultSet = executor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+        showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
         System.out.println(showResultSet.getResultRows().get(0));
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("127.0.0.1"));
 
@@ -1823,21 +1818,18 @@ public class PrivilegeCheckerTest {
         long tabletId = Long.parseLong(showResultSet.getResultRows().get(0).get(0));
         showTabletSql = "show tablet " + tabletId;
         showTabletStmt = UtFrameUtils.parseStmtWithNewParser(showTabletSql, starRocksAssert.getCtx());
-        executor = new ShowExecutor();
-        showResultSet = executor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+        showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
         System.out.println(showResultSet.getResultRows().get(0));
         String detailCmd = showResultSet.getResultRows().get(0).get(9);
         System.out.println(detailCmd);
         showTabletStmt = UtFrameUtils.parseStmtWithNewParser(detailCmd, starRocksAssert.getCtx());
-        executor = new ShowExecutor();
-        showResultSet = executor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+        showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
         System.out.println(showResultSet.getResultRows().get(0));
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("*:0"));
 
         // test OPERATE priv
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
-        executor = new ShowExecutor();
-        showResultSet = executor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+        showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
         System.out.println(showResultSet.getResultRows().get(0));
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("127.0.0.1"));
 
@@ -2180,10 +2172,9 @@ public class PrivilegeCheckerTest {
         String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = '" + jobName + "';";
         StatementBase statementTask =
                 UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet set = executor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
         for (int i = 0; i < 30; i++) {
-            set = executor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
+            set = ShowExecutor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
             if (set.getResultRows().size() > 0) {
                 break;
             } else {
@@ -2194,16 +2185,14 @@ public class PrivilegeCheckerTest {
 
         ctxToTestUser();
         // SHOW ROUTINE LOAD TASK
-        ShowExecutor executorBeforeGrant = new ShowExecutor();
-        set = executorBeforeGrant.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
+        set = ShowExecutor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
         Assert.assertEquals(0, set.getResultRows().size());
         ctxToRoot();
         DDLStmtExecutor.execute(
                 UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
                 starRocksAssert.getCtx());
         ctxToTestUser();
-        ShowExecutor executorAfterGrant = new ShowExecutor();
-        set = executorAfterGrant.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
+        set = ShowExecutor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
         Assert.assertTrue(set.getResultRows().size() > 0);
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke insert on db1.tbl1 from test",
@@ -2325,10 +2314,9 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withExport(createExportSql);
         String showExportSql = "SHOW EXPORT FROM db1";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showExportSql, starRocksAssert.getCtx());
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet set = executor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         for (int i = 0; i < 30; i++) {
-            set = executor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+            set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
             if (set.getResultRows().size() > 0) {
                 break;
             } else {
@@ -2340,15 +2328,13 @@ public class PrivilegeCheckerTest {
         // SHOW EXPORT STMT
         ctxToTestUser();
         showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showExportSql, starRocksAssert.getCtx());
-        ShowExecutor executorBeforeGrant = new ShowExecutor();
-        set = executorBeforeGrant.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         Assert.assertEquals(0, set.getResultRows().size());
         DDLStmtExecutor.execute(
                 UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
                 starRocksAssert.getCtx());
         ctxToTestUser();
-        ShowExecutor executorAfterGrant = new ShowExecutor();
-        set = executorAfterGrant.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         Assert.assertTrue(set.getResultRows().size() > 0);
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke insert on db1.tbl1 from test",
@@ -2469,15 +2455,13 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
         String showBackupSql = "SHOW BACKUP FROM db1;";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet set = executor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         Assert.assertEquals(0, set.getResultRows().size());
         ctxToRoot();
         grantOrRevoke("grant export on db1.tbl1 to test");
         // user(test) has all privilege
         ctxToTestUser();
-        executor = new ShowExecutor();
-        set = executor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         Assert.assertTrue(set.getResultRows().size() > 0);
         // revoke all privilege
         ctxToRoot();
@@ -2673,19 +2657,16 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withMaterializedView(createSql);
         String showBackupSql = "SHOW MATERIALIZED VIEWS FROM db1;";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet set = executor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         Assert.assertTrue(set.getResultRows().size() > 0);
         grantOrRevoke("grant SELECT,INSERT on db1.tbl1 to test");
         ctxToTestUser();
-        executor = new ShowExecutor();
-        set = executor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         Assert.assertEquals(0, set.getResultRows().size());
         ctxToRoot();
         grantOrRevoke("grant refresh on materialized view db1.mv3 to test");
         ctxToTestUser();
-        executor = new ShowExecutor();
-        set = executor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
         Assert.assertTrue(set.getResultRows().size() > 0);
         ctxToRoot();
         grantOrRevoke("revoke SELECT,INSERT on db1.tbl1 from test");
@@ -3025,8 +3006,7 @@ public class PrivilegeCheckerTest {
     public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(stmt, starRocksAssert.getCtx());
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
 
         Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("UserIdentity", resultSet.getMetaData().getColumn(0).getName());
@@ -3037,16 +3017,14 @@ public class PrivilegeCheckerTest {
                 resultSet.getResultRows().toString());
 
         stmt = new ShowAuthenticationStmt(null, true);
-        executor = new ShowExecutor();
-        resultSet = executor.execute(stmt, starRocksAssert.getCtx());
+        resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
         Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null], " +
                         "['test2'@'%', No, " +
                         "MYSQL_NATIVE_PASSWORD, null], ['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
 
         stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, false);
-        executor = new ShowExecutor();
-        resultSet = executor.execute(stmt, starRocksAssert.getCtx());
+        resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
         Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
     }
@@ -3149,7 +3127,7 @@ public class PrivilegeCheckerTest {
     private void executeDdlAsRoot(String ddl) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         ctxToRoot();
-        DDLStmtExecutorEPack.execute(UtFrameUtils.parseStmtWithNewParser(ddl, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(ddl, ctx), ctx);
         ctxToTestUser();
     }
 
@@ -3369,21 +3347,21 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("grant select on db1.tbl1 to test");
         ctxToTestUser();
         ShowResultSet res =
-                new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
+                ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
         System.out.println(res.getResultRows());
         Assert.assertEquals(1, res.getResultRows().size());
         Assert.assertEquals("tbl1", res.getResultRows().get(0).get(0));
 
         // can show mv if we have any privilege on it
         grantRevokeSqlAsRoot("grant alter on materialized view db1.mv5 to test");
-        res = new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
+        res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("mv5", res.getResultRows().get(0).get(0));
 
         // can show view if we have any privilege on it
         grantRevokeSqlAsRoot("grant drop on view db1.view5 to test");
-        res = new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
+        res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
         System.out.println(res.getResultRows());
         Assert.assertEquals(3, res.getResultRows().size());
         Assert.assertEquals("view5", res.getResultRows().get(2).get(0));
@@ -3535,7 +3513,7 @@ public class PrivilegeCheckerTest {
 
         // test no authorization on show storage volumes
         ShowResultSet res =
-                new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show storage volumes", ctx), ctx);
+                ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show storage volumes", ctx), ctx);
         Assert.assertEquals(0, res.getResultRows().size());
 
         // test desc storage volume
@@ -3635,14 +3613,14 @@ public class PrivilegeCheckerTest {
         {
             ctxToRoot();
             ShowResultSet res =
-                    new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+                    ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
             Assert.assertEquals(0, res.getResultRows().size());
             // create
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
             // show
-            res = new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx), ctx);
+            res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx), ctx);
             // desc
-            new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx), ctx);
+            ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx), ctx);
             // alter
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("alter pipe p1 set('poll_interval'='10')", ctx),
                     ctx);
@@ -3653,14 +3631,14 @@ public class PrivilegeCheckerTest {
         {
             ctxToTestUser();
             ShowResultSet res =
-                    new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+                    ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
             Assert.assertEquals(0, res.getResultRows().size());
             // create
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
             // show
-            res = new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx), ctx);
+            res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx), ctx);
             // desc
-            new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx), ctx);
+            ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx), ctx);
             // alter
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("alter pipe p1 set('poll_interval'='10')", ctx),
                     ctx);
@@ -3706,10 +3684,10 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql2, ctx), ctx);
 
         // test show pipes
-        ShowResultSet res = new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+        ShowResultSet res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
         Assert.assertEquals(0, res.getResultRows().size());
         starRocksAssert.ddl("grant USAGE on PIPE db1.p1 to test");
-        res = new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+        res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
         Assert.assertEquals(1, res.getResultRows().size());
 
         // test show grants
@@ -3764,7 +3742,7 @@ public class PrivilegeCheckerTest {
             starRocksAssert.ddl("revoke CREATE PIPE on ALL DATABASES from test");
         }
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke USAGE on PIPE db1.p1 from test", ctx), ctx);
-        res = new ShowExecutor().execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+        res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
         Assert.assertEquals(0, res.getResultRows().size());
         Assert.assertEquals(ImmutableList.of(
                         ImmutableList.of("'test'@'%'", "default_catalog",

@@ -4,6 +4,7 @@ package com.starrocks.epack.privilege;
 
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.WarehouseManager;
@@ -13,6 +14,10 @@ import com.starrocks.sql.ast.UserIdentity;
 import java.util.Set;
 
 public class AuthorizerEPack extends Authorizer {
+
+    public AuthorizerEPack(AccessControlProvider accessControlProvider) {
+        super(accessControlProvider);
+    }
 
     public static void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                          String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {

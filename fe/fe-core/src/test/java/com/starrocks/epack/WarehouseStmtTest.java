@@ -4,7 +4,6 @@ package com.starrocks.epack;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
-import com.starrocks.epack.qe.DDLStmtExecutorEPack;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
@@ -13,6 +12,7 @@ import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -107,12 +107,12 @@ public class WarehouseStmtTest {
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         CreateWarehouseStmt statement = (CreateWarehouseStmt) stmt;
-        DDLStmtExecutorEPack.execute(statement, connectCtx);
+        DDLStmtExecutor.execute(statement, connectCtx);
         WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
 
         try {
-            DDLStmtExecutorEPack.execute(statement, connectCtx);
+            DDLStmtExecutor.execute(statement, connectCtx);
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("exists"));
         }
@@ -121,14 +121,14 @@ public class WarehouseStmtTest {
         String suspendSql = "SUSPEND WAREHOUSE warehouse_1";
         stmt = AnalyzeTestUtil.analyzeSuccess(suspendSql);
         Assert.assertTrue(stmt instanceof SuspendWarehouseStmt);
-        DDLStmtExecutorEPack.execute(stmt, connectCtx);
+        DDLStmtExecutor.execute(stmt, connectCtx);
         Assert.assertEquals(LocalWarehouse.WarehouseState.SUSPENDED,
                 ((LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getState());
 
         String resumeSql = "RESUME WAREHOUSE warehouse_1";
         stmt = AnalyzeTestUtil.analyzeSuccess(resumeSql);
         Assert.assertTrue(stmt instanceof ResumeWarehouseStmt);
-        DDLStmtExecutorEPack.execute(stmt, connectCtx);
+        DDLStmtExecutor.execute(stmt, connectCtx);
         Assert.assertEquals(LocalWarehouse.WarehouseState.AVAILABLE,
                 ((LocalWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getState());
 

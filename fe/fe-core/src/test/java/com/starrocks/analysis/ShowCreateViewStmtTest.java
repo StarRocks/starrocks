@@ -251,8 +251,7 @@ public class ShowCreateViewStmtTest {
                 com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
         Assert.assertTrue(statement instanceof DescribeStmt);
-        ShowExecutor showExecutor = new ShowExecutor();
-        ShowResultSet rs = showExecutor.execute((DescribeStmt) statement, ctx);
+        ShowResultSet rs = ShowExecutor.execute((DescribeStmt) statement, ctx);
         Assert.assertTrue(rs.getResultRows().stream().allMatch(r -> r.get(1).toUpperCase().startsWith("VARCHAR")));
         String query = "select * from v2 union all select c1 as a, c2 as b, NULL as c, c4 as d from t0";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);

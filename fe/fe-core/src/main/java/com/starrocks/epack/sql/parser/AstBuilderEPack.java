@@ -90,13 +90,28 @@ import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilderEPack extends AstBuilder {
-
-    public AstBuilderEPack(long sqlMode) {
-        super(sqlMode);
-    }
-
     public AstBuilderEPack(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
         super(sqlMode, hintMap);
+    }
+
+    private static final AstBuilderEPack.AstBuilderFactory INSTANCE = new AstBuilderEPack.AstBuilderFactory();
+
+    public static AstBuilderEPack.AstBuilderFactory getInstance() {
+        return INSTANCE;
+    }
+
+    public static class AstBuilderFactory extends AstBuilder.AstBuilderFactory {
+        private AstBuilderFactory() {
+            super();
+        }
+
+        public AstBuilder create(long sqlMode) {
+            return new AstBuilderEPack(sqlMode, new IdentityHashMap<>());
+        }
+
+        public AstBuilder create(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+            return new AstBuilderEPack(sqlMode, hintMap);
+        }
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------

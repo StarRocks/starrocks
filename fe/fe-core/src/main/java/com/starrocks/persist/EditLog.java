@@ -68,14 +68,12 @@ import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.persist.DropFailoverGroupLog;
 import com.starrocks.epack.persist.DropPolicyLog;
-import com.starrocks.epack.persist.DropWarehouseLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
 import com.starrocks.epack.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.epack.persist.UpdateFailoverGroupLog;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
-import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.ha.LeaderInfo;
@@ -135,7 +133,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -160,7 +157,7 @@ public class EditLog {
         this.journalQueue = journalQueue;
     }
 
-    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
+    public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
         short opCode = journal.getOpCode();
         if (opCode != OperationType.OP_SAVE_NEXTID
@@ -1288,24 +1285,6 @@ public class EditLog {
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
                     break;
                 }
-                case OperationTypeEPack.OP_CREATE_WAREHOUSE: {
-                    Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayCreateWarehouse(wh);
-                    break;
-                }
-                case OperationTypeEPack.OP_DROP_WAREHOUSE: {
-                    DropWarehouseLog log = (DropWarehouseLog) journal.getData();
-                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayDropWarehouse(log);
-                    break;
-                }
-                case OperationTypeEPack.OP_ALTER_WAREHOUSE: {
-                    Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayAlterWarehouse(wh);
-                    break;
-                }
                 case OperationTypeEPack.OP_CREATE_FAILOVER_GROUP: {
                     CreateFailoverGroupLog createFailoverGroupLog = (CreateFailoverGroupLog) journal.getData();
                     globalStateMgr.getFailoverGroupMgr().replayCreateFailoverGroup(createFailoverGroupLog.getFailoverGroup());
@@ -2186,19 +2165,6 @@ public class EditLog {
     public void logReplicationJob(ReplicationJob replicationJob) {
         ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
         logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
-    }
-
-    // warehouse
-    public void logCreateWarehouse(Warehouse warehouse) {
-        logEdit(OperationTypeEPack.OP_CREATE_WAREHOUSE, warehouse);
-    }
-
-    public void logDropWarehouse(DropWarehouseLog log) {
-        logEdit(OperationTypeEPack.OP_DROP_WAREHOUSE, log);
-    }
-
-    public void logAlterWarehouse(Warehouse wh) {
-        logEdit(OperationTypeEPack.OP_ALTER_WAREHOUSE, wh);
     }
 
     // failover group

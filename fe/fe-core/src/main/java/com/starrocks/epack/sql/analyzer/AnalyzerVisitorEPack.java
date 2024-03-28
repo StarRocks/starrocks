@@ -34,12 +34,19 @@ import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AnalyzerVisitor;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 
-public class AnalyzerVisitorEPack extends AnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
+public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
+
+    private static final AnalyzerVisitorEPack INSTANCE = new AnalyzerVisitorEPack();
+
+    public static AnalyzerVisitorEPack getInstance() {
+        return INSTANCE;
+    }
+
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
 
     @Override

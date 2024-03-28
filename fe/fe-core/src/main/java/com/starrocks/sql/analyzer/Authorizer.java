@@ -24,12 +24,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.privilege.AccessControllerEPack;
-import com.starrocks.epack.privilege.NativeAccessControllerEPack;
-import com.starrocks.epack.privilege.ranger.starrocks.RangerStarRocksAccessControllerEPack;
-import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
@@ -50,18 +46,14 @@ import java.util.Optional;
 import java.util.Set;
 
 public class Authorizer {
-    private static final AccessControlProvider INSTANCE;
+    private final AccessControlProvider accessControlProvider;
 
-    static {
-        if (Config.access_control.equals("ranger")) {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessControllerEPack());
-        } else {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitorEPack(), new NativeAccessControllerEPack());
-        }
+    public Authorizer(AccessControlProvider accessControlProvider) {
+        this.accessControlProvider = accessControlProvider;
     }
 
     public static AccessControlProvider getInstance() {
-        return INSTANCE;
+        return GlobalStateMgr.getCurrentState().getAuthorizer().accessControlProvider;
     }
 
     public static void check(StatementBase statement, ConnectContext context) {
