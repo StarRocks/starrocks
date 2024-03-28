@@ -41,7 +41,7 @@ public:
 
     static StatusOr<ConnectorChunkSink::Futures> hive_style_partitioning_write_chunk(
             bool partitioned, const std::string& partition,
-            std::map<std::string, std::shared_ptr<formats::FileWriter>> partition_writers,
+            std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers,
             LocationProvider* location_provider, formats::FileWriterFactory* file_writer_factory, int64_t max_file_size,
             ChunkPtr chunk);
 
