@@ -182,17 +182,16 @@ public class JDBCTable extends Table {
         // -> jdbc_postgresql_172.26.194.237_5432_db_pg_select
         // requirement: it should be used as local path.
         // and there is no ':' in it to avoid be parsed into non-local filesystem.
-
-        String ans = uri.replace("//", "")
-                .replace('/', '_')
-                .replace(':', '_');
+        String ans = uri.replaceAll("[^0-9a-zA-Z]", "_");
 
         // currently we use this uri as part of name of download file.
         // so if this uri is too long, we might fail to write file on BE side.
         // so here we have to shorten it to reduce fail probability because of long file name.
-
         // in most cases, jdbc uri is not that long, so we can preserve original information.
-        if (ans.length() > 128) {
+
+        final String prefix = "jdbc_";
+        final int signLength = 64;
+        if (ans.length() > (signLength + prefix.length())) {
             try {
                 // 256bits = 32bytes = 64hex chars.
                 MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -200,7 +199,7 @@ public class JDBCTable extends Table {
                 byte[] hashBytes = digest.digest();
                 StringBuilder sb = new StringBuilder();
                 // it's for be side parsing: expect a _ in name.
-                sb.append("jdbc_");
+                sb.append(prefix);
                 for (byte b : hashBytes) {
                     sb.append(String.format("%02x", b));
                 }
