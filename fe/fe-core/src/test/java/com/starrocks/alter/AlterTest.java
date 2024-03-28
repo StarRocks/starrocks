@@ -2491,8 +2491,8 @@ public class AlterTest {
                                 replayNextJournal(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES);
                 Assert.assertNotNull(modifyMvLog);
                 if (modifyMvLog.getProperties().containsKey("foreign_key_constraints")) {
-                    Assert.assertEquals("default_catalog.10001.10133(site_id) " +
-                                    "REFERENCES default_catalog.10001.10118(site_id)",
+                    Assert.assertEquals("default_catalog.10004.10136(site_id) " +
+                                    "REFERENCES default_catalog.10004.10121(site_id)",
                             modifyMvLog.getProperties().get("foreign_key_constraints"));
                     break;
                 }
