@@ -58,7 +58,7 @@ StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
     Futures futures;
     auto it = _partition_writers.find(partition);
     if (it != _partition_writers.end()) {
-        auto writer = it->second;
+        auto* writer = it->second.get();
         if (writer->get_written_bytes() >= _max_file_size) {
             // commit writer and create a new one
             futures.commit_file_futures.push_back(writer->commit());
@@ -67,7 +67,7 @@ StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
             ASSIGN_OR_RETURN(auto new_writer, _file_writer_factory->create(path));
             RETURN_IF_ERROR(new_writer->init());
             futures.add_chunk_futures.push_back(new_writer->write(chunk));
-            _partition_writers[partition] = new_writer;
+            _partition_writers.emplace(partition, std::move(new_writer));
         } else {
             futures.add_chunk_futures.push_back(writer->write(chunk));
         }
@@ -76,7 +76,7 @@ StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
         ASSIGN_OR_RETURN(auto new_writer, _file_writer_factory->create(path));
         RETURN_IF_ERROR(new_writer->init());
         futures.add_chunk_futures.push_back(new_writer->write(chunk));
-        _partition_writers[partition] = new_writer;
+        _partition_writers.emplace(partition, std::move(new_writer));
     }
 
     return futures;
