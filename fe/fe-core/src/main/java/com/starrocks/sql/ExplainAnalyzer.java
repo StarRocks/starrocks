@@ -316,7 +316,7 @@ public class ExplainAnalyzer {
     private void appendSummaryInfo() {
         appendSummaryLine("Summary");
 
-        // 1. Brief information
+        // Brief information
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         if (plan.getFragments().stream()
                 .anyMatch(fragment -> fragment.getSink().instanceOf(OlapTableSink.class))) {
@@ -336,7 +336,7 @@ public class ExplainAnalyzer {
                     " for running; ", NodeState.FINISHED.symbol, " for finished");
         }
 
-        // 2. Time Usage
+        // Time Usage
         appendSummaryLine("TotalTime: ", summaryProfile.containsInfoString(ProfileManager.TOTAL_TIME) ?
                 summaryProfile.getInfoString(ProfileManager.TOTAL_TIME) :
                 summaryProfile.getCounter(ProfileManager.TOTAL_TIME));
@@ -370,17 +370,20 @@ public class ExplainAnalyzer {
         appendSummaryLine("FrontendProfileMergeTime: ", executionProfile.getCounter("FrontendProfileMergeTime"));
         popIndent(); // metric indent
 
-        // 3. Memory Usage
+        // Memory Usage
         appendSummaryLine("QueryPeakMemoryUsage: ", executionProfile.getCounter("QueryPeakMemoryUsage"),
                 ", QueryAllocatedMemoryUsage: ", executionProfile.getCounter("QueryAllocatedMemoryUsage"));
 
-        // 4. Top Cpu Nodes
+        // Query Scan Bytes
+        appendSummaryLine("QueryScanBytes: ", executionProfile.getCounter("QueryScanBytes"));
+
+        // Top Cpu Nodes
         appendCpuTopNodes();
 
-        // 5. Top Memory Nodes
+        // Top Memory Nodes
         appendMemoryNodes();
 
-        // 6. Runtime Progress
+        // Runtime Progress
         if (isRuntimeProfile) {
             long finishedCount = allNodeInfos.values().stream()
                     .filter(nodeInfo -> nodeInfo.state.isFinished())
@@ -391,7 +394,7 @@ public class ExplainAnalyzer {
             }
         }
 
-        // 7. Non default Variables
+        // Non default Variables
         String sessionVariables = summaryProfile.getInfoString("NonDefaultSessionVariables");
         Map<String, SessionVariable.NonDefaultValue> variables = Maps.newTreeMap();
         variables.putAll(SessionVariable.NonDefaultValue.parseFrom(sessionVariables));
