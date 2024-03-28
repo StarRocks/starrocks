@@ -40,6 +40,7 @@ public class Constants {
         MV,
         INSERT,
         PIPE,
+        DATACACHE_SELECT
     }
 
     // PENDING -> RUNNING -> FAILED

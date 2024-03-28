@@ -53,6 +53,7 @@ import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -923,6 +924,9 @@ public class DefaultCoordinator extends Coordinator {
             lock();
             try {
                 queryProfile.updateLoadInformation(execState, params);
+                if (params.isSetLoad_datacache_metrics()) {
+                    queryProfile.updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
+                }
             } finally {
                 unlock();
             }
@@ -1098,6 +1102,11 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
         return executionDAG.getFragmentInstanceInfos();
+    }
+
+    @Override
+    public DataCacheSelectMetrics getDataCacheSelectMetrics() {
+        return queryProfile.getDataCacheSelectMetrics();
     }
 
     @Override
