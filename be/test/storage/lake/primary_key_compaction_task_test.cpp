@@ -571,7 +571,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_index_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
