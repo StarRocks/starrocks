@@ -219,7 +219,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         }
 
         if (can_push) {
-            filters.push_back(condition);
+            filters.push_back(std::move(condition));
         }
     } else {
         TCondition low;
@@ -231,7 +231,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         }
 
         if (!low.condition_values.empty()) {
-            filters.push_back(low);
+            filters.push_back(std::move(low));
         }
 
         TCondition high;
@@ -243,7 +243,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
         }
 
         if (!high.condition_values.empty()) {
-            filters.push_back(high);
+            filters.push_back(std::move(high));
         }
     }
 }
