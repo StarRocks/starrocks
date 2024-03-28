@@ -819,7 +819,8 @@ public class MvRewritePreprocessor {
                                                               MvPlanContext mvPlanContext,
                                                               Set<String> partitionNamesToRefresh) {
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
-        ScalarOperator mvPartialPartitionPredicates = null;
+        ScalarOperator mvPartialPartitionPredicates = ConstantOperator.TRUE;
+        // TODO: support list partition
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
             // when should calculate the latest partition range predicates for partition-by base table
@@ -836,7 +837,7 @@ public class MvRewritePreprocessor {
                 return null;
             }
         }
-        return ConstantOperator.TRUE;
+        return mvPartialPartitionPredicates;
     }
 
     /**
@@ -865,12 +866,12 @@ public class MvRewritePreprocessor {
 
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
 
         // Only record `refTableUpdatedPartitionNames` when `mvPartialPartitionPredicates` is not null and it needs
         // to be compensated by using it.
         MVToRefreshPartitionInfo mvToRefreshPartitionInfo = new MVToRefreshPartitionInfo();
-        if (mvPartialPartitionPredicates != null) {
+        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        if (partitionTableAndColumns != null && !partitionNamesToRefresh.isEmpty()) {
             Table refBaseTable = partitionTableAndColumns.first;
             mvToRefreshPartitionInfo = mv.getUpdateInfoOfTable(refBaseTable, true);
             logMVPrepare(mv, "Ref table {} partitions to refresh: {}", refBaseTable.getName(),
