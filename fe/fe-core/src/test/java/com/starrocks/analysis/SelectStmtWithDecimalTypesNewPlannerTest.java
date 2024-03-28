@@ -329,7 +329,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalSubNULL() throws Exception {
         String sql = "select col_decimal32p9s2 - NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) - NULL";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(10,2)) - NULL";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -412,10 +412,31 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     }
 
     @Test
+    public void testDecimalSubRule() throws Exception {
+        String sql;
+        String plan;
+
+        // decimal(10, 2) - decimal(10, 2) = decimal(11, 2)
+        sql = "select count(`dec_10_2` - dec_10_2) from `test_decimal_type6`;";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("[12: cast, DECIMAL64(11,2), false] - [12: cast, DECIMAL64(11,2), false]"));
+
+        // int - decimal(18, 17) = decimal(27, 17)
+        sql = "select count(key0 - 1.12345678901234567) from `decimal_table`;";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("cast([1: key0, INT, false] as DECIMAL128(27,0)"));
+
+        sql = "select avg((key0 - 1.12345678901234567) * 1.12345678901234567 + col_decimal64p13s0)  from `decimal_table`;";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("cast([1: key0, INT, false] as DECIMAL128(27,0))"));
+        Assert.assertTrue(plan, plan.contains("cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(38,0))"));
+    }
+
+    @Test
     public void testDecimalSubZero() throws Exception {
         String sql = "select col_decimal32p9s2 - 0.0 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) - 0";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(10,2)) - 0";
         Assert.assertTrue(plan.contains(snippet));
     }
 
