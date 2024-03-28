@@ -128,7 +128,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_info(new TSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
 
             Deencapsulation.invoke(new LeaderImpl(), "finishRemoteSnapshotTask",
@@ -203,7 +203,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_info(new TSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -231,7 +231,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_info(new TSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -286,7 +286,7 @@ public class ReplicationMgrTest {
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
-            request.setSnapshot_info(new TSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
+            request.setSnapshot_info(newTSnapshotInfo(new TBackend("test_host", 0, 0), "test_snapshot_path", true));
             replicationMgr.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
         }
 
@@ -356,5 +356,13 @@ public class ReplicationMgrTest {
         } catch (Exception e) {
             Assert.assertNull(e);
         }
+    }
+
+    private static TSnapshotInfo newTSnapshotInfo(TBackend backend, String snapshotPath, boolean incrementalSnapshot) {
+        TSnapshotInfo tSnapshotInfo = new TSnapshotInfo();
+        tSnapshotInfo.setBackend(backend);
+        tSnapshotInfo.setSnapshot_path(snapshotPath);
+        tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
+        return tSnapshotInfo;
     }
 }

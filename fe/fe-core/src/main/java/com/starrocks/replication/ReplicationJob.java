@@ -293,7 +293,11 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         public TSnapshotInfo getSnapshotInfo() {
-            return new TSnapshotInfo(backendInfo.getBackend(), snapshotPath, incrementalSnapshot);
+            TSnapshotInfo tSnapshotInfo = new TSnapshotInfo();
+            tSnapshotInfo.setBackend(backendInfo.getBackend());
+            tSnapshotInfo.setSnapshot_path(snapshotPath);
+            tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
+            return tSnapshotInfo;
         }
     }
 

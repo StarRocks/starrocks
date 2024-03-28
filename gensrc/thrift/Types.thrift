@@ -568,7 +568,7 @@ struct TSinkCommitInfo {
 }
 
 struct TSnapshotInfo {
-    1: required TBackend backend
-    2: required string snapshot_path
-    3: required bool incremental_snapshot
+    1: optional TBackend backend
+    2: optional string snapshot_path
+    3: optional bool incremental_snapshot
 }
