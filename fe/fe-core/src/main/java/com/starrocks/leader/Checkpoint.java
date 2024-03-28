@@ -51,7 +51,9 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 
 /**
  * Checkpoint daemon is running on master node. handle the checkpoint work for starrocks.
@@ -63,11 +65,13 @@ public class Checkpoint extends FrontendDaemon {
     private static final int READ_TIMEOUT_SECOND = 1;
 
     private GlobalStateMgr globalStateMgr;
-    private String imageDir;
-    private Journal journal;
+    private final String imageDir;
+    private final Journal journal;
     // subDir comes after base imageDir, to distinguish different module's image dir
     private final String subDir;
     private final boolean belongToGlobalStateMgr;
+
+    private final Set<String> nodesToPushImage;
 
     public Checkpoint(Journal journal) {
         this("leaderCheckpointer", journal, "" /* subDir */, true /* belongToGlobalStateMgr */);
@@ -79,147 +83,135 @@ public class Checkpoint extends FrontendDaemon {
         this.journal = journal;
         this.subDir = subDir;
         this.belongToGlobalStateMgr = belongToGlobalStateMgr;
+        nodesToPushImage = new HashSet<>();
     }
 
     @Override
     protected void runAfterCatalogReady() {
         long imageVersion = 0;
-        long checkpointVersion = 0;
-        Storage storage = null;
+        long logVersion = 0;
         try {
-            storage = new Storage(imageDir);
+            Storage storage = new Storage(imageDir);
             // get max image version
             imageVersion = storage.getImageJournalId();
             // get max finalized journal id
-            checkpointVersion = journal.getFinalizedJournalId();
-            LOG.info("checkpoint imageVersion {}, checkpointVersion {}", imageVersion, checkpointVersion);
-            if (imageVersion >= checkpointVersion) {
-                return;
-            }
+            logVersion = journal.getFinalizedJournalId();
+            LOG.info("checkpoint imageVersion {}, logVersion {}", imageVersion, logVersion);
         } catch (IOException e) {
-            LOG.error("Does not get storage info", e);
+            LOG.error("Failed to get storage info", e);
             return;
         }
 
-        boolean success = false;
-        if (belongToGlobalStateMgr) {
-            success = replayAndGenerateGlobalStateMgrImage(checkpointVersion);
-        } else {
-            success = replayAndGenerateStarMgrImage(checkpointVersion);
+        // Step 1: create image
+        boolean newImageCreated = false;
+        if (imageVersion < logVersion) {
+            newImageCreated = createImage(logVersion);
         }
 
-        if (!success) {
-            return;
-        }
-
-        // push image file to all the other non-leader nodes
-        // DO NOT get other nodes from HaProtocol, because node may not in bdbje replication group yet.
-        List<Frontend> allFrontends = GlobalStateMgr.getServingState().getFrontends(null);
-        int successPushed = 0;
-        int otherNodesCount = 0;
-        if (!allFrontends.isEmpty()) {
-            otherNodesCount = allFrontends.size() - 1; // skip master itself
-            for (Frontend fe : allFrontends) {
-                String host = fe.getHost();
-                if (host.equals(GlobalStateMgr.getServingState().getLeaderIp())) {
-                    // skip master itself
-                    continue;
-                }
-                int port = Config.http_port;
-
-                String url = "http://" + host + ":" + port + "/put?version=" + checkpointVersion
-                        + "&port=" + port + "&subdir=" + subDir;
-                LOG.info("Put image:{}", url);
-
-                try {
-                    MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
-                    successPushed++;
-                } catch (IOException e) {
-                    LOG.error("Exception when pushing image file. url = {}", url, e);
-                }
+        if (newImageCreated) {
+            // Push the image file to all other nodes
+            // NOTE: Do not get other nodes from HaProtocol, because the node may not be in bdbje replication group yet.
+            for (Frontend frontend : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
+                nodesToPushImage.add(frontend.getNodeName());
             }
-
-            LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push succeeded {} nodes",
-                    checkpointVersion, subDir, otherNodesCount, successPushed);
         }
 
-        // Delete old journals
-        if (successPushed == otherNodesCount) {
-            long minOtherNodesJournalId = Long.MAX_VALUE;
-            long deleteVersion = checkpointVersion;
-            if (successPushed > 0) {
-                for (Frontend fe : allFrontends) {
-                    String host = fe.getHost();
-                    if (host.equals(GlobalStateMgr.getServingState().getLeaderIp())) {
-                        // skip master itself
-                        continue;
-                    }
-                    int port = Config.http_port;
-                    URL idURL;
-                    HttpURLConnection conn = null;
-                    try {
-                        /*
-                         * get current replayed journal id of each non-master nodes.
-                         * when we delete bdb database, we cannot delete db newer than
-                         * any non-master node's current replayed journal id. otherwise,
-                         * this lagging node can never get the deleted journal.
-                         */
-                        idURL = new URL("http://" + host + ":" + port + "/journal_id?prefix=" + journal.getPrefix());
-                        conn = (HttpURLConnection) idURL.openConnection();
-                        conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
-                        conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
-                        String idString = conn.getHeaderField("id");
-                        long id = Long.parseLong(idString);
-                        if (minOtherNodesJournalId > id) {
-                            minOtherNodesJournalId = id;
-                        }
-                    } catch (IOException e) {
-                        LOG.error("Exception when getting current replayed journal id. host={}, port={}",
-                                host, port, e);
-                        minOtherNodesJournalId = 0;
-                        break;
-                    } finally {
-                        if (conn != null) {
-                            conn.disconnect();
-                        }
-                    }
-                }
-                deleteVersion = Math.min(minOtherNodesJournalId, checkpointVersion);
-            }
-            journal.deleteJournals(deleteVersion + 1);
-            if (MetricRepo.hasInit) {
-                MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
-            }
-            LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
-                    deleteVersion, journal.getPrefix(), checkpointVersion, minOtherNodesJournalId);
+        // Step2: push image
+        int needToPushCnt = nodesToPushImage.size();
+        long newImageVersion = newImageCreated ? logVersion : imageVersion;
+        if (needToPushCnt > 0) {
+            pushImage(newImageVersion);
         }
 
-        // Delete old image files
-        MetaCleaner cleaner = new MetaCleaner(imageDir);
-        try {
-            cleaner.clean();
-        } catch (IOException e) {
-            LOG.error("Leader delete old image file fail.", e);
+        // Step3: Delete old journals
+        // conditions: 1. new image created and no others node to push, this means there is only one FE in the cluster,
+        //                delete the old journals immediately.
+        //             2. needToPushCnt > 0 means there are other nodes in the cluster,
+        //                we must make sure all the other nodes have got the new image and then delete old journals.
+        if ((newImageCreated && needToPushCnt == 0)
+                || (needToPushCnt > 0 && nodesToPushImage.size() == 0)) {
+            deleteOldJournals(newImageVersion);
+        }
+
+        // Step4: Delete old image files from local storage.
+        if (newImageCreated) {
+            MetaCleaner cleaner = new MetaCleaner(imageDir);
+            try {
+                cleaner.clean();
+            } catch (IOException e) {
+                LOG.error("Leader delete old image file fail.", e);
+            }
         }
     }
 
-    private boolean replayAndGenerateGlobalStateMgrImage(long checkPointVersion) {
-        assert belongToGlobalStateMgr == true;
+    private void deleteOldJournals(long imageVersion) {
+        // To ensure that all nodes will not lose data,
+        // deleteVersion should be the minimum value of imageVersion and replayedJournalId.
+        long minReplayedJournalId = getMinReplayedJournalId();
+        long deleteVersion = Math.min(imageVersion, minReplayedJournalId);
+        journal.deleteJournals(deleteVersion + 1);
+        LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
+                deleteVersion, journal.getPrefix(), imageVersion, minReplayedJournalId);
+
+    }
+
+    private void pushImage(long imageVersion) {
+        Iterator<String> iterator = nodesToPushImage.iterator();
+        int needToPushCnt = nodesToPushImage.size();
+        int successPushedCnt = 0;
+        while (iterator.hasNext()) {
+            String nodeName = iterator.next();
+
+            Frontend frontend = GlobalStateMgr.getServingState().getNodeMgr().getFeByName(nodeName);
+            if (frontend == null) {
+                iterator.remove();
+                continue;
+            }
+
+            String url = "http://" + frontend.getHost() + ":" + Config.http_port
+                    + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir;
+            try {
+                MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
+                successPushedCnt++;
+                iterator.remove();
+                LOG.info("push image successfully, url = {}", url);
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
+                }
+            } catch (IOException e) {
+                LOG.error("Exception when pushing image file. url = {}", url, e);
+            }
+        }
+
+        LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push succeeded {} nodes",
+                imageVersion, subDir, needToPushCnt, successPushedCnt);
+    }
+
+    private boolean createImage(long logVersion) {
+        if (belongToGlobalStateMgr) {
+            return replayAndGenerateGlobalStateMgrImage(logVersion);
+        } else {
+            return replayAndGenerateStarMgrImage(logVersion);
+        }
+    }
+
+    private boolean replayAndGenerateGlobalStateMgrImage(long logVersion) {
+        assert belongToGlobalStateMgr;
         long replayedJournalId = -1;
         // generate new image file
-        LOG.info("begin to generate new image: image.{}", checkPointVersion);
+        LOG.info("begin to generate new image: image.{}", logVersion);
         globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.setJournal(journal);
         try {
             globalStateMgr.loadImage(imageDir);
-            globalStateMgr.replayJournal(checkPointVersion);
+            globalStateMgr.replayJournal(logVersion);
             globalStateMgr.clearExpiredJobs();
             globalStateMgr.saveImage();
             replayedJournalId = globalStateMgr.getReplayedJournalId();
             if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
-            GlobalStateMgr.getServingState().setImageJournalId(checkPointVersion);
+            GlobalStateMgr.getServingState().setImageJournalId(logVersion);
             LOG.info("checkpoint finished save image.{}", replayedJournalId);
             return true;
         } catch (Exception e) {
@@ -232,11 +224,11 @@ public class Checkpoint extends FrontendDaemon {
         }
     }
 
-    private boolean replayAndGenerateStarMgrImage(long checkPointVersion) {
-        assert belongToGlobalStateMgr == false;
+    private boolean replayAndGenerateStarMgrImage(long logVersion) {
+        assert !belongToGlobalStateMgr;
         StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
         try {
-            return starMgrServer.replayAndGenerateImage(imageDir, checkPointVersion);
+            return starMgrServer.replayAndGenerateImage(imageDir, logVersion);
         } catch (Exception e) {
             LOG.error("Exception when generate new star mgr image file, {}.", e.getMessage());
             return false;
@@ -244,5 +236,43 @@ public class Checkpoint extends FrontendDaemon {
             // destroy checkpoint, reclaim memory
             StarMgrServer.destroyCheckpoint();
         }
+    }
+
+    private long getMinReplayedJournalId() {
+        long minReplayedJournalId = Long.MAX_VALUE;
+        for (Frontend fe : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
+            String host = fe.getHost();
+            int port = Config.http_port;
+            URL idURL;
+            HttpURLConnection conn = null;
+            try {
+                /*
+                 * get current replayed journal id of each non-master nodes.
+                 * when we delete bdb database, we cannot delete db newer than
+                 * any non-master node's current replayed journal id. otherwise,
+                 * this lagging node can never get the deleted journal.
+                 */
+                idURL = new URL("http://" + host + ":" + port + "/journal_id?prefix=" + journal.getPrefix());
+                conn = (HttpURLConnection) idURL.openConnection();
+                conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
+                conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
+                String idString = conn.getHeaderField("id");
+                long id = Long.parseLong(idString);
+                if (minReplayedJournalId > id) {
+                    minReplayedJournalId = id;
+                }
+            } catch (IOException e) {
+                LOG.error("Exception when getting current replayed journal id. host={}, port={}",
+                        host, port, e);
+                minReplayedJournalId = 0;
+                break;
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
+            }
+        }
+
+        return minReplayedJournalId;
     }
 }

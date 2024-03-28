@@ -91,6 +91,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class NodeMgr {
     private static final Logger LOG = LogManager.getLogger(NodeMgr.class);
@@ -179,6 +180,15 @@ public class NodeMgr {
 
     public List<Frontend> getAllFrontends() {
         return Lists.newArrayList(frontends.values());
+    }
+
+    // All frontends except self
+    public List<Frontend> getOtherFrontends() {
+        return frontends
+                .values()
+                .stream()
+                .filter(frontend -> !frontend.getNodeName().equals(nodeName))
+                .collect(Collectors.toList());
     }
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
