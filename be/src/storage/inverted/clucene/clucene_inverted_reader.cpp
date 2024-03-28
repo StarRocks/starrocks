@@ -105,6 +105,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     try {
         RETURN_IF_ERROR(match_operator->match(&result));
     } catch (CLuceneError& e) {
+        CLOSE_DIR(directory)
         LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();
         return Status::InternalError(fmt::format("CLuceneError occured, error msg: {}", e.what()));
     }
