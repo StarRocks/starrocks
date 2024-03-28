@@ -14,25 +14,25 @@
 
 #pragma once
 
-#include "storage/lake/key_index.h"
 #include "storage/persistent_index.h"
 #include "util/phmap/btree.h"
 
 namespace starrocks::lake {
 
-using IndexValueInfo = std::pair<int64_t, IndexValue>;
+using KeyIndex = uint32_t;
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class PersistentIndexMemtable {
 public:
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  KeyIndexesInfo* not_found, size_t* num_found, int64_t version);
+                  std::set<KeyIndex>* not_founds, size_t* num_found, int64_t version);
 
     // |version|: version of index values
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
     // |version|: version of index values
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexesInfo* not_found, size_t* num_found,
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, std::set<KeyIndex>* not_founds, size_t* num_found,
                  int64_t version);
 
     // |version|: version of index values
@@ -40,17 +40,31 @@ public:
                    int64_t version);
 
     // |version|: version of index values
-    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found, size_t* num_found,
+    Status get(size_t n, const Slice* keys, IndexValue* values, std::set<KeyIndex>* not_founds, size_t* num_found,
                int64_t version);
+
+    // batch get
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |key_indexes|: the indexes of keys to be found.
+    // |found_key_indexes|: return the found indexes of keys.
+    // |version|: version of values
+    Status get(const Slice* keys, IndexValue* values, const std::set<KeyIndex>& key_indexes,
+               std::set<KeyIndex>* found_key_indexes, int64_t version);
+
+    size_t memory_usage();
+
+    Status flush(WritableFile* wf, uint64_t* filesize);
 
     void clear();
 
 private:
-    static void update_index_value(std::list<IndexValueInfo>* index_value_info, int64_t version,
+    static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,
                                    const IndexValue& value);
 
 private:
-    phmap::btree_map<std::string, std::list<IndexValueInfo>, std::less<>> _map;
+    // The size can be up to 230K. The performance of std::map may be poor.
+    phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>> _map;
 };
 
 } // namespace starrocks::lake
