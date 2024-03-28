@@ -114,8 +114,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         ")\n" +
                         "PARTITION BY RANGE(k1)\n" +
                         "(\n" +
-                        "    PARTITION p1 values less than('2022-02-01'),\n" +
-                        "    PARTITION p2 values less than('2022-03-01')\n" +
+                        "    PARTITION p1 values [('2022-01-01'), ('2022-02-01')),\n" +
+                        "    PARTITION p2 values [('2022-02-01'), ('2022-03-01'))\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
@@ -3219,11 +3219,9 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         "(select date_trunc('DAY', k1) as ds, k1, k2 from (select k1, k2 from " +
                         "(select * from tbl1)t1 )t2 ) a left join " +
                         "(select date_trunc('DAY', k1) as ds, k2 from (select * from tbl2)t ) b " +
-                        "on date_trunc('DAY', a.k1) = b.ds and a.k2 = b.k2 left join " +
-                        "(select date_trunc('DAY', k1) as ds, k2 from tbl15) c " +
-                        "on a.k2 = c.k2 and a.ds = c.ds;");
+                        "on date_trunc('DAY', a.k1) = b.ds and a.k2 = b.k2");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
-        Assert.assertEquals(3, materializedView.getPartitionExprMaps().size());
+        Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
@@ -3232,12 +3230,12 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         executeInsertSql(connectContext, "insert into tbl2 partition(p1) values('2022-01-02', 3, 10);");
         taskRun.executeTaskRun();
         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
-        Assert.assertEquals(Sets.newHashSet("p20211201_20220101", "p20220101_20220201"),
+        Assert.assertEquals(Sets.newHashSet("p20220101_20220201"),
                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
         Map<String, Set<String>> refBasePartitionsToRefreshMap =
                 processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap();
         Map<String, String> expect = ImmutableMap.of(
-                "tbl1", "[p0, p1]",
+                "tbl1", "[p1]",
                 "tbl2", "[p1]",
                 "tbl15", "[p20220101, p20220102, p20220103]"
         );
@@ -3337,8 +3335,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         executeInsertSql(connectContext, "insert into tbl2 partition(p1) values('2022-01-02', 3, 10);");
         taskRun.executeTaskRun();
         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
-        Assert.assertEquals(Sets.newHashSet("p0", "p1"), processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
-        Assert.assertEquals("{tbl2=[p1], tbl1=[p0, p1]}",
+        Assert.assertEquals(Sets.newHashSet("p1"), processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
+        Assert.assertEquals("{tbl2=[p1], tbl1=[p1]}",
                 processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap().toString());
         starRocksAssert.useDatabase("test").dropMaterializedView("mv_join_predicate");
     }

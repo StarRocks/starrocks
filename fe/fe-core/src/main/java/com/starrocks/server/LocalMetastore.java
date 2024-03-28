@@ -185,6 +185,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -3297,6 +3298,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     partitionExprMaps.put(partitionExpr, MaterializedView.getMvPartitionSlotRef(partitionExpr));
                 }
                 materializedView.setPartitionExprMaps(partitionExprMaps);
+                // check partition schema from children
+                PartitionBasedMvRefreshProcessor.computePartitionRangeDiff(db, materializedView,
+                        Pair.create(null, null));
             }
 
             MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
