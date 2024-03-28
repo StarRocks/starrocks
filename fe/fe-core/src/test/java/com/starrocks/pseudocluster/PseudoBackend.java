@@ -576,19 +576,7 @@ public class PseudoBackend {
         if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             lakeTabletManager.createTablet(request.create_tablet_req);
         } else {
-<<<<<<< HEAD
             tabletManager.createTablet(request.create_tablet_req);
-=======
-            TCreateTabletReq createTabletReq = request.create_tablet_req;
-            tabletManager.createTablet(createTabletReq);
-            TTabletInfo tabletInfo = new TTabletInfo();
-            tabletInfo.setPath_hash(PATH_HASH);
-            tabletInfo.setData_size(0);
-            tabletInfo.setTablet_id(createTabletReq.tablet_id);
-            tabletInfo.setSchema_hash(createTabletReq.tablet_schema.schema_hash);
-            tabletInfo.setVersion(createTabletReq.version);
-            finish.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
->>>>>>> 9909840469 ([UT] Fix tablet_info not set in finishTaskRequest in MockedBackend (#42069))
         }
     }
 
