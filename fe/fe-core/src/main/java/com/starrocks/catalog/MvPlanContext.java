@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -53,15 +54,18 @@ public class MvPlanContext {
         this.mvScanOpNum = 0;
     }
 
-    public MvPlanContext(
-            OptExpression logicalPlan,
-            List<ColumnRefOperator> outputColumns,
-            ColumnRefFactory refFactory) {
+    public MvPlanContext(OptExpression logicalPlan,
+                         List<ColumnRefOperator> outputColumns,
+                         ColumnRefFactory refFactory,
+                         boolean isValidMvPlan,
+                         String invalidReason) {
+        Preconditions.checkState(logicalPlan != null);
         this.logicalPlan = logicalPlan;
         this.outputColumns = outputColumns;
         this.refFactory = refFactory;
-        this.isValidMvPlan = true;
+        this.isValidMvPlan = isValidMvPlan;
         this.mvScanOpNum = MvUtils.getOlapScanNode(logicalPlan).size();
+        this.invalidReason = invalidReason;
     }
 
     public OptExpression getLogicalPlan() {

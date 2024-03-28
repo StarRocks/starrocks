@@ -103,6 +103,16 @@ public class MvPartitionCompensator {
                     .addAll(SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES)
                     .build();
 
+    public static boolean isTableSupportedPartitionCompensate(Table t) {
+        if (t == null) {
+            return false;
+        }
+        if (t.isNativeTableOrMaterializedView() || t.isIcebergTable() || t.isHiveTable()) {
+            return true;
+        }
+        return false;
+    }
+
     /**
      * Determine whether to compensate extra partition predicates to query plan for the mv,
      * - if it needs compensate, use `selectedPartitionIds` to compensate complete partition ranges
@@ -408,7 +418,7 @@ public class MvPartitionCompensator {
     public static OptExpression getMvTransparentPlan(MaterializationContext mvContext,
                                                      MVCompensation mvCompensation,
                                                      List<ColumnRefOperator> expectOutputColumns) {
-        Preconditions.checkState(mvCompensation.isTransparentRewrite());
+        Preconditions.checkState(mvCompensation.getState().isCompensate());
         final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
         final MaterializedView mv = mvContext.getMv();
         final List<ColumnRefOperator> originalOutputColumns = expectOutputColumns == null ?

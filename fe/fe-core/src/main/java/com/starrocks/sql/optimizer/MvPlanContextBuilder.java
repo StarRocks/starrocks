@@ -33,7 +33,7 @@ public class MvPlanContextBuilder {
 
         List<MvPlanContext> results = Lists.newArrayList();
         try (var guard = connectContext.bindScope()) {
-            MvPlanContext contextWithoutView = mvOptimizer.optimize(mv, connectContext);
+            MvPlanContext contextWithoutView = mvOptimizer.optimizeWithInlineView(mv, connectContext);
             results.add(contextWithoutView);
 
             // TODO: Only add context with view when view rewrite is set on.

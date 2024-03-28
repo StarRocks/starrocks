@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensation;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVToRefreshPartitionInfo;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -64,7 +65,7 @@ public class MaterializationContext {
     private final Set<String> mvPartitionNamesToRefresh;
 
     // Updated partition names of the ref base table which will be used in compensating partition predicates
-    private final Set<String> refTableUpdatePartitionNames;
+    private final MVToRefreshPartitionInfo mvToRefreshPartitionInfo;
 
     private final List<Table> baseTables;
 
@@ -105,7 +106,7 @@ public class MaterializationContext {
                                   List<Table> baseTables,
                                   List<Table> intersectingTables,
                                   ScalarOperator mvPartialPartitionPredicate,
-                                  Set<String> refTableUpdatePartitionNames,
+                                  MVToRefreshPartitionInfo mvToRefreshPartitionInfo,
                                   List<ColumnRefOperator> mvOutputColumnRefs) {
         this.optimizerContext = optimizerContext;
         this.mv = mv;
@@ -117,7 +118,7 @@ public class MaterializationContext {
         this.intersectingTables = intersectingTables;
         this.matchedGroups = Lists.newArrayList();
         this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
-        this.refTableUpdatePartitionNames = refTableUpdatePartitionNames;
+        this.mvToRefreshPartitionInfo = mvToRefreshPartitionInfo;
         this.mvOutputColumnRefs = mvOutputColumnRefs;
         this.scanOpToPartitionCompensatePredicates = Maps.newHashMap();
     }
@@ -199,7 +200,11 @@ public class MaterializationContext {
     }
 
     public Set<String> getRefTableUpdatePartitionNames() {
-        return this.refTableUpdatePartitionNames;
+        return mvToRefreshPartitionInfo.getRefTableUpdatedPartitionNames();
+    }
+
+    public MVToRefreshPartitionInfo getMvToRefreshPartitionInfo() {
+        return mvToRefreshPartitionInfo;
     }
 
     private boolean checkOperatorCompatible(OperatorType query) {

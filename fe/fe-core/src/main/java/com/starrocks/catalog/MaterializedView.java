@@ -79,6 +79,7 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVToRefreshPartitionInfo;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -111,6 +112,8 @@ import java.util.stream.IntStream;
 import static com.starrocks.backup.mv.MVRestoreUpdater.checkMvDefinedQuery;
 import static com.starrocks.backup.mv.MVRestoreUpdater.restoreBaseTableInfoIfNoRestored;
 import static com.starrocks.backup.mv.MVRestoreUpdater.restoreBaseTableInfoIfRestored;
+import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithList;
+import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithRange;
 
 /**
  * meta structure for materialized view
@@ -594,6 +597,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return getUpdatedPartitionNamesOfTable(base, false, isQueryRewrite, MaterializedView.getPartitionExpr(this));
     }
 
+    public MVToRefreshPartitionInfo getUpdateInfoOfTable(Table base, boolean isQueryRewrite) {
+        MVToRefreshPartitionInfo updatedInfo = new MVToRefreshPartitionInfo();
+        Preconditions.checkState(getToRefreshPartitionInfoOfTable(updatedInfo, base, false, isQueryRewrite,
+                MaterializedView.getPartitionExpr(this)));
+        return updatedInfo;
+    }
+
     public int getMaxMVRewriteStaleness() {
         return maxMVRewriteStaleness;
     }
@@ -762,41 +772,73 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * Get to refresh partition info of the specific table.
+     * @param updatedInfo
+     * @param baseTable
+     * @param withMv
+     * @param isQueryRewrite
+     * @param partitionExpr
+     * @return true if success, false if fail
+     */
+    public boolean getToRefreshPartitionInfoOfTable(MVToRefreshPartitionInfo updatedInfo, Table baseTable,
+                                                    boolean withMv, boolean isQueryRewrite, Expr partitionExpr) {
+        if (baseTable.isView()) {
+            // do nothing
+        } else if (baseTable.isNativeTableOrMaterializedView()) {
+            Set<String> toRefreshPartitions = updatedInfo.getRefTableUpdatedPartitionNames();
+            OlapTable olapBaseTable = (OlapTable) baseTable;
+            Set<String> baseTableUpdatedPartitionNames = getUpdatedPartitionNamesOfOlapTable(olapBaseTable, isQueryRewrite);
+            toRefreshPartitions.addAll(baseTableUpdatedPartitionNames);
+
+            // recursive check its children
+            if (withMv && baseTable.isMaterializedView()) {
+                ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv(toRefreshPartitions, isQueryRewrite);
+            }
+        } else {
+            Set<String> updatePartitionNames = getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
+            Map<Table, Column> partitionTableAndColumns = getRelatedPartitionTableAndColumn();
+            if (!partitionTableAndColumns.containsKey(baseTable)) {
+                // ATTENTION: This partition value is not formatted to mv partition type.
+                updatedInfo.getRefTableUpdatedPartitionNames().addAll(updatePartitionNames);
+            }
+            try {
+                List<String> updatedPartitionNamesList = Lists.newArrayList(updatePartitionNames);
+                Column partitionColumn = partitionTableAndColumns.get(baseTable);
+                boolean isListPartition = partitionInfo instanceof ListPartitionInfo;
+                if (isListPartition) {
+                    Map<String, List<List<String>>> partitionNameWithList = getMVPartitionNameWithList(baseTable, partitionColumn,
+                            updatedPartitionNamesList);
+                    updatedInfo.getRefTablePartitionNameWithLists().putAll(partitionNameWithList);
+                    updatedInfo.getRefTableUpdatedPartitionNames().addAll(partitionNameWithList.keySet());
+                } else {
+                    Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(baseTable,
+                            partitionColumn, updatedPartitionNamesList, partitionExpr);
+                    updatedInfo.getRefTablePartitionNameWithRanges().putAll(partitionNameWithRange);
+                    updatedInfo.getRefTableUpdatedPartitionNames().addAll(partitionNameWithRange.keySet());
+                }
+            } catch (AnalysisException e) {
+                LOG.warn("Mv {}'s base table {} get partition name fail", name, baseTable.name, e);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Return base tables' updated partition names, if `withMv` is true check base tables recursively when the base
      * table is materialized view too.
      *
      * @param baseTable : materialized view's base table to be checked
      * @param withMv    : whether to check the base table recursively when it is also a mv.
-     * @return
+     * @return: updated partition names of the base table if success, null if fail.
      */
-    public Set<String> getUpdatedPartitionNamesOfTable(
-            Table baseTable, boolean withMv, boolean isQueryRewrite, Expr partitionExpr) {
-        if (baseTable.isView()) {
-            return Sets.newHashSet();
-        } else if (baseTable.isNativeTableOrMaterializedView()) {
-            Set<String> result = Sets.newHashSet();
-            OlapTable olapBaseTable = (OlapTable) baseTable;
-            result.addAll(getUpdatedPartitionNamesOfOlapTable(olapBaseTable, isQueryRewrite));
-
-            if (withMv && baseTable.isMaterializedView()) {
-                ((MaterializedView) baseTable).getPartitionNamesToRefreshForMv(result, isQueryRewrite);
-            }
-            return result;
-        } else {
-            Set<String> updatePartitionNames = getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
-            Map<Table, Column> partitionTableAndColumns = getRelatedPartitionTableAndColumn();
-            if (!partitionTableAndColumns.containsKey(baseTable)) {
-                return updatePartitionNames;
-            }
-            try {
-                boolean isListPartition = partitionInfo instanceof ListPartitionInfo;
-                return PartitionUtil.getMVPartitionName(baseTable, partitionTableAndColumns.get(baseTable),
-                        Lists.newArrayList(updatePartitionNames), isListPartition, partitionExpr);
-            } catch (AnalysisException e) {
-                LOG.warn("Mv {}'s base table {} get partition name fail", name, baseTable.name, e);
-                return null;
-            }
+    public Set<String> getUpdatedPartitionNamesOfTable(Table baseTable, boolean withMv,
+                                                       boolean isQueryRewrite, Expr partitionExpr) {
+        MVToRefreshPartitionInfo updatedInfo = new MVToRefreshPartitionInfo();
+        if (!getToRefreshPartitionInfoOfTable(updatedInfo, baseTable, withMv, isQueryRewrite, partitionExpr)) {
+            return null;
         }
+        return updatedInfo.getRefTableUpdatedPartitionNames();
     }
 
     @Override
@@ -1078,6 +1120,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return true;
         }
         return tableProperty.getMvQueryRewriteSwitch().isEnable();
+    }
+
+    /**
+     * Whether this mv can be used for transparent rewrite configured by.
+     * @return: true if it is configured to enable transparent rewrite, otherwise false.
+     */
+    public boolean isTransparentRewrite() {
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
+            return true;
+        }
+        return tableProperty.getMvTransparentRewriteMode().isEnable();
     }
 
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {

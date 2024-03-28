@@ -33,7 +33,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -228,7 +227,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: text matched with {}",
                         mv.getName());
 
-                MvPlanContext mvPlanContext = getMvPlanContext(mv);
+                MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);
                 if (mvPlanContext == null) {
                     logMVRewrite(context, this, "MV {} plan context is invalid", mv.getName());
                     continue;
@@ -252,18 +251,6 @@ public class TextMatchBasedRewriteRule extends Rule {
             return null;
         }
         return null;
-    }
-
-    private MvPlanContext getMvPlanContext(MaterializedView mv) {
-        // step1: get from mv plan cache
-        List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
-                .getPlanContextFromCacheIfPresent(mv);
-        if (mvPlanContexts != null && !mvPlanContexts.isEmpty() && mvPlanContexts.get(0).getLogicalPlan() != null) {
-            // TODO: distinguish normal mv plan and view rewrite plan
-            return mvPlanContexts.get(0);
-        }
-        // step2: get from optimize
-        return new MaterializedViewOptimizer().optimize(mv, connectContext, true, false);
     }
 
     private OptExpression doTextMatchBasedRewrite(OptimizerContext context,
