@@ -512,15 +512,17 @@ void HdfsScannerContext::merge_split_tasks() {
     }
     do_merge(head, split_tasks.size() - 1);
 
-    // handle the tail stripe, if it's small, merge it to the last one.
+    // handle the tail stripe, if it's small and consecutive, merge it to the last one.
     size_t new_size = new_split_tasks.size();
     if (new_size >= 2) {
         auto tail_ctx = new_split_tasks[new_size - 1].get();
         size_t tail_size = (tail_ctx->split_end - tail_ctx->split_start);
         if ((tail_size * 2) < connector_max_split_size) {
             auto last_ctx = new_split_tasks[new_size - 2].get();
-            last_ctx->split_end = tail_ctx->split_end;
-            new_split_tasks.pop_back();
+            if (last_ctx->split_end == tail_ctx->split_start) {
+                last_ctx->split_end = tail_ctx->split_end;
+                new_split_tasks.pop_back();
+            }
         }
     }
 
