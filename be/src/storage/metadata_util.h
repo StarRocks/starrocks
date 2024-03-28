@@ -40,6 +40,10 @@ enum class FieldTypeVersion {
     kV2,
 };
 
+// This function will assign an increasing column unique id to each column starting from 0.
+Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TCompressionType::type compression_type,
+                                     TabletSchemaPB* out_schema);
+
 Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                                      const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                                      TabletSchemaPB* schema, TCompressionType::type compression_type);

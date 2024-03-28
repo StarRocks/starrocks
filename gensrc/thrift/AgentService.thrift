@@ -423,6 +423,9 @@ struct TTabletMetaInfo {
     6: optional bool enable_persistent_index
     7: optional TBinlogConfig binlog_config
     8: optional i32 primary_index_cache_expire_sec
+    9: optional TTabletSchema tablet_schema;
+    // |create_schema_file| only used when |tablet_schema| exists
+    10: optional bool create_schema_file;
 }
 
 struct TUpdateTabletMetaInfoReq {
