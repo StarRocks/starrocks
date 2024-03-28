@@ -387,7 +387,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
     // bloom runtime filter
     for (const auto& it : runtime_filters->descriptors()) {
         const RuntimeFilterProbeDescriptor* desc = it.second;
-        const JoinRuntimeFilter* rf = desc->runtime_filter();
+        const JoinRuntimeFilter* rf = desc->runtime_filter(driver_sequence);
         using RangeType = ColumnValueRange<RangeValueType>;
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
         SlotId slot_id;
@@ -397,7 +397,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
 
         // runtime filter existed and does not have null.
         if (rf == nullptr) {
-            rt_ranger_params.add_unarrived_rf(desc, &slot);
+            rt_ranger_params.add_unarrived_rf(desc, &slot, driver_sequence);
             continue;
         }
 

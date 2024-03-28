@@ -96,8 +96,6 @@ public:
 
 private:
     void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
-
-    std::unique_ptr<starrocks::DataSink> _data_sink;
     starrocks::stream_load::OlapTableSink* _sink0;
     FragmentContext* const _fragment_ctx;
     std::atomic<int32_t> _num_sinkers = 0;

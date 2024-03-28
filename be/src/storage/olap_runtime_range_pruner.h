@@ -28,13 +28,17 @@ class SlotDescriptor;
 class RuntimeFilterProbeDescriptor;
 class PredicateParser;
 class ColumnPredicate;
+class RuntimeBloomFilterEvalContext;
 
 struct UnarrivedRuntimeFilterList {
     std::vector<const RuntimeFilterProbeDescriptor*> unarrived_runtime_filters;
     std::vector<const SlotDescriptor*> slot_descs;
-    void add_unarrived_rf(const RuntimeFilterProbeDescriptor* desc, const SlotDescriptor* slot_desc) {
+    int32_t driver_sequence = -1;
+    void add_unarrived_rf(const RuntimeFilterProbeDescriptor* desc, const SlotDescriptor* slot_desc,
+                          int32_t driver_sequence_) {
         unarrived_runtime_filters.push_back(desc);
         slot_descs.push_back(slot_desc);
+        driver_sequence = driver_sequence_;
     }
 };
 
@@ -62,6 +66,7 @@ public:
 private:
     std::vector<const RuntimeFilterProbeDescriptor*> _unarrived_runtime_filters;
     std::vector<const SlotDescriptor*> _slot_descs;
+    int32_t _driver_sequence = -1;
     std::vector<bool> _arrived_runtime_filters_masks;
     std::vector<size_t> _rf_versions;
     PredicateParser* _parser = nullptr;

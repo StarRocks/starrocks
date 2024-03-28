@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "common/logging.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
 #include "gutil/strings/substitute.h"
@@ -90,7 +91,12 @@ void Operator::set_prepare_time(int64_t cost_ns) {
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {
+    _runtime_in_filters = _factory->get_colocate_runtime_in_filters(_driver_sequence);
     _factory->prepare_runtime_in_filters(state);
+    const auto& instance_runtime_filters = _factory->get_runtime_in_filters();
+    _runtime_in_filters.insert(_runtime_in_filters.end(), instance_runtime_filters.begin(),
+                               instance_runtime_filters.end());
+    VLOG_QUERY << "local in runtime filter num:" << _runtime_in_filters.size();
 }
 
 const LocalRFWaitingSet& Operator::rf_waiting_set() const {
@@ -136,7 +142,7 @@ void Operator::close(RuntimeState* state) {
 }
 
 std::vector<ExprContext*>& Operator::runtime_in_filters() {
-    return _factory->get_runtime_in_filters();
+    return _runtime_in_filters;
 }
 
 RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
@@ -243,6 +249,7 @@ void Operator::_init_rf_counters(bool init_bloom) {
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
+        _bloom_filter_eval_context.driver_sequence = _driver_sequence;
     }
 }
 
@@ -268,10 +275,10 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     _state = state;
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
-        RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _row_desc, _runtime_profile.get()));
+        RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _runtime_profile.get()));
         auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
         for (auto& [filter_id, desc] : descriptors) {
-            if (desc->is_local() || desc->runtime_filter() != nullptr) {
+            if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
                 continue;
             }
             auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
@@ -297,7 +304,12 @@ void OperatorFactory::close(RuntimeState* state) {
 }
 
 void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
-    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
+    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set, -1, true);
+    _prepare_runtime_holders(holders, &_runtime_in_filters);
+}
+
+void OperatorFactory::_prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,
+                                               std::vector<ExprContext*>* runtime_in_filters) {
     for (auto& holder : holders) {
         DCHECK(holder->is_ready());
         auto* collector = holder->get_collector();
@@ -306,11 +318,18 @@ void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            WARN_IF_ERROR(filter->prepare(state), "prepare filter expression failed");
-            WARN_IF_ERROR(filter->open(state), "open filter expression failed");
-            _runtime_in_filters.push_back(filter);
+            WARN_IF_ERROR(filter->prepare(runtime_state()), "prepare filter expression failed");
+            WARN_IF_ERROR(filter->open(runtime_state()), "open filter expression failed");
+            runtime_in_filters->push_back(filter);
         }
     }
+}
+
+std::vector<ExprContext*> OperatorFactory::get_colocate_runtime_in_filters(size_t driver_sequence) {
+    std::vector<ExprContext*> runtime_in_filter;
+    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set, driver_sequence, true);
+    _prepare_runtime_holders(holders, &runtime_in_filter);
+    return runtime_in_filter;
 }
 
 bool OperatorFactory::has_runtime_filters() const {
