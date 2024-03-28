@@ -101,8 +101,6 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
         return Status::InvalidArgument("Unknown query type");
     }
 
-    _CLDECDELETE(directory)
-
     roaring::Roaring result;
     try {
         RETURN_IF_ERROR(match_operator->match(&result));
@@ -111,6 +109,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
         return Status::InternalError(fmt::format("CLuceneError occured, error msg: {}", e.what()));
     }
     bit_map->swap(result);
+    CLOSE_DIR(directory)
     return Status::OK();
 }
 
@@ -142,13 +141,13 @@ Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, co
 
         bit_map->swap(*null_bitmap);
 
-        CLOSE_INPUT(dir)
+        CLOSE_DIR(dir)
     } catch (CLuceneError& e) {
         if (null_bitmap_in) {
             FINALLY_CLOSE_INPUT(null_bitmap_in)
         }
         if (dir) {
-            FINALLY_CLOSE_INPUT(dir)
+            FINALLY_CLOSE_DIR(dir)
         }
         LOG(WARNING) << "Inverted index read null bitmap error occurred: " << e.what();
         return Status::NotFound(fmt::format("Inverted index read null bitmap error occurred: ", e.what()));

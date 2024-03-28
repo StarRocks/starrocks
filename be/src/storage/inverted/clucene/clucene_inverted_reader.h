@@ -22,6 +22,19 @@
 
 namespace starrocks {
 
+// close is enough, because if the refCount == 0
+// after decrementment, FSDirectory::close will
+// delete itself says, delete this.
+#define CLOSE_DIR(x)  \
+    if (x != nullptr) { \
+        x->close();     \
+    }
+#define FINALLY_CLOSE_DIR(x) \
+    try {                      \
+        CLOSE_DIR(x)         \
+    } catch (...) {            \
+    }
+
 #define CLOSE_INPUT(x)  \
     if (x != nullptr) { \
         x->close();     \
