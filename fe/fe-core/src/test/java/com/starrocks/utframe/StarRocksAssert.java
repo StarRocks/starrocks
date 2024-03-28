@@ -89,6 +89,8 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DdlStmt;
@@ -97,6 +99,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -318,6 +321,23 @@ public class StarRocksAssert {
         String sql = mTable.getCreateTableSql();
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
+    public StarRocksAssert withTemporaryTable(String sql) throws Exception {
+        CreateTemporaryTableStmt createTableStmt =
+                (CreateTemporaryTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        createTableStmt.setSessionId(ctx.getSessionId());
+        utCreateTableWithRetry(createTableStmt, ctx);
+        return this;
+    }
+
+    public StarRocksAssert withTemporaryTableLike(String dstTable, String srcTable) throws Exception {
+        String sql = "create temporary table " + dstTable + " like " + srcTable;
+        CreateTemporaryTableLikeStmt createTemporaryTableLikeStmt =
+                (CreateTemporaryTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        createTemporaryTableLikeStmt.setSessionId(ctx.getSessionId());
+        utCreateTableWithRetry(createTemporaryTableLikeStmt.getCreateTableStmt(), ctx);
         return this;
     }
 
@@ -591,6 +611,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert alterTable(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Analyzer.analyze(alterTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
+        return this;
+    }
+
     public StarRocksAssert dropTables(List<String> tableNames) throws Exception {
         for (String tableName : tableNames) {
             dropTable(tableName);
@@ -602,6 +629,13 @@ public class StarRocksAssert {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropTemporaryTable(String tableName) throws Exception {
+        DropTemporaryTableStmt dropTemporaryTableStmt = (DropTemporaryTableStmt)
+                UtFrameUtils.parseStmtWithNewParser("drop temporary table " + tableName + ";", ctx);
+        GlobalStateMgr.getCurrentState().getMetadataMgr().dropTemporaryTable(dropTemporaryTableStmt);
         return this;
     }
 

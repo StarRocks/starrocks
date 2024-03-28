@@ -15,6 +15,7 @@
 
 package com.starrocks.server;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
@@ -55,7 +56,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -72,6 +75,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -101,6 +105,7 @@ public class MetadataMgr {
     }
 
     private final LocalMetastore localMetastore;
+    private final TemporaryTableMgr temporaryTableMgr;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
 
@@ -129,10 +134,12 @@ public class MetadataMgr {
                         }
                     });
 
-    public MetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr,
+    public MetadataMgr(LocalMetastore localMetastore, TemporaryTableMgr temporaryTableMgr, ConnectorMgr connectorMgr,
                        ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr) {
         Preconditions.checkNotNull(localMetastore, "localMetastore is null");
+        Preconditions.checkNotNull(temporaryTableMgr, "temporaryTableMgr is null");
         this.localMetastore = localMetastore;
+        this.temporaryTableMgr = temporaryTableMgr;
         this.connectorMgr = connectorMgr;
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
@@ -247,6 +254,23 @@ public class MetadataMgr {
         return ImmutableList.copyOf(tableNames.build());
     }
 
+    public List<String> listTemporaryTableNames(UUID sessionId, String catalogName, String dbName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+            Preconditions.checkArgument(connectorMetadata.isPresent(), "internal catalog doesn't exist");
+            try {
+                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                Database database = connectorMetadata.get().getDb(dbName);
+                if (database != null) {
+                    return temporaryTableMgr.listTemporaryTables(sessionId, database.getId());
+                }
+            } catch (Exception e) {
+                throw e;
+            }
+        }
+        return Lists.newArrayList();
+    }
+
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -295,6 +319,40 @@ public class MetadataMgr {
         }
     }
 
+    public boolean createTemporaryTable(CreateTemporaryTableStmt stmt) throws DdlException {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in CreateTemporaryTableStmt");
+        String catalogName = stmt.getCatalogName();
+
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (!connectorMetadata.isPresent()) {
+            throw new DdlException("Invalid catalog " + catalogName + ", ConnectorMetadata doesn't exist");
+        } else if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new DdlException("temporary table must be created under internal catalog");
+        } else {
+            String dbName = stmt.getDbName();
+            Database db = getDb(catalogName, dbName);
+            if (db == null) {
+                throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            String tableName = stmt.getTableName();
+            UUID sessionId = stmt.getSessionId();
+
+            if (temporaryTableMgr.tableExists(sessionId, db.getId(), tableName)) {
+                if (stmt.isSetIfNotExists()) {
+                    LOG.info("create temporary table[{}.{}] which already exists in session[{}]",
+                            dbName, tableName, sessionId);
+                    return false;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+            }
+            return connectorMetadata.get().createTable(stmt);
+        }
+    }
+
     public void alterTable(AlterTableStmt stmt) throws UserException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -339,6 +397,47 @@ public class MetadataMgr {
         });
     }
 
+    public void dropTemporaryTable(DropTemporaryTableStmt stmt) {
+        Preconditions.checkArgument(stmt.getSessionId() != null,
+                "session id should not be null in DropTemporaryTableStmt");
+        String catalogName = stmt.getCatalogName();
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new StarRocksConnectorException("temporary table must be under internal catalog");
+        }
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            String dbName = stmt.getDbName();
+            Database db = getDb(catalogName, dbName);
+            if (db == null) {
+                throw new StarRocksConnectorException(
+                        "Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+            String tableName = stmt.getTableName();
+            UUID sessionId = stmt.getSessionId();
+
+            Long tableId = temporaryTableMgr.getTable(sessionId, db.getId(), tableName);
+            if (tableId == null) {
+                if (stmt.isSetIfExists()) {
+                    LOG.info("drop temporary table[{}.{}] which doesn't exist in session[{}]",
+                            dbName, tableName, sessionId);
+                } else {
+                    throw new StarRocksConnectorException("Temporary table '" + tableName + "' doesn't exist");
+                }
+            }
+            try {
+                metadata.dropTemporaryTable(dbName, tableId, tableName, stmt.isSetIfExists(), stmt.isForceDrop());
+                temporaryTableMgr.dropTemporaryTable(sessionId, db.getId(), tableName);
+            } catch (DdlException e) {
+                LOG.error("Failed to drop temporary table {}.{}.{} in session {}, {}",
+                        catalogName, dbName, tableName, sessionId, e);
+                throw new StarRocksConnectorException("Failed to drop temporary table %s.%s.%s. msg: %s",
+                        catalogName, dbName, tableName, e.getMessage());
+            }
+        });
+    }
+
     public Optional<Table> getTable(TableName tableName) {
         return Optional.ofNullable(getTable(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
     }
@@ -359,6 +458,21 @@ public class MetadataMgr {
             return null;
         }
         return database.getTable(tableId);
+    }
+
+    public Table getTemporaryTable(UUID sessionId, String catalogName, Long databaseId, String tblName) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            return null;
+        }
+        Long tableId = temporaryTableMgr.getTable(sessionId, databaseId, tblName);
+        if (tableId == null) {
+            return null;
+        }
+        Database database = localMetastore.getDb(databaseId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTemporaryTable(tableId);
     }
 
     public boolean tableExists(String catalogName, String dbName, String tblName) {

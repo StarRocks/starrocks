@@ -43,6 +43,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -224,6 +225,8 @@ public class ConnectContext {
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
+    private UUID sessionId;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -270,6 +273,7 @@ public class ConnectContext {
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
+        this.sessionId = UUIDUtil.genUUID();
     }
 
     public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
@@ -742,6 +746,15 @@ public class ConnectContext {
 
     public int getForwardTimes() {
         return this.forwardTimes;
+    }
+
+
+    public void setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public UUID getSessionId() {
+        return this.sessionId;
     }
 
     // kill operation with no protect.
