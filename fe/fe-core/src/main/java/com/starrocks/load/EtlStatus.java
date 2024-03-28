@@ -56,6 +56,9 @@ import org.apache.commons.collections.map.HashedMap;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -362,9 +365,8 @@ public class EtlStatus implements Writable {
         // load task id -> fragment id -> rows count
         private Table<String, String, Long> counterTbl = HashBasedTable.create();
 
-        // load task id -> unfinished backend id list
-        @SerializedName("unfinishedBackendIds")
-        private Map<String, List<Long>> unfinishedBackendIds = Maps.newHashMap();
+        @SerializedName("unfinishedBackendIdCounts")
+        private Map<String, Map<Long, Long>> unfinishedBackendIdCounts = Maps.newHashMap();
         // load task id -> all backend id list
         @SerializedName("allBackendIds")
         private Map<String, List<Long>> allBackendIds = Maps.newHashMap();
@@ -417,10 +419,11 @@ public class EtlStatus implements Writable {
                 sourceScanBytesCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
             }
             
-            allBackendIds.put(loadStr, relatedBackendIds);
-            // need to get a copy of relatedBackendIds, so that when we modify the "relatedBackendIds" in
-            // allBackendIds, the list in unfinishedBackendIds will not be changed.
-            unfinishedBackendIds.put(loadStr, Lists.newArrayList(relatedBackendIds));
+            allBackendIds.put(loadStr, new ArrayList<>(new HashSet(relatedBackendIds)));
+            Map<Long, Long> unfinishedBackendInfo = unfinishedBackendIdCounts.computeIfAbsent(loadStr, key -> new HashMap<>());
+            for (Long backendId : relatedBackendIds) {
+                unfinishedBackendInfo.merge(backendId, 1L, Long::sum);
+            }
         }
 
         public synchronized void removeLoad(TUniqueId loadId) {
@@ -432,8 +435,8 @@ public class EtlStatus implements Writable {
             filteredRowsCounterTbl.rowMap().remove(loadStr);
             unselectedRowsCounterTbl.rowMap().remove(loadStr);
             sourceScanBytesCounterTbl.rowMap().remove(loadStr);
-            
-            unfinishedBackendIds.remove(loadStr);
+
+            unfinishedBackendIdCounts.remove(loadStr);
             allBackendIds.remove(loadStr);
         }
 
@@ -522,8 +525,18 @@ public class EtlStatus implements Writable {
                 sourceScanBytesCounterTbl.put(loadStr, fragmentStr, params.source_scan_bytes);
             }
 
-            if (params.done && unfinishedBackendIds.containsKey(loadStr)) {
-                unfinishedBackendIds.get(loadStr).remove(params.backend_id);
+            if (params.done && unfinishedBackendIdCounts.containsKey(loadStr)) {
+                Map<Long, Long> backendInfo = unfinishedBackendIdCounts.get(loadStr);
+                if (backendInfo != null) {
+                    Long count = backendInfo.get(params.backend_id);
+                    if (count != null) {
+                        if (count - 1L == 0) {
+                            backendInfo.remove(params.backend_id);
+                        } else {
+                            backendInfo.put(params.backend_id, count - 1L);
+                        }
+                    }
+                }
             }
         }
 
@@ -573,10 +586,21 @@ public class EtlStatus implements Writable {
             details.put("FileNumber", fileNum);
             details.put("FileSize", totalFileSizeB);
             details.put("TaskNumber", counterTbl.rowMap().size());
-            details.put("Unfinished backends", unfinishedBackendIds);
+            details.put("Unfinished backends", getUnfinishedBackendIdToCount());
             details.put("All backends", allBackendIds);
             Gson gson = new Gson();
             return gson.toJson(details);
+        }
+
+        public Map<String, String> getUnfinishedBackendIdToCount() {
+            Map<String, String> result = new HashMap<>();
+            for (Map.Entry<String, Map<Long, Long>> entry : unfinishedBackendIdCounts.entrySet()) {
+                List<String> params = new ArrayList<>();
+                entry.getValue().forEach((key, value) -> params.add(String.format("%d(%d),", key, value)));
+                String value = String.join("", params);
+                result.put(entry.getKey(), value.length() != 0 ? value.substring(0, value.length() - 1) : value);
+            }
+            return result;
         }
 
         public String toJson() throws IOException {
