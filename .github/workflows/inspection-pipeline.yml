@@ -538,11 +538,7 @@ jobs:
           fi
 
       - name: save unstable cases
-<<<<<<< HEAD
         if: always() && (github.event_name == 'schedule' || (github.event_name != 'schedule' && env.BRANCH != 'main'))
-=======
-        if: always() && ((github.event_name == 'schedule' && env.BRANCH == 'main') || (github.event_name != 'schedule' && env.BRANCH != 'main'))
->>>>>>> 4a61b21f05 ([Tool] Request approval for feature (#43288))
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/save_unstable_cases.sh
