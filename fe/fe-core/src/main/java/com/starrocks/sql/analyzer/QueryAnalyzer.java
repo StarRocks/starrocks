@@ -21,6 +21,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.CaseExpr;
+import com.starrocks.analysis.CaseWhenClause;
+>>>>>>> f97ba06a82 ([Feature] impl left join unnest on true (#42924))
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -483,10 +489,24 @@ public class QueryAnalyzer {
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
                 if (!(join.getRight() instanceof TableFunctionRelation)) {
                     throw new SemanticException("Only support lateral join with UDTF");
-                }
-
-                if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin()) {
+                } else if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin() &&
+                        !((TableFunctionRelation) join.getRight()).getFunctionName().getFunction().
+                                equalsIgnoreCase("unnest")) {
+                    // not inner join && not cross join && not unnest
                     throw new SemanticException("Not support lateral join except inner or cross");
+                } else if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin()) {
+                    // must be unnest and not inner join and not corss join
+                    if (join.getJoinOp().isLeftOuterJoin()) {
+                        if (join.getOnPredicate() instanceof BoolLiteral &&
+                                ((BoolLiteral) join.getOnPredicate()).getValue()) {
+                            // left join on true
+                            ((TableFunctionRelation) join.getRight()).setIsLeftJoin(true);
+                        } else {
+                            throw new SemanticException("left join unnest only support on true");
+                        }
+                    } else {
+                        throw new SemanticException("unnest support inner join, cross join and left join on true");
+                    }
                 }
                 rightScope = process(join.getRight(), leftScope);
             } else {
@@ -902,6 +922,7 @@ public class QueryAnalyzer {
             }
 
             TableFunction tableFunction = (TableFunction) fn;
+            tableFunction.setIsLeftJoin(node.getIsLeftJoin());
             node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
