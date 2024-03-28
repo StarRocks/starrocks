@@ -190,11 +190,6 @@ vectorized_functions = [
 
     [10322, "square", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
 
-<<<<<<< HEAD
-=======
-    [10330, "cbrt", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::cbrt"],
-
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065))
     # 20xxx: bit functions
     [20010, 'bitand', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', True, False, 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
@@ -319,21 +314,10 @@ vectorized_functions = [
     [30250, 'concat', True, True, 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::concat',
      'StringFunctions::concat_prepare', 'StringFunctions::concat_close'],
 
-<<<<<<< HEAD
-    [30260, 'concat_ws', 'VARCHAR', ['VARCHAR', 'VARCHAR', '...'], 'StringFunctions::concat_ws'],
-    [30270, 'find_in_set', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::find_in_set'],
-    [30310, 'split_part', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::split_part'],
-    [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
-=======
     [30260, 'concat_ws', True, True, 'VARCHAR', ['VARCHAR', 'VARCHAR', '...'], 'StringFunctions::concat_ws'],
-    [30261, 'concat_ws', True, True, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR'], 'ArrayFunctions::array_concat_ws'],
     [30270, 'find_in_set', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::find_in_set'],
     [30310, 'split_part', True, True, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::split_part'],
-    [30311, 'split', True, True, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split',
-     'StringFunctions::split_prepare', 'StringFunctions::split_close'],
-    [30312, 'substring_index', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'],
-     'StringFunctions::substring_index'],
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065))
+    [30311, 'split', True, True, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
     # v1 is deprecated
     [30316, 'str_to_map', True, False, 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],
      'StringFunctions::str_to_map_v1'],
@@ -369,29 +353,12 @@ vectorized_functions = [
     [30411, 'url_extract_parameter', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
      'StringFunctions::url_extract_parameter',
      'StringFunctions::url_extract_parameter_prepare', 'StringFunctions::url_extract_parameter_close'],
-<<<<<<< HEAD
-    [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
-    [30421, 'url_encode', 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_encode'],
-    [30422, 'url_decode', 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_decode'],
-=======
-    [30412, 'url_extract_host', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_extract_host'],
     [30420, 'strcmp', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
     [30421, 'url_encode', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_encode'],
     [30422, 'url_decode', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_decode'],
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065))
 
     [30430, 'translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::translate',
      'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
-<<<<<<< HEAD
-=======
-    [30431, 'crc32', True, False, 'BIGINT', ['VARCHAR'], 'StringFunctions::crc32'],
-
-    [30440, 'ngram_search', True, False, 'DOUBLE', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::ngram_search',
-     'StringFunctions::ngram_search_prepare', 'StringFunctions::ngram_search_close'],
-    [30441, 'ngram_search_case_insensitive', True, False, 'DOUBLE', ['VARCHAR', 'VARCHAR', 'INT'],
-     'StringFunctions::ngram_search_case_insensitive', 'StringFunctions::ngram_search_case_insensitive_prepare',
-     'StringFunctions::ngram_search_close'],
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065))
 
     # Binary Functions
     # to_binary
@@ -406,21 +373,6 @@ vectorized_functions = [
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
 
     # 50xxx: timestamp functions
-<<<<<<< HEAD
-    [50008, 'year', 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
-    [50009, 'year', 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
-    [50010, 'year', 'INT', ['DATETIME'], 'TimeFunctions::year'],
-    [50018, 'month', 'TINYINT', ['DATE'], 'TimeFunctions::monthV3'],
-    [50019, 'month', 'TINYINT', ['DATETIME'], 'TimeFunctions::monthV2'],
-    [50020, 'month', 'INT', ['DATETIME'], 'TimeFunctions::month'],
-    [50030, 'quarter', 'INT', ['DATETIME'], 'TimeFunctions::quarter'],
-    [50040, 'dayofweek', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week'],
-    [50041, 'dayofweek_iso', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week_iso'],
-    [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
-    [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
-    [50052, 'to_tera_date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_date', "TimeFunctions::to_tera_date_prepare", "TimeFunctions::to_tera_date_close"],
-    [50053, 'to_tera_timestamp', 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_timestamp', "TimeFunctions::to_tera_timestamp_prepare", "TimeFunctions::to_tera_timestamp_close"],
-=======
     [50008, 'year', True, False, 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
     [50009, 'year', True, False, 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
     [50010, 'year', True, False, 'INT', ['DATETIME'], 'TimeFunctions::year'],
@@ -430,15 +382,10 @@ vectorized_functions = [
     [50030, 'quarter', True, False, 'INT', ['DATETIME'], 'TimeFunctions::quarter'],
     [50040, 'dayofweek', True, False, 'INT', ['DATETIME'], 'TimeFunctions::day_of_week'],
     [50041, 'dayofweek_iso', True, False, 'INT', ['DATETIME'], 'TimeFunctions::day_of_week_iso'],
-    [50042, 'yearweek', True, False, 'INT', ['DATETIME'], 'TimeFunctions::year_week_with_default_mode'],
-    [50043, 'yearweek', True, False, 'INT', ['DATETIME', 'INT'], 'TimeFunctions::year_week_with_mode'],
     [50050, 'to_date', True, False, 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', True, False, 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
-    [50052, 'to_tera_date', True, False, 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_date',
-     "TimeFunctions::to_tera_date_prepare", "TimeFunctions::to_tera_date_close"],
-    [50053, 'to_tera_timestamp', True, False, 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_timestamp',
-     "TimeFunctions::to_tera_timestamp_prepare", "TimeFunctions::to_tera_timestamp_close"],
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065))
+    [50052, 'to_tera_date', True, False, 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_date', "TimeFunctions::to_tera_date_prepare", "TimeFunctions::to_tera_date_close"],
+    [50053, 'to_tera_timestamp', True, False, 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_tera_timestamp', "TimeFunctions::to_tera_timestamp_prepare", "TimeFunctions::to_tera_timestamp_close"],
 
     [50057, 'day', True, False, 'TINYINT', ['DATE'], 'TimeFunctions::dayV3'],
     [50058, 'day', True, False, 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],
@@ -476,41 +423,6 @@ vectorized_functions = [
     [50144, 'adddate', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::days_add'],
     [50145, 'subdate', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::days_sub'],
 
-<<<<<<< HEAD
-    [50150, 'hours_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::hours_add'],
-    [50151, 'hours_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::hours_sub'],
-    [50160, 'minutes_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::minutes_add'],
-    [50161, 'minutes_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::minutes_sub'],
-    [50170, 'seconds_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::seconds_add'],
-    [50171, 'seconds_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::seconds_sub'],
-    [50175, 'milliseconds_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::millis_add'],
-    [50176, 'milliseconds_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::millis_sub'],
-    [50180, 'microseconds_add', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::micros_add'],
-    [50181, 'microseconds_sub', 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::micros_sub'],
-    [50190, 'years_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::years_diff'],
-    [50191, 'months_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::months_diff'],
-    [50192, 'weeks_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::weeks_diff'],
-    [50193, 'days_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::days_diff'],
-    [50194, 'hours_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::hours_diff'],
-    [50195, 'minutes_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::minutes_diff'],
-    [50196, 'seconds_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::seconds_diff'],
-    [50197, 'datediff', 'INT', ['DATETIME', 'DATETIME'], 'TimeFunctions::date_diff'],
-    [50198, 'timediff', 'TIME', ['DATETIME', 'DATETIME'], 'TimeFunctions::time_diff'],
-    [50199, 'date_diff', 'BIGINT', ['VARCHAR', 'DATETIME', 'DATETIME'], 'TimeFunctions::datediff',"TimeFunctions::datediff_prepare", "TimeFunctions::datediff_close"],
-    [50200, 'now', 'DATETIME', [], 'TimeFunctions::now'],
-    [50201, 'current_timestamp', 'DATETIME', [], 'TimeFunctions::now'],
-    [50202, 'localtime', 'DATETIME', [], 'TimeFunctions::now'],
-    [50203, 'localtimestamp', 'DATETIME', [], 'TimeFunctions::now'],
-    [50204, 'now', 'DATETIME', ['INT'], 'TimeFunctions::now'],
-    [50210, 'curtime', 'TIME', [], 'TimeFunctions::curtime'],
-    [50211, 'current_time', 'TIME', [], 'TimeFunctions::curtime'],
-    [50220, 'curdate', 'DATE', [], 'TimeFunctions::curdate'],
-    [50221, 'current_date', 'DATE', [], 'TimeFunctions::curdate'],
-    [50230, 'from_days', 'DATE', ['INT'], 'TimeFunctions::from_days'],
-    [50231, 'to_days', 'INT', ['DATE'], 'TimeFunctions::to_days'],
-    [50241, 'date_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
-    [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
-=======
     [50150, 'hours_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::hours_add'],
     [50151, 'hours_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::hours_sub'],
     [50160, 'minutes_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::minutes_add'],
@@ -530,8 +442,7 @@ vectorized_functions = [
     [50196, 'seconds_diff', True, False, 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::seconds_diff'],
     [50197, 'datediff', True, False, 'INT', ['DATETIME', 'DATETIME'], 'TimeFunctions::date_diff'],
     [50198, 'timediff', True, False, 'TIME', ['DATETIME', 'DATETIME'], 'TimeFunctions::time_diff'],
-    [50199, 'date_diff', True, False, 'BIGINT', ['VARCHAR', 'DATETIME', 'DATETIME'], 'TimeFunctions::datediff',
-     "TimeFunctions::datediff_prepare", "TimeFunctions::datediff_close"],
+    [50199, 'date_diff', True, False, 'BIGINT', ['VARCHAR', 'DATETIME', 'DATETIME'], 'TimeFunctions::datediff',"TimeFunctions::datediff_prepare", "TimeFunctions::datediff_close"],
     [50200, 'now', True, False, 'DATETIME', [], 'TimeFunctions::now'],
     [50201, 'current_timestamp', True, False, 'DATETIME', [], 'TimeFunctions::now'],
     [50202, 'localtime', True, False, 'DATETIME', [], 'TimeFunctions::now'],
@@ -543,12 +454,8 @@ vectorized_functions = [
     [50221, 'current_date', True, False, 'DATE', [], 'TimeFunctions::curdate'],
     [50230, 'from_days', True, False, 'DATE', ['INT'], 'TimeFunctions::from_days'],
     [50231, 'to_days', True, False, 'INT', ['DATE'], 'TimeFunctions::to_days'],
-    [50241, 'date_format', True, False, 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format',
-     'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
-    [50242, 'date_format', True, False, 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format',
-     'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
-    [50245, 'milliseconds_diff', True, False, 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::milliseconds_diff'],
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065))
+    [50241, 'date_format', True, False, 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
+    [50242, 'date_format', True, False, 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
 
     # From string to DATE/DATETIME
     # the function will call by FE getStrToDateFunction, and is invisible to user
@@ -572,25 +479,12 @@ vectorized_functions = [
 
     # unix timestamp extended version to int64
     # be sure to put before int32 version, so fe will find signature in order.
-<<<<<<< HEAD
-    [50284, 'unix_timestamp', 'BIGINT', [], 'TimeFunctions::to_unix_for_now_64'],
-    [50285, 'unix_timestamp', 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_64'],
-    [50286, 'unix_timestamp', 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date_64'],
-    [50287, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
-    [50288, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
-    [50289, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
-=======
     [50284, 'unix_timestamp', True, False, 'BIGINT', [], 'TimeFunctions::to_unix_for_now_64'],
     [50285, 'unix_timestamp', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_64'],
     [50286, 'unix_timestamp', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date_64'],
-    [50287, 'unix_timestamp', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'],
-     'TimeFunctions::to_unix_from_datetime_with_format_64'],
+    [50287, 'unix_timestamp', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
     [50288, 'from_unixtime', True, False, 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
-    [50289, 'from_unixtime', True, False, 'VARCHAR', ['BIGINT', 'VARCHAR'],
-     'TimeFunctions::from_unix_to_datetime_with_format_64',
-     'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
-    [50290, 'from_unixtime_ms', True, False, 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_ms_64'],
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065))
+    [50289, 'from_unixtime', True, False, 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
 
     [50300, 'unix_timestamp', True, False, 'INT', [], 'TimeFunctions::to_unix_for_now_32'],
     [50301, 'unix_timestamp', True, False, 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_32'],
@@ -1226,21 +1120,11 @@ vectorized_functions = [
     [150271, 'array_cum_sum', True, False, 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
 
     # reserve 150281
-<<<<<<< HEAD
-    [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
+    [150282, 'array_contains_all', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
 
-    [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
-    [150301, 'all_match', 'BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::all_match'],
-    [150302, 'any_match', 'BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::any_match'],
-=======
-    [150282, 'array_contains_all', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'],
-     'ArrayFunctions::array_contains_all'],
-    [150283, 'array_contains_seq', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'],
-     'ArrayFunctions::array_contains_seq'],
-    [150300, 'array_filter', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ARRAY_BOOLEAN'], 'ArrayFunctions::array_filter'],
-    [150301, 'all_match', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::all_match'],
-    [150302, 'any_match', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::any_match'],
->>>>>>> 3d935f4706 ([BugFix] Function framework support checkout overflow (#43065))
+    [150300, 'array_filter', True, False, 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
+    [150301, 'all_match', True, False, 'BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::all_match'],
+    [150302, 'any_match', True, False, 'BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::any_match'],
 
     [150311, 'array_sortby', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ARRAY_BOOLEAN'],
      'ArrayFunctions::array_sortby<TYPE_BOOLEAN>'],
