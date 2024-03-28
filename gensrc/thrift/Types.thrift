@@ -319,6 +319,8 @@ struct TAggregateFunction {
 struct TTableFunction {
   1: required list<TTypeDesc> ret_types
   2: optional string symbol
+  // Table function left join
+  3: optional bool is_left_join
 }
 
 // Represents a function in the Catalog.
