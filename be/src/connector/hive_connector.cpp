@@ -75,6 +75,12 @@ std::string HiveDataSource::name() const {
 
 Status HiveDataSource::open(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
+    if (_split_context != nullptr) {
+        auto split_context = down_cast<HdfsSplitContext*>(_split_context);
+        _scan_range.offset = split_context->split_start;
+        _scan_range.length = split_context->split_end - split_context->split_start;
+    }
+
     if (_scan_range.file_length == 0) {
         _no_data = true;
         return Status::OK();
@@ -751,8 +757,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
 
-    COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
-    COUNTER_UPDATE(_profile.scan_ranges_size, scan_range.length);
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
@@ -777,8 +781,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
-    scanner_params.split_context = _split_context;
+    scanner_params.split_context = down_cast<HdfsSplitContext*>(_split_context);
     scanner_params.enable_split_tasks = _enable_split_tasks;
+    if (state->query_options().__isset.connector_max_split_size) {
+        scanner_params.connector_max_split_size = state->query_options().connector_max_split_size;
+    }
 
     if (!_equality_delete_slots.empty()) {
         MORParams& mor_params = scanner_params.mor_params;
@@ -868,6 +875,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
 void HiveDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
+        if (!_scanner->has_split_tasks()) {
+            COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
+            COUNTER_UPDATE(_profile.scan_ranges_size, _scan_range.length);
+        }
         _scanner->close();
     }
     Expr::close(_min_max_conjunct_ctxs, state);
@@ -965,7 +976,7 @@ void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, i
 
 void HiveDataSource::get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
     if (_scanner == nullptr) return;
-    _scanner->get_split_tasks(split_tasks);
+    _scanner->move_split_tasks(split_tasks);
 }
 
 } // namespace starrocks::connector
