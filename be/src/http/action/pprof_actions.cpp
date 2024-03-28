@@ -33,11 +33,7 @@
 // under the License.
 
 #include "http/action/pprof_actions.h"
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#endif
-#include <gperftools/heap-profiler.h>
-#include <gperftools/malloc_extension.h>
+
 #include <gperftools/profiler.h>
 
 #include <fstream>
@@ -53,6 +49,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "io/io_profiler.h"
+#include "jemalloc/jemalloc.h"
 #include "util/bfd_parser.h"
 
 namespace starrocks {
@@ -89,18 +86,11 @@ void GrowthAction::handle(HttpRequest* req) {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     std::string str = "Growth profiling is not available with address sanitizer builds.";
     HttpChannel::send_reply(req, str);
-#elif defined(USE_JEMALLOC)
+#else
     std::string str =
             "Growth profiling is not available with jemalloc builds.You can set the `--base` flag to jeprof to compare "
             "the results of two Heap Profiling";
     HttpChannel::send_reply(req, str);
-#else
-    std::lock_guard<std::mutex> lock(kPprofActionMutex);
-
-    std::string heap_growth_stack;
-    MallocExtension::instance()->GetHeapGrowthStacks(&heap_growth_stack);
-
-    HttpChannel::send_reply(req, heap_growth_stack);
 #endif
 }
 

@@ -166,10 +166,6 @@ if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
-if [[ -z ${USE_JEMALLOC} ]]; then
-    USE_JEMALLOC=ON
-fi
-
 HELP=0
 if [ $# == 1 ] ; then
     # default
@@ -242,7 +238,6 @@ echo "Get params:
     USE_SSE4_2          -- $USE_SSE4_2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
 check_tool()
@@ -327,7 +322,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
-                  -DUSE_JEMALLOC=$USE_JEMALLOC                          \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
