@@ -35,6 +35,7 @@
 package com.starrocks.metric;
 
 import com.starrocks.common.Config;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
@@ -158,5 +159,7 @@ public class MetricCalculator extends TimerTask {
         }
 
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
+
+        MetricRepo.GAUGE_DB_LOCK_WAITER.setValue(LockChecker.getWaiterNumber());
     }
 }
