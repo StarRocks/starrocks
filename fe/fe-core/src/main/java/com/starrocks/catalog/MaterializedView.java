@@ -1384,7 +1384,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             Table partitionTable = getDirectTableAndPartitionColumn().first;
             Column partitionColumn = getPartitionInfo().getPartitionColumns().get(0);
-            PartitionDiffer differ = PartitionDiffer.build(this, null);
+            PartitionDiffer differ = PartitionDiffer.build(this, Pair.create(null, null));
             rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
                     refBaseTablePartitionMap.get(partitionTable), mvRangePartitionMap, differ);
         } catch (Exception e) {

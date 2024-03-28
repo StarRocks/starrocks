@@ -941,8 +941,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private void syncPartitionsForExpr(TaskRunContext context) {
         Pair<String, String> partitionRange = Pair.create(
-                context.getProperties().get(TaskRun.PARTITION_START),
-                context.getProperties().get(TaskRun.PARTITION_END));
+                context == null ? null : context.getProperties().get(TaskRun.PARTITION_START),
+                context == null ? null : context.getProperties().get(TaskRun.PARTITION_END));
         DiffResult result = computePartitionRangeDiff(db, materializedView, partitionRange);
         if (result == null) {
             return;
