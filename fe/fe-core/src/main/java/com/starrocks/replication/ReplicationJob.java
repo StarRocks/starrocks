@@ -51,8 +51,8 @@ import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TIndexReplicationInfo;
 import com.starrocks.thrift.TPartitionReplicationInfo;
-import com.starrocks.thrift.TRemoteSnapshotInfo;
 import com.starrocks.thrift.TReplicaReplicationInfo;
+import com.starrocks.thrift.TSnapshotInfo;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableType;
@@ -69,6 +69,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ReplicationJob implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(ReplicationJob.class);
@@ -204,55 +205,99 @@ public class ReplicationJob implements GsonPostProcessable {
         @SerializedName(value = "backendId")
         private final long backendId;
 
-        @SerializedName(value = "backendHost")
-        private final String backendHost;
-        @SerializedName(value = "backendBePort")
-        private final int backendBePort;
-        @SerializedName(value = "backendHttpPort")
-        private final int backendHttpPort;
+        @SerializedName(value = "srcBackendInfos")
+        private final List<BackendInfo> srcBackendInfos;
 
-        @SerializedName(value = "srcSnapshotPath")
-        private volatile String srcSnapshotPath;
+        @SerializedName(value = "srcSnapshotInfo")
+        private volatile SnapshotInfo srcSnapshotInfo;
 
-        @SerializedName(value = "srcIncrementalSnapshot")
-        private volatile boolean srcIncrementalSnapshot;
-
-        public ReplicaInfo(long backendId, Backend srcBackend) {
+        public ReplicaInfo(long backendId, List<BackendInfo> srcBackendInfos) {
             this.backendId = backendId;
-            this.backendHost = srcBackend.getHost();
-            this.backendBePort = srcBackend.getBePort();
-            this.backendHttpPort = srcBackend.getHttpPort();
-        }
-
-        public ReplicaInfo(long backendId, String backendHost, int backendBePort, int backendHttpPort) {
-            this.backendId = backendId;
-            this.backendHost = backendHost;
-            this.backendBePort = backendBePort;
-            this.backendHttpPort = backendHttpPort;
+            this.srcBackendInfos = srcBackendInfos;
         }
 
         public long getBackendId() {
             return backendId;
         }
 
-        public TBackend getSrcBackend() {
-            return new TBackend(backendHost, backendBePort, backendHttpPort);
+        public List<BackendInfo> getSrcBackendInfos() {
+            return srcBackendInfos;
         }
 
-        public String getSrcSnapshotPath() {
-            return srcSnapshotPath;
+        public List<TBackend> getSrcBackends() {
+            return srcBackendInfos.stream().map(BackendInfo::getBackend).collect(Collectors.toList());
         }
 
-        public void setSrcSnapshotPath(String srcSnapshotPath) {
-            this.srcSnapshotPath = srcSnapshotPath;
+        public SnapshotInfo getSrcSnapshotInfo() {
+            return srcSnapshotInfo;
         }
 
-        public boolean getSrcIncrementalSnapshot() {
-            return srcIncrementalSnapshot;
+        public void setSrcSnapshotInfo(SnapshotInfo srcSnapshotInfo) {
+            this.srcSnapshotInfo = srcSnapshotInfo;
+        }
+    }
+
+    private static class BackendInfo {
+        @SerializedName(value = "host")
+        private final String host;
+
+        @SerializedName(value = "bePort")
+        private final int bePort;
+
+        @SerializedName(value = "httpPort")
+        private final int httpPort;
+
+        public BackendInfo(String host, int bePort, int httpPort) {
+            this.host = host;
+            this.bePort = bePort;
+            this.httpPort = httpPort;
         }
 
-        public void setSrcIncrementalSnapshot(boolean srcIncrementalSnapshot) {
-            this.srcIncrementalSnapshot = srcIncrementalSnapshot;
+        public BackendInfo(Backend backend) {
+            this.host = backend.getHost();
+            this.bePort = backend.getBePort();
+            this.httpPort = backend.getHttpPort();
+        }
+
+        public BackendInfo(TBackend backend) {
+            this.host = backend.host;
+            this.bePort = backend.be_port;
+            this.httpPort = backend.http_port;
+        }
+
+        public TBackend getBackend() {
+            return new TBackend(host, bePort, httpPort);
+        }
+    }
+
+    private static class SnapshotInfo {
+        @SerializedName(value = "backendInfo")
+        private final BackendInfo backendInfo;
+
+        @SerializedName(value = "snapshotPath")
+        private final String snapshotPath;
+
+        @SerializedName(value = "incrementalSnapshot")
+        private final boolean incrementalSnapshot;
+
+        public SnapshotInfo(BackendInfo backendInfo, String snapshotPath, boolean incrementalSnapshot) {
+            this.backendInfo = backendInfo;
+            this.snapshotPath = snapshotPath;
+            this.incrementalSnapshot = incrementalSnapshot;
+        }
+
+        public SnapshotInfo(TSnapshotInfo snapshotInfo) {
+            this.backendInfo = new BackendInfo(snapshotInfo.backend);
+            this.snapshotPath = snapshotInfo.snapshot_path;
+            this.incrementalSnapshot = snapshotInfo.incremental_snapshot;
+        }
+
+        public TSnapshotInfo getSnapshotInfo() {
+            TSnapshotInfo tSnapshotInfo = new TSnapshotInfo();
+            tSnapshotInfo.setBackend(backendInfo.getBackend());
+            tSnapshotInfo.setSnapshot_path(snapshotPath);
+            tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
+            return tSnapshotInfo;
         }
     }
 
@@ -419,7 +464,7 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         if (request.getTask_status().getStatus_code() == TStatusCode.OK) {
-            if (request.isSetSnapshot_path() && request.isSetIncremental_snapshot()) {
+            if (request.isSetSnapshot_info()) {
                 PartitionInfo partitionInfo = partitionInfos.get(task.getPartitionId());
                 Preconditions.checkNotNull(partitionInfo);
                 IndexInfo indexInfo = partitionInfo.getIndexInfos().get(task.getIndexId());
@@ -429,12 +474,11 @@ public class ReplicationJob implements GsonPostProcessable {
                 ReplicaInfo replicaInfo = tabletInfo.getReplicaInfos().get(task.getBackendId());
                 Preconditions.checkNotNull(replicaInfo);
 
-                replicaInfo.setSrcSnapshotPath(request.snapshot_path);
-                replicaInfo.setSrcIncrementalSnapshot(request.incremental_snapshot);
+                replicaInfo.setSrcSnapshotInfo(new SnapshotInfo(request.snapshot_info));
                 task.setFinished(true);
             } else {
                 task.setFailed(true);
-                task.setErrorMsg("No snapshot path or incremental snapshot");
+                task.setErrorMsg("No snapshot info");
                 LOG.warn("Remote snapshot task failed, task: {}, error: {}", task, task.getErrorMsg());
             }
         } else {
@@ -550,14 +594,20 @@ public class ReplicationJob implements GsonPostProcessable {
         Map<Long, ReplicaInfo> replicaInfos = Maps.newHashMap();
         List<Replica> replicas = tablet.getAllReplicas();
         List<TReplicaReplicationInfo> tReplicaInfos = tTabletInfo.replica_replication_infos;
-        Preconditions.checkState(replicas.size() <= tReplicaInfos.size(),
-                "Source replica number must not less than target replica number");
+
+        final int splitSize = tReplicaInfos.size() / replicas.size();
+        final int remainSize = tReplicaInfos.size() % replicas.size();
+        int offset = 0;
         for (int i = 0; i < replicas.size(); ++i) {
             Replica replica = replicas.get(i);
-            TReplicaReplicationInfo tReplicaInfo = tReplicaInfos.get(i);
-            ReplicaInfo replicaInfo = new ReplicaInfo(replica.getBackendId(),
-                    tReplicaInfo.src_backend.host, tReplicaInfo.src_backend.be_port,
-                    tReplicaInfo.src_backend.http_port);
+            int size = i < remainSize ? splitSize + 1 : splitSize;
+            List<BackendInfo> backendInfos = Lists.newArrayList();
+            for (int j = 0; j < size; ++j) {
+                TReplicaReplicationInfo tReplicaInfo = tReplicaInfos.get(offset);
+                backendInfos.add(new BackendInfo(tReplicaInfo.src_backend));
+                ++offset;
+            }
+            ReplicaInfo replicaInfo = new ReplicaInfo(replica.getBackendId(), backendInfos);
             replicaInfos.put(replicaInfo.getBackendId(), replicaInfo);
         }
         return new TabletInfo(tTabletInfo.tablet_id, tTabletInfo.src_tablet_id, replicaInfos);
@@ -623,19 +673,24 @@ public class ReplicationJob implements GsonPostProcessable {
         Map<Long, ReplicaInfo> replicaInfos = Maps.newHashMap();
         List<Replica> replicas = tablet.getAllReplicas();
         List<Replica> srcReplicas = srcTablet.getAllReplicas();
-        Preconditions.checkState(replicas.size() <= srcReplicas.size());
+
+        final int splitSize = srcReplicas.size() / replicas.size();
+        final int remainSize = srcReplicas.size() % replicas.size();
+        int offset = 0;
         for (int i = 0; i < replicas.size(); ++i) {
             Replica replica = replicas.get(i);
-            Replica srcReplica = srcReplicas.get(i); // TODO: replicas.size() > srcReplicas.size()
-            ReplicaInfo replicaInfo = initReplicaInfo(replica, srcReplica, srcSystemInfoService);
+            int size = i < remainSize ? splitSize + 1 : splitSize;
+            List<BackendInfo> backendInfos = Lists.newArrayList();
+            for (int j = 0; j < size; ++j) {
+                Replica srcReplica = srcReplicas.get(offset);
+                Backend srcBackend = srcSystemInfoService.getBackend(srcReplica.getBackendId());
+                backendInfos.add(new BackendInfo(srcBackend));
+                ++offset;
+            }
+            ReplicaInfo replicaInfo = new ReplicaInfo(replica.getBackendId(), backendInfos);
             replicaInfos.put(replicaInfo.getBackendId(), replicaInfo);
         }
         return new TabletInfo(tablet.getId(), srcTablet.getId(), replicaInfos);
-    }
-
-    private ReplicaInfo initReplicaInfo(Replica replica, Replica srcReplica, SystemInfoService srcSystemInfoService) {
-        Backend srcBackend = srcSystemInfoService.getBackend(srcReplica.getBackendId());
-        return new ReplicaInfo(replica.getBackendId(), srcBackend);
     }
 
     private TTabletType getTabletType(Table.TableType tableType) {
@@ -717,15 +772,17 @@ public class ReplicationJob implements GsonPostProcessable {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
                     for (ReplicaInfo replicaInfo : tabletInfo.getReplicaInfos().values()) {
-                        RemoteSnapshotTask task = new RemoteSnapshotTask(replicaInfo.getBackendId(), databaseId,
-                                tableId, partitionInfo.getPartitionId(), indexInfo.getIndexId(),
-                                tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
-                                indexInfo.getSchemaHash(), partitionInfo.getVersion(),
-                                srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
-                                indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
-                                Lists.newArrayList(replicaInfo.getSrcBackend()),
-                                Config.replication_transaction_timeout_sec);
-                        runningTasks.put(task, task);
+                        if (!replicaInfo.getSrcBackendInfos().isEmpty()) {
+                            RemoteSnapshotTask task = new RemoteSnapshotTask(replicaInfo.getBackendId(), databaseId,
+                                    tableId, partitionInfo.getPartitionId(), indexInfo.getIndexId(),
+                                    tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
+                                    indexInfo.getSchemaHash(), partitionInfo.getVersion(),
+                                    srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
+                                    indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
+                                    replicaInfo.getSrcBackends(),
+                                    Config.replication_transaction_timeout_sec);
+                            runningTasks.put(task, task);
+                        }
                     }
                 }
             }
@@ -741,18 +798,29 @@ public class ReplicationJob implements GsonPostProcessable {
         for (PartitionInfo partitionInfo : partitionInfos.values()) {
             for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
                 for (TabletInfo tabletInfo : indexInfo.getTabletInfos().values()) {
-                    for (ReplicaInfo replicaInfo : tabletInfo.getReplicaInfos().values()) {
-                        TRemoteSnapshotInfo srcSnapshotInfo = new TRemoteSnapshotInfo();
-                        srcSnapshotInfo.setBackend(replicaInfo.getSrcBackend());
-                        srcSnapshotInfo.setSnapshot_path(replicaInfo.getSrcSnapshotPath());
-                        srcSnapshotInfo.setIncremental_snapshot(replicaInfo.getSrcIncrementalSnapshot());
+                    List<ReplicaInfo> replicaInfos = Lists.newArrayList(tabletInfo.getReplicaInfos().values());
+                    List<TSnapshotInfo> srcSnapshotInfos = Lists.newArrayList();
+                    for (ReplicaInfo replicaInfo : replicaInfos) {
+                        if (replicaInfo.getSrcSnapshotInfo() != null) {
+                            srcSnapshotInfos.add(replicaInfo.getSrcSnapshotInfo().getSnapshotInfo());
+                        }
+                    }
+                    if (srcSnapshotInfos.isEmpty()) {
+                        throw new RuntimeException("Source snapshots is empty");
+                    }
+                    for (int i = 0; i < replicaInfos.size(); ++i) {
+                        ReplicaInfo replicaInfo = replicaInfos.get(i);
+                        List<TSnapshotInfo> flippedSrcSnapshotInfos = Lists.newArrayList();
+                        int offset = i % srcSnapshotInfos.size();
+                        flippedSrcSnapshotInfos.addAll(srcSnapshotInfos.subList(offset, srcSnapshotInfos.size()));
+                        flippedSrcSnapshotInfos.addAll(srcSnapshotInfos.subList(0, offset));
                         ReplicateSnapshotTask task = new ReplicateSnapshotTask(replicaInfo.getBackendId(), databaseId,
                                 tableId, partitionInfo.getPartitionId(), indexInfo.getIndexId(),
                                 tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
                                 indexInfo.getSchemaHash(), partitionInfo.getVersion(),
                                 srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                 indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
-                                Lists.newArrayList(srcSnapshotInfo));
+                                flippedSrcSnapshotInfos);
                         runningTasks.put(task, task);
                     }
                 }
