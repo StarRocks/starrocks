@@ -152,13 +152,16 @@ public class AlterJobMgr {
     private final SchemaChangeHandler schemaChangeHandler;
     private final MaterializedViewHandler materializedViewHandler;
     private final SystemHandler clusterHandler;
-    private CompactionHandler compactionHandler;
+    private final CompactionHandler compactionHandler;
 
-    public AlterJobMgr() {
-        schemaChangeHandler = new SchemaChangeHandler();
-        materializedViewHandler = new MaterializedViewHandler();
-        clusterHandler = new SystemHandler();
-        compactionHandler = new CompactionHandler();
+    public AlterJobMgr(SchemaChangeHandler schemaChangeHandler,
+                       MaterializedViewHandler materializedViewHandler,
+                       SystemHandler systemHandler,
+                       CompactionHandler compactionHandler) {
+        this.schemaChangeHandler = schemaChangeHandler;
+        this.materializedViewHandler = materializedViewHandler;
+        this.clusterHandler = systemHandler;
+        this.compactionHandler = compactionHandler;
     }
 
     public void start() {

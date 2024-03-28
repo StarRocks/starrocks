@@ -21,8 +21,8 @@ import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -110,7 +110,7 @@ public class RepoExecutor {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Analyzer.analyze(parsedStmt, context);
             AuditLog.getInternalAudit().info("RepoExecutor execute DDL | SQL {}", sql);
-            DDLStmtExecutor.execute(parsedStmt, context);
+            GlobalStateMgr.getCurrentState().getDdlStmtExecutor().execute(parsedStmt, context);
         } catch (Exception e) {
             LOG.error("execute DDL error: {}", sql, e);
             throw new RuntimeException(e);
