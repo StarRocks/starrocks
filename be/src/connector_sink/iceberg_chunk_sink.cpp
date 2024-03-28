@@ -68,6 +68,7 @@ StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
     if (writer->get_written_bytes() >= _max_file_size) {
         auto f = writer->commit();
         futures.commit_file_futures.push_back(std::move(f));
+        _partition_writers.erase(partition);
         auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
         ASSIGN_OR_RETURN(writer, _file_writer_factory->create(path));
         RETURN_IF_ERROR(writer->init());
