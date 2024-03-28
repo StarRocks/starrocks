@@ -4493,6 +4493,22 @@ public class LocalMetastore implements ConnectorMetadata {
         GlobalStateMgr.getCurrentState().getEditLog().logModifyPrimaryIndexCacheExpireSec(info);
     }
 
+    public void modifyTableFastSchemaEvolution(Database db, OlapTable table, Map<String, String> properties) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildUseFastSchemaEvolution();
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                properties);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyFastSchemaEvolution(info);
+    }
+
     public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
                                 TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
@@ -4507,6 +4523,8 @@ public class LocalMetastore implements ConnectorMetadata {
             modifyTableAutomaticBucketSize(db, table, properties);
         } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
             modifyTablePrimaryIndexCacheExpireSec(db, table, properties);
+        } else if (metaType == TTabletMetaType.FAST_SCHEMA_EVOLUTION) {
+            modifyTableFastSchemaEvolution(db, table, properties);
         }
     }
 
@@ -4627,6 +4645,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     if (!olapTable.isBinlogEnabled()) {
                         olapTable.clearBinlogAvailableVersion();
                     }
+                } else if (opCode == OperationType.OP_MODIFY_FAST_SCHEMA_EVOLUTION) {
+                    olapTable.setUseFastSchemaEvolution(tableProperty.getUseFastSchemaEvolution());
                 }
             }
         } catch (Exception ex) {
