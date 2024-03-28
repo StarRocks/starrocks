@@ -841,6 +841,7 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         }
         result_data[i] = result_value;
         target_data += dim_size;
+        base_data += dim_size;
     }
     return result;
 }
