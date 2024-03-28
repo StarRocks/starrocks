@@ -120,7 +120,6 @@ select * from ngram_index_char where username like '_hiaa%';
 -- name: test_bloom_filter
 create database ngram_bloom_filter_db_4;
 use ngram_bloom_filter_db_4;
--- 创建一个包含bloom filter的表
 CREATE TABLE `common_duplicate` (
   `c0` int(11) NOT NULL COMMENT "",
   `c1` int(11) NOT NULL COMMENT "",
