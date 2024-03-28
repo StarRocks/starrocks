@@ -117,7 +117,7 @@ public:
         int res = 0;
 
         // compile code to so
-        // [[maybe_unused]] res =
+        // res =
         //         system("g++ -shared ./be/test/runtime/test_data/user_function_cache/lib/my_add.cc -o "
         //                "./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
 
@@ -125,9 +125,13 @@ public:
 
         res = system("touch ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
 
+        ASSERT_EQ(res, 0) << res;
+
         jar_md5sum = compute_md5("./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
 
         res = system("touch ./be/test/runtime/test_data/user_function_cache/lib/my_udf.wasm");
+
+        ASSERT_EQ(res, 0) << res;
 
         wasm_md5sum = compute_md5("./be/test/runtime/test_data/user_function_cache/lib/my_udf.wasm");
     }
@@ -136,10 +140,15 @@ public:
         s_server->join();
         delete s_server;
         int res = 0;
-        // [[maybe_unused]] res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
+        // res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
+        ASSERT_EQ(res, 0) << res;
+
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.wasm");
+        ASSERT_EQ(res, 0) << res;
+
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
+        ASSERT_EQ(res, 0) << res;
     }
     void SetUp() override { k_is_downloaded = false; }
 };
@@ -193,7 +202,9 @@ TEST_F(UserFunctionCacheTest, load_wasm) {
     std::string lib_dir = "./be/test/runtime/test_data/user_function_cache/download";
     fs::remove_all(lib_dir);
     res = system("mkdir -p ./be/test/runtime/test_data/user_function_cache/download/0/");
+    ASSERT_EQ(res, 0) << res;
     res = system("touch ./be/test/runtime/test_data/user_function_cache/download/0/test.wasm");
+    ASSERT_EQ(res, 0) << res;
     auto st = cache.init(lib_dir);
     ASSERT_TRUE(st.ok()) << st;
 }
