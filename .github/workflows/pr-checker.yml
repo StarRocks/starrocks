@@ -264,6 +264,24 @@ jobs:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: squash
 
+  feature-label-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: add feature label
+        id: add
+        if: startsWith(github.event.pull_request.title, '[Feature]')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 'feature'
+          github_token: ${{ secrets.PAT }}
+
+      - name: remove feature label
+        if: always() && steps.add.outcome == 'skipped'
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 'feature'
+          github_token: ${{ secrets.PAT }}
+
   changelist-check:
     runs-on: [self-hosted, normal]
     if: >
@@ -272,7 +290,7 @@ jobs:
       !contains(github.event.pull_request.title, 'backport')
     env:
       PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.PAT }}
     steps:
       - name: CHECK CHANGELIST
         run: |
