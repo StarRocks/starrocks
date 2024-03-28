@@ -43,15 +43,22 @@ public:
     ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id);
     ~ReplicateChannel();
 
-    Status sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
-                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
-
     Status async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
                          std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                          std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 
-    void cancel();
+    void cancel(const Status& status);
+
+    void set_status(const Status& status) {
+        if (status.ok()) return;
+        std::lock_guard l(_status_lock);
+        if (_st.ok()) _st = status;
+    }
+
+    Status status() const {
+        std::lock_guard l(_status_lock);
+        return _st;
+    }
 
     int64_t node_id() { return _node_id; }
 
@@ -59,7 +66,8 @@ public:
 
 private:
     Status _init();
-    void _send_request(SegmentPB* segment, butil::IOBuf& data, bool eos);
+    Status _start_new_rpc_call();
+    Status _send_request(SegmentPB* segment, butil::IOBuf& data, bool eos);
     Status _wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                           std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 
@@ -73,6 +81,7 @@ private:
     MemTracker* _mem_tracker = nullptr;
 
     bool _inited = false;
+    mutable SpinLock _status_lock;
     Status _st = Status::OK();
 };
 

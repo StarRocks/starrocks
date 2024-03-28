@@ -173,6 +173,9 @@ private:
     void _commit_tablets(const PTabletWriterAddChunkRequest& request,
                          const std::shared_ptr<LocalTabletsChannel::WriteContext>& context);
 
+    void _cancel_primary_tablets(const std::unordered_set<int64_t>& failed_primary_tablets,
+                                 const std::string& cancel_reason);
+
     void _abort_replica_tablets(const PTabletWriterAddChunkRequest& request, const std::string& abort_reason,
                                 const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
 
