@@ -65,6 +65,12 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 1. Configure the Kafka connector. In the **config** directory under the Kafka installation directory, create the configuration file **connect-StarRocks-sink.properties** for the Kafka connector, and configure the following parameters. For more parameters and descriptions, see [Parameters](#Parameters).
 
+    :::note
+
+    The Kafka connector is a sink connector.
+
+    :::
+
     ```yaml
     name=starrocks-kafka-connector
     connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
@@ -141,6 +147,12 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka connector through the REST API. For parameters and descriptions, see [Parameters](#Parameters).
 
+      :::note
+
+      The Kafka connector is a sink connector.
+
+      :::
+
       ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
         "name":"starrocks-kafka-connector",
@@ -161,9 +173,11 @@ CREATE TABLE test_tbl (id INT, city STRING);
       }'
       ```
 
-      > **NOTICE**
-      >
-      > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
+      :::info
+      
+      If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
+
+      :::
 
 #### Query StarRocks table
 
@@ -311,6 +325,12 @@ The data is successfully loaded when the above result is returned.
 
 If the Kafka data is in Debezium CDC format and the StarRocks table is a Primary Key table, you also need to configure the `transforms` parameter and other related parameters.
 
+  :::note
+
+  The Kafka connector is a sink connector.
+
+  :::
+
 ```Properties
 transforms=addfield,unwrap
 transforms.addfield.type=com.starrocks.connector.kafka.transforms.AddOpFieldForDebeziumRecord
@@ -321,5 +341,5 @@ transforms.unwrap.delete.handling.mode
 
 In the above configurations, we specify `transforms=addfield,unwrap`.
 
-- The addfield transform is used to add the __op field to each record of Debezium CDC-formatted data to support the StarRocks Primary Key table. If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform. The addfield transform class is com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord. It is included in the Kafka connector JAR file, so you do not need to manually install it.
+- If the StarRocks table is a Primary Key table, you need to specify the addfield transform to add an `op` field to each record of the Debezium CDC formatted data. If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform. The addfield transform class is `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`. It is included in the Kafka connector JAR file, so you do not need to manually install it.
 - The unwrap transform is provided by Debezium and is used to unwrap Debezium's complex data structure based on the operation type. For more information, see [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html).
