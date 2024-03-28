@@ -211,6 +211,22 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
     ASSERT_TRUE(status.ok());
 }
 
+TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(default_parquet_file, 4, 1024);
+    auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+    auto* param = _create_param(default_parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok());
+
+    ASSERT_TRUE(scanner->cpu_time_spent() > 0);
+}
+
 TEST_F(HdfsScannerTest, TestParquetGetNext) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
