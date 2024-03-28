@@ -540,6 +540,48 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new EmptyStmt();
     }
 
+    // ---------------------------------------- Warehouse Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateWarehouseStatement(StarRocksParser.CreateWarehouseStatementContext context) {
+        throw new SyntaxNotSupportException(context.start, context.stop);
+    }
+
+    @Override
+    public ParseNode visitSuspendWarehouseStatement(StarRocksParser.SuspendWarehouseStatementContext context) {
+        throw new SyntaxNotSupportException(context.start, context.stop);
+    }
+
+    @Override
+    public ParseNode visitResumeWarehouseStatement(StarRocksParser.ResumeWarehouseStatementContext context) {
+        throw new SyntaxNotSupportException(context.start, context.stop);
+    }
+
+    @Override
+    public ParseNode visitDropWarehouseStatement(StarRocksParser.DropWarehouseStatementContext context) {
+        throw new SyntaxNotSupportException(context.start, context.stop);
+    }
+
+    @Override
+    public ParseNode visitSetWarehouseStatement(StarRocksParser.SetWarehouseStatementContext context) {
+        throw new SyntaxNotSupportException(context.start, context.stop);
+    }
+
+    @Override
+    public ParseNode visitShowWarehousesStatement(StarRocksParser.ShowWarehousesStatementContext context) {
+        throw new SyntaxNotSupportException(context.start, context.stop);
+    }
+
+    @Override
+    public ParseNode visitShowClustersStatement(StarRocksParser.ShowClustersStatementContext context) {
+        throw new SyntaxNotSupportException(context.start, context.stop);
+    }
+
+    @Override
+    public ParseNode visitShowNodesStatement(StarRocksParser.ShowNodesStatementContext context) {
+        throw new SyntaxNotSupportException(context.start, context.stop);
+    }
+
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     @Override
@@ -1007,9 +1049,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 null,
                 context.orderByDesc() == null ? null :
-                    visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                        .stream().map(Identifier::getValue).collect(toList())
-                );
+                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                .stream().map(Identifier::getValue).collect(toList())
+        );
 
         List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
         return new CreateTableAsSelectStmt(
