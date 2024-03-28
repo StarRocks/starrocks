@@ -232,13 +232,18 @@ inline bool compare(Decimal val1, Decimal val2) {
         int128_t value1 = (static_cast<int128_t>(val1.value.getHighBits()) << 64) + val1.value.getLowBits();
         int128_t value2 = (static_cast<int128_t>(val2.value.getHighBits()) << 64) + val2.value.getLowBits();
         int32_t delta = val2.scale - val1.scale;
-        int128_t res;
-        bool overflow = starrocks::mul_overflow(value1, starrocks::exp10_int128(delta), &res);
+        int128_t scaled_value1;
+        bool overflow;
+        overflow = starrocks::mul_overflow(value1, starrocks::exp10_int128(delta), &scaled_value1);
         if (overflow) {
             return value1;
-        } else {
-            return res - value2;
         }
+        int128_t diff;
+        overflow = starrocks::sub_overflow(scaled_value1, value2, &diff);
+        if (overflow) {
+            return value1;
+        }
+        return diff;
     };
 
     if (val1.scale < val2.scale) {
