@@ -419,6 +419,32 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     return Status::OK();
 }
 
+Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes) {
+    // we can split task if we enable split tasks feature and have >= 2 stripes.
+    // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
+    bool enable_split_tasks =
+            (_scanner_ctx.enable_split_tasks && stripes.size() >= 2) && (_scanner_ctx.split_context == nullptr);
+    if (!enable_split_tasks) return Status::OK();
+
+    auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
+    for (const auto& info : stripes) {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->footer = footer;
+        ctx->split_start = info.offset;
+        ctx->split_end = info.offset + info.length;
+        _scanner_ctx.split_tasks.emplace_back(std::move(ctx));
+    }
+    _scanner_ctx.merge_split_tasks();
+    // if only one split task, clear it, no need to do split work.
+    if (_scanner_ctx.split_tasks.size() <= 1) {
+        _scanner_ctx.split_tasks.clear();
+    }
+    VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
+                  << ", split_tasks.size = " << _scanner_ctx.split_tasks.size();
+
+    return Status::OK();
+}
+
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // create wrapped input stream.
     RETURN_IF_ERROR(open_random_access_file());
@@ -455,29 +481,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // select stripes to read and resolve columns aganist this orc file.
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
-
-    // we can split task if we enable split tasks feature and have >= 2 stripes.
-    // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
-    bool enable_split_tasks =
-            (_scanner_ctx.enable_split_tasks && stripes.size() >= 2) && (_scanner_ctx.split_context == nullptr);
-    if (enable_split_tasks) {
-        auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
-        for (const auto& info : stripes) {
-            auto ctx = std::make_unique<SplitContext>();
-            ctx->footer = footer;
-            ctx->split_start = info.offset;
-            ctx->split_end = info.offset + info.length;
-            _scanner_ctx.split_tasks.emplace_back(std::move(ctx));
-        }
-        _scanner_ctx.merge_split_tasks();
-        VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                      << ", split_tasks.size = " << _scanner_ctx.split_tasks.size();
-        if (_scanner_ctx.split_tasks.size() <= 1) {
-            _scanner_ctx.split_tasks.clear();
-        } else {
-            _should_skip_file = true;
-            return Status::OK();
-        }
+    RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
+    if (_scanner_ctx.split_tasks.size() > 0) {
+        _should_skip_file = true;
+        return Status::OK();
     }
 
     RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
