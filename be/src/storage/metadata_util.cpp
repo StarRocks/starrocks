@@ -70,7 +70,7 @@ static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggr
 }
 
 static Status validate_tablet_schema(const TabletSchemaPB& schema_pb) {
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(BE_TEST)
     std::unordered_set<std::string> column_names;
     std::unordered_set<int64_t> column_ids;
     for (const auto& col : schema_pb.column()) {
