@@ -156,6 +156,7 @@ public class RollupJobV2Test extends DDLTestBase {
         Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
         assertEquals(1, alterJobsV2.size());
         RollupJobV2 rollupJob = (RollupJobV2) alterJobsV2.values().stream().findAny().get();
+        materializedViewHandler.clearJobs(); // Disable the execution of job in background thread
 
         // runPendingJob
         materializedViewHandler.runAfterCatalogReady();
