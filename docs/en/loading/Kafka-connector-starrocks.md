@@ -341,5 +341,5 @@ transforms.unwrap.delete.handling.mode
 
 In the above configurations, we specify `transforms=addfield,unwrap`.
 
-- If the StarRocks table is a Primary Key table, you need to specify the addfield transform to add an `op` field to each record of the Debezium CDC formatted data. If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform. The addfield transform class is com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord. It is included in the Kafka connector JAR file, so you do not need to manually install it.
+- If the StarRocks table is a Primary Key table, you need to specify the addfield transform to add an `op` field to each record of the Debezium CDC formatted data. If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform. The addfield transform class is `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`. It is included in the Kafka connector JAR file, so you do not need to manually install it.
 - The unwrap transform is provided by Debezium and is used to unwrap Debezium's complex data structure based on the operation type. For more information, see [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html).

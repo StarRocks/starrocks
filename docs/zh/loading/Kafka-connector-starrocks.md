@@ -237,5 +237,5 @@ transforms.unwrap.delete.handling.mode=rewrite
 
 在上述配置中，我们指定 `transforms=addfield,unwrap`。
 
-- 如果 StarRocks 表是主键表，则需要指定 addfield transform，用于向 Debezium CDC 格式数据的每个记录添加一个 `op` 字段。如果 StarRocks 表不是主键表，则无需指定 addfield transform。addfield transform 的类是 com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
+- 如果 StarRocks 表是主键表，则需要指定 addfield transform，用于向 Debezium CDC 格式数据的每个记录添加一个 `op` 字段。如果 StarRocks 表不是主键表，则无需指定 addfield transform。addfield transform 的类是 `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
 - unwrap transform 是指由 Debezium 提供的 unwrap，可以根据操作类型 unwrap Debezium 复杂的数据结构。更多信息，参见 [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html)。
