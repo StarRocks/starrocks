@@ -141,6 +141,14 @@ public class MetaFunctions {
     }
 
     /**
+     * Return the logical plan of a materialized-view with cache
+     */
+    @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvPlan(ConstantOperator mvName) {
+        return inspectMvPlan(mvName, ConstantOperator.TRUE);
+    }
+
+    /**
      * Return verbose metadata of a materialized-view
      */
     @ConstantFunction(name = "inspect_mv_plan", argTypes = {VARCHAR, BOOLEAN}, returnType = VARCHAR, isMetaFunction = true)
@@ -165,7 +173,7 @@ public class MetaFunctions {
                     String debugString = plan.debugString();
                     plans += String.format("plan %d: \n%s\n", i, debugString);
                 } else {
-                    plans += String.format(" plan %d: null\n", i);
+                    plans += String.format("plan %d: null\n", i);
                 }
             }
             return ConstantOperator.createVarchar(plans);
