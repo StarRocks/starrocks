@@ -34,6 +34,7 @@ import com.starrocks.connector.hive.Partition;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
@@ -129,6 +130,24 @@ public class MetaFunctions {
             locker.lockDatabase(dbTable.getLeft(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
+            return ConstantOperator.createVarchar(meta);
+        } finally {
+            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+        }
+    }
+
+    /**
+     * Return verbose metadata of a table
+     */
+    @ConstantFunction(name = "inspect_table_meta", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectTableMeta(ConstantOperator mvName) {
+        TableName tableName = TableName.fromString(mvName.getVarchar());
+        Pair<Database, Table> dbTable = inspectTable(tableName);
+        Table table = dbTable.getRight();
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
+            String meta = GsonUtils.GSON.toJson(table);
             return ConstantOperator.createVarchar(meta);
         } finally {
             locker.unLockDatabase(dbTable.getLeft(), LockType.READ);

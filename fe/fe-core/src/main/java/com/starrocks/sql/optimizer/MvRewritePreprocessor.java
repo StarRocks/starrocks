@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -420,30 +421,66 @@ public class MvRewritePreprocessor {
         }
     }
 
-    private static Set<String> splitQueryMVNamesConfig(String str) {
+    private static Set<TableName> splitQueryMVNamesConfig(String str) {
         if (Strings.isNullOrEmpty(str)) {
             return Sets.newHashSet();
         }
-        return Arrays.stream(str.split(",")).map(String::trim).collect(Collectors.toSet());
+        return Arrays.stream(str.split(",")).map(String::trim).map(TableName::fromString).collect(Collectors.toSet());
     }
 
     private Set<MaterializedView> getRelatedMVsByConfig(Set<MaterializedView> relatedMVs) {
         // filter mvs by including/excluding settings
-        String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
-        String queryIncludingMVNames = connectContext.getSessionVariable().getQueryIncludingMVNames();
-        if (Strings.isNullOrEmpty(queryExcludingMVNames) && Strings.isNullOrEmpty(queryIncludingMVNames)) {
+        String queryExcludingMVNamesConf = connectContext.getSessionVariable().getQueryExcludingMVNames();
+        String queryIncludingMVNamesConf = connectContext.getSessionVariable().getQueryIncludingMVNames();
+        if (Strings.isNullOrEmpty(queryExcludingMVNamesConf) && Strings.isNullOrEmpty(queryIncludingMVNamesConf)) {
             return relatedMVs;
         }
         logMVPrepare(connectContext, "queryExcludingMVNames:{}, queryIncludingMVNames:{}",
-                Strings.nullToEmpty(queryExcludingMVNames), Strings.nullToEmpty(queryIncludingMVNames));
+                Strings.nullToEmpty(queryExcludingMVNamesConf), Strings.nullToEmpty(queryIncludingMVNamesConf));
 
-        final Set<String> queryExcludingMVNamesSet = splitQueryMVNamesConfig(queryExcludingMVNames);
-        final Set<String> queryIncludingMVNamesSet = splitQueryMVNamesConfig(queryIncludingMVNames);
+        final Set<TableName> queryIncludingMVTableNames = splitQueryMVNamesConfig(queryIncludingMVNamesConf);
+        final Set<TableName> queryExcludingMVTableNames = splitQueryMVNamesConfig(queryExcludingMVNamesConf);
+        final Map<String, Set<TableName>> queryIncludingMVNames = Maps.newHashMap();
+        final Map<String, Set<TableName>> queryExcludingMVNames = Maps.newHashMap();
+        queryIncludingMVTableNames.stream()
+                .forEach(t -> queryIncludingMVNames.computeIfAbsent(t.getTbl(), ignored -> Sets.newHashSet()).add(t));
+        queryExcludingMVTableNames.stream()
+                .forEach(t -> queryExcludingMVNames.computeIfAbsent(t.getTbl(), ignored -> Sets.newHashSet()).add(t));
 
-        return relatedMVs.stream()
-                .filter(mv -> queryIncludingMVNamesSet.isEmpty() || queryIncludingMVNamesSet.contains(mv.getName()))
-                .filter(mv -> queryExcludingMVNamesSet.isEmpty() || !queryExcludingMVNamesSet.contains(mv.getName()))
+        Set<MaterializedView> filteredMvs = relatedMVs.stream()
+                .filter(mv -> queryIncludingMVNames.isEmpty() || queryIncludingMVNames.containsKey(mv.getName()))
+                .filter(mv -> queryExcludingMVNames.isEmpty() || !queryExcludingMVNames.containsKey(mv.getName()))
                 .collect(Collectors.toSet());
+
+        // Add setting including mvs even if related mvs are not included
+        if (!queryIncludingMVNames.isEmpty()) {
+            Set<String> filteredMvNames = filteredMvs.stream().map(MaterializedView::getName).collect(Collectors.toSet());
+            Set<TableName> unIncludingMvTableNames = Sets.newHashSet();
+            queryIncludingMVNames.keySet().stream()
+                    .filter(s -> !filteredMvNames.contains(s))
+                    .forEach(s -> unIncludingMvTableNames.addAll(queryIncludingMVNames.get(s)));
+            for (TableName tableName : unIncludingMvTableNames) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+                if (db == null) {
+                    logMVPrepare(connectContext, "Ignore including mv table name:{}, because db is not found",
+                            tableName);
+                    continue;
+                }
+                Table table = db.getTable(tableName.getTbl());
+                if (table == null) {
+                    logMVPrepare(connectContext, "Ignore including mv table name:{}, because table is not found",
+                            tableName);
+                    continue;
+                }
+                if (table instanceof MaterializedView) {
+                    logMVPrepare(connectContext, "Ignore including mv table name:{}, because table is not mv",
+                            tableName);
+                    continue;
+                }
+                filteredMvs.add((MaterializedView) table);
+            }
+        }
+        return filteredMvs;
     }
 
     private List<MvWithPlanContext> getMVWithContext(MaterializedView mv) {

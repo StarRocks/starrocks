@@ -27,6 +27,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.isTraceEnabled;
+
 public class ConnectorTblMetaInfoMgr {
     private static final Logger LOG = LogManager.getLogger(ConnectorTblMetaInfoMgr.class);
 
@@ -42,9 +44,33 @@ public class ConnectorTblMetaInfoMgr {
 
     public ConnectorTableInfo getConnectorTableInfo(String catalog, String db, String tableIdentifier) {
         readLock();
+
+        if (isTraceEnabled()) {
+            LOG.info("Get connector table info, catalog:{}, db:{}, tableIdentifier:{}", catalog, db,
+                    tableIdentifier);
+        }
+
         try {
             Map<String, ConnectorTableInfo> tableInfoMap = connectorTableMetaInfos.get(catalog, db);
-            return tableInfoMap == null ? null : tableInfoMap.get(tableIdentifier);
+            if (tableInfoMap == null) {
+                if (isTraceEnabled()) {
+                    LOG.info("Get connector table info map failed because cannot find catalog/db, {}/{}",
+                            catalog, db);
+                }
+                return null;
+            }
+
+            ConnectorTableInfo connectorTableInfo = tableInfoMap.get(tableIdentifier);
+            if (isTraceEnabled()) {
+                if (connectorTableInfo == null) {
+                    LOG.info("Get connector table info map failed because cannot find tableIdentifier {}",
+                            tableIdentifier);
+                } else {
+                    LOG.info("Find the connector table info {} by catalog/db/tableIdentifier: {}/{}/{}",
+                            connectorTableInfo, catalog, db, tableIdentifier);
+                }
+            }
+            return connectorTableInfo;
         } finally {
             readUnlock();
         }
