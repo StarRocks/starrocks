@@ -66,11 +66,7 @@ Status SchemaLoadsScanner::start(RuntimeState* state) {
     }
 
     int32_t timeout = static_cast<int32_t>(std::min(state->query_options().query_timeout * 1000 / 2, INT_MAX));
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_loads(*(_param->ip), _param->port, load_params, &_result, timeout));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::get_loads(load_params, &_result, timeout));
 
     _cur_idx = 0;
     return Status::OK();
