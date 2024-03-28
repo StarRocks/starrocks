@@ -92,6 +92,9 @@ public:
     virtual bool is_running_all_io_tasks() const;
 
     virtual int64_t get_scan_table_id() const { return -1; }
+    virtual const RuntimeProfile::MergeIsomorphicProfileOptions* merge_chunk_source_profile_options() const {
+        return RuntimeProfile::MergeIsomorphicProfileOptions::NOT_REQUIRE_IDENTICAL;
+    }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
