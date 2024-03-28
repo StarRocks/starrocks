@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -27,6 +28,8 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -66,6 +69,16 @@ public final class LogicalProjectOperator extends LogicalOperator {
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         return new RowOutputInfo(columnRefMap, Maps.newHashMap());
+    }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new ValueProperty(ImmutableMap.of());
+        }
+        ValueProperty childValueProperty = inputs.get(0).getValueProperty();
+
+        return childValueProperty.projectValueProperty(columnRefMap);
     }
 
     @Override

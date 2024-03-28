@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -31,6 +32,8 @@ import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -147,6 +150,14 @@ public class LogicalTopNOperator extends LogicalOperator {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
         return new RowOutputInfo(entryList);
+    }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new ValueProperty(ImmutableMap.of());
+        }
+        return inputs.get(0).getValueProperty();
     }
 
     @Override

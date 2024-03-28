@@ -22,6 +22,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,6 +58,14 @@ public class LogicalFilterOperator extends LogicalOperator {
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         return projectInputRow(inputs.get(0).getRowOutputInfo());
+    }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        ValueProperty childValueProperty = inputs.get(0).getValueProperty();
+        ValuePropertyDeriver deriver = new ValuePropertyDeriver();
+        ValueProperty filterValueProperty = deriver.derive(predicate);
+        return childValueProperty.filterValueProperty(filterValueProperty);
     }
 
     @Override

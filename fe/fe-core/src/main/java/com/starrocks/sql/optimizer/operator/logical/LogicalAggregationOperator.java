@@ -35,6 +35,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -175,6 +177,31 @@ public class LogicalAggregationOperator extends LogicalOperator {
         aggregations.entrySet().forEach(entry -> columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(),
                 entry.getValue())));
         return new RowOutputInfo(columnOutputInfoList);
+    }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new ValueProperty(ImmutableMap.of());
+        }
+        ValueProperty childValueProperty = inputs.get(0).getValueProperty();
+
+        Map<ScalarOperator, ValueProperty.ValueWrapper> newValueMap = Maps.newHashMap();
+        for (ColumnRefOperator groupByKey : groupingKeys) {
+            if (childValueProperty.contains(groupByKey)) {
+                newValueMap.put(groupByKey, childValueProperty.getValueWrapper(groupByKey));
+            }
+        }
+
+        ColumnRefSet groupByCols = new ColumnRefSet(groupingKeys);
+        for (Map.Entry<ScalarOperator, ValueProperty.ValueWrapper> entry : childValueProperty.getValueMap().entrySet()) {
+            if (!newValueMap.containsKey(entry.getKey()) && groupByCols.containsAll(entry.getKey().getUsedColumns())) {
+                newValueMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        ValueProperty valueProperty = new ValueProperty(newValueMap);
+        // todo consider having filter
+        return valueProperty;
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {

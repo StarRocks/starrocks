@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -25,6 +26,8 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,6 +75,14 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
             entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
         }
         return new RowOutputInfo(entryList);
+    }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new ValueProperty(ImmutableMap.of());
+        }
+        return inputs.get(0).getValueProperty();
     }
 
     public int getCteId() {
