@@ -103,7 +103,7 @@ jobs:
     env:
       PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
       REPO: ${{ github.repository }}
-      TEAM: msg-reviewer
+      TEAM: feature-reviewer
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:

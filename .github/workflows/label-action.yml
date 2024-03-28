@@ -87,7 +87,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
-      TEAM: msg-reviewer
+      TEAM: feature-reviewer
       GH_TOKEN: ${{ secrets.PAT }}
 
     steps:
