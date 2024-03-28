@@ -48,11 +48,9 @@ Status FileChunkSink::init() {
 
 // requires that input chunk belongs to a single partition (see LocalKeyPartitionExchange)
 StatusOr<ConnectorChunkSink::Futures> FileChunkSink::add(ChunkPtr chunk) {
+    std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
-    std::string partition;
     if (partitioned) {
-        partition = DEFAULT_PARTITION;
-    } else {
         ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name_nullable(_partition_column_names,
                                                                             _partition_column_evaluators, chunk.get()));
     }
