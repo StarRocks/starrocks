@@ -133,4 +133,3 @@ StarRocks BE 中的内存分为以下几类。
 |  --- |  --- | --- |
 | query_mem_limit | 0 | 各 BE 节点上单个查询的内存限制，单位是 Byte。建议设置为 17179869184（16GB）以上。 |
 | load_mem_limit| 0| 各 BE 节点上单个导入任务的内存限制，单位是 Byte。如果设置为 `0`，StarRocks 采用 `exec_mem_limit` 作为内存限制。 |
->>>>>>> 27c574aa60 ([Doc] Remove excess doc links (#42813)):docs/zh/administration/management/resource_management/Memory_management.md
