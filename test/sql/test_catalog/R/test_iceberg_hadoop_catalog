@@ -31,6 +31,24 @@ select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
 drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
 -- result:
 -- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double (
+    c0 double
+);
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as as select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double;
+-- result:
+-- !result
+describe ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as;
+-- result:
+c0	DOUBLE	Yes	false	None	
+-- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as;
+-- result:
+-- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double;
+-- result:
+-- !result
 drop database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
 -- result:
 -- !result

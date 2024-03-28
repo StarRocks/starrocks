@@ -428,7 +428,7 @@ public class CTASAnalyzerTest {
     }
 
     @Test
-    public void testCtasWithNullale() throws Exception {
+    public void testCtasWithNullable() throws Exception {
         {
             String createSql = "create table emps (\n" +
                     "    empid int null,\n" +
