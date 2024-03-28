@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -73,18 +74,21 @@ public class Session {
 
     // get a deep copy of temporaryTables
     public Map<Long, Map<String, Long>> getAllTemporaryTables() {
-        Map<Long, Map<String, Long>> deepCopy = Maps.newHashMap();
-        temporaryTables.forEach((databaseId, table) -> {
-            deepCopy.put(databaseId,
-                    table.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
-        });
-        return deepCopy;
+        Map<Long, Map<String, Long>> tempCopy;
+        synchronized (temporaryTables) {
+            tempCopy = temporaryTables.entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey,
+                            e -> new ConcurrentHashMap<>(e.getValue())));
+        }
+        return tempCopy;
     }
 
     public List<String> listTemporaryTables(long databaseId) {
         List<String> tableNames = Lists.newArrayList();
         if (temporaryTables.containsKey(databaseId)) {
-            temporaryTables.get(databaseId).keySet().stream().forEach(tableNames::add);
+            synchronized (temporaryTables) {
+                tableNames.addAll(new ArrayList<>(temporaryTables.get(databaseId).keySet()));
+            }
         }
         return tableNames;
     }

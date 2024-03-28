@@ -18,6 +18,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -81,7 +83,8 @@ public class TemporaryTableMgr {
     // db -> session -> table
     public Map<Long, Map<UUID, Long>> getAllTemporaryTables(Set<Long> requiredDbIds) {
         Map<Long, Map<UUID, Long>> result = Maps.newHashMap();
-        sessionMap.values().forEach(session -> {
+        Collection<Session> sessionsCopy = new ArrayList<>(sessionMap.values());
+        sessionsCopy.forEach(session -> {
             UUID sessionId = session.getId();
             Map<Long, Map<String, Long>> allTables = session.getAllTemporaryTables();
             allTables.forEach((databaseId, tableMap) -> {
