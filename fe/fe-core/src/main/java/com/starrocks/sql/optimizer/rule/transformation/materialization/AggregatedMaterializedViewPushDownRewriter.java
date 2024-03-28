@@ -58,6 +58,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.genRollupProject;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.getRollupFunctionName;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getQuerySplitPredicate;
@@ -410,26 +411,23 @@ public class AggregatedMaterializedViewPushDownRewriter extends MaterializedView
                 Preconditions.checkState(realAggregate != null, "realAggregate is null");
                 realAggregate = replaceAggFuncArgument(remapping, origAggColRef, realAggregate, foundIndex);
 
+                ColumnRefOperator newAggColRef = queryColumnRefFactory.create(realAggregate,
+                        realAggregate.getType(), realAggregate.isNullable());
+                newAggregations.put(newAggColRef, realAggregate);
                 if (!newAggregate.isAggregate()) {
-                    ColumnRefOperator newAggColRef = queryColumnRefFactory.create(realAggregate,
-                            realAggregate.getType(), realAggregate.isNullable());
-                    newAggregations.put(newAggColRef, realAggregate);
-
                     CallOperator copyProject = (CallOperator) newAggregate.clone();
                     copyProject.setChild(foundIndex, newAggColRef);
+
                     ColumnRefOperator newProjColRef = queryColumnRefFactory
                             .create(copyProject, copyProject.getType(), copyProject.isNullable());
                     // keeps original output column, otherwise upstream operators may be affected
-                    aggProjection.put(origAggColRef, copyProject);
+                    aggProjection.put(newProjColRef, copyProject);
 
-                    // replace original projection to newProjColRef or no need to change?
+                    // replace original projection to newProjColRef.
                     aggColRefToAggMap.put(origAggColRef, copyProject);
                 } else {
-                    ColumnRefOperator newAggColRef = queryColumnRefFactory
-                            .create(origAggColRef, origAggColRef.getType(), origAggColRef.isNullable());
-                    newAggregations.put(newAggColRef, realAggregate);
                     // keeps original output column, otherwise upstream operators may be affected
-                    aggProjection.put(origAggColRef, newAggColRef);
+                    aggProjection.put(newAggColRef, genRollupProject(aggCall, newAggColRef, true));
 
                     // replace original projection to newAggColRef or no need to change?
                     aggColRefToAggMap.put(origAggColRef, newAggColRef);

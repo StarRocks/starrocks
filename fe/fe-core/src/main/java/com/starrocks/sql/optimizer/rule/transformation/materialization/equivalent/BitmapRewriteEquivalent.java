@@ -76,20 +76,20 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         return null;
     }
 
-    private CallOperator makeBitmapUnionCountFunc(ScalarOperator arg0, CallOperator aggFunc) {
-        return new CallOperator(BITMAP_UNION_COUNT, aggFunc.getType(),
+    private CallOperator makeBitmapUnionCountFunc(ScalarOperator arg0) {
+        return new CallOperator(BITMAP_UNION_COUNT, Type.BIGINT,
                 Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
     }
 
-    private CallOperator makeBitmapUnionFunc(ScalarOperator arg0, CallOperator aggFunc) {
-        return new CallOperator(BITMAP_UNION, aggFunc.getType(),
+    private CallOperator makeBitmapUnionFunc(ScalarOperator arg0) {
+        return new CallOperator(BITMAP_UNION, Type.BITMAP,
                 Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
     }
 
-    private CallOperator makeBitmapCountFunc(ScalarOperator arg0, CallOperator aggFunc) {
-        return new CallOperator(FunctionSet.BITMAP_COUNT, aggFunc.getType(),
+    private CallOperator makeBitmapCountFunc(ScalarOperator arg0) {
+        return new CallOperator(FunctionSet.BITMAP_COUNT, Type.BIGINT,
                 Arrays.asList(arg0), Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
     }
@@ -102,18 +102,17 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         if (isRollup) {
             if (rewriteContext != null && rewriteContext.getAggregatePushDownContext() != null) {
                 // final agg is used to rewrite query which will be remapping in the final stage.
-                CallOperator partialFn = makeBitmapUnionFunc(replace, aggFunc);
-                CallOperator finalFn = makeBitmapUnionCountFunc(replace, aggFunc);
+                CallOperator partialFn = makeBitmapUnionFunc(replace);
+                CallOperator finalFn = makeBitmapUnionCountFunc(replace);
                 rewriteContext.getAggregatePushDownContext().registerAggRewriteInfo(aggFunc, partialFn, finalFn);
                 return partialFn;
             } else {
-                return makeBitmapUnionCountFunc(replace, aggFunc);
+                return makeBitmapUnionCountFunc(replace);
             }
         } else {
-            return makeBitmapCountFunc(replace, aggFunc);
+            return makeBitmapCountFunc(replace);
         }
     }
-
 
     public static final ImmutableSet<String> SUPPORT_AGG_FUNC = ImmutableSet.of(
             MULTI_DISTINCT_COUNT,
@@ -179,13 +178,13 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
             }
             RewriteContext rewriteContext = shuttleContext.getRewriteContext();
             if (isRollup && rewriteContext != null) {
-                CallOperator partialFn = makeBitmapUnionFunc(replace, aggFunc);
-                CallOperator finalFn = makeBitmapUnionFunc(eqChild, aggFunc);
+                CallOperator partialFn = makeBitmapUnionFunc(replace);
+                CallOperator finalFn = makeBitmapUnionFunc(eqChild);
                 Preconditions.checkState(shuttleContext.getRewriteContext().getAggregatePushDownContext() != null);
                 rewriteContext.getAggregatePushDownContext().registerAggRewriteInfo(aggFunc, partialFn, finalFn);
                 return partialFn;
             } else {
-                return makeBitmapUnionFunc(replace, aggFunc);
+                return makeBitmapUnionFunc(replace);
             }
         }
         return null;

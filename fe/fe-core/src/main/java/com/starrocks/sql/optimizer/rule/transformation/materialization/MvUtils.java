@@ -1194,11 +1194,6 @@ public class MvUtils {
     }
 
     public static void deriveLogicalProperty(OptExpression root) {
-        // TODO: avoid duplicate derive
-        if (root.getLogicalProperty() != null) {
-            return;
-        }
-
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
         }
