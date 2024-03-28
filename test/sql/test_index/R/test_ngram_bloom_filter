@@ -60,8 +60,6 @@ drop database ngram_bloom_filter_db_1;
 -- !result
 
 
-
-
 -- name: test_ngram_bloom_filter_default
 create database ngram_bloom_filter_db_2;
 -- result:
@@ -107,8 +105,6 @@ ngram_bloom_filter_db_2.ngram_index_default_3		idx_name1		username						NGRAMBF
 -- !result
 
 
-
-
 -- name: test_ngram_bloom_filter_like
 CREATE TABLE ngram_index_like(
     timestamp DATETIME NOT NULL,
@@ -135,8 +131,6 @@ select * from ngram_index_like where username like '_hin%';
 -- result:
 2023-01-01 00:00:00	chinese	3
 -- !result
-
-
 
 
 -- name: test_ngram_bloom_filter_case_insensitive
@@ -227,4 +221,34 @@ insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"ch
 select * from ngram_index_char where username like '_hiaa%';
 -- result:
 -- !result
-
+-- name: test_bloom_filter
+create database ngram_bloom_filter_db_4;
+-- result:
+-- !result
+use ngram_bloom_filter_db_4;
+-- result:
+-- !result
+CREATE TABLE `common_duplicate` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NOT NULL COMMENT "",
+  `c2` varchar(500) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"bloom_filter_columns" = "c2",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into common_duplicate values (1,1,"abc"),(2,2,"abc"),(3,3,"abc"),(4,4,"abc"),(5,5,"abc");
+-- result:
+-- !result
+select * from common_duplicate where c2 like '%b%' order by c0;
+-- result:
+-- !result

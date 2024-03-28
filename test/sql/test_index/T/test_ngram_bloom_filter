@@ -116,3 +116,26 @@ show index from ngram_index_char;
 
 insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaa",4),('2023-01-03',"我爱chin",4),('2023-01-04',"toniggrht",4);
 select * from ngram_index_char where username like '_hiaa%';
+
+-- name: test_bloom_filter
+create database ngram_bloom_filter_db_4;
+use ngram_bloom_filter_db_4;
+-- 创建一个包含bloom filter的表
+CREATE TABLE `common_duplicate` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NOT NULL COMMENT "",
+  `c2` varchar(500) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"bloom_filter_columns" = "c2",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+insert into common_duplicate values (1,1,"abc"),(2,2,"abc"),(3,3,"abc"),(4,4,"abc"),(5,5,"abc");
+select * from common_duplicate where c2 like '%b%' order by c0;

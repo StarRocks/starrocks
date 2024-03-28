@@ -126,6 +126,9 @@ public:
     bool has_zone_map() const { return _zonemap_index != nullptr; }
     bool has_bitmap_index() const { return _bitmap_index != nullptr; }
     bool has_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
+    bool has_ngram_bloom_filter_index() const {
+        return _bloom_filter_index != nullptr && _segment->tablet_schema().has_index(_column_unique_id, NGRAMBF);
+    }
 
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
