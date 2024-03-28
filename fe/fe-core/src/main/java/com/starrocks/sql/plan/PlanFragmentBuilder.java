@@ -2142,7 +2142,7 @@ public class PlanFragmentBuilder {
             } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(
                     distribution.getDistributionSpec().getType())) {
                 exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
-                dataPartition = DataPartition.RANDOM;
+                dataPartition = DataPartition.RANDOM_SCALE;
             } else {
                 throw new StarRocksPlannerException("Unsupport exchange type : "
                         + distribution.getDistributionSpec().getType(), INTERNAL_ERROR);

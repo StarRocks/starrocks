@@ -98,6 +98,10 @@ public:
 
     void incr_sinker(RuntimeState* state);
 
+    bool connector_sink_need_scaling(int64_t buffer_size, int i) {
+        return (_bytes_enqueued.load() - _bytes_sent.load()) >= i * buffer_size * 1024 * 1024;
+    }
+
 private:
     using Mutex = bthread::Mutex;
 

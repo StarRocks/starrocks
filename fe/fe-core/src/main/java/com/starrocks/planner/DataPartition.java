@@ -61,13 +61,15 @@ public class DataPartition {
 
     public static final DataPartition RANDOM = new DataPartition(TPartitionType.RANDOM);
 
+    public static final DataPartition RANDOM_SCALE = new DataPartition(TPartitionType.RANDOM_SCALE);
+
     private final TPartitionType type;
 
     // for hash partition: exprs used to compute hash value
     private ImmutableList<Expr> partitionExprs;
 
     public DataPartition(TPartitionType type, List<Expr> exprs) {
-        if (type != TPartitionType.UNPARTITIONED && type != TPartitionType.RANDOM) {
+        if (type != TPartitionType.UNPARTITIONED && type != TPartitionType.RANDOM && type != TPartitionType.RANDOM_SCALE) {
             Preconditions.checkNotNull(exprs);
             Preconditions.checkState(!exprs.isEmpty());
             Preconditions.checkState(
@@ -88,7 +90,7 @@ public class DataPartition {
 
     public DataPartition(TPartitionType type) {
         Preconditions.checkState(
-                type == TPartitionType.UNPARTITIONED || type == TPartitionType.RANDOM);
+                type == TPartitionType.UNPARTITIONED || type == TPartitionType.RANDOM || type == TPartitionType.RANDOM_SCALE);
         this.type = type;
         this.partitionExprs = ImmutableList.of();
     }
