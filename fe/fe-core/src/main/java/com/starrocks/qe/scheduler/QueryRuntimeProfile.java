@@ -567,6 +567,9 @@ public class QueryRuntimeProfile {
         this.loadCounters.put(LoadEtlTask.DPP_ABNORMAL_ALL, String.valueOf(numRowsAbnormal));
         this.loadCounters.put(LoadJob.UNSELECTED_ROWS, String.valueOf(numRowsUnselected));
         this.loadCounters.put(LoadJob.LOADED_BYTES, String.valueOf(numLoadBytesTotal));
+        if (newLoadCounters.containsKey(LoadJob.PARTITION_LOADED_ROWS)) {
+            this.loadCounters.put(LoadJob.PARTITION_LOADED_ROWS, newLoadCounters.get(LoadJob.PARTITION_LOADED_ROWS));
+        }
     }
 
     private long getCounterLongValueOrDefault(Map<String, String> counters, String key, long defaultValue) {

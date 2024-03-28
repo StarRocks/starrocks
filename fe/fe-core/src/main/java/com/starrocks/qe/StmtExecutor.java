@@ -2192,7 +2192,7 @@ public class StmtExecutor {
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        new InsertTxnCommitAttachment(loadedRows),
+                        new InsertTxnCommitAttachment(loadedRows, coord.getLoadCounters()),
                         jobDeadLineMs - System.currentTimeMillis());
 
                 long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :

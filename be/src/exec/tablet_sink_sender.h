@@ -78,6 +78,14 @@ protected:
         }
     }
 
+    void _update_partition_rows(int64_t partition_id) {
+        if (auto iterator = _partition_to_num_rows.find(partition_id); iterator != _partition_to_num_rows.end()) {
+            (iterator->second)++;
+        } else {
+            _partition_to_num_rows[partition_id] = 1;
+        }
+    }
+
 protected:
     // unique load id
     PUniqueId _load_id;
@@ -100,6 +108,7 @@ protected:
     std::vector<uint32_t> _node_select_idx;
     std::vector<int64_t> _tablet_ids;
     std::set<int64_t> _failed_channels;
+    std::unordered_map<int64_t, int64_t> _partition_to_num_rows;
 };
 
 } // namespace starrocks::stream_load
