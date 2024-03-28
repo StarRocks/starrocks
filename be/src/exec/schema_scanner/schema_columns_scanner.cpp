@@ -102,7 +102,7 @@ Status SchemaColumnsScanner::start(RuntimeState* state) {
 std::string SchemaColumnsScanner::to_mysql_data_type_string(TColumnDesc& desc) {
     switch (desc.columnType) {
     case TPrimitiveType::BOOLEAN:
-        return "tinyint";
+        return "boolean";
     case TPrimitiveType::TINYINT:
         return "tinyint";
     case TPrimitiveType::SMALLINT:
@@ -152,7 +152,7 @@ std::string SchemaColumnsScanner::to_mysql_data_type_string(TColumnDesc& desc) {
 std::string SchemaColumnsScanner::type_to_string(TColumnDesc& desc) {
     switch (desc.columnType) {
     case TPrimitiveType::BOOLEAN:
-        return "tinyint(1)";
+        return "boolean";
     case TPrimitiveType::TINYINT:
         return "tinyint(4)";
     case TPrimitiveType::SMALLINT:
