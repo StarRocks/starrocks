@@ -219,6 +219,8 @@ public class LoadPlannerTest {
         Assert.assertEquals(4, locationsList.size());
         Assert.assertEquals(2, planner.getFragments().get(0).getPipelineDop());
         Assert.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
+
+        Assert.assertNotNull(planner.getExecPlan());
     }
 
     @Test

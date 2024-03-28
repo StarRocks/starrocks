@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPartitionType;
@@ -603,6 +604,10 @@ public class LoadPlanner {
 
     public List<PlanFragment> getFragments() {
         return fragments;
+    }
+
+    public ExecPlan getExecPlan() {
+        return new ExecPlan(context, fragments);
     }
 
     public List<ScanNode> getScanNodes() {
