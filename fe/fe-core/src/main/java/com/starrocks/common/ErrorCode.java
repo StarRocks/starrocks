@@ -51,7 +51,6 @@ public enum ErrorCode {
     ERR_NON_UNIQ_ERROR(1052, new byte[] {'2', '3', '0', '0', '0'}, "Column '%s' in is ambiguous"),
     ERR_ILLEGAL_COLUMN_REFERENCE_ERROR(1053, new byte[] {'2', '3', '0', '0', '1'},
             "Illegal column/field reference '%s' of semi-/anti-join"),
-    ERR_BAD_FIELD_ERROR(1054, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
     ERR_BAD_FUNC_ERROR(1055, new byte[] {'4', '2', '0', '0', '0'}, "Unknown function '%s'"),
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
@@ -277,6 +276,9 @@ public enum ErrorCode {
     ERR_MULTI_SUB_PARTITION(5504, new byte[] {'4', '2', '0', '0', '0'},
             "Partition '%s' has sub partitions, should specify the partition id"),
     ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
+    ERR_COLUMN_RENAME_NOT_SUPPORTED(5506, new byte[] {'4', '2', '0', '0', '0'},
+            "Column rename not supported, %s"),
+    ERR_BAD_FIELD_ERROR(5507, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
     ;
 
     public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
