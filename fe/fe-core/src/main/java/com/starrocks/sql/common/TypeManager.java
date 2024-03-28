@@ -120,7 +120,10 @@ public class TypeManager {
                     baseType = type1.isDecimalOfAnyVersion() ? type1 : type2;
                 }
             }
-
+            if (ConnectContext.get() != null && SessionVariableConstants.DOUBLE.equalsIgnoreCase(ConnectContext.get()
+                    .getSessionVariable().getCboEqBaseType())) {
+                baseType = Type.DOUBLE;
+            }
             if ((type1.isStringType() && type2.isExactNumericType()) ||
                     (type1.isExactNumericType() && type2.isStringType())) {
                 return baseType;
