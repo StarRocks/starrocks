@@ -86,7 +86,7 @@ public class PruneGroupByKeysRule extends TransformationRule {
                     "cannot find grouping key from projections");
 
             // if the output col of this groupingExpr had been added into the newGroupingKeys, it means this
-            // is a duplicate group by ket, we can skip it. But we need add a projection using after the agg
+            // is a duplicate group by key, we can skip it. But we need add a projection using after the agg
             // to ensure the correct output columns and the projection should use agg output to rewrite.
             if (groupingExpr.isColumnRef()) {
                 ColumnRefOperator inputCol = (ColumnRefOperator) groupingExpr;
