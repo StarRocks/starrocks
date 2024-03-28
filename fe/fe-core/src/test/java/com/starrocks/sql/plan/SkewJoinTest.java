@@ -150,10 +150,10 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  <slot 1> : 1: c0\n" +
                 "  |  <slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN " +
                 "24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: round ELSE 0 END\n" +
-                "  |  <slot 18> : 2: c1.a[true]\n" +
-                "  |  <slot 19> : 3: c2.a[false]\n" +
+                "  |  <slot 18> : 2: c1.a\n" +
+                "  |  <slot 19> : 3: c2.a\n" +
                 "  |  common expressions:\n" +
-                "  |  <slot 21> : 2: c1.a[true]\n" +
+                "  |  <slot 21> : 2: c1.a\n" +
                 "  |  <slot 22> : rand()\n" +
                 "  |  <slot 23> : 22: rand * 1000.0\n" +
                 "  |  <slot 24> : round(23: multiply)");
