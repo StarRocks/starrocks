@@ -403,59 +403,6 @@ public class AuthenticationMgr {
         }
     }
 
-    public void createSecurityIntegration(String name, Map<String, String> propertyMap) throws DdlException {
-        createSecurityIntegration(name, propertyMap, false);
-
-    }
-
-    public void createSecurityIntegration(String name, Map<String, String> propertyMap, boolean isReplay) throws DdlException {
-        SecurityIntegration securityIntegration;
-        try {
-            securityIntegration =
-                    SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        } catch (DdlException e) {
-            throw new DdlException("failed to create security integration, error: " + e.getMessage(), e);
-        }
-        nameToSecurityIntegrationMap.put(name, securityIntegration);
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateSecurityIntegration(name, propertyMap);
-        LOG.info("finished to create security integration '{}'", securityIntegration.toString());
-    }
-
-    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
-                                         boolean isReplay) throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public SecurityIntegration getSecurityIntegration(String name) {
-        return nameToSecurityIntegrationMap.get(name);
-    }
-
-    public Set<SecurityIntegration> getAllSecurityIntegrations() {
-        return new HashSet<>(nameToSecurityIntegrationMap.values());
-    }
-
-    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws DdlException {
-        // using concurrent hash map and COW, we don't need lock protection here
-        SecurityIntegration securityIntegration =
-                SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        nameToSecurityIntegrationMap.put(name, securityIntegration);
-    }
-
-    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
-            throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public void replayDropSecurityIntegration(String name)
-            throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
     public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
         try {
             writeLock();

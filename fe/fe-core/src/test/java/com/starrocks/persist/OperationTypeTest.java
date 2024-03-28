@@ -139,7 +139,6 @@ public class OperationTypeTest {
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DROP_ROLE_V2));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_USER_PROP_V2));
-        Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_SECURITY_INTEGRATION));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CREATE_STREAM_LOAD_TASK));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MV_EPOCH_UPDATE));
         Assert.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MV_JOB_STATE));

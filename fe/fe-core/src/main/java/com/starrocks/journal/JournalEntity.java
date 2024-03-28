@@ -127,7 +127,6 @@ import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
-import com.starrocks.persist.SecurityIntegrationInfo;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
@@ -1068,11 +1067,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_USER_V3: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), UserIdentity.class);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
-                data = SecurityIntegrationInfo.read(in);
                 isRead = true;
                 break;
             }

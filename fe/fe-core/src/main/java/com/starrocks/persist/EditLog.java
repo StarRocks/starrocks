@@ -1106,12 +1106,6 @@ public class EditLog {
                     globalStateMgr.getAuthenticationMgr().replayDropUser(userIdentity);
                     break;
                 }
-                case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
-                    SecurityIntegrationInfo info = (SecurityIntegrationInfo) journal.getData();
-                    globalStateMgr.getAuthenticationMgr().replayCreateSecurityIntegration(
-                            info.name, info.propertyMap);
-                    break;
-                }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
                     globalStateMgr.getAuthorizationMgr().replayUpdateRolePrivilegeCollection(info);
@@ -1903,11 +1897,6 @@ public class EditLog {
 
     public void logDropUser(UserIdentity userIdentity) {
         logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity);
-    }
-
-    public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
-        SecurityIntegrationInfo info = new SecurityIntegrationInfo(name, propertyMap);
-        logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
     }
 
     public void logUpdateUserPrivilege(
