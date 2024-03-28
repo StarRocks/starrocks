@@ -572,7 +572,8 @@ public:
 
     void reset() override {
         _stats.reset();
-        setSum(Decimal());
+        // Do not compute sum of decimal column
+        // setSum(Decimal());
     }
 
     void toProtoBuf(proto::ColumnStatistics& pbStats) const override {

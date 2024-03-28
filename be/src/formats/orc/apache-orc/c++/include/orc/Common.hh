@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <string>
 
 #include "orc/Exceptions.hh"
@@ -213,9 +214,43 @@ inline bool compare(T val1, T val2) {
     return (val1 < val2);
 }
 
+const static int32_t MAX_PRECISION_64 = 18;
+const static int64_t POWERS_OF_TEN[MAX_PRECISION_64 + 1] = {1,
+                                                            10,
+                                                            100,
+                                                            1000,
+                                                            10000,
+                                                            100000,
+                                                            1000000,
+                                                            10000000,
+                                                            100000000,
+                                                            1000000000,
+                                                            10000000000,
+                                                            100000000000,
+                                                            1000000000000,
+                                                            10000000000000,
+                                                            100000000000000,
+                                                            1000000000000000,
+                                                            10000000000000000,
+                                                            100000000000000000,
+                                                            1000000000000000000};
+
 // Specialization for Decimal
 template <>
 inline bool compare(Decimal val1, Decimal val2) {
+    if (val1.scale == val2.scale) {
+        return val1.value < val2.value;
+    }
+
+    if (val1.value.fitsInLong() && val2.value.fitsInLong()) {
+        double decimal1 = static_cast<double>(val1.value.toLong()) / POWERS_OF_TEN[val1.scale];
+        double decimal2 = static_cast<double>(val2.value.toLong()) / POWERS_OF_TEN[val2.scale];
+
+        if (std::abs(decimal2 - decimal1) > 0.000001) {
+            return decimal1 < decimal2;
+        }
+    }
+
     // compare integral parts
     Int128 integral1 = scaleDownInt128ByPowerOfTen(val1.value, val1.scale);
     Int128 integral2 = scaleDownInt128ByPowerOfTen(val2.value, val2.scale);
