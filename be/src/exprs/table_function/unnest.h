@@ -54,23 +54,22 @@ public:
                         // to support unnest with null.
                         unnested_array_elements->append_nulls(1);
                         offset += 1;
-                        copy_count_column->append(offset);
                     }
+                    copy_count_column->append(offset);
                 } else {
                     if (offset_column->get(row_idx + 1).get_int32() == offset_column->get(row_idx).get_int32() &&
                         state->get_is_left_join()) {
                         // to support unnest with null.
                         unnested_array_elements->append_nulls(1);
                         offset += 1;
-                        copy_count_column->append(offset);
                     } else {
                         auto length =
                                 offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
                         unnested_array_elements->append(*(col_array->elements_column()),
                                                         offset_column->get(row_idx).get_int32(), length);
                         offset += length;
-                        copy_count_column->append(offset);
                     }
+                    copy_count_column->append(offset);
                 }
             }
 
