@@ -58,6 +58,7 @@ private:
     std::atomic_bool _is_finished = false;
     // whether enable aggregate group by limit optimize
     bool _agg_group_by_with_limit = false;
+    std::atomic<int64_t>* _runtime_limit = nullptr;
 };
 
 class AggregateBlockingSinkOperatorFactory final : public OperatorFactory {
@@ -65,7 +66,9 @@ public:
     AggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory,
                                          const SpillProcessChannelFactoryPtr& _)
             : OperatorFactory(id, "aggregate_blocking_sink", plan_node_id),
-              _aggregator_factory(std::move(aggregator_factory)) {}
+              _aggregator_factory(std::move(aggregator_factory)) {
+        _runtime_limit.store(_aggregator_factory->aggregator_param()->limit);
+    }
 
     ~AggregateBlockingSinkOperatorFactory() override = default;
 
@@ -73,7 +76,10 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
+    std::atomic<int64_t>* get_runtime_limit() { return &_runtime_limit; }
+
 private:
     AggregatorFactoryPtr _aggregator_factory;
+    std::atomic<int64_t> _runtime_limit;
 };
 } // namespace starrocks::pipeline
