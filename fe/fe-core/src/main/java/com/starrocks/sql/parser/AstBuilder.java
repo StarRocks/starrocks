@@ -448,6 +448,7 @@ import java.util.Objects;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import static com.starrocks.analysis.IndexDef.IndexType.getIndexType;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -851,9 +852,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
             String comment =
                     context.comment() != null ? ((StringLiteral) visit(context.comment())).getStringValue() : null;
+
             final IndexDef indexDef =
                     new IndexDef(indexName, columnList.stream().map(Identifier::getValue).collect(toList()),
-                            IndexDef.IndexType.BITMAP, comment, createPos(context));
+                            getIndexType(context.indexType()), comment, getPropertyList(context.propertyList()),
+                            createPos(context));
             indexDefList.add(indexDef);
         }
         return indexDefList;
@@ -1360,8 +1363,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         IndexDef indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
-                IndexDef.IndexType.BITMAP,
-                comment, idxPos);
+                getIndexType(context.indexType()),
+                comment, getPropertyList(context.propertyList()), idxPos);
 
         CreateIndexClause createIndexClause = new CreateIndexClause(indexDef, idxPos);
 
@@ -3562,8 +3565,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         IndexDef indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
-                IndexDef.IndexType.BITMAP,
-                comment, createPos(start, stop));
+                getIndexType(context.indexType()),
+                comment, getPropertyList(context.propertyList()),
+                createPos(start, stop));
 
         return new CreateIndexClause(indexDef, createPos(context));
     }
