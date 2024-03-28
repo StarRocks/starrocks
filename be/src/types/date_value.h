@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cctz/time_zone.h>
+
 #include <cstdint>
 #include <string>
 
@@ -40,6 +42,8 @@ public:
     inline static DateValue create(int year, int month, int day);
 
 public:
+    bool from_unixtime(int64_t timestamp, const std::string& timezone);
+    bool from_unixtime(int64_t timestamp, const cctz::time_zone& ctz);
     void from_date(int year, int month, int day);
 
     int32_t to_date_literal() const;
@@ -104,6 +108,7 @@ public:
 public:
     static const DateValue MAX_DATE_VALUE;
     static const DateValue MIN_DATE_VALUE;
+    static const DateValue INVALID_DATE_VALUE;
 
 public:
     JulianDate _julian;
