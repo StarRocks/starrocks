@@ -28,7 +28,7 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-ubuntu22-x86_64"
 JINDOSDK_MD5SUM="52236053391091591c2d09684791e810"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.1.1/starcache-ubuntu22_amd64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.1.2/starcache-ubuntu22_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="0ad20ba0168a46f7eb1ab7096e67ad17"
+STARCACHE_MD5SUM="0a024398153d57b5cff55b7cf7c043d7"
