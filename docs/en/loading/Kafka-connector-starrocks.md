@@ -171,18 +171,12 @@ CREATE TABLE test_tbl (id INT, city STRING);
         }
       }'
       ```
-<<<<<<< HEAD
-      > **NOTICE**
-      >
-      > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
-=======
 
       :::info
       
       If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
 
       :::
->>>>>>> 1fcce957b0 ([Doc]add more description in kafka connector and modify the name for op field (#43074))
 
 #### Query StarRocks table
 
