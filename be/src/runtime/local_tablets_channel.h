@@ -170,11 +170,13 @@ private:
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
-    void _commit_tablets(const PTabletWriterAddChunkRequest& request,
-                         const std::shared_ptr<LocalTabletsChannel::WriteContext>& context);
+    void _commit_primary_replicas(const PTabletWriterAddChunkRequest& request,
+                                  const std::shared_ptr<LocalTabletsChannel::WriteContext>& context);
 
     void _abort_replica_tablets(const PTabletWriterAddChunkRequest& request, const std::string& abort_reason,
                                 const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
+
+    void _wait_secondary_replicas_commit(const PTabletWriterAddChunkRequest& request);
 
     void _flush_stale_memtables();
 
@@ -219,6 +221,8 @@ private:
     Status _status = Status::OK();
 
     std::set<int64_t> _immutable_partition_ids;
+
+    int64_t _rpc_start_ts = 0;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
