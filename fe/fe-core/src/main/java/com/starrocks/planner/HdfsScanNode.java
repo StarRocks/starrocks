@@ -14,6 +14,8 @@
 
 package com.starrocks.planner;
 
+import static com.starrocks.thrift.TExplainLevel.VERBOSE;
+
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
@@ -22,6 +24,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.credential.CloudConfiguration;
@@ -34,10 +37,7 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
-
 import java.util.List;
-
-import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
 /**
  * Scan node for HDFS files, like hive table.
@@ -133,8 +133,9 @@ public class HdfsScanNode extends ScanNode {
         }
 
         output.append(prefix).append(
-                String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        scanNodePredicates.getIdToPartitionKey().size()));
+                String.format("partitions=%s/%s files=%d size=%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                        scanNodePredicates.getIdToPartitionKey().size(), scanRangeLocations.getFileNum(),
+                        DebugUtil.getPrettyStringBytes(scanRangeLocations.getFileSizeBytes())));
         output.append("\n");
 
         // TODO: support it in verbose
@@ -199,7 +200,7 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public static void setMinMaxConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
-                                                  HDFSScanNodePredicates scanNodePredicates) {
+            HDFSScanNodePredicates scanNodePredicates) {
         List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
         if (!minMaxConjuncts.isEmpty()) {
             String minMaxSqlPredicate = scanNode.getExplainString(minMaxConjuncts);
@@ -212,7 +213,7 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public static void setNonEvalPartitionConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
-                                                            HDFSScanNodePredicates scanNodePredicates) {
+            HDFSScanNodePredicates scanNodePredicates) {
         List<Expr> noEvalPartitionConjuncts = scanNodePredicates.getNoEvalPartitionConjuncts();
         String partitionSqlPredicate = scanNode.getExplainString(noEvalPartitionConjuncts);
         for (Expr expr : noEvalPartitionConjuncts) {
@@ -222,7 +223,7 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public static void setNonPartitionConjunctsToThrift(TPlanNode msg, ScanNode scanNode,
-                                                        HDFSScanNodePredicates scanNodePredicates) {
+            HDFSScanNodePredicates scanNodePredicates) {
         // put non-partition conjuncts into conjuncts
         if (msg.isSetConjuncts()) {
             msg.conjuncts.clear();
