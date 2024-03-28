@@ -83,7 +83,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             .add(FunctionSet.COUNT)
             .add(FunctionSet.MAX)
             .add(FunctionSet.MIN)
-            .add(FunctionSet.APPROX_COUNT_DISTINCT)
             .add(FunctionSet.BITMAP_UNION)
             .add(FunctionSet.BITMAP_AGG)
             .add(FunctionSet.HLL_UNION)
@@ -141,6 +140,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         // Cannot ROLLUP distinct
         if (isRollup) {
+            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewAggregateRollupRewrite()) {
+                logMVRewrite(mvRewriteContext, "Rollup aggregate is disabled");
+                return null;
+            }
             boolean mvHasDistinctAggFunc =
                     mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct()
                             && !callOp.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG));

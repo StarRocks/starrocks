@@ -558,6 +558,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_materialized_view_rewrite_greedy_mode";
 
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
+    public static final String MATERIALIZED_VIEW_AGGREGATE_ROLLUP_REWRITE =
+            "enable_materialized_view_aggregate_rollup_rewrite";
 
     public static final String ENABLE_VIEW_BASED_MV_REWRITE = "enable_view_based_mv_rewrite";
 
@@ -1633,6 +1635,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // whether to use materialized view plan context cache to reduce mv rewrite time cost
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewPlanCache = true;
+
+    @VarAttr(name = MATERIALIZED_VIEW_AGGREGATE_ROLLUP_REWRITE)
+    private boolean enableMaterializedViewAggregateRollupRewrite = true;
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
     private boolean enableViewBasedMvRewrite = false;
@@ -3168,6 +3173,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableMaterializedViewPlanCache() {
         return this.enableMaterializedViewPlanCache;
+    }
+
+    public boolean isEnableMaterializedViewAggregateRollupRewrite() {
+        return enableMaterializedViewAggregateRollupRewrite;
+    }
+
+    public void setEnableMaterializedViewAggregateRollupRewrite(boolean enableMaterializedViewAggregateRollupRewrite) {
+        this.enableMaterializedViewAggregateRollupRewrite = enableMaterializedViewAggregateRollupRewrite;
     }
 
     public void setEnableViewBasedMvRewrite(boolean enableViewBasedMvRewrite) {
