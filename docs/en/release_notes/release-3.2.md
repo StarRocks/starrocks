@@ -4,6 +4,13 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## Behavior Changes in v3.2
+
+| Version | Functionality | Change Description |
+| --- | --- | --- |
+| v3.2.4 | Materialized view refresh  | xxx |
+| v3.2.3 | Query memory limit  | xxx |
+
 ## 3.2.4
 
 Release date: March 12, 2024
