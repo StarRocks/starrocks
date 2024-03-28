@@ -45,6 +45,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
+import com.starrocks.sql.optimizer.rewrite.ScalarFunctionInitializer;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.lang.ArrayUtils;
@@ -737,11 +738,25 @@ public class Function implements Writable {
         return null;
     }
 
+    public static Function getFunction(List<Function> fns, Function desc, Object [] argValues, CompareMode mode) {
+        Function fn = getFunction(fns, desc, mode);
+        if (fn != null && argValues != null && fn instanceof DynamicScalarFunction) {
+            DynamicScalarFunction dfn = (DynamicScalarFunction) fn;
+            Type retType = ScalarFunctionInitializer.initialize(dfn, argValues);
+            Function candidate = new DynamicScalarFunction(dfn);
+            candidate.setRetType(retType);
+            return candidate;
+        }
+
+        return fn;
+    }
+
     enum FunctionType {
         ORIGIN(0),
         SCALAR(1),
         AGGREGATE(2),
         TABLE(3),
+        DYNAMIC_SCALAR(4),
         UNSUPPORTED(-1);
 
         private int code;
@@ -849,6 +864,9 @@ public class Function implements Writable {
         switch (functionType) {
             case SCALAR:
                 function = new ScalarFunction();
+                break;
+            case DYNAMIC_SCALAR:
+                function = new DynamicScalarFunction();
                 break;
             case AGGREGATE:
                 function = new AggregateFunction();

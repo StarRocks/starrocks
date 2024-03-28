@@ -1346,7 +1346,7 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' (RETURNS returnType=type)? (INTERMEDIATE intermediateType =  type)? properties?
     ;
 
 typeList

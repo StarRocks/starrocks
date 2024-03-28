@@ -181,6 +181,13 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
             (*res)->name = std::move(method_name);
             (*res)->signature = std::move(signature);
             (*res)->method_desc = std::move(mtdesc);
+            if (_fn.scalar_fn.has_dynamic_return_type) {
+                for (int i = 0; i < (*res)->method_desc.size(); ++i) {
+                    if ((*res)->method_desc.at(i).type == TYPE_UNKNOWN) {
+                        (*res)->method_desc.at(i).type = _type.type;
+                    }
+                }
+            }
             ASSIGN_OR_RETURN((*res)->method, desc->analyzer->get_method_object(desc->udf_class.clazz(), name));
         }
         return Status::OK();

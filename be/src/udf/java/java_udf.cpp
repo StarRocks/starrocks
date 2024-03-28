@@ -577,7 +577,7 @@ StatusOr<JVMClass> ClassLoader::getClass(const std::string& className) {
     LOCAL_REF_GUARD(loaded_clazz);
 
     // check exception
-    RETURN_ERROR_IF_EXCEPTION(env, "exception happened when get class: {}");
+    RETURN_ERROR_IF_EXCEPTION(env, "exception happened when get class " + className + ": {}");
     // no exception happened, class exists
     DCHECK(loaded_clazz != nullptr);
 

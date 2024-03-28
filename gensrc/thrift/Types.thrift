@@ -295,6 +295,7 @@ struct TScalarFunction {
     1: required string symbol
     2: optional string prepare_fn_symbol
     3: optional string close_fn_symbol
+    4: optional bool has_dynamic_return_type 
 }
 
 struct TAggregateFunction {

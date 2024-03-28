@@ -345,7 +345,7 @@ public class DecimalV3FunctionAnalyzer {
         Function fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         if (fn == null) {
-            fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
+            fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes, null);
         }
 
         if (fn == null) {
