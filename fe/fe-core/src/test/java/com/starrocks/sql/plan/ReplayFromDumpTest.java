@@ -467,9 +467,9 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  13:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) " +
-                "WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1', " +
-                "(2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2)\n"));
+                "  |  other join predicates: CAST(CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) " +
+                "WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END AS DOUBLE) > " +
+                "1.0, (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2)\n"));
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
     }
 
