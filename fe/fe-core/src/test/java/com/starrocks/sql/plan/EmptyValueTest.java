@@ -196,6 +196,44 @@ public class EmptyValueTest extends PlanTestBase {
     }
 
     @Test
+    public void testRemoveUnion() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String sql = "select \n" +
+                "v1,\n" +
+                "name1,\n" +
+                "name2,\n" +
+                "max(v3)\n" +
+                "from\n" +
+                "(\n" +
+                "select v1, coalesce(v2, 1) as name1, coalesce(v2, 1) as name2, max(v3) v3, max(v4)  " +
+                "from (select v1, v2 from t0) t1 join (select v3, v1 as v4 from t0) t2 group by 1, 2, 3\n" +
+                "union all\n" +
+                "select v1, v2, v2 + 1, v3, v4  from (select v1, v2 from t0) t1 join " +
+                "(select v1 v4, v3 from t0 where 1 > 2) t2\n" +
+                ") t\n" +
+                "group by 1, 2, 3;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "8:Project\n" +
+                "  |  <slot 17> : 17: v1\n" +
+                "  |  <slot 18> : 18: coalesce\n" +
+                "  |  <slot 19> : clone(18: coalesce)\n" +
+                "  |  <slot 22> : 22: max\n" +
+                "  |  \n" +
+                "  7:AGGREGATE (update finalize)\n" +
+                "  |  output: max(20: max)\n" +
+                "  |  group by: 17: v1, 18: coalesce\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 17> : 1: v1\n" +
+                "  |  <slot 18> : 7: coalesce\n" +
+                "  |  <slot 20> : 8: max\n" +
+                "  |  \n" +
+                "  5:AGGREGATE (update finalize)\n" +
+                "  |  output: max(6: v3)\n" +
+                "  |  group by: 1: v1, 7: coalesce");
+    }
+
+    @Test
     public void testOuterPredicate() throws Exception {
         String sql = "select t0.v2 from t0 full outer join " +
                 "(select * from lineitem_partition p where L_SHIPDATE = '2000-01-01') x on x.L_ORDERKEY = t0.v2" +
