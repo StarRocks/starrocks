@@ -628,6 +628,8 @@ public class QueryAnalyzer {
                         throw new SemanticException("Skew join column must be a column reference");
                     }
                     analyzeExpression(join.getSkewColumn(), new AnalyzeState(), join.getLeft().getScope());
+                } else {
+                    throw new SemanticException("Skew join column must be specified");
                 }
                 if (join.getSkewValues() != null) {
                     if (join.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
@@ -638,6 +640,8 @@ public class QueryAnalyzer {
                         newSkewValues.add(TypeManager.addCastExpr(expr, join.getSkewColumn().getType()));
                     }
                     join.setSkewValues(newSkewValues);
+                } else {
+                    throw new SemanticException("Skew join values must be specified");
                 }
             } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
