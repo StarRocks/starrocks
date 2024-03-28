@@ -718,10 +718,6 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------
 
     default R visitBackupStatement(BackupStmt statement, C context) {
