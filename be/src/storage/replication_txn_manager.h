@@ -25,8 +25,7 @@ public:
 
     Status init(const std::vector<starrocks::DataDir*>& data_dirs);
 
-    Status remote_snapshot(const TRemoteSnapshotRequest& request, std::string* src_snapshot_path,
-                           bool* incremental_snapshot);
+    Status remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info);
 
     Status replicate_snapshot(const TReplicateSnapshotRequest& request);
 
@@ -54,8 +53,7 @@ private:
                                 const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
                                 std::string* src_snapshot_path);
 
-    Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
-                                     const TRemoteSnapshotInfo& src_snapshot_info,
+    Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request, const TSnapshotInfo& src_snapshot_info,
                                      const std::string& tablet_snapshot_dir_path, Tablet* tablet);
 
     Status convert_snapshot_for_none_primary(const std::string& tablet_snapshot_path,

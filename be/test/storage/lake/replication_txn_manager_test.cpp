@@ -234,10 +234,8 @@ TEST_P(LakeReplicationTxnManagerTest, test_remote_snapshot_no_missing_versions) 
     remote_snapshot_request.__set_src_visible_version(_version);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status =
-            _replication_txn_manager->remote_snapshot(remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
     EXPECT_FALSE(status.ok());
 }
 
@@ -257,10 +255,8 @@ TEST_P(LakeReplicationTxnManagerTest, test_remote_snapshot_no_versions) {
     remote_snapshot_request.__set_src_visible_version(_src_version + 1);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status =
-            _replication_txn_manager->remote_snapshot(remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
     EXPECT_FALSE(status.ok());
 }
 
@@ -280,13 +276,11 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     remote_snapshot_request.__set_src_visible_version(_src_version);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status =
-            _replication_txn_manager->remote_snapshot(remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
-    status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
     TReplicateSnapshotRequest replicate_snapshot_request;
@@ -302,10 +296,6 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash + 1);
     replicate_snapshot_request.__set_src_visible_version(_src_version);
-    TRemoteSnapshotInfo remote_snapshot_info;
-    remote_snapshot_info.__set_backend(TBackend());
-    remote_snapshot_info.__set_snapshot_path(snapshot_path);
-    remote_snapshot_info.__set_incremental_snapshot(incremental_snapshot);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
     status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
@@ -334,10 +324,8 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     remote_snapshot_request.__set_src_visible_version(_src_version);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status =
-            _replication_txn_manager->remote_snapshot(remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
     const int64_t txn_ids[] = {_transaction_id};
@@ -366,10 +354,8 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     remote_snapshot_request.__set_src_visible_version(_src_version);
     remote_snapshot_request.__set_src_backends({TBackend()});
 
-    std::string snapshot_path;
-    bool incremental_snapshot = false;
-    Status status =
-            _replication_txn_manager->remote_snapshot(remote_snapshot_request, &snapshot_path, &incremental_snapshot);
+    TSnapshotInfo remote_snapshot_info;
+    Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
     EXPECT_TRUE(status.ok()) << status;
 
     TReplicateSnapshotRequest replicate_snapshot_request;
@@ -385,10 +371,6 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_src_visible_version(_src_version);
-    TRemoteSnapshotInfo remote_snapshot_info;
-    remote_snapshot_info.__set_backend(TBackend());
-    remote_snapshot_info.__set_snapshot_path(snapshot_path);
-    remote_snapshot_info.__set_incremental_snapshot(incremental_snapshot);
     replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
 
     status = _replication_txn_manager->replicate_snapshot(replicate_snapshot_request);
