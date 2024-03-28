@@ -161,13 +161,12 @@ public class BestMvSelector {
                         new CandidateContext(expression.getStatistics(), scanOperator.getTable().getBaseSchema().size());
                 if (isAggregate) {
                     MaterializedView mv = (MaterializedView) scanOperator.getTable();
-                    List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
+                    MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(
                             mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-                    for (MvPlanContext planContext : planContexts) {
-                        if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
-                            LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();
-                            candidateContext.setGroupbyColumnNum(aggregationOperator.getGroupingKeys().size());
-                        }
+                    if (planContext != null && planContext.getLogicalPlan() != null
+                            && planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
+                        LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();
+                        candidateContext.setGroupbyColumnNum(aggregationOperator.getGroupingKeys().size());
                     }
                 }
                 return candidateContext;
