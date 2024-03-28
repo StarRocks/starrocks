@@ -504,6 +504,7 @@ INNER JOIN (join-predicate [2: v2 = 4: v4] post-join-predicate [null])
 [end]
 
 /* test PushDownApplyAggFilterRule */
+/* test PushDownApplyAggFilterRule */
 
 [sql]
 select * from t0 where v1 = (select max(v5 + 1) from t1 where t0.v2 = t1.v4);
@@ -611,13 +612,13 @@ INNER JOIN (join-predicate [1: v1 = 23: cast] post-join-predicate [null])
                 AGGREGATE ([GLOBAL] aggregate [{20: min=min(20: min)}] group by [[]] having [null]
                     EXCHANGE GATHER
                         AGGREGATE ([LOCAL] aggregate [{20: min=min(6: t1c)}] group by [[]] having [null]
-                            INNER JOIN (join-predicate [4: t1a = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
-                                SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[4: t1a IS NOT NULL AND 7: t1d IS NOT NULL])
-                                EXCHANGE SHUFFLE[22]
+                            INNER JOIN (join-predicate [24: cast = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
+                                SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[cast(4: t1a as double) IS NOT NULL AND 7: t1d IS NOT NULL])
+                                EXCHANGE BROADCAST
                                     AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
                                         EXCHANGE SHUFFLE[22]
                                             AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
-                                                SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as varchar(1048576)) IS NOT NULL AND 14: v4 = 2])
+                                                SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as double) IS NOT NULL AND 14: v4 = 2])
 [end]
 
 [sql]
@@ -630,13 +631,13 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
             AGGREGATE ([GLOBAL] aggregate [{20: min=min(20: min)}] group by [[]] having [null]
                 EXCHANGE GATHER
                     AGGREGATE ([LOCAL] aggregate [{20: min=min(6: t1c)}] group by [[]] having [null]
-                        INNER JOIN (join-predicate [4: t1a = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
-                            SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[4: t1a IS NOT NULL AND 7: t1d IS NOT NULL])
-                            EXCHANGE SHUFFLE[22]
+                        INNER JOIN (join-predicate [23: cast = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
+                            SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[cast(4: t1a as double) IS NOT NULL AND 7: t1d IS NOT NULL])
+                            EXCHANGE BROADCAST
                                 AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
                                     EXCHANGE SHUFFLE[22]
                                         AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
-                                            SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as varchar(1048576)) IS NOT NULL AND 14: v4 = 2])
+                                            SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as double) IS NOT NULL AND 14: v4 = 2])
 [end]
 
 [sql]
@@ -707,8 +708,6 @@ LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(23: expr, 1,
                 AGGREGATE ([LOCAL] aggregate [{21: max=max(20: expr)}] group by [[23: expr]] having [null]
                     SCAN (columns[12: t1c, 13: t1d] predicate[null])
 [end]
-
-/* test ScalarApply2JoinRule */
 
 [sql]
 select * from t0 where 1 = (select v5 + 1 from t1 where t0.v2 = t1.v4);
@@ -849,12 +848,12 @@ INNER JOIN (join-predicate [1: v1 = 24: cast] post-join-predicate [null])
             ASSERT LE 1
                 EXCHANGE GATHER
                     PREDICATE 7: t1d = 18: expr
-                        RIGHT OUTER JOIN (join-predicate [20: cast = 4: t1a] post-join-predicate [null])
+                        RIGHT OUTER JOIN (join-predicate [20: cast = 25: cast] post-join-predicate [null])
                             AGGREGATE ([GLOBAL] aggregate [{21: countRows=count(21: countRows), 22: anyValue=any_value(22: anyValue)}] group by [[20: cast]] having [null]
                                 EXCHANGE SHUFFLE[20]
                                     AGGREGATE ([LOCAL] aggregate [{21: countRows=count(1), 22: anyValue=any_value(add(14: v4, 15: v5))}] group by [[20: cast]] having [null]
                                         SCAN (columns[14: v4, 15: v5] predicate[14: v4 = 2])
-                            EXCHANGE SHUFFLE[4]
+                            EXCHANGE SHUFFLE[25]
                                 SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[null])
 [end]
 
@@ -867,12 +866,12 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
         ASSERT LE 1
             EXCHANGE GATHER
                 PREDICATE 7: t1d = 18: expr
-                    RIGHT OUTER JOIN (join-predicate [20: cast = 4: t1a] post-join-predicate [null])
+                    RIGHT OUTER JOIN (join-predicate [20: cast = 24: cast] post-join-predicate [null])
                         AGGREGATE ([GLOBAL] aggregate [{21: countRows=count(21: countRows), 22: anyValue=any_value(22: anyValue)}] group by [[20: cast]] having [null]
                             EXCHANGE SHUFFLE[20]
                                 AGGREGATE ([LOCAL] aggregate [{21: countRows=count(1), 22: anyValue=any_value(add(14: v4, 15: v5))}] group by [[20: cast]] having [null]
                                     SCAN (columns[14: v4, 15: v5] predicate[14: v4 = 2])
-                        EXCHANGE SHUFFLE[4]
+                        EXCHANGE SHUFFLE[24]
                             SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[null])
 [end]
 
