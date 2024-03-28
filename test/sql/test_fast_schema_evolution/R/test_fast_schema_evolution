@@ -851,12 +851,10 @@ tab1	CREATE TABLE `tab1` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 alter table tab1 set ("fast_schema_evolution" = "false");
@@ -876,11 +874,9 @@ tab1	CREATE TABLE `tab1` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
+"compression" = "LZ4",
 "replicated_storage" = "true",
-"compression" = "LZ4"
+"replication_num" = "1"
 );
 -- !result
 alter table tab1 set ("fast_schema_evolution" = "true");
@@ -900,12 +896,10 @@ tab1	CREATE TABLE `tab1` (
 DUPLICATE KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 drop table tab1;
