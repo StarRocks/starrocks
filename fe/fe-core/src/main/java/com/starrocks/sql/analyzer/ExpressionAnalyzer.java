@@ -131,10 +131,6 @@ public class ExpressionAnalyzer {
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
-        if (session == null) {
-            // For some load requests, the ConnectContext will be null
-            session = new ConnectContext();
-        }
         this.session = session;
     }
 
@@ -626,7 +622,7 @@ public class ExpressionAnalyzer {
                 Expr child = node.getChild(i);
                 if (child.getType().isBoolean() || child.getType().isNull()) {
                     // do nothing
-                } else if (!session.getSessionVariable().isEnableStrictType() &&
+                } else if (session != null && !session.getSessionVariable().isEnableStrictType() &&
                         Type.canCastTo(child.getType(), Type.BOOLEAN)) {
                     node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));
                 } else {
