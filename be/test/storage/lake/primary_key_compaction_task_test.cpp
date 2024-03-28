@@ -529,14 +529,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 4; i++) {
         auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .build());
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -546,22 +540,24 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
         version++;
     }
     ASSERT_EQ(kChunkSize * 4, read(version));
-    ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto tablet_metadata, tablet.get_metadata(version));
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
     config::lake_pk_compaction_min_input_segments = 1;
-    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(4, input_rowsets.size());
-    EXPECT_EQ(4, compaction_score(_tablet_mgr.get(), tablet_metadata));
+    EXPECT_EQ(4, compaction_score(_tablet_mgr.get(), *tablet_metadata));
 
     config::lake_pk_compaction_min_input_segments = 4;
-    ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
+    ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(4, input_rowsets2.size());
-    EXPECT_EQ(4, compaction_score(_tablet_mgr.get(), tablet_metadata));
+    EXPECT_EQ(4, compaction_score(_tablet_mgr.get(), *tablet_metadata));
 
     config::lake_pk_compaction_min_input_segments = 5;
-    ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
+    ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(0, input_rowsets3.size());
-    EXPECT_EQ(0, compaction_score(_tablet_mgr.get(), tablet_metadata));
+    EXPECT_EQ(0, compaction_score(_tablet_mgr.get(), *tablet_metadata));
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
