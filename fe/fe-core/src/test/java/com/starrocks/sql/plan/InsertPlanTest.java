@@ -44,6 +44,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.stream.Stream;
 
 public class InsertPlanTest extends PlanTestBase {
@@ -878,7 +879,7 @@ public class InsertPlanTest extends PlanTestBase {
     public void insertToSql() {
         String sql = "insert into test_all_type_partition_by_date " +
                 "partition(p1992) (t1a, id_date) SELECT `t1a`, `id_date` FROM `test_all_type_partition_by_date` ";
-        var stmts = SqlParser.parse(sql, new SessionVariable());
+        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
         Assert.assertEquals(1, stmts.size());
 
         // verify generated SQL
@@ -889,7 +890,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "FROM `test_all_type_partition_by_date`", genSql);
 
         // parse it again
-        var stmts2 = SqlParser.parse(genSql, new SessionVariable());
+        List<StatementBase> stmts2 = SqlParser.parse(genSql, new SessionVariable());
         Assert.assertEquals(genSql, AstToSQLBuilder.toSQL(stmts2.get(0)));
     }
 
