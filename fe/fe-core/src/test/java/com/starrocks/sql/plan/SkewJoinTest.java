@@ -148,22 +148,10 @@ public class SkewJoinTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "  1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-<<<<<<< HEAD
-                "  |  <slot 10> : CASE WHEN 2: c1.a IS NULL THEN 26: " +
-                "round WHEN 2: c1.a IN (1, 2) THEN 26: round ELSE 0 END\n" +
+                "  |  <slot 10> : CASE WHEN 2: c1.a IS NULL THEN 24: " +
+                "round WHEN 2: c1.a IN (1, 2) THEN 24: round ELSE 0 END\n" +
                 "  |  <slot 19> : 2: c1.a\n" +
                 "  |  <slot 21> : 3: c2.a");
-=======
-                "  |  <slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN " +
-                "24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: round ELSE 0 END\n" +
-                "  |  <slot 18> : 2: c1.a[true]\n" +
-                "  |  <slot 19> : 3: c2.a[false]\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 21> : 2: c1.a[true]\n" +
-                "  |  <slot 22> : rand()\n" +
-                "  |  <slot 23> : 22: rand * 1000.0\n" +
-                "  |  <slot 24> : round(23: multiply)");
->>>>>>> 2aec922d11 ([BugFix] Fix some problems of skew join (#43199))
     }
 
     @Test
