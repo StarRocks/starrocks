@@ -3562,6 +3562,234 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConst) {
     }
 }
 
+PARALLEL_TEST(RegexpInstrFunctionsTest, leftAndRightNULLTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+    auto str = BinaryColumn::create());
+    auto pattern = BinaryColumn::create());
+    auto null = NullColumn::create();
+
+    std::string rows[] = {"", "a", "ABCDEFG_HIJKLMN"};
+    std::string patterns[] = {"", "a", "AB"};
+
+    // result
+    std::string result[] = {"NULL", 1, "NULL"};
+
+    for (int i = 0; i < rows.sizes(); ++i) {
+        str->append(rows[i]);
+        pattern->append(patterns[i]);
+        null->append(i % 2 == 0)
+    }
+
+    columns.push_back(str);
+    columns.push_back(NullableColumn::create(pattern, null));
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_instr_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_instr(context, columns).value();
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());
+
+    for (int i = 0; i < result.size(); ++i) {
+        ASSERT_EQ(res[i], result->debug_item(i));
+    }
+}
+
+PARALLEL_TEST(RegexpInstrFunctionsTest, leftAndRightNotConstASCIITest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+    auto str = BinaryColumn::create();
+    auto pattern = BinaryColumn::create();
+    
+    // Test1
+    std::string rows[] = {"", "a", "ABCDEFG_HIJKLMN"};
+    std::string patterns[] = {"test", "a", "AB"};
+
+    // Test2
+    std::string string rows_2[] = {"test", "alex demo", "ABCDEFG_HIJKLMN"};
+    std::string patterns_2[] = {"", "demo", "MN"};
+
+    // result
+    std::string result[] = {0, 1, 1, 1, 6, 14};
+
+    for (int i = 0; i < rows.sizes(); ++i) {
+        str->append(rows[i]);
+        pattern->append(patterns[i]);
+    }
+
+    for (int i = 0; i < rows_2.sizes(); ++i) {
+        str->append(rows_2[i]);
+        pattern->append(patterns_2[i]);
+    }
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_instr_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_instr(context, columns).value();
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());
+
+    for (int i = 0; i < result.size(); ++i) {
+        ASSERT_EQ(res[i], result->debug_item(i));
+    }
+}
+
+
+PARALLEL_TEST(RegexpInstrFunctionsTest, leftAndRightNotConstUtf8Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+    auto str = BinaryColumn::create();
+    auto pattern = BinaryColumn::create();
+
+    // Test1
+    std::string rows[] = {"", "三十年众生牛马，六十年诸佛龙", "a三b十c年d众e生f牛g马"};
+    std::string patterns[] = {"三十", "三十", "a三"};
+
+    // Test2
+    std::string string rows_2[] = {"三十", "三十年众生牛马，六十年诸佛龙", "a三b十c年d众e生f牛g马"};
+    std::string patterns_2[] = {"", "龙象", "g马"};
+
+    // result
+    std::string result[] = {0, 1, 1, 1, 0, 13};
+
+    for (int i = 0; i < rows.sizes(); ++i) {
+        str->append(rows[i]);
+        pattern->append(patterns[i]);
+    }
+
+    for (int i = 0; i < rows_2.sizes(); ++i) {
+        str->append(rows_2[i]);
+        pattern->append(patterns_2[i]);
+    }
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_instr_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_instr(context, columns).value();
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());
+
+    for (int i = 0; i < result.size(); ++i) {
+        ASSERT_EQ(res[i], result->debug_item(i));
+    }
+}
+
+PARALLEL_TEST(RegexpInstrFunctionsTest, leftAndRightConstASCIITest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+    auto str = ConstColumn::create(BinaryColumn::create());
+    auto pattern = ConstColumn::create(BinaryColumn::create());
+
+    // Test1
+    std::string rows[] = {"", "a", "ABCDEFG_HIJKLMN"};
+    std::string patterns[] = {"test", "a", "AB"};
+
+    // Test2
+    std::string string rows_2[] = {"test", "alex demo", "ABCDEFG_HIJKLMN"};
+    std::string patterns_2[] = {"", "demo", "MN"};
+
+    // result
+    std::string result[] = {0, 1, 1, 1, 6, 14};
+
+    for (int i = 0; i < rows.sizes(); ++i) {
+        str->append(rows[i]);
+        pattern->append(patterns[i]);
+    }
+
+    for (int i = 0; i < rows_2.sizes(); ++i) {
+        str->append(rows_2[i]);
+        pattern->append(patterns_2[i]);
+    }
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_instr_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_instr(context, columns).value();
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());
+
+    for (int i = 0; i < result.size(); ++i) {
+        ASSERT_EQ(res[i], result->debug_item(i));
+    }
+}
+
+PARALLEL_TEST(RegexpInstrFunctionsTest, leftAndRightConstUtf8Test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+    auto str = ConstColumn::create(BinaryColumn::create());
+    auto pattern = ConstColumn::create(BinaryColumn::create());
+
+    // Test1
+    std::string rows[] = {"", "三十年众生牛马，六十年诸佛龙", "a三b十c年d众e生f牛g马"};
+    std::string patterns[] = {"三十", "三十", "a三"};
+
+    // Test2
+    std::string string rows_2[] = {"三十", "三十年众生牛马，六十年诸佛龙", "a三b十c年d众e生f牛g马"};
+    std::string patterns_2[] = {"", "龙象", "g马"};
+
+    // result
+    std::string result[] = {0, 1, 1, 1, 0, 13};
+
+    for (int i = 0; i < rows.sizes(); ++i) {
+        str->append(rows[i]);
+        pattern->append(patterns[i]);
+    }
+
+    for (int i = 0; i < rows_2.sizes(); ++i) {
+        str->append(rows_2[i]);
+        pattern->append(patterns_2[i]);
+    }
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_instr_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_instr(context, columns).value();
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());
+
+    for (int i = 0; i < result.size(); ++i) {
+        ASSERT_EQ(res[i], result->debug_item(i));
+    }
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, crc32Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;

@@ -3443,6 +3443,225 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context
     return regexp_extract_all_general(context, options, columns);
 }
 
+Status StringFunctions::regexp_instr_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::THREAD_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new StringFunctionsState();
+    context->set_function_state(scope, state);
+
+    state->options = std::make_unique<re2::RE2::Options>();
+    state->options->set_log_errors(false);
+    state->options->set_longest_match(false);
+    state->options->set_dot_nl(true);
+
+    if (context->is_notnull_constant_column(0)) {
+        state->const_row = true;
+        auto row_column = context->get_constant_column(0);
+        auto row_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(row_column);
+        state->row = row_slice;
+    }
+
+    if (context->is_notnull_constant_column(1)) {
+        state->const_pattern = true;
+        auto pattern_column = context->get_constant_column(1);
+        auto ptn_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(pattern_column);
+        state->pattern = ptn_str.to_string();
+        state->regex = std::make_unique<re2::RE2>(state->pattern, *(state->options));
+
+        if (!state->regex->ok()) {
+            std::stringstream error;
+            error << "Invalid regex expression: " << ptn_str.to_string();
+            context->set_error(error.str().c_str());
+            return Status::InvalidArgument(error.str());
+        }
+    }
+
+    return Status::OK();
+}
+
+static int regexp_instr_const_pattern(re2::RE2* re, const starrocks::Slice& row, string& ptn_data) {
+    int result = 0;
+
+    auto row_size = row.get_size();
+    if (row_size > INT_MAX) {
+        row_size = INT_MAX;
+    }
+
+    re2::StringPiece str_sp(row.get_data(), row_size);
+    auto max_matches = 1 + re->NumberOfCapturingGroups();
+    std::vector<re2::StringPiece> matches(max_matches);
+    bool success = re->Match(str_sp, 0, row_size, re2::RE2::UNANCHORED, &matches[0], max_matches);
+    if (!success) {
+        return result;
+    }
+
+    const re2::StringPiece& match = matches[0];
+    std::string match_str = match.data();
+    std::string row_str = row.get_data();
+    std::vector<size_t> utf8_index;
+    size_t utf8_len = get_utf8_index(row_str, &utf8_index);
+    auto index = row_str.find(match_str);
+
+    if (utf8_len == row_str.length()) {
+        if (index != std::string::npos) {
+            result = index + 1;
+        }
+    } else {
+        for (int idx = 0; idx < utf8_index.size(); ++idx) {
+            if (utf8_index[idx] == index) {
+                result = idx + 1;
+            }
+        }
+    }
+
+    return result;
+}
+
+static int regexp_instr_non_const_pattern(re2::RE2::Options* options, const starrocks::Slice& row, const starrocks::Slice& ptn) {
+    int result = 0;
+
+    re2::RE2 local_re(ptn.get_data(), *options);
+    if (!local_re.ok()) {
+        return result;
+    }
+
+    auto row_size = row.get_size();
+    if (row_size > INT_MAX) {
+        row_size = INT_MAX;
+    }
+
+    re2::StringPiece str_sp(row.get_data(), row_size);
+    auto max_matches = 1 + local_re.NumberOfCapturingGroups();
+    std::vector<re2::StringPiece> matches(max_matches);
+    bool success = local_re.Match(str_sp, 0, row_size, re2::RE2::UNANCHORED, &matches[0], max_matches);
+    if (!success) {
+        return result;
+    }
+
+    const re2::StringPiece& match = matches[0];
+    std::string match_str = match.data();
+    std::string row_str = row.get_data();
+    std::vector<size_t> utf8_index;
+    size_t utf8_len = get_utf8_index(row_str, &utf8_index);
+    auto index = row_str.find(match_str);
+
+    if (utf8_len == row_str.length()) {
+        if (index != std::string::npos) {
+            result = index + 1;
+        }
+    } else {
+        for (int idx = 0; idx < utf8_index.size(); ++idx) {
+            if (utf8_index[idx] == index) {
+                result = idx + 1;
+            }
+        }
+    }
+
+    return result;
+}
+
+static ColumnPtr regexp_instr_const_mode(StringFunctionsState* state, re2::RE2::Options* options, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    re2::RE2* const_re = state->get_or_prepare_regex();
+    starrocks::Slice row_value = state->row;
+    std::string ptn_str = state->pattern;
+    
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
+
+    if (state->const_row && state->const_pattern) {
+        if (ptn_str.empty()) {
+            result.append(1);
+            return result.build(ColumnHelper::is_all_const(columns));
+        }
+
+        if (row_value.empty()) {
+            result.append(0);
+            return result.build(ColumnHelper::is_all_const(columns));
+        }
+
+        int index = regexp_instr_const_pattern(const_re, row_value, ptn_str);
+        result.append(index);
+    } else if (state->const_pattern) {
+        if (ptn_str.empty()) {
+            for (int row = 0; row < size; ++row) {
+                result.append(1);
+            }
+        } else {
+            for (int row = 0; row < size; ++row) {
+                if (content_viewer.is_null(row)) {
+                    result.append(0);
+                    continue;
+                }
+
+                auto local_row_value = content_viewer.value(row);
+                int index = regexp_instr_const_pattern(const_re, local_row_value, ptn_str);
+                result.append(index);
+            }
+        }
+    } else {
+        if (row_value.empty()) {
+            for (int row = 0; row < size; ++row) {
+                result.append(0);
+            }
+        } else {
+            for (int row = 0; row < size; ++row) {
+                if (ptn_viewer.is_null(row)) {
+                    result.append(1);
+                    continue;
+                }
+
+                int index = regexp_instr_non_const_pattern(options, row_value, ptn_viewer.value(row));
+                result.append(index);
+            }
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+static ColumnPtr regexp_instr_general_mode(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (ptn_viewer.is_null(row)) {
+            result.append(1);
+            continue;
+        } 
+        
+        if (content_viewer.is_null(row)) {
+            result.append(0);
+            continue;
+        }
+
+        auto row_value = content_viewer.value(row);
+        auto ptn_value = ptn_viewer.value(row);
+
+        int index = regexp_instr_non_const_pattern(options, row_value, ptn_value);
+        result.append(index);
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_instr(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    re2::RE2::Options* options = state->options.get();
+
+    if (state->const_row || state->const_pattern) {
+        return regexp_instr_const_mode(state, options, columns);
+    }
+
+    return regexp_instr_general_mode(context, options, columns);
+}
+
 static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
