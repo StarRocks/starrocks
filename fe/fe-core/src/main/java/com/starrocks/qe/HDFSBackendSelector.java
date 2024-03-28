@@ -86,7 +86,9 @@ public class HDFSBackendSelector implements BackendSelector {
     private boolean chooseComputeNode;
     private boolean shuffleScanRange;
     private final int kCandidateNumber = 3;
-    private final int kMaxImbalanceRatio = 3;
+    // After testing, this value can ensure that the scan range size assigned to each BE is as uniform as possible,
+    // and the largest scan data is not more than 1.1 times of the average value
+    private final double kMaxImbalanceRatio = 1.1;
     public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 32;
 
     class HdfsScanRangeHasher {
@@ -156,30 +158,24 @@ public class HDFSBackendSelector implements BackendSelector {
         this.shuffleScanRange = shuffleScanRange;
     }
 
-    private ComputeNode selectLeastScanBytesComputeNode(List<ComputeNode> backends, long maxImbalanceBytes) {
+    // re-balance scan ranges for compute node if needed, return the compute node which scan range is assigned to
+    private ComputeNode reBalanceScanRangeForComputeNode(List<ComputeNode> backends, long avgNodeScanRangeBytes,
+                                                         TScanRangeLocations scanRangeLocations) {
         if (backends == null || backends.isEmpty()) {
             return null;
         }
 
         ComputeNode node = null;
-        long minAssignedScanRanges = Long.MAX_VALUE;
+        long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
         for (ComputeNode backend : backends) {
             long assignedScanRanges = assignedScansPerComputeNode.get(backend);
-            if (assignedScanRanges < minAssignedScanRanges) {
-                minAssignedScanRanges = assignedScanRanges;
-                node = backend;
-            }
-        }
-        if (maxImbalanceBytes == 0) {
-            return node;
-        }
-
-        for (ComputeNode backend : backends) {
-            long assignedScanRanges = assignedScansPerComputeNode.get(backend);
-            if (assignedScanRanges < (minAssignedScanRanges + maxImbalanceBytes)) {
+            if (assignedScanRanges + addedScans < avgNodeScanRangeBytes * kMaxImbalanceRatio) {
                 node = backend;
                 break;
             }
+        }
+        if (node == null) {
+            node = backends.get(0);
         }
         return node;
     }
@@ -217,12 +213,12 @@ public class HDFSBackendSelector implements BackendSelector {
         return hashRing;
     }
 
-    private long computeAverageScanRangeBytes() {
+    private long computeTotalSize() {
         long size = 0;
         for (TScanRangeLocations scanRangeLocations : locations) {
             size += scanRangeLocations.scan_range.hdfs_scan_range.getLength();
         }
-        return size / (locations.size() + 1);
+        return size;
     }
 
     @Override
@@ -231,8 +227,8 @@ public class HDFSBackendSelector implements BackendSelector {
             return;
         }
 
-        long avgScanRangeBytes = computeAverageScanRangeBytes();
-        long maxImbalanceBytes = avgScanRangeBytes * kMaxImbalanceRatio;
+        long totalSize = computeTotalSize();
+        long avgNodeScanRangeBytes = totalSize / workerProvider.getAllWorkers().size() + 1;
 
         // exclude non-alive or in-blacklist compute nodes.
         for (ComputeNode computeNode : computeNodes) {
@@ -262,7 +258,7 @@ public class HDFSBackendSelector implements BackendSelector {
                     }
                     backends.addAll(servers);
                 }
-                ComputeNode node = selectLeastScanBytesComputeNode(backends, 0);
+                ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
                 if (node == null) {
                     remoteScanRangeLocations.add(scanRangeLocations);
                 } else {
@@ -285,7 +281,7 @@ public class HDFSBackendSelector implements BackendSelector {
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
             List<ComputeNode> backends = hashRing.get(scanRangeLocations, kCandidateNumber);
-            ComputeNode node = selectLeastScanBytesComputeNode(backends, maxImbalanceBytes);
+            ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
             if (node == null) {
                 throw new RuntimeException("Failed to find backend to execute");
             }
