@@ -387,6 +387,12 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testSelectFunctionWithDb() throws Exception {
+        String sql = "select test.concat_ws(',', 'test1', 'test2')";
+        assertPlanContains(sql, "concat_ws");
+    }
+
+    @Test
     public void testSelectStruct() throws Exception {
         String sql = "select c0, c1.a from test_struct";
         assertPlanContains(sql, "1:Project\n" +
