@@ -219,6 +219,10 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
         return status;
     }
 
+    src_snapshot_info->__isset.backend = true;
+    src_snapshot_info->__isset.snapshot_path = true;
+    src_snapshot_info->__isset.incremental_snapshot = true;
+
     LOG(INFO) << "Made snapshot from " << src_snapshot_info->backend.host << ":" << src_snapshot_info->backend.be_port
               << ":" << src_snapshot_info->snapshot_path << ", txn_id: " << request.transaction_id
               << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
