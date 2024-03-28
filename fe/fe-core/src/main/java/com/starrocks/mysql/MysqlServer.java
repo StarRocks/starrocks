@@ -35,6 +35,7 @@
 package com.starrocks.mysql;
 
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,7 +43,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.concurrent.Future;
@@ -82,7 +82,7 @@ public class MysqlServer {
         // open server socket
         try {
             serverChannel = ServerSocketChannel.open();
-            serverChannel.socket().bind(new InetSocketAddress("0.0.0.0", port), 2048);
+            serverChannel.socket().bind(NetUtils.getSockAddrBasedOnCurrIpVersion(port), 2048);
             serverChannel.configureBlocking(true);
         } catch (IOException e) {
             LOG.warn("Open MySQL network service failed.", e);

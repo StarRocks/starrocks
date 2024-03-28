@@ -60,17 +60,12 @@ private:
 // Looks up all IP addresses associated with a given hostname. Returns
 // an error status if any system call failed, otherwise OK. Even if OK
 // is returned, addresses may still be of zero length.
-std::string hostname_to_ip(const std::string& host);
-
-Status hostname_to_ip_addrs_v4(const std::string& name, std::vector<std::string>* addresses);
-
-Status hostname_to_ip_addrs_v6(const std::string& name, std::vector<std::string>* addresses);
+Status hostname_to_ip(const std::string& host, std::string& ip);
+Status hostname_to_ip(const std::string& host, std::string& ip, bool ipv6);
+Status hostname_to_ipv4(const std::string& host, std::string& ip);
+Status hostname_to_ipv6(const std::string& host, std::string& ip);
 
 bool is_valid_ip(const std::string& ip);
-
-// Finds the first non-localhost IP address in the given list. Returns
-// true if such an address was found, false otherwise.
-bool find_first_non_localhost(const std::vector<std::string>& addresses, std::string* addr);
 
 // Sets the output argument to the system defined hostname.
 // Returns OK if a hostname can be found, false otherwise.
@@ -84,7 +79,5 @@ TNetworkAddress make_network_address(const std::string& hostname, int port);
 Status get_inet_interfaces(std::vector<std::string>* interfaces, bool include_ipv6 = false);
 
 std::string get_host_port(const std::string& host, int port);
-
-std::string get_brpc_http_url(const std::string& host, int port);
 
 } // namespace starrocks

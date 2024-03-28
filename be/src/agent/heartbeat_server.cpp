@@ -198,13 +198,14 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
             if (fe_saved_is_valid_ip) {
                 ip = master_info.backend_ip;
             } else {
-                ip = hostname_to_ip(master_info.backend_ip);
-                if (ip.empty()) {
-                    std::stringstream err_msg;
-                    err_msg << "Can not get ip from fqdn, fqdn is: " << master_info.backend_ip;
-                    LOG(WARNING) << err_msg.str();
-                    return Status::InternalError(err_msg.str());
+                Status status = hostname_to_ip(master_info.backend_ip, ip, BackendOptions::is_bind_ipv6());
+                if (!status.ok()) {
+                    LOG(WARNING) << "Can not get ip from fqdn, fqdn is: " << master_info.backend_ip
+                                 << ", binding ipv6: " << BackendOptions::is_bind_ipv6()
+                                 << ", status: " << status.to_string();
+                    return status;
                 }
+                LOG(INFO) << "resolved from fqdn: " << master_info.backend_ip << " to ip: " << ip;
             }
 
             //step3: get all ips of the interfaces on this machine

@@ -37,6 +37,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.service.FrontendOptions;
 import inet.ipaddr.IPAddressString;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
@@ -178,4 +179,8 @@ public class NetUtils {
 
     }
 
+    public static InetSocketAddress getSockAddrBasedOnCurrIpVersion(final int port) {
+        String anyLocalAddr = FrontendOptions.isBindIPV6() ? "::0" : "0.0.0.0";
+        return new InetSocketAddress(anyLocalAddr, port);
+    }
 }
