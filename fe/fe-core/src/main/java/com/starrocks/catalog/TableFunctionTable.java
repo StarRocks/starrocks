@@ -312,7 +312,7 @@ public class TableFunctionTable extends Table {
             }
         } catch (UserException e) {
             LOG.error("parse files error", e);
-            throw new DdlException("failed to parse files", e);
+            throw new DdlException("failed to parse files: " + e.getMessage());
         }
 
         if (fileStatuses.isEmpty()) {
