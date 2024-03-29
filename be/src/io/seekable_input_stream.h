@@ -77,6 +77,13 @@ public:
     // object directly with a single GET OBJECT call, without the need
     // to first send a HEAD OBJECT request to get the object size.
     virtual StatusOr<std::string> read_all();
+
+    virtual const std::string& filename() const { return _filename; };
+
+    virtual bool is_cache_hit() const { return false; };
+
+protected:
+    std::string _filename = "";
 };
 
 class SeekableInputStreamWrapper : public SeekableInputStream {

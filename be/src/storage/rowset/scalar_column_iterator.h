@@ -88,6 +88,8 @@ public:
 
     ParsedPage* get_current_page() { return _page.get(); }
 
+    ColumnReader* get_column_reader() override { return _reader; }
+
     bool is_nullable();
 
     int64_t element_ordinal() const override { return _element_ordinal; }

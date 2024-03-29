@@ -65,6 +65,8 @@ public:
 
     int dict_size() override { return _element_iterator->dict_size(); }
 
+    ColumnReader* get_column_reader() { return _reader; }
+
 private:
     [[nodiscard]] Status next_batch_null_offsets(size_t* n, UInt32Column* offsets, UInt8Column* nulls,
                                                  size_t* element_rows);
