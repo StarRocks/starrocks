@@ -339,6 +339,35 @@ public:
         ASSERT_OK(migration_task_2.execute());
     }
 
+    void do_chain_path_migration(int64_t tablet_id, int32_t schema_hash) {
+        TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
+        TabletSharedPtr tablet = tablet_manager->get_tablet(tablet_id);
+        ASSERT_TRUE(tablet != nullptr);
+        ASSERT_EQ(tablet->tablet_id(), tablet_id);
+        DataDir* source_dir = tablet->data_dir();
+        tablet.reset();
+
+        std::vector<DataDir*> dest_dir;
+        for (const auto& dir : starrocks::StorageEngine::instance()->get_stores()) {
+            if (dir != source_dir) {
+                dest_dir.push_back(dir);
+            }
+        }
+
+        EngineStorageMigrationTask migration_task_1(tablet_id, schema_hash, dest_dir[0]);
+        ASSERT_OK(migration_task_1.execute());
+
+        // sleep 2 second for add latency for load
+        sleep(2);
+        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, dest_dir[1]);
+        ASSERT_OK(migration_task_2.execute());
+
+        // sleep 2 second for add latency for load
+        sleep(2);
+        EngineStorageMigrationTask migration_task_3(tablet_id, schema_hash, dest_dir[0]);
+        ASSERT_OK(migration_task_3.execute());
+    }
+
     void do_migration_fail(int64_t tablet_id, int32_t schema_hash) {
         TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
         TabletSharedPtr tablet = tablet_manager->get_tablet(tablet_id);
@@ -373,6 +402,14 @@ TEST_F(EngineStorageMigrationTaskTest, test_cycle_migration) {
 
 TEST_F(EngineStorageMigrationTaskTest, test_cycle_migration_pk) {
     do_cycle_migration(99999, 9999);
+}
+
+TEST_F(EngineStorageMigrationTaskTest, test_chain_path_migration) {
+    do_chain_path_migration(12345, 1111);
+}
+
+TEST_F(EngineStorageMigrationTaskTest, test_chain_path_migration_pk) {
+    do_chain_path_migration(99999, 9999);
 }
 
 TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) {
@@ -571,12 +608,15 @@ int main(int argc, char** argv) {
     CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
     std::string root_path_1 = storage_root.value() + "/migration_test_path_1";
     std::string root_path_2 = storage_root.value() + "/migration_test_path_2";
+    std::string root_path_3 = storage_root.value() + "/migration_test_path_3";
     starrocks::fs::remove_all(root_path_1);
     starrocks::fs::create_directories(root_path_1);
     starrocks::fs::remove_all(root_path_2);
     starrocks::fs::create_directories(root_path_2);
+    starrocks::fs::remove_all(root_path_3);
+    starrocks::fs::create_directories(root_path_3);
 
-    starrocks::config::storage_root_path = root_path_1 + ";" + root_path_2;
+    starrocks::config::storage_root_path = root_path_1 + ";" + root_path_2 + ";" + root_path_3;
     starrocks::config::storage_flood_stage_left_capacity_bytes = 10485600;
 
     starrocks::CpuInfo::init();
