@@ -74,6 +74,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -926,14 +927,18 @@ public class TabletChecker extends FrontendDaemon {
                     stats.getNeedFurtherRepairReplica());
         }
 
-        if (stats.getAliveCnt() < replicationNum && replicas.size() >= aliveBackendsNum
+        Set<Long> replicaBackendIds = replicas
+                .stream()
+                .map(Replica::getBackendId)
+                .collect(Collectors.toSet());
+        if (stats.getAliveCnt() < replicationNum && replicaBackendIds.containsAll(aliveBeIdsInCluster)
                 && aliveBackendsNum >= replicationNum && replicationNum > 1) {
             // there is no enough backend for us to create a new replica, so we have to delete an existing replica,
             // so there can be available backend for us to create a new replica.
             // And if there is only one replica, we will not handle it(maybe need human interference)
             // condition explain:
             // 1. alive < replicationNum: replica is missing or bad
-            // 2. replicas.size() >= aliveBackendsNum: the existing replicas occupies all available backends
+            // 2. replicaBackendIds.containsAll(aliveBeIdsInCluster): the existing replicas occupies all available backends
             // 3. aliveBackendsNum >= replicationNum: make sure after deletion, there will be
             //    at least one backend for new replica.
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
