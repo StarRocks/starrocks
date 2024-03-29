@@ -67,7 +67,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
     :::info
 
-    - In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and loads data into StarRocks.
+    - In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
     - If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
 
     :::
@@ -146,7 +146,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
     :::info
 
-    - In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and loads data into StarRocks.
+    - In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
     - If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
 
     :::
@@ -213,8 +213,8 @@ The data is successfully loaded when the above result is returned.
 ### topics.regex
 
 **Required**:<br/>
-**Default value**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in `topics.regex`or `topics` (above), but not both. <br/>
-**Description**:
+**Default value**:
+**Description**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in `topics.regex`or `topics` (above), but not both. <br/>
 
 ### starrocks.topic2table.map
 
@@ -319,7 +319,7 @@ If the Kafka data is in Debezium CDC format and the StarRocks table is a Primary
 
 :::info
 
-In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and loads data into StarRocks.
+In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
 
 :::
 
@@ -333,7 +333,7 @@ transforms.unwrap.delete.handling.mode
 
 In the above configurations, we specify `transforms=addfield,unwrap`.
 
-- The op field of the Debezium-formatted CDC data records the SQL operation on each data row from the upstream database. The values `c`, `u`, and `d` represent create, update, and delete, respectively. If the StarRocks table is a Primary Key table, you need to specify the addfield transform. The addfield transform adds a `__op` field for each data row to mark the SQL operation on each data row. It also retrieves the values of other columns from the `before` or `after` fields based on the value of the `op` field in the Debezium-formatted CDC data, to form a complete row of data. Finally, the data will be converted into JSON or CSV format and written into StarRocks. The addfield transform class is `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`. It is included in the Kafka connector JAR file, so you do not need to manually install it.
+- The `op` field of the Debezium-formatted CDC data records the SQL operation on each data row from the upstream database. The values `c`, `u`, and `d` represent create, update, and delete, respectively. If the StarRocks table is a Primary Key table, you need to specify the addfield transform. The addfield transform adds a `__op` field for each data row to mark the SQL operation on each data row. To form a complete data row, the addfield transform also retrieves the values of other columns from the `before` or `after` fields based on the value of the `op` field in the Debezium-formatted CDC data. Finally, the data will be converted into JSON or CSV format and written into StarRocks. The addfield transform class is `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`. It is included in the Kafka connector JAR file, so you do not need to manually install it.
 
     If the StarRocks table is not a Primary Key table, you do not need to specify the addfield transform.
 
