@@ -344,7 +344,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
-    public static final String USE_STATS_TO_OPTIMIZE_SKEW_JOIN = "use_stats_to_optimize_skew_join";
+    public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
     public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
     public static final String SKEW_JOIN_DATA_SKEW_THRESHOLD = "skew_join_data_skew_threshold";
 
@@ -1849,8 +1849,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
 
-    @VarAttr(name = USE_STATS_TO_OPTIMIZE_SKEW_JOIN)
-    private boolean useStatsToOptimizeSkewJoin = true;
+    @VarAttr(name = ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN)
+    private boolean enableStatsToOptimizeSkewJoin = true;
 
     // mcv means most common value in histogram statistics
     @VarAttr(name = SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT, flag = VariableMgr.INVISIBLE)
@@ -3516,8 +3516,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.skewJoinRandRange = skewJoinRandRange;
     }
 
-    public boolean isUseStatsToOptimizeSkewJoin() {
-        return useStatsToOptimizeSkewJoin;
+    public boolean isEnableStatsToOptimizeSkewJoin() {
+        return enableStatsToOptimizeSkewJoin;
     }
 
     public int getSkewJoinOptimizeUseMCVCount() {

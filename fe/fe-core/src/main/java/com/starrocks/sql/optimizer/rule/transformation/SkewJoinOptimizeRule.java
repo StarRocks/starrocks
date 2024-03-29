@@ -102,7 +102,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             return true;
         }
 
-        if (!context.getSessionVariable().isUseStatsToOptimizeSkewJoin()) {
+        if (!context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
             return false;
         }
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
