@@ -51,10 +51,11 @@ public class PartitionUtils {
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,
                                                           List<Long> tmpPartitionIds,
-                                                          DistributionDesc distributionDesc) throws DdlException {
+                                                          DistributionDesc distributionDesc,
+                                                          long warehouseId) throws DdlException {
         List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
-                        tmpPartitionIds, distributionDesc);
+                        tmpPartitionIds, distributionDesc, warehouseId);
         Locker locker = new Locker();
         if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");

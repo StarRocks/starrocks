@@ -14,9 +14,11 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.StatusPB;
@@ -26,9 +28,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.Cluster;
+import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
@@ -39,6 +42,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -71,21 +75,55 @@ public class KafkaUtilTest {
                 result = globalStateMgr;
                 globalStateMgr.getWarehouseMgr();
                 result = warehouseManager;
-                warehouseManager.getDefaultWarehouse();
-                result = warehouse;
                 BackendServiceClient.getInstance();
                 minTimes = 0;
                 result = client;
             }
         };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public List<Long> getAllComputeNodeIds(long warehouseId) {
+                return Lists.newArrayList(1L);
+            }
+
+            @Mock
+            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
+                return null;
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
     }
 
     @Test
-    public void testNoAliveComputeNode(@Mocked Cluster cluster) throws UserException {
+    public void testNoAliveComputeNode() throws UserException {
         new Expectations() {
             {
-                cluster.getComputeNodeIds();
-                result = Lists.newArrayList(1L);
                 service.getBackendOrComputeNode(anyLong);
                 result = null;
             }
@@ -98,15 +136,13 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoRpcException(@Mocked Cluster cluster) throws UserException, RpcException {
+    public void testGetInfoRpcException() throws UserException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
 
         new Expectations() {
             {
-                cluster.getComputeNodeIds();
-                result = Lists.newArrayList(1L);
                 service.getBackendOrComputeNode(anyLong);
                 result = backend;
                 client.getInfo((TNetworkAddress) any, (PProxyRequest) any);
@@ -120,17 +156,16 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoInterruptedException(@Mocked Cluster cluster) throws UserException, RpcException {
+    public void testGetInfoInterruptedException() throws UserException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
 
         new Expectations() {
             {
-                cluster.getComputeNodeIds();
-                result = Lists.newArrayList(1L);
                 service.getBackendOrComputeNode(anyLong);
                 result = backend;
+
                 client.getInfo((TNetworkAddress) any, (PProxyRequest) any);
                 result = new InterruptedException("interrupted");
             }
@@ -142,15 +177,13 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoValidateObjectException(@Mocked Cluster cluster) throws UserException, RpcException {
+    public void testGetInfoValidateObjectException() throws UserException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
 
         new Expectations() {
             {
-                cluster.getComputeNodeIds();
-                result = Lists.newArrayList(1L);
                 service.getBackendOrComputeNode(anyLong);
                 result = backend;
                 client.getInfo((TNetworkAddress) any, (PProxyRequest) any);
@@ -164,7 +197,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoFailed(@Mocked Cluster cluster) throws UserException, RpcException {
+    public void testGetInfoFailed() throws UserException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -178,8 +211,6 @@ public class KafkaUtilTest {
 
         new Expectations() {
             {
-                cluster.getComputeNodeIds();
-                result = Lists.newArrayList(1L);
                 service.getBackendOrComputeNode(anyLong);
                 result = backend;
                 client.getInfo((TNetworkAddress) any, (PProxyRequest) any);

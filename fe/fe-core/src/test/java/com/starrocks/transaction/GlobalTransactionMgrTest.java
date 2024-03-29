@@ -418,7 +418,7 @@ public class GlobalTransactionMgrTest {
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
-        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getNodeTasksNum();
         beTasksNum.put(1L, 0);
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
@@ -508,7 +508,7 @@ public class GlobalTransactionMgrTest {
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
-        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getNodeTasksNum();
         beTasksNum.put(1L, 0);
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 

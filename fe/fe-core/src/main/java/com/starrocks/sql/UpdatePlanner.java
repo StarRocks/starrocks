@@ -161,7 +161,7 @@ public class UpdatePlanner {
                     throw new SemanticException(e.getMessage());
                 }
             } else if (targetTable instanceof SystemTable) {
-                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable);
+                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable, ConnectContext.get().getCurrentWarehouseId());
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + targetTable.getClass().getName());
@@ -202,15 +202,15 @@ public class UpdatePlanner {
      * @return: new root logical plan with cast operator.
      */
     private static OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
-                                                                      Table targetTable,
-                                                                      List<String> colNames,
-                                                                      List<ColumnRefOperator> outputColumns,
-                                                                      OptExprBuilder root) {
+                                                                       Table targetTable,
+                                                                       List<String> colNames,
+                                                                       List<ColumnRefOperator> outputColumns,
+                                                                       OptExprBuilder root) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
         Preconditions.checkState(colNames.size() == outputColumns.size(), "Column name's size %s should be equal " +
-                        "to output column refs' size %s", colNames.size(), outputColumns.size());
+                "to output column refs' size %s", colNames.size(), outputColumns.size());
 
         for (int columnIdx = 0; columnIdx < outputColumns.size(); ++columnIdx) {
             ColumnRefOperator outputColumn = outputColumns.get(columnIdx);
