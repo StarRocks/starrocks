@@ -487,3 +487,55 @@ SELECT * FROM t_clone_for_gin ORDER BY id1;
 function: set_first_tablet_bad_and_recover("t_clone_for_gin")
 
 SELECT * FROM t_clone_for_gin ORDER BY id1;
+
+-- name: test_complex_predicate_for_gin
+CREATE TABLE `t_complex_predicate_for_gin_none` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT ''
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t_complex_predicate_for_gin_english` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_english (`text_column`) USING GIN ("parser" = "english") COMMENT ''
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_complex_predicate_for_gin_none VALUES (1, "abc cbd");
+INSERT INTO t_complex_predicate_for_gin_none VALUES (2, "cbd edf");
+
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) LIKE "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) LIKE "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) LIKE "abc";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) LIKE "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column LIKE CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column LIKE CONCAT("ab", "%");
+
+INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
+INSERT INTO t_complex_predicate_for_gin_english VALUES (2, "cbd edf");
+
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) LIKE "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) LIKE "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) LIKE "abc";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) LIKE "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column LIKE CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column LIKE CONCAT("ab", "%");
+
+DROP TABLE t_complex_predicate_for_gin_none;
+DROP TABLE t_complex_predicate_for_gin_english;
