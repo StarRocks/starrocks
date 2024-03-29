@@ -234,17 +234,27 @@ public class MvRewritePreprocessor {
                 Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
 
                 // 2. choose best related mvs by user's config or related mv limit
-                Set<MaterializedView> selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
+                Set<MaterializedView> selectedRelatedMVs;
+                try (Timer t1 = Tracers.watchScope("chooseCandidates")) {
+                    selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
+                }
 
                 // 3. convert to mv with planContext, skip if mv has no valid plan(not SPJG)
-                Set<MvWithPlanContext> mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
+                Set<MvWithPlanContext> mvWithPlanContexts;
+                try (Timer t2 = Tracers.watchScope("generateMvPlan")) {
+                    mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
+                }
 
                 // 4. process related mvs to candidates
-                prepareRelatedMVs(queryTables, mvWithPlanContexts);
+                try (Timer t3 = Tracers.watchScope("validateMv")) {
+                    prepareRelatedMVs(queryTables, mvWithPlanContexts);
+                }
 
                 // 5. process relate mvs with views
-                processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
-                        queryColumnRefFactory, requiredColumns);
+                try (Timer t4 = Tracers.watchScope("mvWithView")) {
+                    processPlanWithView(queryMaterializationContext, connectContext, queryOptExpression,
+                            queryColumnRefFactory, requiredColumns);
+                }
 
                 // add queryMaterializationContext into context
                 if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
