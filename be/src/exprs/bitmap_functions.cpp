@@ -186,30 +186,31 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_and(FunctionContext* context, const 
     }
     std::vector<BitmapValue> values;
     values.reserve(columns.size());
-    size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_OBJECT> builder(size);
-    for (int row = 0; row < size; ++row) {
+    size_t rows = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(rows);
+    for (int row = 0; row < rows; ++row) {
+        values.clear();
         bool is_null = false;
-        for (auto& viewer : list) {
+        for (const auto& viewer : list) {
             if (viewer.is_null(row)) {
                 is_null = true;
                 break;
             }
+            values.emplace_back(*(viewer.value(row)));
         }
         if(is_null) {
             builder.append_null();
             continue;
         }
-        values.clear();
-        for (int i = 0; i < list.size(); i++) {
-            values.emplace_back(*(list[i].value(row)));
-        }
         std::sort(values.begin(), values.end(),
-                  [](const BitmapValue& a, const BitmapValue& b) -> bool { return a.cardinality() > b.cardinality(); });
+                  [](const BitmapValue& a, const BitmapValue& b) -> bool { return a.cardinality() <= b.cardinality(); });
         BitmapValue bitmap;
-        bitmap |= values[0];
-        for (int i = 1; i < list.size(); i++) {
+        bitmap |= values[values.size() - 1];
+        for (int i = 0; i < list.size() - 1; i++) {
             bitmap &= values[i];
+            if(bitmap.cardinality() == 0) {
+                break;
+            }
         }
         builder.append(&bitmap);
     }
