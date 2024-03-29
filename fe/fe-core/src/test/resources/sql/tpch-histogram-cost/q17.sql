@@ -60,6 +60,7 @@ OutPut Exchange Id: 12
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 307008.57] ESTIMATE
 |
 9:SELECT
+<<<<<<< HEAD
                                                                                                                                                                                                                                  |  predicates: 5: L_QUANTITY < 0.2 * 50: avg
                                                                                                                                                                                                                                  |  cardinality: 307009
                                                                                                                                                                                                                                  |  column statistics:
@@ -76,6 +77,22 @@ OutPut Exchange Id: 12
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
 |  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+=======
+|  predicates: 5: L_QUANTITY < 0.2 * 50: avg
+|  cardinality: 307009
+|  column statistics:
+|  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 307008.57] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|
+8:ANALYTIC
+|  functions: [, avg[([5: L_QUANTITY, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], ]
+|  partition by: [18: P_PARTKEY, INT, false]
+|  cardinality: 614017
+|  column statistics:
+|  * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0] MCV: [[35.00:12075300][25.00:12063500][32.00:12063000][23.00:12059300][16.00:12051800]] ESTIMATE
+>>>>>>> cde3260c21 ([Enhancement] Use statistics to optimize skew join (#43166))
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 614017.14] ESTIMATE
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 20467.238] ESTIMATE
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE

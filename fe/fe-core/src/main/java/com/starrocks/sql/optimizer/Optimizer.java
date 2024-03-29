@@ -340,11 +340,19 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
+<<<<<<< HEAD
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
+=======
+
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
+>>>>>>> cde3260c21 ([Enhancement] Use statistics to optimize skew join (#43166))
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
+
+        skewJoinOptimize(tree, rootTaskContext);
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         // @todo: resolve recursive optimization question:
@@ -529,6 +537,12 @@ public class Optimizer {
         }
 
         return tree;
+    }
+
+    private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {
+        SkewJoinOptimizeRule rule = new SkewJoinOptimizeRule();
+        Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, rule);
     }
 
     private OptExpression pruneSubfield(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {

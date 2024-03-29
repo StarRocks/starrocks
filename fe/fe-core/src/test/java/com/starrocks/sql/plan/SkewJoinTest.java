@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -32,7 +35,40 @@ public class SkewJoinTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+<<<<<<< HEAD
         ConnectorPlanTestBase.mockCatalog(connectContext);
+=======
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+
+        int scale = 100;
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCHHistogramStatisticStorage(scale));
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
+        setTableStatistics(t0, 5);
+
+        OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
+        setTableStatistics(t5, 25);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
+        setTableStatistics(t1, 10000 * scale);
+
+        OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
+        setTableStatistics(t4, 150000 * scale);
+
+        OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
+        setTableStatistics(t6, 200000 * scale);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
+        setTableStatistics(t2, 800000 * scale);
+
+        OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
+        setTableStatistics(t3, 1500000 * scale);
+
+        OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+        setTableStatistics(t7, 6000000 * scale);
+
+>>>>>>> cde3260c21 ([Enhancement] Use statistics to optimize skew join (#43166))
         starRocksAssert.withTable("create table struct_tbl(c0 INT, " +
                 "c1 struct<a int, b array<struct<a int, b int>>>," +
                 "c2 struct<a int, b int>," +
@@ -168,5 +204,43 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: c1 = 5: c1");
         assertCContains(sqlPlan, "equal join conjunct: 13: rand_col = 20: rand_col\n" +
                 "  |  equal join conjunct: 2: c2 = 10: c2");
+    }
+
+    @Test
+    public void testSkewJoinWithStats() throws Exception {
+        String sql = "select * from test.customer join test.part on c_mktsegment = p_name and c_custkey = p_partkey ";
+        String sqlPlan = getFragmentPlan(sql);
+        // rewrite success
+        assertCContains(sqlPlan, "equal join conjunct: 20: rand_col = 27: rand_col\n" +
+                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
+                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+
+        int skewJoinUseMCVCount = connectContext.getSessionVariable().getSkewJoinOptimizeUseMCVCount();
+        double skewDataThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        connectContext.getSessionVariable().setSkewJoinOptimizeUseMCVCount(1);
+        connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.3);
+        sqlPlan = getFragmentPlan(sql);
+        // not rewrite because of the skewJoinUseMCVCount and skewDataThreshold
+        assertCContains(sqlPlan, "equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
+                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+        connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(skewDataThreshold);
+        connectContext.getSessionVariable().setSkewJoinOptimizeUseMCVCount(skewJoinUseMCVCount);
+
+        sql = "select * from test.customer join test.part on trim(c_mktsegment) = p_name and c_custkey = p_partkey ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 20: trim = 11: P_NAME\n" +
+                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+
+        sql = "select c_custkey, sum(p_retailprice) from (select c_custkey, c_mktsegment from test.customer) c" +
+                " join (select p_name,p_retailprice from test.part) p on c.c_mktsegment = p.p_name group by c_custkey";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
+                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME");
+
+        sql = "select * from test.customer join test.part on p_name = c_mktsegment and p_partkey = c_custkey";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 20: rand_col = 27: rand_col\n" +
+                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
+                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
     }
 }
