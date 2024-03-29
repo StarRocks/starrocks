@@ -40,10 +40,9 @@ public:
             const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
 
     static StatusOr<ConnectorChunkSink::Futures> hive_style_partitioning_write_chunk(
-            bool partitioned, const std::string& partition,
-            std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers,
-            LocationProvider* location_provider, formats::FileWriterFactory* file_writer_factory, int64_t max_file_size,
-            const ChunkPtr& chunk);
+            const ChunkPtr& chunk, bool partitioned, const std::string& partition, int64_t max_file_size,
+            const formats::FileWriterFactory* file_writer_factory, LocationProvider* location_provider,
+            std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers);
 
 private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
