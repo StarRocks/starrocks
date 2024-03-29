@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -94,6 +95,10 @@ public class SetExecutor {
                     .getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
             if (null == userAuthenticationInfo) {
                 throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
+            }
+            if (!userAuthenticationInfo.getAuthPlugin().equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
+                throw new DdlException("only allow set password for native user, current user: " +
+                        setPassVar.getUserIdent() + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
             }
             userAuthenticationInfo.setPassword(setPassVar.getPassword());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
