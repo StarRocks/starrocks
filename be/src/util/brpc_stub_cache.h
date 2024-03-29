@@ -85,9 +85,9 @@ public:
         std::string brpc_url;
         realhost = host;
         if (!is_valid_ip(host)) {
-            realhost = hostname_to_ip(host);
-            if (realhost == "") {
-                LOG(WARNING) << "failed to get ip from host, host=" << host;
+            Status status = hostname_to_ip(host, realhost);
+            if (!status.ok()) {
+                LOG(WARNING) << "failed to get ip from host:" << status.to_string();
                 return nullptr;
             }
         }
@@ -159,9 +159,10 @@ public:
         std::string brpc_url;
         realhost = taddr.hostname;
         if (!is_valid_ip(taddr.hostname)) {
-            realhost = hostname_to_ip(taddr.hostname);
-            if (realhost == "") {
-                return Status::RuntimeError("failed to get ip from host " + taddr.hostname);
+            Status status = hostname_to_ip(taddr.hostname, realhost);
+            if (!status.ok()) {
+                LOG(WARNING) << "failed to get ip from host:" << status.to_string();
+                return nullptr;
             }
         }
         brpc_url = get_host_port(realhost, taddr.port);

@@ -36,23 +36,32 @@
 
 #include <arpa/inet.h>
 #include <common/logging.h>
-#include <errno.h>
 #include <ifaddrs.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
+#include <cerrno>
 #include <climits>
+#include <cstring>
 #include <sstream>
+#include <utility>
+
+#include "gutil/strings/substitute.h"
+
+#ifdef __APPLE__
+#ifndef HOST_NAME_MAX
+#define HOST_NAME_MAX MAXHOSTNAMELEN
+#endif
+#endif
 
 namespace starrocks {
 
 InetAddress::InetAddress(std::string ip, sa_family_t family, bool is_loopback)
-        : _ip_addr(ip), _family(family), _is_loopback(is_loopback) {}
+        : _ip_addr(std::move(ip)), _family(family), _is_loopback(is_loopback) {}
 
 bool InetAddress::is_loopback() const {
     return _is_loopback;
@@ -65,8 +74,6 @@ std::string InetAddress::get_host_address() const {
 bool InetAddress::is_ipv6() const {
     return _family == AF_INET6;
 }
-
-static const std::string LOCALHOST("127.0.0.1");
 
 Status get_hostname(std::string* hostname) {
     char name[HOST_NAME_MAX];
@@ -138,55 +145,48 @@ Status get_hosts(std::vector<InetAddress>* hosts) {
     return Status::OK();
 }
 
-Status hostname_to_ip_addrs(const std::string& name, std::vector<std::string>* addresses) {
-    addrinfo hints;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;
+Status hostname_to_ipv4(const std::string& host, std::string& ip) {
+    addrinfo hints, *res;
+    in_addr addr;
+
+    memset(&hints, 0, sizeof(addrinfo));
     hints.ai_socktype = SOCK_STREAM;
-
-    struct addrinfo* addr_info;
-
-    if (getaddrinfo(name.c_str(), nullptr, &hints, &addr_info) != 0) {
-        std::stringstream ss;
-        ss << "Could not find IP address for: " << name;
-        return Status::InternalError(ss.str());
+    hints.ai_family = AF_INET;
+    int err = getaddrinfo(host.c_str(), nullptr, &hints, &res);
+    if (err != 0) {
+        std::string err_msg = strings::Substitute("failed to get ipv4 from host: $0, err: $1", host, gai_strerror(err));
+        LOG(WARNING) << err_msg;
+        return Status::InternalError(err_msg);
     }
 
-    addrinfo* it = addr_info;
+    addr.s_addr = ((sockaddr_in*)(res->ai_addr))->sin_addr.s_addr;
+    ip = inet_ntoa(addr);
 
-    while (it != nullptr) {
-        char addr_buf[INET6_ADDRSTRLEN];
-        if (it->ai_family == AF_INET) {
-            LOG(INFO) << "this host is an IPv4 address, converting...";
-            const char* result = inet_ntop(AF_INET, &((sockaddr_in*)it->ai_addr)->sin_addr, addr_buf, INET6_ADDRSTRLEN);
-            if (result == nullptr) {
-                std::stringstream ss;
-                ss << "Could not convert IPv4 address for: " << name;
-                freeaddrinfo(addr_info);
-                return Status::InternalError(ss.str());
-            }
-        } else if (it->ai_family == AF_INET6) {
-            LOG(INFO) << "this host is IPv6 address, we are about to convert it now.";
-            struct sockaddr_in6* sa = reinterpret_cast<struct sockaddr_in6*>(it->ai_addr);
-            const char* result = inet_ntop(AF_INET6, &sa->sin6_addr, addr_buf, INET6_ADDRSTRLEN);
-            if (result == nullptr) {
-                std::stringstream ss;
-                ss << "Could not convert IPv6 address for: " << name;
-                freeaddrinfo(addr_info);
-                return Status::InternalError(ss.str());
-            }
-        } else {
-            std::stringstream ss;
-            ss << "unknown address family!";
-            freeaddrinfo(addr_info);
-            return Status::InternalError(ss.str());
-        }
+    freeaddrinfo(res);
+    return Status::OK();
+}
 
-        addresses->push_back(std::string(addr_buf));
-        it = it->ai_next;
+Status hostname_to_ipv6(const std::string& host, std::string& ip) {
+    char ipv6_str[128];
+    struct sockaddr_in6* sockaddr_ipv6;
+
+    struct addrinfo *answer, hint;
+    bzero(&hint, sizeof(hint));
+    hint.ai_family = AF_INET6;
+    hint.ai_socktype = SOCK_STREAM;
+
+    int err = getaddrinfo(host.c_str(), nullptr, &hint, &answer);
+    if (err != 0) {
+        std::string err_msg = strings::Substitute("failed to get ipv6 from host: $0, err: $1", host, gai_strerror(err));
+        LOG(WARNING) << err_msg;
+        return Status::InternalError(err_msg);
     }
 
-    freeaddrinfo(addr_info);
+    sockaddr_ipv6 = reinterpret_cast<struct sockaddr_in6*>(answer->ai_addr);
+    inet_ntop(AF_INET6, &sockaddr_ipv6->sin6_addr, ipv6_str, sizeof(ipv6_str));
+    ip = ipv6_str;
+    fflush(nullptr);
+    freeaddrinfo(answer);
     return Status::OK();
 }
 
@@ -195,29 +195,30 @@ bool is_valid_ip(const std::string& ip) {
     return (inet_pton(AF_INET6, ip.data(), buf) > 0) || (inet_pton(AF_INET, ip.data(), buf) > 0);
 }
 
-std::string hostname_to_ip(const std::string& host) {
-    std::vector<std::string> addresses;
-    Status status = hostname_to_ip_addrs(host, &addresses);
-    if (!status.ok()) {
-        LOG(WARNING) << "failed to resolve this hostname " << host << " to ip address,  err is " << status.message();
-        return "";
+// Prefer ipv4 when both ipv4 and ipv6 bound to the same host
+Status hostname_to_ip(const std::string& host, std::string& ip) {
+    auto start = std::chrono::high_resolution_clock::now();
+    Status status = hostname_to_ipv4(host, ip);
+    if (status.ok()) {
+        return status;
     }
-    if (addresses.size() != 1) {
-        LOG(WARNING) << "the number of addresses could only be equal to 1, failed to get ip from host";
-        return "";
+    status = hostname_to_ipv6(host, ip);
+
+    auto current = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(current - start);
+    if (duration.count() >= 500) {
+        LOG(WARNING) << "hostname_to_ip cost too mush time, cost_time:" << duration.count() << "ms hostname:" << host
+                     << " ip:" << ip;
     }
-    return addresses[0];
+    return status;
 }
 
-bool find_first_non_localhost(const std::vector<std::string>& addresses, std::string* addr) {
-    for (const auto& candidate : addresses) {
-        if (candidate != LOCALHOST) {
-            *addr = candidate;
-            return true;
-        }
+Status hostname_to_ip(const std::string& host, std::string& ip, bool ipv6) {
+    if (ipv6) {
+        return hostname_to_ipv6(host, ip);
+    } else {
+        return hostname_to_ipv4(host, ip);
     }
-
-    return false;
 }
 
 TNetworkAddress make_network_address(const std::string& hostname, int port) {
