@@ -35,7 +35,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class InformationSchemaDataSourceTest {
@@ -99,8 +98,7 @@ public class InformationSchemaDataSourceTest {
                 .filter(t -> t.getTable_engine().equals("MATERIALIZED_VIEW")).findFirst()
                 .orElseGet(null);
         Assert.assertEquals("MATERIALIZED_VIEW", mvConfig.getTable_engine());
-        Map<String, String> propsMap = new HashMap<>();
-        propsMap = new Gson().fromJson(mvConfig.getProperties(), propsMap.getClass());
+        Map<String, String> propsMap = new Gson().fromJson(mvConfig.getProperties(), Map.class);
         Assert.assertEquals("1", propsMap.get("replication_num"));
         Assert.assertEquals("HDD", propsMap.get("storage_medium"));
 
@@ -218,5 +216,73 @@ public class InformationSchemaDataSourceTest {
                 .filter(t -> t.getTable_name().equals("duplicate_table_with_null")).findFirst().orElseGet(null);
         Assert.assertEquals("db3", partitionMeta.getDb_name());
         Assert.assertEquals("duplicate_table_with_null", partitionMeta.getTable_name());
+    }
+
+    @Test
+    public void testRandomDistribution() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db4").useDatabase("db4");
+        String createTblStmtStr = "CREATE TABLE db4.`duplicate_table_random` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db4");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("duplicate_table_random")).findFirst().orElseGet(null);
+        Assert.assertEquals("RANDOM", tableConfig.getDistribute_type());
+        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assert.assertEquals("", tableConfig.getDistribute_key());
+    }
+
+    @Test
+    public void testDynamicPartition() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db5").useDatabase("db5");
+        String createTblStmtStr = "CREATE TABLE db5.`duplicate_dynamic_table` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY RANGE(k1)()\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                "\"dynamic_partition.start\" = \"-3\",\n" +
+                "\"dynamic_partition.end\" = \"3\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db5");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("duplicate_dynamic_table")).findFirst().orElseGet(null);
+        Map<String, String> props = new Gson().fromJson(tableConfig.getProperties(), Map.class);
+        Assert.assertEquals("true", props.get("dynamic_partition.enable"));
+        Assert.assertEquals("DAY", props.get("dynamic_partition.time_unit"));
+        Assert.assertEquals("-3", props.get("dynamic_partition.start"));
+        Assert.assertEquals("3", props.get("dynamic_partition.end"));
+        Assert.assertEquals("p", props.get("dynamic_partition.prefix"));
+        Assert.assertEquals("1", props.get("replication_num"));
     }
 }
