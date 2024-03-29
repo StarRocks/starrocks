@@ -3,6 +3,7 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
 import com.starrocks.epack.privilege.RoleMapping;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
@@ -44,9 +45,10 @@ public class RoleMappingStatementAnalyzer {
                 }
             });
 
+            AuthenticationMgrEPack authenticationMgrEPack =
+                    (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
             String securityIntegrationName = propertyMap.get(RoleMapping.ROLE_MAPPING_PROPERTY_INTEGRATION_NAME_KEY);
-            SecurityIntegration securityIntegration = context.getGlobalStateMgr().getAuthenticationMgr()
-                    .getSecurityIntegration(securityIntegrationName);
+            SecurityIntegration securityIntegration = authenticationMgrEPack.getSecurityIntegration(securityIntegrationName);
             if (securityIntegration == null) {
                 throw new SemanticException("security integration '" + securityIntegrationName + "' doesn't exist");
             }

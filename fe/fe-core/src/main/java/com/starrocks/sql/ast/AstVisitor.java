@@ -52,7 +52,6 @@ import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
-import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -717,10 +716,6 @@ public interface AstVisitor<R, C> {
 
     default R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
         return visitShowStatement(statement, context);
-    }
-
-    default R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {
-        return visitDDLStatement(statement, context);
     }
 
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------

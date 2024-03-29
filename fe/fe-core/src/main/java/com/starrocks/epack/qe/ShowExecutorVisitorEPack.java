@@ -25,6 +25,7 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
@@ -250,7 +251,9 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         Set<RoleMapping> roleMappings = authorizationManager.getRoleMappingMetaMgr().getAllRoleMappings();
         List<List<String>> infos = new ArrayList<>();
         for (RoleMapping roleMapping : roleMappings) {
-            SecurityIntegration securityIntegration = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+            AuthenticationMgrEPack authenticationMgrEPack =
+                    (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            SecurityIntegration securityIntegration = authenticationMgrEPack
                     .getSecurityIntegration(roleMapping.getIntegrationName());
             if (securityIntegration == null) {
                 continue;
@@ -281,7 +284,8 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
     @Override
     public ShowResultSet visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement,
                                                                ConnectContext context) {
-        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        AuthenticationMgrEPack authenticationManager =
+                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         Set<SecurityIntegration> securityIntegrations = authenticationManager.getAllSecurityIntegrations();
         List<List<String>> infos = new ArrayList<>();
         for (SecurityIntegration securityIntegration : securityIntegrations) {
@@ -310,10 +314,12 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
     @Override
     public ShowResultSet visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
                                                                      ConnectContext context) {
+        AuthenticationMgrEPack authenticationManager =
+                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
         String name = statement.getName();
         List<List<String>> infos = new ArrayList<>();
-        SecurityIntegration securityIntegration = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                .getSecurityIntegration(name);
+        SecurityIntegration securityIntegration = authenticationManager.getSecurityIntegration(name);
         if (securityIntegration != null) {
             Map<String, String> propertyMap = securityIntegration.getPropertyMap();
             String propString = propertyMap.entrySet().stream()

@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.privilege.AuthorizationMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -77,8 +78,9 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
     }
 
     public List<String> getBelongedGroupsByUsername(String integrationName, String username) {
+        AuthenticationMgrEPack authenticationMgrEPack = (AuthenticationMgrEPack) authenticationManager;
         LDAPSecurityIntegration ldapSecurityIntegration =
-                (LDAPSecurityIntegration) authenticationManager.getSecurityIntegration(integrationName);
+                (LDAPSecurityIntegration) authenticationMgrEPack.getSecurityIntegration(integrationName);
         if (ldapSecurityIntegration == null) {
             return null;
         }
@@ -98,9 +100,10 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
     }
 
     public synchronized void refreshGroupCache(boolean force) {
+        AuthenticationMgrEPack authenticationMgrEPack = (AuthenticationMgrEPack) authenticationManager;
         Map<String, Set<String>> mappedGroupDNs = authorizationManager.getRoleMappingMetaMgr().getMappedGroupDNs();
         for (Map.Entry<String, Set<String>> entry : mappedGroupDNs.entrySet()) {
-            SecurityIntegration securityIntegration = authenticationManager.getSecurityIntegration(entry.getKey());
+            SecurityIntegration securityIntegration = authenticationMgrEPack.getSecurityIntegration(entry.getKey());
             if (securityIntegration == null) {
                 member2Groups.remove(entry.getKey());
                 continue;

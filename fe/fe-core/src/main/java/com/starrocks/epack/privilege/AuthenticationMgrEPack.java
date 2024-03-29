@@ -10,6 +10,7 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.SecurityIntegrationFactory;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.DdlException;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -17,6 +18,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -68,7 +70,6 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
         return null;
     }
 
-    @Override
     public void createSecurityIntegration(String name,
                                           Map<String, String> propertyMap,
                                           boolean isReplay) throws DdlException {
@@ -85,12 +86,12 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
             throw new DdlException("security integration '" + name + "' already exists");
         }
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateSecurityIntegration(name, propertyMap);
+            EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLogEPack.logCreateSecurityIntegration(name, propertyMap);
             LOG.info("finished to create security integration '{}'", securityIntegration.toString());
         }
     }
 
-    @Override
     public void alterSecurityIntegration(String name, Map<String, String> alterProps,
                                          boolean isReplay) throws DdlException {
         SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
@@ -110,14 +111,14 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
             // update map
             nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
             if (!isReplay) {
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterSecurityIntegration(name, alterProps);
+                EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+                editLogEPack.logAlterSecurityIntegration(name, alterProps);
                 LOG.info("finished to alter security integration '{}' with updated properties {}",
                         name, alterProps);
             }
         }
     }
 
-    @Override
     public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
         AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         Set<String> associatedRoleMappings =
@@ -133,24 +134,30 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
 
         SecurityIntegration result = nameToSecurityIntegrationMap.remove(name);
         if (!isReplay && result != null) {
-            GlobalStateMgr.getCurrentState().getEditLog().logDropSecurityIntegration(name);
+            EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLogEPack.logDropSecurityIntegration(name);
             LOG.info("finished to drop security integration '{}'", name);
         }
     }
 
-    @Override
+    public SecurityIntegration getSecurityIntegration(String name) {
+        return nameToSecurityIntegrationMap.get(name);
+    }
+
+    public Set<SecurityIntegration> getAllSecurityIntegrations() {
+        return new HashSet<>(nameToSecurityIntegrationMap.values());
+    }
+
     public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
             throws DdlException {
         createSecurityIntegration(name, propertyMap, true);
     }
 
-    @Override
     public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
             throws DdlException {
         alterSecurityIntegration(name, alterProps, true);
     }
 
-    @Override
     public void replayDropSecurityIntegration(String name)
             throws DdlException {
         dropSecurityIntegration(name, true);

@@ -5,6 +5,7 @@ package com.starrocks.epack.sql.analyzer;
 import com.google.common.collect.ImmutableSortedSet;
 import com.starrocks.authentication.LDAPSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
@@ -58,8 +59,9 @@ public class SecurityIntegrationStatementAnalyzer {
                         propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY) + "'");
             }
 
-            if (context.getGlobalStateMgr().getAuthenticationMgr()
-                    .getSecurityIntegration(statement.getName()) != null) {
+            AuthenticationMgrEPack authenticationMgrEPack =
+                    (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
+            if (authenticationMgrEPack.getSecurityIntegration(statement.getName()) != null) {
                 throw new SemanticException("security integration '" + statement.getName() + "' already exists");
             }
 
@@ -84,8 +86,9 @@ public class SecurityIntegrationStatementAnalyzer {
         @Override
         public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement,
                                                            ConnectContext context) {
-            if (context.getGlobalStateMgr().getAuthenticationMgr()
-                    .getSecurityIntegration(statement.getName()) == null) {
+            AuthenticationMgrEPack authenticationMgrEPack =
+                    (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
+            if (authenticationMgrEPack.getSecurityIntegration(statement.getName()) == null) {
                 throw new SemanticException("security integration '" + statement.getName() + "' not found");
             }
 
@@ -99,8 +102,9 @@ public class SecurityIntegrationStatementAnalyzer {
         @Override
         public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement,
                                                           ConnectContext context) {
-            if (context.getGlobalStateMgr().getAuthenticationMgr()
-                    .getSecurityIntegration(statement.getName()) == null) {
+            AuthenticationMgrEPack authenticationMgrEPack =
+                    (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
+            if (authenticationMgrEPack.getSecurityIntegration(statement.getName()) == null) {
                 throw new SemanticException("security integration '" + statement.getName() + "' not found");
             }
 
@@ -110,8 +114,9 @@ public class SecurityIntegrationStatementAnalyzer {
         @Override
         public Void visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
                                                                 ConnectContext context) {
-            if (context.getGlobalStateMgr().getAuthenticationMgr()
-                    .getSecurityIntegration(statement.getName()) == null) {
+            AuthenticationMgrEPack authenticationMgrEPack =
+                    (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
+            if (authenticationMgrEPack.getSecurityIntegration(statement.getName()) == null) {
                 throw new SemanticException("security integration '" + statement.getName() + "' not found");
             }
 

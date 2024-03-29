@@ -174,6 +174,7 @@ public class DDLStmtExecutor {
     public static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
         private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();
+
         public static StmtExecutorVisitor getInstance() {
             return INSTANCE;
         }

@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.epack.persist;
 
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
@@ -21,6 +22,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.Warehouse;
 
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 
 public class EditLogEPack extends EditLog {
@@ -39,6 +41,36 @@ public class EditLogEPack extends EditLog {
 
     public void logAlterWarehouse(Warehouse wh) {
         logEdit(OperationTypeEPack.OP_ALTER_WAREHOUSE, wh);
+    }
+
+    public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, propertyMap);
+        logEdit(OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION, info);
+    }
+
+    public void logAlterSecurityIntegration(String name, Map<String, String> alterProps) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, alterProps);
+        logEdit(OperationTypeEPack.OP_ALTER_SECURITY_INTEGRATION, info);
+    }
+
+    public void logDropSecurityIntegration(String name) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, null);
+        logEdit(OperationTypeEPack.OP_DROP_SECURITY_INTEGRATION, info);
+    }
+
+    public void logCreateRoleMapping(String name, Map<String, String> propertyMap) {
+        RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, propertyMap);
+        logEdit(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, info);
+    }
+
+    public void logAlterRoleMapping(String name, Map<String, String> alterProps) {
+        RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, alterProps);
+        logEdit(OperationTypeEPack.OP_ALTER_ROLE_MAPPING, info);
+    }
+
+    public void logDropRoleMapping(String name) {
+        RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, null);
+        logEdit(OperationTypeEPack.OP_DROP_ROLE_MAPPING, info);
     }
 
     @Override
@@ -64,6 +96,46 @@ public class EditLogEPack extends EditLog {
                     Warehouse wh = (Warehouse) journal.getData();
                     WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayAlterWarehouse(wh);
+                    break;
+                }
+                case OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
+                    AuthenticationMgrEPack authenticationMgr =
+                            (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayCreateSecurityIntegration(
+                            info.name, info.propertyMap);
+                    break;
+                }
+                case OperationTypeEPack.OP_ALTER_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
+                    AuthenticationMgrEPack authenticationMgr =
+                            (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayAlterSecurityIntegration(
+                            info.name, info.propertyMap);
+                    break;
+                }
+                case OperationTypeEPack.OP_DROP_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.getData();
+                    AuthenticationMgrEPack authenticationMgr =
+                            (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayDropSecurityIntegration(info.name);
+                    break;
+                }
+                case OperationTypeEPack.OP_CREATE_ROLE_MAPPING: {
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayCreateRoleMapping(
+                            info.name, info.propertyMap);
+                    break;
+                }
+                case OperationTypeEPack.OP_ALTER_ROLE_MAPPING: {
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayAlterRoleMapping(
+                            info.name, info.propertyMap);
+                    break;
+                }
+                case OperationTypeEPack.OP_DROP_ROLE_MAPPING: {
+                    RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.getData();
+                    globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayDropRoleMapping(info.name);
                     break;
                 }
                 default: {

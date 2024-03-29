@@ -22,6 +22,7 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.DdlException;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.AuthorizationProviderEPack;
 import com.starrocks.epack.privilege.LDAPRoleMapping;
@@ -102,7 +103,9 @@ public class RoleMappingTest {
         CreateSecurityIntegrationStatement createSecurityIntegrationStatement =
                 (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         DDLStmtExecutor.execute(createSecurityIntegrationStatement, connectContext);
-        ldap2 = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration("ldap2");
+        AuthenticationMgrEPack authenticationMgrEPack =
+                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        ldap2 = authenticationMgrEPack.getSecurityIntegration("ldap2");
         sql = "create security integration ldap3 properties (" +
                 "\"type\" = \"ldap\"," +
                 "\"ldap_user_group_match_attr\" = \"memberUid\"," +
@@ -115,7 +118,9 @@ public class RoleMappingTest {
         createSecurityIntegrationStatement =
                 (CreateSecurityIntegrationStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         DDLStmtExecutor.execute(createSecurityIntegrationStatement, connectContext);
-        ldap3 = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration("ldap3");
+        authenticationMgrEPack =
+                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        ldap3 = authenticationMgrEPack.getSecurityIntegration("ldap3");
     }
 
     private void createRoleMapping(String sql) throws Exception {

@@ -6,9 +6,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.DdlException;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -240,10 +240,10 @@ public class RoleMappingMetaMgr {
                                   Map<String, String> propertyMap,
                                   boolean isReplay) throws DdlException {
         RoleMapping roleMapping;
-        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        SecurityIntegration secIntegration =
-                authenticationManager.getSecurityIntegration(
-                        propertyMap.get(RoleMapping.ROLE_MAPPING_PROPERTY_INTEGRATION_NAME_KEY));
+        AuthenticationMgrEPack authenticationMgr =
+                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        SecurityIntegration secIntegration = authenticationMgr.getSecurityIntegration(
+                propertyMap.get(RoleMapping.ROLE_MAPPING_PROPERTY_INTEGRATION_NAME_KEY));
         if (secIntegration == null) {
             throw new DdlException("specified security integration doesn't exist");
         }
@@ -255,7 +255,8 @@ public class RoleMappingMetaMgr {
         }
         addRoleMapping(roleMapping, secIntegration.getType());
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateRoleMapping(name, propertyMap);
+            EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLogEPack.logCreateRoleMapping(name, propertyMap);
             LOG.info("finished to create role mapping '{}'", roleMapping.toString());
         }
     }
@@ -267,8 +268,9 @@ public class RoleMappingMetaMgr {
         SecurityIntegration securityIntegration = null;
         // TODO(yiming): resolve potential concurrency issue(dropping integration and create/alter role mapping)
         if (integrationName != null) {
-            securityIntegration = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .getSecurityIntegration(integrationName);
+            AuthenticationMgrEPack authenticationMgr =
+                    (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            securityIntegration = authenticationMgr.getSecurityIntegration(integrationName);
             if (securityIntegration == null) {
                 throw new DdlException("specified security integration '" + integrationName + "' doesn't exist");
             }
@@ -280,7 +282,8 @@ public class RoleMappingMetaMgr {
             throw new DdlException("failed to alter role mapping, error: " + e.getMessage(), e);
         }
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterRoleMapping(name, alterProps);
+            EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLogEPack.logAlterRoleMapping(name, alterProps);
             LOG.info("finished to alter role mapping '{}' with updated properties {}", name, alterProps);
         }
     }
@@ -288,7 +291,8 @@ public class RoleMappingMetaMgr {
     public void dropRoleMapping(String name, boolean isReplay) throws DdlException {
         removeRoleMapping(name);
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logDropRoleMapping(name);
+            EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+            editLogEPack.logDropRoleMapping(name);
             LOG.info("finished to drop role mapping '{}'", name);
         }
     }

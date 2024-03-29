@@ -14,6 +14,7 @@
 package com.starrocks.epack.qe;
 
 import com.starrocks.common.ErrorReport;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
@@ -61,8 +62,9 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
     public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
                                                                  ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> {
-            context.getGlobalStateMgr().getAuthenticationMgr().createSecurityIntegration(
-                    stmt.getName(), stmt.getPropertyMap(), false);
+            AuthenticationMgrEPack authenticationMgr =
+                    (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
+            authenticationMgr.createSecurityIntegration(stmt.getName(), stmt.getPropertyMap(), false);
         });
 
         return null;
@@ -72,7 +74,9 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
     public ShowResultSet visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement stmt,
                                                                 ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> {
-            context.getGlobalStateMgr().getAuthenticationMgr().alterSecurityIntegration(
+            AuthenticationMgrEPack authenticationMgr =
+                    (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
+            authenticationMgr.alterSecurityIntegration(
                     stmt.getName(), stmt.getProperties(), false);
         });
 
@@ -83,7 +87,9 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
     public ShowResultSet visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement stmt,
                                                                ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> {
-            context.getGlobalStateMgr().getAuthenticationMgr().dropSecurityIntegration(
+            AuthenticationMgrEPack authenticationMgr =
+                    (AuthenticationMgrEPack) context.getGlobalStateMgr().getAuthenticationMgr();
+            authenticationMgr.dropSecurityIntegration(
                     stmt.getName(), false);
         });
 
