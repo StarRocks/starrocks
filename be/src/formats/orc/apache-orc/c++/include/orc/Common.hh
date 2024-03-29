@@ -18,8 +18,9 @@
 
 #pragma once
 
-#include <string>
 #include <glog/logging.h>
+
+#include <string>
 
 #include "orc/Exceptions.hh"
 #include "orc/Type.hh"
