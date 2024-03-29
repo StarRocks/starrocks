@@ -205,7 +205,7 @@ class StarrocksSQLApiLib(object):
             if crash_similarity >= 90:
                 log.info("Crash log is similarity, skip create issue")
             else:
-                print("Max similarity is %f, create new issue" % crash_similarity)
+                log.info("Max similarity is %f, create new issue" % crash_similarity)
                 cur_time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 with open(f"{CRASH_DIR}/crash_{cur_time}.log", "w") as f:
                     f.writelines(be_crash_log)
@@ -289,7 +289,7 @@ class StarrocksSQLApiLib(object):
         return similarity
 
     def get_crash_log(self, ip):
-        print("Get crash log from %s" % ip)
+        log.warn("Get crash log from %s" % ip)
         cmd = (
             f'cd {self.cluster_path}/be/log/; grep -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
         )
@@ -300,6 +300,7 @@ class StarrocksSQLApiLib(object):
         """
         wait until be was exited
         """
+        log.warn("Wait be exit...")
         timeout = 60
         while timeout > 0:
             status_dict = self.get_cluster_status()
