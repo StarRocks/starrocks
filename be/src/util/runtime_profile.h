@@ -541,6 +541,16 @@ public:
     // This function updates _local_time_percent for each profile.
     void compute_time_in_profile();
 
+    void inc_version() {
+        std::lock_guard<std::mutex> l(_version_lock);
+        _version += 1;
+    }
+
+    int64_t get_version() const {
+        std::lock_guard<std::mutex> l(_version_lock);
+        return _version;
+    }
+
 public:
     // The root counter name for all top level counters.
     const static std::string ROOT_COUNTER;
@@ -613,9 +623,18 @@ private:
     // of the total time in the entire profile tree.
     double _local_time_percent;
 
-    // update a subtree of profiles from nodes, rooted at *idx.
+    // Protects _version
+    mutable std::mutex _version_lock;
+    // The version of this profile. It is used to prevent updating this profile
+    // from an old one.
+    int64_t _version{0};
+
+    // update a subtree of profiles from nodes, rooted at *idx. If the version
+    // of the parent node, or the version of root node for this subtree is older,
+    // skip to update the subtree, but still traverse the nodes of subtree to
+    // get the node immediately following this subtree.
     // On return, *idx points to the node immediately following this subtree.
-    void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx);
+    void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx, bool is_parent_node_old);
 
     // Helper function to compute compute the fraction of the total time spent in
     // this profile and its children.

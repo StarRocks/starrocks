@@ -116,6 +116,9 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
 
             channel.reset(new LoadChannel(this, ExecEnv::GetInstance()->lake_tablet_manager(), load_id, txn_id,
                                           request.txn_trace_parent(), job_timeout_s, std::move(job_mem_tracker)));
+            if (request.has_load_channel_profile_config()) {
+                channel->set_profile_config(request.load_channel_profile_config());
+            }
             _load_channels.insert({load_id, channel});
         } else {
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);

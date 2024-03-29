@@ -690,4 +690,97 @@ public class RuntimeProfileTest {
         Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("data_size").getAsString(), "10.000 KB");
         Assert.assertEquals(jsonObjchild12.getAsJsonPrimitive("time_ns").getAsString(), "1ms");
     }
+
+    @Test
+    public void testUpdateWithOldAndNewProfile() {
+        RuntimeProfile profile = new RuntimeProfile("profile");
+        Counter counter1 = profile.addCounter("counter1", TUnit.UNIT, null);
+        RuntimeProfile childProfile = new RuntimeProfile("child-profile");
+        profile.addChild(childProfile);
+        Counter counter2 = childProfile.addCounter("counter2", TUnit.UNIT, null);
+
+        Assert.assertEquals(0, profile.getVersion());
+        Assert.assertEquals(0, childProfile.getVersion());
+        counter1.setValue(1);
+        counter2.setValue(2);
+        Assert.assertEquals(1, counter1.getValue());
+        Assert.assertEquals(2, counter2.getValue());
+
+        TRuntimeProfileTree tree = profile.toThrift();
+        Assert.assertEquals(2, tree.nodes.size());
+        Assert.assertTrue(tree.nodes.get(0).isSetVersion());
+        Assert.assertEquals(0, tree.nodes.get(0).version);
+        Assert.assertTrue(tree.nodes.get(1).isSetVersion());
+        Assert.assertEquals(0, tree.nodes.get(1).version);
+
+        // update with new versions for both parent and child profile,
+        // both should update success
+        counter1.setValue(2);
+        counter2.setValue(3);
+        Assert.assertEquals(2, counter1.getValue());
+        Assert.assertEquals(3, counter2.getValue());
+        // make thrift profile versions newer
+        tree.nodes.get(0).setVersion(1);
+        tree.nodes.get(1).setVersion(1);
+        profile.update(tree);
+        Assert.assertEquals(1, counter1.getValue());
+        Assert.assertEquals(2, counter2.getValue());
+        Assert.assertEquals(1, profile.getVersion());
+        Assert.assertEquals(1, childProfile.getVersion());
+
+        // update with an old version for both parent profile, and a new
+        // version for child profile, both should skip
+        counter1.setValue(4);
+        counter2.setValue(5);
+        Assert.assertEquals(4, counter1.getValue());
+        Assert.assertEquals(5, counter2.getValue());
+        // make thrift parent older, and child newer
+        tree.nodes.get(0).setVersion(0);
+        tree.nodes.get(1).setVersion(2);
+        profile.update(tree);
+        Assert.assertEquals(4, counter1.getValue());
+        Assert.assertEquals(5, counter2.getValue());
+        Assert.assertEquals(1, profile.getVersion());
+        Assert.assertEquals(1, childProfile.getVersion());
+
+        // update with a new version for parent profile, and an old
+        // version for child profile, the parent should success, and
+        // the child skip
+        counter1.setValue(5);
+        counter2.setValue(6);
+        Assert.assertEquals(5, counter1.getValue());
+        Assert.assertEquals(6, counter2.getValue());
+        // make thrift parent equal, and child older
+        tree.nodes.get(0).setVersion(1);
+        tree.nodes.get(1).setVersion(0);
+        profile.update(tree);
+        Assert.assertEquals(1, counter1.getValue());
+        Assert.assertEquals(6, counter2.getValue());
+        Assert.assertEquals(1, profile.getVersion());
+        Assert.assertEquals(1, childProfile.getVersion());
+
+        // update with old versions for both parent and child profile,
+        // both should skip
+        counter1.setValue(7);
+        counter2.setValue(8);
+        Assert.assertEquals(7, counter1.getValue());
+        Assert.assertEquals(8, counter2.getValue());
+        // make thrift both parent and child older
+        tree.nodes.get(0).setVersion(0);
+        tree.nodes.get(1).setVersion(0);
+        profile.update(tree);
+        Assert.assertEquals(7, counter1.getValue());
+        Assert.assertEquals(8, counter2.getValue());
+        Assert.assertEquals(1, profile.getVersion());
+        Assert.assertEquals(1, childProfile.getVersion());
+
+        // If thrift not set version, should success
+        tree.nodes.get(0).setVersionIsSet(false);
+        tree.nodes.get(1).setVersionIsSet(false);
+        profile.update(tree);
+        Assert.assertEquals(1, counter1.getValue());
+        Assert.assertEquals(2, counter2.getValue());
+        Assert.assertEquals(1, profile.getVersion());
+        Assert.assertEquals(1, childProfile.getVersion());
+    }
 }
