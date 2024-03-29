@@ -904,7 +904,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                     field.name().equals(parts[0]), "Invalid partition: %s", partitions[i]);
 
             org.apache.iceberg.types.Type sourceType = spec.partitionType().fields().get(i).type();
-            data.set(i, Conversions.fromPartitionString(sourceType, parts[1]));
+            if (parts[1].equals("null")) {
+                data.set(i, null);
+            } else {
+                data.set(i, Conversions.fromPartitionString(sourceType, parts[1]));
+            }
         }
         return data;
     }
