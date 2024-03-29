@@ -189,7 +189,7 @@ MySQL [example_db]> select * from test_tbl;
 
 | 参数                                | 是否必填 | 默认值                                                       | 描述                                                         |
 | ----------------------------------- | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| name                                | 是       |                                                              | 表示当前的 Kafka connector，在 Kafka Connect 集群中必须为全局唯一，例如 Kafka connector。 |
+| name                                | 是       |                                                              | 表示当前的 Kafka connector，在 Kafka Connect 集群中必须为全局唯一，例如 starrocks-kafka-connector。 |
 | connector.class                     | 是       |              | Kafka connector 的 sink 使用的类：com.starrocks.connector.kafka.StarRocksSinkConnector。                          |
 | topics                              |       |                                                              | 一个或多个待订阅 Topic，每个 Topic 对应一个 StarRocks 表，默认情况下 Topic 的名称与 StarRocks 表名一致，导入时根据 Topic 名称确定目标 StarRocks 表。`topics` 和 `topics.regex`（如下） 两者二选一填写。如果两者不一致，则还需要配置 `starrocks.topic2table.map`。 |
 | topics.regex                        |          | |与待订阅 Topic 匹配的正则表达式。更多解释，同 `topics`。`topics` 和 `topics.regex` 和 `topics`（如上）两者二选一填写。 |
