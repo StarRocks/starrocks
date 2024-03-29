@@ -57,12 +57,11 @@ struct ColumnContext {
     std::vector<ColumnContext> child_column_contexts;
 };
 
-static inline arrow::Status check_const_and_only_null(const ColumnPtr& column) {
-    if (!column->is_constant() && !column->only_null()) {
+static inline arrow::Status check_const(const ColumnPtr& column) {
+    if (!column->is_constant()) {
         return arrow::Status::OK();
     }
-    return column->is_constant() ? arrow::Status::Invalid(fmt::format("The column can not be constant"))
-                                 : arrow::Status::Invalid(fmt::format("The column can not only have null values"));
+    return arrow::Status::Invalid(fmt::format("The column can not be constant"));
 }
 
 template <LogicalType LT, ArrowTypeId AT, bool is_nullable, typename = guard::Guard>
@@ -92,7 +91,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvFloatAndIntegerGuard<LT, 
     static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
                                         [[maybe_unused]] ColumnContext* column_context,
                                         arrow::ArrayBuilder* array_builder) {
-        ARROW_RETURN_NOT_OK(check_const_and_only_null(column));
+        ARROW_RETURN_NOT_OK(check_const(column));
         ArrowBuilderType* builder = down_cast<ArrowBuilderType*>(array_builder);
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
@@ -144,7 +143,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
     static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
                                         [[maybe_unused]] ColumnContext* column_context,
                                         arrow::ArrayBuilder* array_builder) {
-        ARROW_RETURN_NOT_OK(check_const_and_only_null(column));
+        ARROW_RETURN_NOT_OK(check_const(column));
         ArrowBuilderType* builder = down_cast<ArrowBuilderType*>(array_builder);
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
@@ -208,7 +207,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
     static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
                                         [[maybe_unused]] ColumnContext* column_context,
                                         arrow::ArrayBuilder* array_builder) {
-        ARROW_RETURN_NOT_OK(check_const_and_only_null(column));
+        ARROW_RETURN_NOT_OK(check_const(column));
         ArrowBuilderType* builder = down_cast<ArrowBuilderType*>(array_builder);
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
@@ -301,7 +300,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
 
     static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
                                         ColumnContext* column_context, arrow::ArrayBuilder* array_builder) {
-        ARROW_RETURN_NOT_OK(check_const_and_only_null(column));
+        ARROW_RETURN_NOT_OK(check_const(column));
         ARROW_RETURN_NOT_OK(initialize_child_column_context(column, column_context));
         auto& element_column_context = column_context->child_column_contexts[0];
         arrow::ListBuilder* builder = down_cast<arrow::ListBuilder*>(array_builder);
@@ -380,7 +379,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvStructGuard<LT, AT>> {
 
     static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
                                         ColumnContext* column_context, arrow::ArrayBuilder* array_builder) {
-        ARROW_RETURN_NOT_OK(check_const_and_only_null(column));
+        ARROW_RETURN_NOT_OK(check_const(column));
         ARROW_RETURN_NOT_OK(initialize_child_column_context(column, column_context));
         arrow::StructBuilder* builder = down_cast<arrow::StructBuilder*>(array_builder);
         const StructColumn* data_column;
@@ -469,7 +468,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
     static inline arrow::Status convert(const ColumnPtr& column, int start_idx, int end_idx,
                                         [[maybe_unused]] ColumnContext* column_context,
                                         arrow::ArrayBuilder* array_builder) {
-        ARROW_RETURN_NOT_OK(check_const_and_only_null(column));
+        ARROW_RETURN_NOT_OK(check_const(column));
         ARROW_RETURN_NOT_OK(initialize_child_column_context(column, column_context));
         arrow::MapBuilder* builder = down_cast<arrow::MapBuilder*>(array_builder);
         auto& key_context = column_context->child_column_contexts[0];
