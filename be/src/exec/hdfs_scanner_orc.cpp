@@ -483,6 +483,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
     RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
     if (_scanner_ctx.split_tasks.size() > 0) {
+        _scanner_ctx.has_split_tasks = true;
         _should_skip_file = true;
         return Status::OK();
     }

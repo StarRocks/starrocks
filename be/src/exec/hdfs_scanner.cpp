@@ -268,7 +268,7 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
-    if (_scanner_ctx.has_split_tasks) {
+    if (_scanner_ctx.estimated_mem_usage_per_split_task != 0) {
         return _scanner_ctx.estimated_mem_usage_per_split_task;
     }
     if (_shared_buffered_input_stream != nullptr) {
@@ -481,6 +481,9 @@ bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const
 void HdfsScannerContext::merge_split_tasks() {
     if (split_tasks.size() < 2) return;
 
+    // NOTE: the prerequisites of `split_tasks` are
+    // 1. all ranges in it are sorted
+    // 2. and none of them is overlapped.
     std::vector<HdfsSplitContextPtr> new_split_tasks;
 
     auto do_merge = [&](size_t start, size_t end) {
@@ -536,7 +539,6 @@ void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* s
         split_tasks->emplace_back(std::move(t));
     }
     if (split_tasks->size() > 0) {
-        _scanner_ctx.has_split_tasks = true;
         _scanner_ctx.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
     }
 }
