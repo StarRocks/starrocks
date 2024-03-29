@@ -555,7 +555,7 @@ jobs:
           fe_change: ${{ needs.fe-checker.outputs.src_filter }}
           build_type: Release
         run: |
-          echo "package=oss://starrocks-ci-release/main/ASAN/pr/StarRocks-4a3ac2f60d79e05b07e506ef9fce725be87a412c.tar.gz" >> "$GITHUB_ENV"
+          echo "package=oss://starrocks-ci-release/main/ASAN/pr/StarRocks-716d819a6de6c95b05eaa1106990300487798d4a.tar.gz" >> "$GITHUB_ENV"
 
       - name: UPDATE ECI & RUN BUILD
         id: run_build

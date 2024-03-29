@@ -196,7 +196,7 @@ class StarrocksSQLApiLib(object):
         # TODO: 判断是不是巡检，不然不需要创建issue
 
         # analyse be crash info
-        log.warn("Cluster %d status is abnormal, begin to get crash log...")
+        log.warn("Cluster status is abnormal, begin to get crash log...")
         be_crash_log = self.get_crash_log(cluster_status_dict["ip"][0])
 
         if be_crash_log != "":
@@ -637,7 +637,7 @@ class StarrocksSQLApiLib(object):
         log.info("shell cmd: %s" % shell)
 
         cmd_res = subprocess.run(
-            shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=1800, shell=True
+            shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=120, shell=True
         )
 
         log.info("shell result: code: %s, stdout: %s" % (cmd_res.returncode, cmd_res.stdout))
