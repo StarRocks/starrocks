@@ -316,8 +316,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
                     ARROW_RETURN_NOT_OK(builder->AppendNull());
                 } else {
                     ARROW_RETURN_NOT_OK(builder->Append());
-                    ARROW_RETURN_NOT_OK(element_column_context.convert_func(
-                            element_column, offsets[i], offsets[i + 1] - 1, &element_column_context, element_builder));
+                    ARROW_RETURN_NOT_OK(element_column_context.convert_func(element_column, offsets[i], offsets[i + 1],
+                                                                            &element_column_context, element_builder));
                 }
             }
         } else {
@@ -327,7 +327,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
             ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
             for (auto i = start_idx; i < end_idx; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append());
-                ARROW_RETURN_NOT_OK(element_column_context.convert_func(child_column, offsets[i], offsets[i + 1] - 1,
+                ARROW_RETURN_NOT_OK(element_column_context.convert_func(child_column, offsets[i], offsets[i + 1],
                                                                         &element_column_context, element_builder));
             }
         }
