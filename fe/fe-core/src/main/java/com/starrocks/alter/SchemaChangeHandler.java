@@ -2502,15 +2502,6 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable.setIndexes(indexes);
             olapTable.rebuildFullSchema();
 
-            // update max column unique id
-            int maxColUniqueId = olapTable.getMaxColUniqueId();
-            for (Column column : indexSchemaMap.get(olapTable.getBaseIndexId())) {
-                if (column.getUniqueId() > maxColUniqueId) {
-                    maxColUniqueId = column.getUniqueId();
-                }
-            }
-            olapTable.setMaxColUniqueId(maxColUniqueId);
-
             // If modified columns are already done, inactive related mv
             inactiveRelatedMaterializedViews(db, olapTable, modifiedColumns);
 
