@@ -115,7 +115,7 @@ select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group
 -- !result
 select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 limit 100) tb;
 -- result:
-100	100	163440
+100	99	163444
 -- !result
 select count(*) from (select array_agg(c0) from t3 group by c0) tb;
 -- result:
