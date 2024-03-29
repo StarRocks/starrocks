@@ -128,8 +128,17 @@ public class LogicalJoinOperator extends LogicalOperator {
     public ScalarOperator getSkewColumn() {
         return skewColumn;
     }
+
+    public void setSkewColumn(ScalarOperator skewColumn) {
+        this.skewColumn = skewColumn;
+    }
+
     public List<ScalarOperator> getSkewValues() {
         return skewValues;
+    }
+
+    public void setSkewValues(List<ScalarOperator> skewValues) {
+        this.skewValues = skewValues;
     }
 
     public int getTransformMask() {

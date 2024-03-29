@@ -436,12 +436,14 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.ELIMINATE_GROUP_BY);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
+
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_UKFK_JOIN);
         deriveLogicalProperty(tree);
+
+        skewJoinOptimize(tree, rootTaskContext);
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         // @todo: resolve recursive optimization question:
@@ -653,6 +655,12 @@ public class Optimizer {
         }
 
         return tree;
+    }
+
+    private void skewJoinOptimize(OptExpression tree, TaskContext rootTaskContext) {
+        SkewJoinOptimizeRule rule = new SkewJoinOptimizeRule();
+        Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, rule);
     }
 
     private OptExpression pruneSubfield(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
