@@ -34,15 +34,12 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.Subquery;
-=======
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
->>>>>>> 352ba74813 ([BugFix] Disable set password for non-native user (#42579))
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
