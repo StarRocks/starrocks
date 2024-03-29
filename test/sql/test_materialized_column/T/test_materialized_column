@@ -395,7 +395,8 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"compression" = "LZ4"
+"compression" = "LZ4",
+"fast_schema_evolution" = "true"
 );
 INSERT INTO t values (1,1),(2,2),(3,3),(4,4);
 ALTER TABLE t drop column c3;
