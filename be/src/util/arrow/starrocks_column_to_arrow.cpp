@@ -28,7 +28,7 @@ namespace starrocks {
 
 class ColumnContext;
 
-// Function to convert the column data in the range [start_idx, end_idx] to arrow
+// Function to convert the column data in the range [start_idx, end_idx) to arrow
 typedef arrow::Status (*StarRocksToArrowConvertFunc)(const ColumnPtr& column, int start_idx, int end_idx,
                                                      ColumnContext* column_context, arrow::ArrayBuilder* array_builder);
 
@@ -98,7 +98,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvFloatAndIntegerGuard<LT, 
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
             const auto* data_column = down_cast<StarRocksColumnType*>(nullable_column->data_column().get());
             const auto& data = data_column->get_data();
-            for (auto i = start_idx; i <= end_idx; ++i) {
+            for (auto i = start_idx; i < end_idx; ++i) {
                 if (nullable_column->is_null(i)) {
                     ARROW_RETURN_NOT_OK(builder->AppendNull());
                 } else {
@@ -108,7 +108,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvFloatAndIntegerGuard<LT, 
         } else {
             const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
             const auto* values = data_column->get_data().data() + start_idx;
-            ARROW_RETURN_NOT_OK(builder->AppendValues(values, end_idx - start_idx + 1));
+            ARROW_RETURN_NOT_OK(builder->AppendValues(values, end_idx - start_idx));
         }
         return arrow::Status::OK();
     }
@@ -150,7 +150,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
             const auto* data_column = down_cast<StarRocksColumnType*>(nullable_column->data_column().get());
             const auto& data = data_column->get_data();
-            for (auto i = start_idx; i <= end_idx; ++i) {
+            for (auto i = start_idx; i < end_idx; ++i) {
                 if (nullable_column->is_null(i)) {
                     ARROW_RETURN_NOT_OK(builder->AppendNull());
                 } else {
@@ -160,7 +160,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
         } else {
             const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
             const auto& data = data_column->get_data();
-            for (auto i = start_idx; i <= end_idx; ++i) {
+            for (auto i = start_idx; i < end_idx; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i])));
             }
         }
@@ -215,7 +215,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
             const auto* data_column = down_cast<StarRocksColumnType*>(nullable_column->data_column().get());
             if constexpr (lt_is_string<LT>) {
                 const auto& data = data_column->get_proxy_data();
-                for (auto i = start_idx; i <= end_idx; ++i) {
+                for (auto i = start_idx; i < end_idx; ++i) {
                     if (nullable_column->is_null(i)) {
                         ARROW_RETURN_NOT_OK(builder->AppendNull());
                     } else {
@@ -230,7 +230,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
                     precision = data_column->precision();
                     scale = data_column->scale();
                 }
-                for (auto i = start_idx; i <= end_idx; ++i) {
+                for (auto i = start_idx; i < end_idx; ++i) {
                     if (nullable_column->is_null(i)) {
                         ARROW_RETURN_NOT_OK(builder->AppendNull());
                     } else {
@@ -242,7 +242,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
             const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
             if constexpr (lt_is_string<LT>) {
                 const auto& data = data_column->get_proxy_data();
-                for (auto i = start_idx; i <= end_idx; ++i) {
+                for (auto i = start_idx; i < end_idx; ++i) {
                     ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], -1, -1)));
                 }
             } else {
@@ -253,7 +253,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
                     precision = data_column->precision();
                     scale = data_column->scale();
                 }
-                for (auto i = start_idx; i <= end_idx; ++i) {
+                for (auto i = start_idx; i < end_idx; ++i) {
                     ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], precision, scale)));
                 }
             }
@@ -311,8 +311,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
             const auto* data_column = down_cast<ArrayColumn*>(nullable_column->data_column().get());
             auto& offsets = data_column->offsets().get_data();
             const auto& element_column = data_column->elements_column();
-            ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx + 1));
-            for (auto i = start_idx; i <= end_idx; ++i) {
+            ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
+            for (auto i = start_idx; i < end_idx; ++i) {
                 if (nullable_column->is_null(i)) {
                     ARROW_RETURN_NOT_OK(builder->AppendNull());
                 } else {
@@ -325,8 +325,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
             const auto* data_column = down_cast<ArrayColumn*>(column.get());
             auto& offsets = data_column->offsets().get_data();
             const auto& child_column = data_column->elements_column();
-            ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx + 1));
-            for (auto i = start_idx; i <= end_idx; ++i) {
+            ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
+            for (auto i = start_idx; i < end_idx; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append());
                 ARROW_RETURN_NOT_OK(element_column_context.convert_func(child_column, offsets[i], offsets[i + 1] - 1,
                                                                         &element_column_context, element_builder));
@@ -388,14 +388,14 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvStructGuard<LT, AT>> {
         if constexpr (is_nullable) {
             const auto* nullable_column = down_cast<NullableColumn*>(column.get());
             data_column = down_cast<StructColumn*>(nullable_column->data_column().get());
-            ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx + 1));
-            for (auto i = start_idx; i <= end_idx; ++i) {
+            ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx));
+            for (auto i = start_idx; i < end_idx; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append(!nullable_column->is_null(i)));
             }
         } else {
             data_column = down_cast<StructColumn*>(column.get());
             // Set null bitmap in batch. *nullptr* indicates all values are not null
-            ARROW_RETURN_NOT_OK(builder->AppendValues(end_idx - start_idx + 1, nullptr));
+            ARROW_RETURN_NOT_OK(builder->AppendValues(end_idx - start_idx, nullptr));
         }
         // 2. convert each field independently
         for (int field = 0; field < data_column->fields().size(); field++) {
@@ -482,15 +482,15 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
             auto& offsets = data_column->offsets().get_data();
             const auto& key_column = data_column->keys_column();
             const auto& value_column = data_column->values_column();
-            ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx + 1));
-            for (auto i = start_idx; i <= end_idx; ++i) {
+            ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx));
+            for (auto i = start_idx; i < end_idx; ++i) {
                 if (nullable_column->is_null(i)) {
                     ARROW_RETURN_NOT_OK(builder->AppendNull());
                 } else {
                     ARROW_RETURN_NOT_OK(builder->Append());
-                    ARROW_RETURN_NOT_OK(key_context.convert_func(key_column, offsets[i], offsets[i + 1] - 1,
-                                                                 &key_context, key_builder));
-                    ARROW_RETURN_NOT_OK(value_context.convert_func(value_column, offsets[i], offsets[i + 1] - 1,
+                    ARROW_RETURN_NOT_OK(key_context.convert_func(key_column, offsets[i], offsets[i + 1], &key_context,
+                                                                 key_builder));
+                    ARROW_RETURN_NOT_OK(value_context.convert_func(value_column, offsets[i], offsets[i + 1],
                                                                    &value_context, value_builder));
                 }
             }
@@ -499,13 +499,13 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
             auto& offsets = data_column->offsets().get_data();
             const auto& key_column = data_column->keys_column();
             const auto& value_column = data_column->values_column();
-            ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx + 1));
-            for (auto i = start_idx; i <= end_idx; ++i) {
+            ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx));
+            for (auto i = start_idx; i < end_idx; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append());
-                ARROW_RETURN_NOT_OK(key_context.convert_func(key_column, offsets[i], offsets[i + 1] - 1, &key_context,
-                                                             key_builder));
-                ARROW_RETURN_NOT_OK(value_context.convert_func(value_column, offsets[i], offsets[i + 1] - 1,
-                                                               &value_context, value_builder));
+                ARROW_RETURN_NOT_OK(
+                        key_context.convert_func(key_column, offsets[i], offsets[i + 1], &key_context, key_builder));
+                ARROW_RETURN_NOT_OK(value_context.convert_func(value_column, offsets[i], offsets[i + 1], &value_context,
+                                                               value_builder));
             }
         }
         return arrow::Status::OK();
@@ -569,7 +569,7 @@ public:
         ColumnContext column_context(_type_desc, _arrow_type, func);                                           \
         std::unique_ptr<arrow::ArrayBuilder> builder;                                                          \
         ARROW_RETURN_NOT_OK(arrow::MakeBuilder(_pool, _arrow_type, &builder));                                 \
-        ARROW_RETURN_NOT_OK(func(_column, 0, _column->size() - 1, &column_context, builder.get()));            \
+        ARROW_RETURN_NOT_OK(func(_column, 0, _column->size(), &column_context, builder.get()));                \
         return builder->Finish(&_array);                                                                       \
     }
 
