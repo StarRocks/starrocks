@@ -124,11 +124,10 @@ inline constexpr T get_min_decimal() {
     return -get_max_decimal<T>();
 }
 
-// NOLINTBEGIN
 template <typename T>
 inline constexpr T get_max() {
     if constexpr (std::is_same_v<T, int128_t>) {
-        return ~(static_cast<int128_t>(1ll) << 127);
+        return ~(static_cast<int128_t>(1ll) << 127); // NOLINT
     } else {
         return std::numeric_limits<T>::max();
     }
@@ -137,12 +136,11 @@ inline constexpr T get_max() {
 template <typename T>
 inline constexpr T get_min() {
     if constexpr (std::is_same_v<T, int128_t>) {
-        return static_cast<int128_t>(1ll) << 127;
+        return static_cast<int128_t>(1ll) << 127; // NOLINT
     } else {
         return std::numeric_limits<T>::lowest();
     }
 }
-// NOLINTEND
 
 template <typename T>
 constexpr bool is_signed_integer = (std::is_integral_v<T> && std::is_signed_v<T>) || std::is_same_v<T, int128_t>;
