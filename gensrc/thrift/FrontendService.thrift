@@ -717,6 +717,8 @@ struct TReportExecStatusParams {
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
   27: optional string rejected_record_path
+
+  28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
 }
 
 struct TAuditStatistics {

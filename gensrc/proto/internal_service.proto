@@ -151,6 +151,12 @@ message PTabletInfo {
     repeated int64 valid_dict_collected_version = 6;
 }
 
+message PLoadChannelProfileConfig {
+    optional bool enable_profile = 1;
+    optional int64 big_query_profile_threshold_ns = 2;
+    optional int64 runtime_profile_report_interval_ns = 3;
+}
+
 // Open a tablet writer.
 message PTabletWriterOpenRequest {
     required PUniqueId id = 1;
@@ -181,6 +187,7 @@ message PTabletWriterOpenRequest {
 
     // tablet's data size larger than this will mark as inmutable
     optional int64 immutable_tablet_size = 33 [default = 0];
+    optional PLoadChannelProfileConfig load_channel_profile_config = 34;
 };
 
 message PTabletWriterOpenResult {
@@ -248,6 +255,7 @@ message PTabletWriterAddBatchResult {
 
     repeated int64 immutable_tablet_ids = 7;
     repeated int64 immutable_partition_ids = 8;
+    optional bytes load_channel_profile = 9;
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -646,7 +654,6 @@ service PInternalService {
     rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
 
     rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
-    
     rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
     rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
 
