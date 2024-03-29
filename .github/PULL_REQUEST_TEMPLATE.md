@@ -39,4 +39,5 @@ If yes, please specify the type of change:
   - [ ] 3.3
   - [ ] 3.2
   - [ ] 3.1
+  - [ ] 3.0
   - [ ] 2.5
