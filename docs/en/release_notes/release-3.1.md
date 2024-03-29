@@ -28,7 +28,6 @@ Fixed the following issues:
 - When users query ORC files by using Hive catalogs, the query results may be incorrect because StarRocks used to read ORC files from Hive based on mapping by position. To resolve this issue, users can set the session variable `orc_use_column_names` to `true`, which specifies to read ORC files from Hive based on mapping by column name. [#42905](https://github.com/StarRocks/starrocks/pull/42905)
 - When LDAP authentication for the AD system is adopted, logins without passwords are allowed. [#42476](https://github.com/StarRocks/starrocks/pull/42476)
 - When disk device names end with digits, the values of monitoring metrics remain 0s because the disk device names may be invalid after such digits are removed. [#42741](https://github.com/StarRocks/starrocks/pull/42741)
-- When users use INSERT FROM FILES to load non-string-type (for example, ARRAY or MAP) data into a string-type column, data conversion errors are thrown.
 
 ## 3.1.9
 
