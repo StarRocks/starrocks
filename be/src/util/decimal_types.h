@@ -124,10 +124,7 @@ inline constexpr T get_min_decimal() {
     return -get_max_decimal<T>();
 }
 
-DIAGNOSTIC_PUSH
-#if defined(clang)
-DIAGNOSTIC_IGNORE("-Wshift-sign-overflow")
-#endif
+// NOLINTBEGIN
 template <typename T>
 inline constexpr T get_max() {
     if constexpr (std::is_same_v<T, int128_t>) {
@@ -145,7 +142,7 @@ inline constexpr T get_min() {
         return std::numeric_limits<T>::lowest();
     }
 }
-DIAGNOSTIC_POP
+// NOLINTEND
 
 template <typename T>
 constexpr bool is_signed_integer = (std::is_integral_v<T> && std::is_signed_v<T>) || std::is_same_v<T, int128_t>;
