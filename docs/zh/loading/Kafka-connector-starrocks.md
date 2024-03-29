@@ -67,7 +67,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
     :::info
 
-    - 在本场景中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
+    - 在本示例中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
     - 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要在 StarRocks 提供的 Kafka connector 的配置文件 **connect-StarRocks-sink.properties** 中[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
     :::
@@ -144,7 +144,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
   
     :::info
 
-    - 在本场景中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
+    - 在本示例中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
     - 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要在 StarRocks 提供的 Kafka connector 的配置文件 **connect-StarRocks-sink.properties** 中[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
     :::
@@ -222,7 +222,7 @@ MySQL [example_db]> select * from test_tbl;
 
 :::info
 
-在本场景中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
+在本示例中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
 
 :::
 
