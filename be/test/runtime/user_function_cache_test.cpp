@@ -117,16 +117,11 @@ public:
         int res = 0;
 
         // compile code to so
-<<<<<<< HEAD
-        system("g++ -shared ./be/test/runtime/test_data/user_function_cache/lib/my_add.cc -o "
-               "./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
-=======
         // res =
         //         system("g++ -shared ./be/test/runtime/test_data/user_function_cache/lib/my_add.cc -o "
         //                "./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
 
         // my_add_md5sum = compute_md5("./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
->>>>>>> 8302372dca ([Refactor] make udf error message clearer (#43275))
 
         system("touch ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
 
@@ -144,11 +139,6 @@ public:
         s_server->stop();
         s_server->join();
         delete s_server;
-<<<<<<< HEAD
-        system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
-        system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
-        system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
-=======
         int res = 0;
         // res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
@@ -159,7 +149,6 @@ public:
 
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
         ASSERT_EQ(res, 0) << res;
->>>>>>> 8302372dca ([Refactor] make udf error message clearer (#43275))
     }
     void SetUp() override { k_is_downloaded = false; }
 };
