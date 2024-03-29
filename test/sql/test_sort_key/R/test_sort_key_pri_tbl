@@ -1,0 +1,159 @@
+-- name: test_sort_key_pri_tbl;
+create database sort_key_test_pri;
+-- result:
+-- !result
+use sort_key_test_pri;
+-- result:
+-- !result
+CREATE TABLE `pri_test` (
+    `k1` int(11) NOT NULL COMMENT "",
+    `k2` int(11) NOT NULL COMMENT "",
+    `v1` bigint REPLACE NULL COMMENT "",
+    `v2` bigint REPLACE NULL COMMENT "",
+    `v3` bigint REPLACE NULL COMMENT ""
+)
+PRIMARY KEY(k1, k2)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
+ORDER BY (k2, k1, k2)
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
+);
+-- result:
+E: (1064, 'Duplicate sort key column k2 is not allowed.')
+-- !result
+CREATE TABLE `pri_test` (
+    `k1` int(11) NOT NULL COMMENT "",
+    `k2` int(11) NOT NULL COMMENT "",
+    `v1` bigint REPLACE NULL COMMENT "",
+    `v2` bigint REPLACE NULL COMMENT "",
+    `v3` bigint REPLACE NULL COMMENT ""
+)
+PRIMARY KEY(k1, k2)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
+ORDER BY (k2, k1)
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
+);
+-- result:
+-- !result
+insert into pri_test values (1,3,2,10,9),(2,2,2,9,7),(3,1,2,8,8);
+-- result:
+-- !result
+select * from pri_test;
+-- result:
+3	1	2	8	8
+2	2	2	9	7
+1	3	2	10	9
+-- !result
+insert into pri_test values (1,2,2,10,9),(2,3,2,9,7),(2,1,2,8,8);
+-- result:
+-- !result
+select * from pri_test;
+-- result:
+3	1	2	8	8
+2	2	2	9	7
+1	3	2	10	9
+2	1	2	8	8
+1	2	2	10	9
+2	3	2	9	7
+-- !result
+function: manual_compact("sort_key_test_pri", "pri_test")
+-- result:
+None
+-- !result
+select * from pri_test;
+-- result:
+2	1	2	8	8
+3	1	2	8	8
+1	2	2	10	9
+2	2	2	9	7
+1	3	2	10	9
+2	3	2	9	7
+-- !result
+alter table pri_test order by (k2,v1,v1);
+-- result:
+E: (1064, 'Duplicated column[v1]')
+-- !result
+alter table pri_test order by (k2,v1);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table pri_test;
+-- result:
+pri_test	CREATE TABLE `pri_test` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`, `k2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
+ORDER BY(`k2`, `v1`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+select * from pri_test;
+-- result:
+2	1	2	8	8
+3	1	2	8	8
+1	2	2	10	9
+2	2	2	9	7
+1	3	2	10	9
+2	3	2	9	7
+-- !result
+alter table pri_test order by (k2,k1);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table pri_test;
+-- result:
+pri_test	CREATE TABLE `pri_test` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`, `k2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
+ORDER BY(`k2`, `k1`)
+PROPERTIES (
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+select * from pri_test;
+-- result:
+2	1	2	8	8
+3	1	2	8	8
+1	2	2	10	9
+2	2	2	9	7
+1	3	2	10	9
+2	3	2	9	7
+-- !result
+drop database sort_key_test_pri;
+-- result:
+-- !result
