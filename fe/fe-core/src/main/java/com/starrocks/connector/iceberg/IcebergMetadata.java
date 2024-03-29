@@ -906,11 +906,14 @@ public class IcebergMetadata implements ConnectorMetadata {
                     field.name().equals(parts[0]), "Invalid partition: %s", partitions[i]);
 
             org.apache.iceberg.types.Type sourceType = spec.partitionType().fields().get(i).type();
+<<<<<<< HEAD
             // apply url decoding for string/fixed type
             if (sourceType.typeId() == Type.TypeID.STRING || sourceType.typeId() == Type.TypeID.FIXED) {
                 parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
             }
 
+=======
+>>>>>>> 6fc6d4bc29 ([BugFix] Fix iceberg sink with null partition (#43321))
             if (parts[1].equals("null")) {
                 data.set(i, null);
             } else {
