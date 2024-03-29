@@ -194,12 +194,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 }
             }
         }
-        if (predicate == null) {
-            return new ValueProperty(valueMap);
+        ValueProperty valueProperty = new ValueProperty(valueMap);
+        if (predicate != null) {
+            ValuePropertyDeriver deriver = new ValuePropertyDeriver();
+            ValueProperty property = deriver.derive(predicate);
+            valueProperty = valueProperty.filterValueProperty(property);
         }
 
-        ValuePropertyDeriver deriver = new ValuePropertyDeriver();
-        return deriver.derive(predicate);
+        return valueProperty;
     }
 
     private ValueProperty.ValueWrapper buildRangeDesc(ColumnRefOperator col, ConstantOperator min, ConstantOperator max) {
