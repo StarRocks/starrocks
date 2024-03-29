@@ -753,7 +753,7 @@ select count(*) from profile_wos_p7;
    1. `fs.s3a.access.key`: the AWS access key ID.
    2. `fs.s3a.secret.key`: the AWS secret key.
    3. `fs.s3a.endpoint`: the AWS S3 endpoint to connect to.
-   4. `fs.s3a.connection.maximu``m`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
+   4. `fs.s3a.connection.maximum`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
 
 ## (Deprecated) Iceberg external table
 
