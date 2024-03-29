@@ -232,17 +232,18 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
                                const_cast<Table*>(this), options);
 }
 
-Status Table::MultiGet(const ReadOptions& options, const Slice* keys, std::iterator<IndexType> begin,
-                       std::iterator<IndexType> end, std::vector<std::string>* values) {
+template <class ForwardIt>
+Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt begin, ForwardIt end,
+                       std::vector<std::string>* values) {
     Status s;
     Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
     std::unique_ptr<Iterator> current_block_itr_ptr;
 
     // return true if find k
-    auto search_in_block = [&](const Slice& k, const IndexType& index) {
+    auto search_in_block = [&](const Slice& k, const size_t& index) {
         current_block_itr_ptr->Seek(k);
         if (current_block_itr_ptr->Valid() && k == current_block_itr_ptr->key()) {
-            (*values)[index] = current_block_itr_ptr->value().to_string();
+            (*values)[index].assign(current_block_itr_ptr->value().data, current_block_itr_ptr->value().size);
             return true;
         }
         s = current_block_itr_ptr->status();
@@ -253,7 +254,7 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, std::itera
         auto& k = keys[*it];
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
-            if (search_in_block(k, key_index)) {
+            if (search_in_block(k, *it)) {
                 TRACE_COUNTER_INCREMENT("continue_block_read", 1);
                 continue;
             } else {
@@ -274,7 +275,7 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, std::itera
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
                 auto end_ts = butil::gettimeofday_us();
                 TRACE_COUNTER_INCREMENT("read_block", end_ts - start_ts);
-                (void)search_in_block(k, key_index);
+                (void)search_in_block(k, *it);
             }
         }
     }
@@ -284,5 +285,10 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, std::itera
     delete iiter;
     return s;
 }
+
+template Status Table::MultiGet<std::set<size_t>::iterator>(const ReadOptions& options, const Slice* keys,
+                                                            std::set<size_t>::iterator begin,
+                                                            std::set<size_t>::iterator end,
+                                                            std::vector<std::string>* values);
 
 } // namespace starrocks::sstable

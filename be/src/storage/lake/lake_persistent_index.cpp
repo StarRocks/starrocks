@@ -17,8 +17,8 @@
 #include "fs/fs_util.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/persistent_index_memtable.h"
+#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/sstable/persistent_index_sstable.h"
 
 namespace starrocks::lake {
 
@@ -33,14 +33,16 @@ LakePersistentIndex::~LakePersistentIndex() {
     _sstables.clear();
 }
 
-void LakePersistentIndex::set_difference(std::set<KeyIndex>* key_indexes, const std::set<KeyIndex>& found_key_indexes) {
-    std::set<KeyIndex> t;
-    std::set_difference(key_indexes->begin(), key_indexes->end(), found_key_indexes.begin(), found_key_indexes.end(),
-                        std::inserter(t, t.end()));
-    key_indexes->swap(t);
+void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes) {
+    if (!found_key_indexes.empty()) {
+        KeyIndexSet t;
+        std::set_difference(key_indexes->begin(), key_indexes->end(), found_key_indexes.begin(),
+                            found_key_indexes.end(), std::inserter(t, t.end()));
+        key_indexes->swap(t);
+    }
 }
 
-bool LakePersistentIndex::is_memtable_full() {
+bool LakePersistentIndex::is_memtable_full() const {
     const auto memtable_mem_size = _memtable->memory_usage();
     return memtable_mem_size >= config::l0_max_mem_usage / 2;
 }
@@ -53,7 +55,7 @@ Status LakePersistentIndex::minor_compact() {
     RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesize));
     RETURN_IF_ERROR(wf->close());
 
-    auto sstable = std::make_unique<sstable::PersistentIndexSstable>();
+    auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
     PersistentIndexSstablePB sstable_pb;
@@ -74,20 +76,16 @@ Status LakePersistentIndex::flush_memtable() {
     return Status::OK();
 }
 
-Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, IndexValue* values,
-                                              std::set<KeyIndex>* key_indexes, int64_t version) {
-    if (key_indexes->size() == 0 || _sstables.empty()) {
+Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* key_indexes,
+                                              int64_t version) const {
+    if (key_indexes->empty() || _sstables.empty()) {
         return Status::OK();
     }
-    size_t sstables_size = _sstables.size();
-    for (size_t i = sstables_size; i > 0; --i) {
-        std::set<KeyIndex> found_key_indexes;
-        RETURN_IF_ERROR(_sstables[i - 1]->multi_get(n, keys, *key_indexes, version, values, &found_key_indexes));
-        if (found_key_indexes.size() != 0) {
-            // modify key_indexes_info
-            set_difference(key_indexes, found_key_indexes);
-        }
-        if (key_indexes->size() == 0) {
+    for (auto iter = _sstables.rbegin(); iter != _sstables.rend(); ++iter) {
+        KeyIndexSet found_key_indexes;
+        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes));
+        set_difference(key_indexes, found_key_indexes);
+        if (key_indexes->empty()) {
             break;
         }
     }
@@ -95,26 +93,24 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
 }
 
 Status LakePersistentIndex::get_from_immutable_memtable(const Slice* keys, IndexValue* values,
-                                                        std::set<KeyIndex>* key_indexes, int64_t version) {
-    if (_immutable_memtable == nullptr || key_indexes->size() == 0) {
+                                                        const KeyIndexSet& key_indexes, KeyIndexSet* found_key_indexes,
+                                                        int64_t version) const {
+    if (_immutable_memtable == nullptr || key_indexes.empty()) {
         return Status::OK();
     }
-    std::set<KeyIndex> found_key_indexes;
-    RETURN_IF_ERROR(_immutable_memtable->get(keys, values, *key_indexes, &found_key_indexes, version));
-    if (found_key_indexes.size() != 0) {
-        // modify key_indexes_info
-        set_difference(key_indexes, found_key_indexes);
-    }
+    RETURN_IF_ERROR(_immutable_memtable->get(keys, values, key_indexes, found_key_indexes, version));
     return Status::OK();
 }
 
 Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
-    std::set<KeyIndex> not_founds;
-    size_t num_found;
+    KeyIndexSet not_founds;
     // Assuming we always want the latest value now
-    RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, &num_found, -1));
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, values, &key_wanted, -1));
-    RETURN_IF_ERROR(get_from_sstables(n, keys, values, &not_founds, -1));
+    RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, -1));
+    KeyIndexSet& key_indexes = not_founds;
+    KeyIndexSet found_key_indexes;
+    RETURN_IF_ERROR(get_from_immutable_memtable(keys, values, key_indexes, &found_key_indexes, -1));
+    set_difference(&key_indexes, found_key_indexes);
+    RETURN_IF_ERROR(get_from_sstables(n, keys, values, &key_indexes, -1));
     return Status::OK();
 }
 
@@ -123,8 +119,11 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     std::set<KeyIndex> not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number()));
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, &not_founds, -1));
-    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
+    KeyIndexSet& key_indexes = not_founds;
+    KeyIndexSet found_key_indexes;
+    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
+    set_difference(&key_indexes, found_key_indexes);
+    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
     }
@@ -141,11 +140,14 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
 }
 
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
-    std::set<KeyIndex> not_founds;
+    KeyIndexSet not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number()));
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, &not_founds, -1));
-    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
+    KeyIndexSet& key_indexes = not_founds;
+    KeyIndexSet found_key_indexes;
+    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
+    set_difference(&key_indexes, found_key_indexes);
+    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
     }

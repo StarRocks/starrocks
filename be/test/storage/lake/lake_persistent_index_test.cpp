@@ -69,8 +69,8 @@ protected:
 };
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {
-    auto memtable_size = config::lake_persistent_index_memtable_size;
-    config::lake_persistent_index_memtable_size = 10;
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
     using Key = uint64_t;
     const int N = 1000;
     vector<Key> keys;
@@ -150,12 +150,12 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     }
     vector<IndexValue> upsert_old_values(upsert_keys.size());
     ASSERT_TRUE(index->upsert(N, upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data()).ok());
-    config::lake_persistent_index_memtable_size = memtable_size;
+    config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
 TEST_F(LakePersistentIndexTest, test_replace) {
-    auto memtable_size = config::lake_persistent_index_memtable_size;
-    config::lake_persistent_index_memtable_size = 10;
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
     using Key = uint64_t;
     vector<Key> keys;
     vector<Slice> key_slices;
@@ -187,7 +187,7 @@ TEST_F(LakePersistentIndexTest, test_replace) {
     for (int i = 0; i < N; i++) {
         ASSERT_EQ(replace_values[i], new_get_values[i]);
     }
-    config::lake_persistent_index_memtable_size = memtable_size;
+    config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
 } // namespace starrocks::lake

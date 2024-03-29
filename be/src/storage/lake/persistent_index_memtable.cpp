@@ -14,7 +14,7 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
-#include "storage/sstable/persistent_index_sstable.h"
+#include "storage/lake/persistent_index_sstable.h"
 
 namespace starrocks::lake {
 
@@ -26,7 +26,7 @@ void PersistentIndexMemtable::update_index_value(std::list<IndexValueWithVer>* i
 }
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                       std::set<KeyIndex>* not_founds, size_t* num_found, int64_t version) {
+                                       KeyIndexSet* not_founds, size_t* num_found, int64_t version) {
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
@@ -64,8 +64,8 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
     return Status::OK();
 }
 
-Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values,
-                                      std::set<KeyIndex>* not_founds, size_t* num_found, int64_t version) {
+Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
+                                      size_t* num_found, int64_t version) {
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();
@@ -100,9 +100,8 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
     return Status::OK();
 }
 
-Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, std::set<KeyIndex>* not_founds,
-                                    size_t* num_found, int64_t version) {
-    size_t nfound = 0;
+Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* not_founds,
+                                    int64_t version) const {
     for (size_t i = 0; i < n; ++i) {
         auto key = std::string_view(keys[i]);
         auto it = _map.find(key);
@@ -114,15 +113,13 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
             auto& index_value_vers = it->second;
             auto index_value = index_value_vers.front().second;
             values[i] = index_value;
-            nfound += index_value.get_value() != NullIndexValue;
         }
     }
-    *num_found = nfound;
     return Status::OK();
 }
 
-Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const std::set<KeyIndex>& key_indexes,
-                                    std::set<KeyIndex>* found_key_indexes, int64_t version) {
+Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes,
+                                    KeyIndexSet* found_key_indexes, int64_t version) const {
     for (auto& key_index : key_indexes) {
         auto key = std::string_view(keys[key_index]);
         auto it = _map.find(key);
@@ -137,17 +134,17 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
     return Status::OK();
 }
 
-size_t PersistentIndexMemtable::memory_usage() {
+size_t PersistentIndexMemtable::memory_usage() const {
     size_t mem_usage = 0;
     for (auto const& it : _map) {
-        mem_usage += it.first.size();
+        mem_usage += it.first.size() + sizeof(std::string);
         mem_usage += it.second.size() * sizeof(IndexValueWithVer);
     }
     return mem_usage;
 }
 
 Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize) {
-    return sstable::PersistentIndexSstable::build_sstable(_map, wf, filesize);
+    return PersistentIndexSstable::build_sstable(_map, wf, filesize);
 }
 
 void PersistentIndexMemtable::clear() {

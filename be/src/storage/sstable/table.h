@@ -11,7 +11,6 @@ namespace starrocks {
 class Slice;
 class RandomAccessFile;
 namespace sstable {
-using IndexType = size_t;
 class Block;
 class BlockHandle;
 class Footer;
@@ -48,10 +47,10 @@ public:
     // call one of the Seek methods on the iterator before using it).
     Iterator* NewIterator(const ReadOptions&) const;
 
-    // Calls (*handle_result)(arg, ...) with the entry found after a call
-    // to Seek(key).  May not make such a call if filter policy says
-    // that key is not present.
-    Status MultiGet(const ReadOptions&, const Slice* keys, std::iterator<IndexType> begin, std::iterator<IndexType> end,
+    // Batch get keys within indexes iterator between begin to end.
+    // If entry found, value of the corresponding index will be set.
+    template <typename ForwardIt>
+    Status MultiGet(const ReadOptions&, const Slice* keys, ForwardIt begin, ForwardIt end,
                     std::vector<std::string>* values);
 
 private:

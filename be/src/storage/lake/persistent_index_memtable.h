@@ -19,20 +19,21 @@
 
 namespace starrocks::lake {
 
-using KeyIndex = uint32_t;
+using KeyIndex = size_t;
+using KeyIndexSet = std::set<KeyIndex>;
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class PersistentIndexMemtable {
 public:
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  std::set<KeyIndex>* not_founds, size_t* num_found, int64_t version);
+                  KeyIndexSet* not_founds, size_t* num_found, int64_t version);
 
     // |version|: version of index values
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
     // |version|: version of index values
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values, std::set<KeyIndex>* not_founds, size_t* num_found,
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds, size_t* num_found,
                  int64_t version);
 
     // |version|: version of index values
@@ -40,8 +41,7 @@ public:
                    int64_t version);
 
     // |version|: version of index values
-    Status get(size_t n, const Slice* keys, IndexValue* values, std::set<KeyIndex>* not_founds, size_t* num_found,
-               int64_t version);
+    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* not_founds, int64_t version) const;
 
     // batch get
     // |keys|: key array as raw buffer
@@ -49,10 +49,10 @@ public:
     // |key_indexes|: the indexes of keys to be found.
     // |found_key_indexes|: return the found indexes of keys.
     // |version|: version of values
-    Status get(const Slice* keys, IndexValue* values, const std::set<KeyIndex>& key_indexes,
-               std::set<KeyIndex>* found_key_indexes, int64_t version);
+    Status get(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes, KeyIndexSet* found_key_indexes,
+               int64_t version) const;
 
-    size_t memory_usage();
+    size_t memory_usage() const;
 
     Status flush(WritableFile* wf, uint64_t* filesize);
 
