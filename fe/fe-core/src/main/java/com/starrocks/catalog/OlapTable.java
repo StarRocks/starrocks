@@ -587,6 +587,12 @@ public class OlapTable extends Table {
             }
         }
         fullSchema = newFullSchema;
+        // update max column unique id
+        int maxColUniqueId = getMaxColUniqueId();
+        for (Column column : fullSchema) {
+            maxColUniqueId = Math.max(maxColUniqueId, column.getUniqueId());
+        }
+        setMaxColUniqueId(maxColUniqueId);
         LOG.debug("after rebuild full schema. table {}, schema: {}", id, fullSchema);
     }
 
