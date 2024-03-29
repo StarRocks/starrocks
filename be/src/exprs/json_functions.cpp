@@ -47,6 +47,8 @@
 #include "storage/chunk_helper.h"
 #include "types/logical_type.h"
 #include "util/json.h"
+#include "util/json_converter.h"
+#include "util/string_parser.hpp"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
@@ -388,7 +390,8 @@ StatusOr<ColumnPtr> _json_number(FunctionContext* context, const Columns& column
         } else {
             JsonValue* json = viewer.value(row);
             auto slice = json->to_vslice();
-            Status st = _convert_json_slice<ResultType>(slice, result);
+            // Status st = _convert_json_slice<ResultType>(slice, result);
+            Status st = cast_vpjson_to<ResultType, false>(slice, result);
             if (!st.ok()) {
                 result.append_null();
                 continue;
@@ -537,7 +540,17 @@ static Status _convert_json_slice(const vpack::Slice& slice, ColumnBuilder<Resul
                 result.append(Slice(str));
             }
         } else if constexpr (ResultType == TYPE_BOOLEAN) {
-            slice.isBool() ? result.append(slice.getBool()) : result.append(slice.getNumber<double>() != 0);
+            if (slice.isBoolean()) {
+                result.append(slice.getBool());
+            } else if (slice.isString()) {
+                vpack::ValueLength len;
+                const char* str = slice.getStringUnchecked(len);
+                StringParser::ParseResult parseResult;
+                bool b = StringParser::string_to_bool(str, len, &parseResult);
+                parseResult == StringParser::PARSE_SUCCESS ? result.append(b) : result.append_null();
+            } else {
+                result.append(slice.getNumber<double>() != 0);
+            }
         } else if constexpr (ResultType == TYPE_INT || ResultType == TYPE_BIGINT) {
             slice.isBool() ? result.append(slice.getBool()) : result.append(slice.getNumber<int64_t>());
         } else if constexpr (ResultType == TYPE_DOUBLE) {
@@ -678,7 +691,8 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             JsonValue* json_value = json_viewer.value(row);
             builder.clear();
             vpack::Slice slice = JsonPath::extract(json_value, state->real_path, &builder);
-            Status st = _convert_json_slice<ResultType>(slice, result);
+            // Status st = _convert_json_slice<ResultType>(slice, result);
+            Status st = cast_vpjson_to<ResultType, false>(slice, result);
             if (!st.ok()) {
                 result.append_null();
                 continue;
@@ -724,7 +738,8 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_query_impl(FunctionContext* contex
 
         builder.clear();
         vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
-        Status st = _convert_json_slice<ResultType>(slice, result);
+        // Status st = _convert_json_slice<ResultType>(slice, result);
+        Status st = cast_vpjson_to<ResultType, false>(slice, result);
         if (!st.ok()) {
             result.append_null();
             continue;
