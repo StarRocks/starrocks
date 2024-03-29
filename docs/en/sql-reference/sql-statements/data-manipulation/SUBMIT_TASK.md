@@ -34,10 +34,10 @@ AS <etl_statement>
 
 | **Parameter**      | **Optional** | **Description**                                                                                     |
 | -------------      | ------------ | ---------------------------------------------------------------------------------------------------- |
-| task_name          | Required     | The name of the task.                                                                               |
-| schedule_start     | Required     | The start time for scheduled tasks.                                                                 |
-| schedule_interval  | Required     | The interval at which scheduled tasks are executed, with a minimum interval of 10 seconds.          |
-| etl_statement      | Optional     | The ETL statement for creating asynchronous tasks. StarRocks currently supports creating asynchronous tasks using [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md). |
+| task_name          | Optional     | The name of the task.                                                                               |
+| schedule_start     | Optional     | The start time for scheduled tasks.                                                                 |
+| schedule_interval  | Optional     | The interval at which scheduled tasks are executed, with a minimum interval of 10 seconds.          |
+| etl_statement      | Required     | The ETL statement for creating asynchronous tasks. StarRocks currently supports creating asynchronous tasks using [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md). |
 
 
 
