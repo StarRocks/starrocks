@@ -42,21 +42,19 @@ OutPut Exchange Id: 12
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 300018.951] ESTIMATE
 |
 9:SELECT
-                                                                                                                                                                                                                                                                            |  predicates: CAST(5: l_quantity AS DECIMAL128(38,9)) < 0.2 * 47: avg
-                                                                                                                                                                                                                                                                            |  cardinality: 300019
-                                                                                                                                                                                                                                                                            |  column statistics:
-                                                                                                                                                                                                                                                                            |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
-                                                                                                                                                                                                                                                                            |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-                                                                                                                                                                                                                                                                            |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 300018.951] ESTIMATE
-                                                                                                                                                                                                                                                                            |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
-                                                                                                                                                                                                                                                                            |  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-                                                                                                                                                                                                                                                                            |
-                                                                                                                                                                                                                                                                            8:ANALYTIC
-                                                                                                                                                                                                                                                                            |  functions: [, avg[([5: l_quantity, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true], ]
+|  predicates: CAST(5: l_quantity AS DECIMAL128(38,9)) < 0.2 * 47: avg
+|  cardinality: 300019
+|  column statistics:
+|  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 300018.951] ESTIMATE
+|  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
+|  * avg-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|
+8:ANALYTIC
+|  functions: [, avg[([5: l_quantity, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true], ]
 |  partition by: [17: p_partkey, INT, true]
 |  cardinality: 600038
 |  column statistics:
-|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 600037.902] ESTIMATE
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 20000.0] ESTIMATE
