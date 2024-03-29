@@ -1412,7 +1412,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         long hi = in.readLong();
         long lo = in.readLong();
         TUniqueId loadId = new TUniqueId(hi, lo);
-        task.init();
         task.setTUniqueId(loadId);
         // Only task which type is PARALLEL will be persisted
         // just set type to PARALLEL
@@ -1423,6 +1422,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     @Override
     public void gsonPostProcess() throws IOException {
         loadId = new TUniqueId(loadIdHi, loadIdLo);
+        this.init();
     }
 
     @Override

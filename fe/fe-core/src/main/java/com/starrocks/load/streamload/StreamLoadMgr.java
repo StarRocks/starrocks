@@ -615,7 +615,6 @@ public class StreamLoadMgr implements MemoryTrackable {
         streamLoadManager.init();
         for (int i = 0; i < size; i++) {
             StreamLoadTask loadTask = StreamLoadTask.read(in);
-            loadTask.init();
             // discard expired task right away
             if (loadTask.checkNeedRemove(currentMs, false)) {
                 LOG.info("discard expired task: {}", loadTask.getLabel());
@@ -643,7 +642,6 @@ public class StreamLoadMgr implements MemoryTrackable {
         int numJson = reader.readInt();
         for (int i = 0; i < numJson; ++i) {
             StreamLoadTask loadTask = reader.readJson(StreamLoadTask.class);
-            loadTask.init();
             // discard expired task right away
             if (loadTask.checkNeedRemove(currentMs, false)) {
                 LOG.info("discard expired task: {}", loadTask.getLabel());
