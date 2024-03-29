@@ -286,6 +286,7 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     return s;
 }
 
+// If new container wants to be supported in MultiGet, the initialization can be added here.
 template Status Table::MultiGet<std::set<size_t>::iterator>(const ReadOptions& options, const Slice* keys,
                                                             std::set<size_t>::iterator begin,
                                                             std::set<size_t>::iterator end,

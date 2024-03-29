@@ -3,8 +3,6 @@
 // (https://developers.google.com/open-source/licenses/bsd)
 #pragma once
 
-#include <set>
-
 #include "common/status.h"
 
 namespace starrocks {
