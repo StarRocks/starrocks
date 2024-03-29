@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
@@ -52,8 +53,8 @@ public class BestMvSelector {
         }
         List<CandidateContext> contexts = Lists.newArrayList();
         for (int i = 0; i < expressions.size(); i++) {
-            CandidateContext mvContext =
-                    getMVContext(expressions.get(i), isAggQuery, context);
+            CandidateContext mvContext = getMVContext(expressions.get(i),
+                    expressions.get(i).getOp() instanceof LogicalUnionOperator, isAggQuery, context);
             Preconditions.checkState(mvContext != null);
             mvContext.setIndex(i);
             contexts.add(mvContext);
@@ -72,14 +73,16 @@ public class BestMvSelector {
         // else set it to Integer.MAX_VALUE
         private int groupbyColumnNum;
         private int index;
+        private boolean isUnion;
 
-        public CandidateContext(Statistics mvStatistics, int schemaColumnNum) {
-            this(mvStatistics, schemaColumnNum, 0);
+        public CandidateContext(Statistics mvStatistics, int schemaColumnNum, boolean isUnion) {
+            this(mvStatistics, schemaColumnNum, isUnion, 0);
         }
 
-        public CandidateContext(Statistics mvStatistics, int schemaColumnNum, int index) {
+        public CandidateContext(Statistics mvStatistics, int schemaColumnNum, boolean isUnion, int index) {
             this.mvStatistics = mvStatistics;
             this.schemaColumnNum = schemaColumnNum;
+            this.isUnion = isUnion;
             this.index = index;
             this.groupbyColumnNum = Integer.MAX_VALUE;
         }
@@ -113,8 +116,12 @@ public class BestMvSelector {
     public static class CandidateContextComparator implements Comparator<CandidateContext> {
         @Override
         public int compare(CandidateContext context1, CandidateContext context2) {
+            int ret = Boolean.compare(context1.isUnion, context2.isUnion);
+            if (ret != 0) {
+                return ret;
+            }
             // compare group by key num
-            int ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
+            ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
             if (ret != 0) {
                 return ret;
             }
@@ -153,12 +160,12 @@ public class BestMvSelector {
     }
 
     private CandidateContext getMVContext(
-            OptExpression expression, boolean isAggregate, OptimizerContext optimizerContext) {
+            OptExpression expression, boolean isUnion, boolean isAggregate, OptimizerContext optimizerContext) {
         if (expression.getOp() instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator scanOperator = expression.getOp().cast();
             if (scanOperator.getTable().isMaterializedView()) {
-                CandidateContext candidateContext =
-                        new CandidateContext(expression.getStatistics(), scanOperator.getTable().getBaseSchema().size());
+                CandidateContext candidateContext = new CandidateContext(
+                        expression.getStatistics(), scanOperator.getTable().getBaseSchema().size(), isUnion);
                 if (isAggregate) {
                     MaterializedView mv = (MaterializedView) scanOperator.getTable();
                     MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(
@@ -173,7 +180,7 @@ public class BestMvSelector {
             }
         }
         for (OptExpression child : expression.getInputs()) {
-            CandidateContext context = getMVContext(child, isAggregate, optimizerContext);
+            CandidateContext context = getMVContext(child, isUnion, isAggregate, optimizerContext);
             if (context != null) {
                 return context;
             }
