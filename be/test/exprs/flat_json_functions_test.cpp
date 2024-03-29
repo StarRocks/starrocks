@@ -636,14 +636,17 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonPathDeriver, FlatJsonDeriverPaths,
         std::make_tuple(R"({ "k1": 1, "k2": 2 })", R"({ "k1": 3, "k2": 4 })", std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_SMALLINT, TYPE_SMALLINT}),
         std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": "v33" })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_VARCHAR}),
         std::make_tuple(R"({ "k1": {"k2": 1} })",  R"({ "k1": 123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
-        std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_VARCHAR}),
+        std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
         std::make_tuple(R"({ "k1": {"k2": 1} })", R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
         std::make_tuple(R"({ "k1": [1,2,3] })", R"({ "k1": "v33" })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
 
         std::make_tuple(R"({ "k1": "v1", "k2": [3,4,5], "k3": 1, "k4": 1.2344 })",  
                         R"({ "k1": "abc", "k2": [11,123,54], "k3": 23423, "k4": 1.2344 })", 
                         std::vector<std::string> {"k3", "k4", "k1", "k2"}, 
-                        std::vector<LogicalType> {TYPE_BIGINT, TYPE_DOUBLE, TYPE_VARCHAR, TYPE_JSON})
+                        std::vector<LogicalType> {TYPE_BIGINT, TYPE_DOUBLE, TYPE_VARCHAR, TYPE_JSON}),
+        std::make_tuple(R"({ "k1": 1, "k2": "a" })", R"({ "k1": 3, "k2": null })", std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_SMALLINT, TYPE_VARCHAR}),
+        std::make_tuple(R"({ "k1": 1, "k2": 2 })", R"({ "k1": 3, "k2": 4 })", std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_SMALLINT, TYPE_SMALLINT})
+
 ));
 // clang-format on
 

@@ -62,7 +62,6 @@ public class SubfieldAccessPathNormalizer {
      */
     private static final Map<PrimitiveType, Byte> JSON_COMPATIBLE_TYPE =
             ImmutableMap.<PrimitiveType, Byte>builder()
-                    .put(PrimitiveType.BOOLEAN, (byte) 128)
                     .put(PrimitiveType.BIGINT, (byte) 120)
                     .put(PrimitiveType.DOUBLE, (byte) 112)
                     .put(PrimitiveType.VARCHAR, (byte) 128)
@@ -224,7 +223,8 @@ public class SubfieldAccessPathNormalizer {
                     List<String> flatPaths = Lists.newArrayList();
                     boolean isOverflown = formatJsonPath(path, flatPaths);
                     p.appendFieldNames(flatPaths);
-                    if (isOverflown || FunctionSet.JSON_LENGTH.equals(call.getFnName())) {
+                    if (isOverflown || FunctionSet.JSON_LENGTH.equals(call.getFnName())
+                            || FunctionSet.GET_JSON_BOOL.equals(call.getFnName())) {
                         p.setValueType(Type.JSON);
                     } else if (FunctionSet.JSON_EXISTS.equals(call.getFnName()) ||
                             FunctionSet.JSON_OBJECT.equals(call.getFnName())) {
