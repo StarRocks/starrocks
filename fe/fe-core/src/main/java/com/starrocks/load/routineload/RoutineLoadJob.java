@@ -1490,7 +1490,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     protected abstract String getStatistic();
 
-
     public List<String> getShowInfo() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table tbl = null;

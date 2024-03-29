@@ -330,13 +330,12 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeBeScanRanges() {
-
         List<ComputeNode> nodeList;
-
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            nodeList = warehouse.getAnyAvailableCluster().getComputeNodeIds().stream()
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+
+            nodeList = computeNodeIds.stream()
                     .map(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(id))
                     .collect(Collectors.toList());
         } else {

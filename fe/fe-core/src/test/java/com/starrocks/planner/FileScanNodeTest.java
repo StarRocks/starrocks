@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableMap;
@@ -21,8 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
@@ -36,6 +33,8 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -153,8 +152,8 @@ public class FileScanNodeTest {
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
-                fileStatusesList, 2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
+                2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -214,8 +213,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
-                fileStatusesList, 4, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -267,8 +266,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
-                fileStatusesList, 5, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -350,8 +349,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
-                fileStatusesList, 1, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -387,8 +386,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
-                fileStatusesList, 1, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -408,7 +407,8 @@ public class FileScanNodeTest {
         // file groups
         fileGroups = Lists.newArrayList();
         files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2.csv",
-                "hdfs://127.0.0.1:9001/file3.gz", "hdfs://127.0.0.1:9001/file4.bz2", "hdfs://127.0.0.1:9001/file5.lz4", "hdfs://127.0.0.1:9001/file6.deflate", "hdfs://127.0.0.1:9001/file7.zst");
+                "hdfs://127.0.0.1:9001/file3.gz", "hdfs://127.0.0.1:9001/file4.bz2", "hdfs://127.0.0.1:9001/file5.lz4",
+                "hdfs://127.0.0.1:9001/file6.deflate", "hdfs://127.0.0.1:9001/file7.zst");
         desc =
                 new DataDescription("testTable", null, files, columnNames, null, null, "csv", false, null);
         brokerFileGroup = new BrokerFileGroup(desc);
@@ -428,8 +428,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
-                fileStatusesList, 2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -438,15 +438,21 @@ public class FileScanNodeTest {
         locationsList = scanNode.getScanRangeLocations(0);
         Assert.assertEquals(1, locationsList.size());
 
-
         Assert.assertEquals(7, locationsList.get(0).scan_range.broker_scan_range.ranges.size());
 
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, locationsList.get(0).scan_range.broker_scan_range.ranges.get(0).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, locationsList.get(0).scan_range.broker_scan_range.ranges.get(1).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_GZ, locationsList.get(0).scan_range.broker_scan_range.ranges.get(2).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_BZ2, locationsList.get(0).scan_range.broker_scan_range.ranges.get(3).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME, locationsList.get(0).scan_range.broker_scan_range.ranges.get(4).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE, locationsList.get(0).scan_range.broker_scan_range.ranges.get(5).format_type);
-        Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD, locationsList.get(0).scan_range.broker_scan_range.ranges.get(6).format_type);
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
+                locationsList.get(0).scan_range.broker_scan_range.ranges.get(0).format_type);
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN,
+                locationsList.get(0).scan_range.broker_scan_range.ranges.get(1).format_type);
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_GZ,
+                locationsList.get(0).scan_range.broker_scan_range.ranges.get(2).format_type);
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_BZ2,
+                locationsList.get(0).scan_range.broker_scan_range.ranges.get(3).format_type);
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME,
+                locationsList.get(0).scan_range.broker_scan_range.ranges.get(4).format_type);
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE,
+                locationsList.get(0).scan_range.broker_scan_range.ranges.get(5).format_type);
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
+                locationsList.get(0).scan_range.broker_scan_range.ranges.get(6).format_type);
     }
 }

@@ -442,7 +442,7 @@ public class StreamLoadInfo {
         if (request.isSetLog_rejected_record_num()) {
             logRejectedRecordNum = request.getLog_rejected_record_num();
         }
-        
+
         if (request.isSetPartial_update()) {
             partialUpdate = request.isPartial_update();
         }

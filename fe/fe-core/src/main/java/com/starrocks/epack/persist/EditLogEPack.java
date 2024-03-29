@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.epack.persist;
 
-import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
@@ -50,19 +50,19 @@ public class EditLogEPack extends EditLog {
             switch (opCode) {
                 case OperationTypeEPack.OP_CREATE_WAREHOUSE: {
                     Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
+                    WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayCreateWarehouse(wh);
                     break;
                 }
                 case OperationTypeEPack.OP_DROP_WAREHOUSE: {
                     DropWarehouseLog log = (DropWarehouseLog) journal.getData();
-                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
+                    WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayDropWarehouse(log);
                     break;
                 }
                 case OperationTypeEPack.OP_ALTER_WAREHOUSE: {
                     Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) globalStateMgr.getWarehouseMgr();
+                    WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayAlterWarehouse(wh);
                     break;
                 }

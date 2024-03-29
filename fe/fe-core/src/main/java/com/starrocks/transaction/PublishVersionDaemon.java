@@ -53,7 +53,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.DeleteTxnLogRequest;
@@ -62,6 +61,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -101,7 +101,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     @VisibleForTesting
     protected Set<Long> publishingLakeTransactionsBatchTableId;
-
 
     public PublishVersionDaemon() {
         super("PUBLISH_VERSION", Config.publish_version_interval_ms);
@@ -499,7 +498,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
         });
     }
 
-
     public boolean publishPartitionBatch(Database db, long tableId, long partitionId, List<Long> txnIds,
                                          List<Long> versions, List<TransactionState> transactionStates,
                                          TransactionStateBatch stateBatch) {
@@ -563,7 +561,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 List<Tablet> publishShdowTablets = new ArrayList<>(item.getValue());
                 // TODO: specify the right worker group id (@SarahLiu)
                 Utils.publishLogVersionBatch(publishShdowTablets, txnIds.subList(index, txnIds.size()),
-                        versions.subList(index, versions.size()), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                        versions.subList(index, versions.size()), WarehouseManager.DEFAULT_WAREHOUSE_ID);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
@@ -578,7 +576,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
                 Utils.publishVersionBatch(publishTablets, txnIds,
                         startVersion - 1, endVersion, commitTime, compactionScores,
-                        StarOSAgent.DEFAULT_WORKER_GROUP_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         nodeToTablets);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
@@ -647,7 +645,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Map<Long, List<Long>> partitionVersions = new HashMap<>();
         // partitionId -> transactionState
         Map<Long, List<TransactionState>> partitionStates = new HashMap<>();
-
 
         for (TransactionState state : states) {
             Map<Long, PartitionCommitInfo> partitionCommitInfoMap = state.getTableCommitInfo(tableId)
@@ -786,7 +783,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
-        long workerGroupId = txnState.getWorkerGroupId();
+        long warehouseId = txnState.getWarehouseId();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
 
@@ -830,12 +827,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
-                Utils.publishLogVersion(shadowTablets, txnId, txnVersion, workerGroupId);
+                Utils.publishLogVersion(shadowTablets, txnId, txnVersion, warehouseId);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
-                        compactionScores, workerGroupId);
+                        compactionScores, warehouseId);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

@@ -55,7 +55,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -203,10 +202,10 @@ public class KafkaUtil {
                     warehouseId = req.kafkaInfo.warehouseId;
                 }
 
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                    ComputeNode node =
-                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                for (long nodeId : computeNodeIds) {
+                    ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr()
+                            .getClusterInfo().getBackendOrComputeNode(nodeId);
                     if (node != null && node.isAlive()) {
                         nodeIds.add(nodeId);
                     }

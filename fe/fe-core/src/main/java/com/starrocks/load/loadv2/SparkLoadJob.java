@@ -77,7 +77,6 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
@@ -89,6 +88,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
@@ -112,7 +112,6 @@ import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -121,7 +120,6 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -244,18 +242,11 @@ public class SparkLoadJob extends BulkLoadJob {
 
     @Override
     public void beginTxn()
-            throws LabelAlreadyUsedException, BeginTransactionException,
-            RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
-        try {
-            Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-            transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
+        transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                        LoadJobSourceType.FRONTEND, id, timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
-        } catch (WarehouseUnavailableException e) {
-            throw new BeginTransactionException(e.getMessage());
-        }
-        
+                        LoadJobSourceType.FRONTEND, id, timeoutSecond, warehouseId);
     }
 
     @Override
@@ -576,21 +567,17 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().
-                                            getAvailbleWarehouse(warehouseId);
-                                    long backendId = ((LakeTablet) tablet).
-                                            getPrimaryComputeNodeId(currentWh.getAnyAvailableCluster().getWorkerGroupId());
-                                    // TODO: need to refactor after be split into cn + dn
-                                    ComputeNode backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
-                                            getBackendOrComputeNode(backendId);
+                                    WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                                    ComputeNode backend = warehouseManager
+                                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                                     if (backend == null) {
-                                        LOG.warn("replica {} not exists", backendId);
+                                        LOG.warn("replica {} not exists", ((LakeTablet) tablet).getShardId());
                                         continue;
                                     }
 
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
                                             tabletId, schemaHash, params, batchTask, tabletMetaStr,
-                                            backend, new Replica(tabletId, backendId, -1, NORMAL),
+                                            backend, new Replica(tabletId, backend.getId(), -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE, columnsDesc);
 
                                     if (tabletFinishedReplicas.contains(tabletId)) {

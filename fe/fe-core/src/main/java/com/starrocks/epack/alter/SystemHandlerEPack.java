@@ -18,6 +18,9 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.epack.sql.ast.AddBackendClauseEPack;
 import com.starrocks.epack.sql.ast.AddComputeNodeClauseEPack;
@@ -27,10 +30,17 @@ import com.starrocks.epack.sql.ast.DecommissionDiskClause;
 import com.starrocks.epack.sql.ast.DisableDiskClause;
 import com.starrocks.epack.sql.ast.DropBackendClauseEPack;
 import com.starrocks.epack.sql.ast.DropComputeNodeClauseEPack;
-import com.starrocks.epack.system.SystemInfoServiceEpack;
+import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -50,32 +60,86 @@ public class SystemHandlerEPack extends SystemHandler {
     }
 
     protected static class Visitor extends SystemHandler.Visitor implements AstVisitorEPack<Void, Void> {
+        private static final Logger LOG = LogManager.getLogger(SystemHandlerEPack.class);
         private static final SystemHandlerEPack.Visitor INSTANCE = new SystemHandlerEPack.Visitor();
 
         public static SystemHandlerEPack.Visitor getInstance() {
             return INSTANCE;
         }
 
+        public void addComuteNodeToWarehouse(ComputeNode computeNode, String warehouseName)
+                throws DdlException {
+            LocalWarehouse warehouse = (LocalWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouse(warehouseName);
+            // check if the warehouse exist
+            if (warehouse == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+            }
+
+            computeNode.setWorkerGroupId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
+            computeNode.setWarehouseId(warehouse.getId());
+        }
+
         @Override
         public Void visitAddBackendClause(AddBackendClauseEPack alterClause, Void context) {
-            SystemInfoServiceEpack systemInfoServiceEpack =
-                    (SystemInfoServiceEpack) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            try {
-                systemInfoServiceEpack.addBackends(
-                        alterClause.getAddBackendClause().getHostPortPairs(), alterClause.getWarehouse());
-            } catch (DdlException e) {
-                throw new RuntimeException(e);
-            }
+            ErrorReport.wrapWithRuntimeException(() -> {
+                SystemInfoService systemInfoService =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+                String warehouseName = alterClause.getWarehouse();
+                List<Pair<String, Integer>> hostPortPairs = alterClause.getAddBackendClause().getHostPortPairs();
+
+                for (Pair<String, Integer> pair : hostPortPairs) {
+                    systemInfoService.checkSameNodeExist(pair.first, pair.second);
+                }
+
+                for (Pair<String, Integer> pair : hostPortPairs) {
+                    Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), pair.first, pair.second);
+                    systemInfoService.addBackend(newBackend);
+
+                    addComuteNodeToWarehouse(newBackend, warehouseName);
+
+                    // add backend to DEFAULT_CLUSTER
+                    systemInfoService.setBackendOwner(newBackend);
+
+                    // log
+                    GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
+                    LOG.info("finished to add {} ", newBackend);
+
+                    // backends are changed, regenerated tablet number metrics
+                    MetricRepo.generateBackendsTabletMetrics();
+                }
+            });
             return null;
         }
 
         @Override
         public Void visitAddComputeNodeClause(AddComputeNodeClauseEPack alterClause, Void context) {
-            SystemInfoServiceEpack systemInfoServiceEpack =
-                    (SystemInfoServiceEpack) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             try {
-                systemInfoServiceEpack.addComputeNodes(
-                        alterClause.getAddComputeNodeClause().getHostPortPairs(), alterClause.getWarehouse());
+                SystemInfoService systemInfoService =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+                String warehouseName = alterClause.getWarehouse();
+                List<Pair<String, Integer>> hostPortPairs = alterClause.getAddComputeNodeClause().getHostPortPairs();
+
+                for (Pair<String, Integer> pair : hostPortPairs) {
+                    systemInfoService.checkSameNodeExist(pair.first, pair.second);
+                }
+
+                for (Pair<String, Integer> pair : hostPortPairs) {
+                    ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(),
+                            pair.first, pair.second);
+                    systemInfoService.addComputeNode(newComputeNode);
+
+                    addComuteNodeToWarehouse(newComputeNode, warehouseName);
+
+                    systemInfoService.setComputeNodeOwner(newComputeNode);
+
+                    // log
+                    GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
+                    LOG.info("finished to add {} ", newComputeNode);
+                }
+
             } catch (DdlException e) {
                 throw new RuntimeException(e);
             }
@@ -84,10 +148,41 @@ public class SystemHandlerEPack extends SystemHandler {
 
         @Override
         public Void visitDropBackendClause(DropBackendClauseEPack alterClause, Void context) {
-            SystemInfoServiceEpack systemInfoServiceEpack =
-                    (SystemInfoServiceEpack) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             try {
-                systemInfoServiceEpack.dropBackends(alterClause.getDropBackendClause(), alterClause.getWarehouse());
+                SystemInfoService systemInfoService =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+                String warehouseName = alterClause.getWarehouse();
+                List<Pair<String, Integer>> hostPortPairs = alterClause.getDropBackendClause().getHostPortPairs();
+
+                boolean needCheckUnforce = !alterClause.getDropBackendClause().isForce();
+
+                // check if the warehouse exist
+                if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName) == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+                }
+
+                for (Pair<String, Integer> pair : hostPortPairs) {
+                    Backend be = systemInfoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+                    // check is already exist
+                    if (be == null) {
+                        throw new DdlException("backend does not exists[" + pair.first + ":" + pair.second + "]");
+                    }
+
+                    // check if warehouseName is right
+                    Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(be.getWarehouseId());
+                    if (wh != null && !warehouseName.equalsIgnoreCase(wh.getName())) {
+                        LOG.warn("warehouseName in dropBackends is not equal, " +
+                                        "warehouseName from dropBackendClause is {}, while actual one is {}",
+                                warehouseName, wh.getName());
+                        throw new DdlException("backend [" + pair.first + ":" + pair.second +
+                                "] does not exist in warehouse " + warehouseName);
+                    }
+                }
+
+                for (Pair<String, Integer> pair : hostPortPairs) {
+                    systemInfoService.dropBackend(pair.first, pair.second, needCheckUnforce);
+                }
             } catch (DdlException e) {
                 throw new RuntimeException(e);
             }
@@ -96,11 +191,35 @@ public class SystemHandlerEPack extends SystemHandler {
 
         @Override
         public Void visitDropComputeNodeClause(DropComputeNodeClauseEPack alterClause, Void context) {
-            SystemInfoServiceEpack systemInfoServiceEpack =
-                    (SystemInfoServiceEpack) GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             try {
-                systemInfoServiceEpack.dropComputeNodes(alterClause.getDropComputeNodeClause().getHostPortPairs(),
-                        alterClause.getWarehouse());
+                SystemInfoService systemInfoService =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+                String warehouseName = alterClause.getWarehouse();
+                List<Pair<String, Integer>> hostPortPairs = alterClause.getDropComputeNodeClause().getHostPortPairs();
+
+                // check if the warehouse exist
+                if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName) == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
+                }
+
+                for (Pair<String, Integer> pair : hostPortPairs) {
+                    // check is already exist
+                    ComputeNode cn = systemInfoService.getComputeNodeWithHeartbeatPort(pair.first, pair.second);
+                    if (cn == null) {
+                        throw new DdlException("compute node does not exists[" + pair.first + ":" + pair.second + "]");
+                    }
+                    // check if warehouseName is right
+                    Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(cn.getWarehouseId());
+                    if (wh != null && !warehouseName.equalsIgnoreCase(wh.getName())) {
+                        throw new DdlException("compute node [" + pair.first + ":" + pair.second +
+                                "] does not exist in warehouse " + warehouseName);
+                    }
+                }
+
+                for (Pair<String, Integer> pair : hostPortPairs) {
+                    systemInfoService.dropComputeNode(pair.first, pair.second);
+                }
             } catch (DdlException e) {
                 throw new RuntimeException(e);
             }

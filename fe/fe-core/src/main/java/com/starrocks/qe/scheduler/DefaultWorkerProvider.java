@@ -21,8 +21,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -90,7 +88,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
                                                              int numUsedComputeNodes,
-                                                             long warehouseId) throws UserException {
+                                                             long warehouseId) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseId);
@@ -225,6 +223,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
      * if usedComputeNode turns on or no backend, we add all compute nodes to the result.
      * if perferComputeNode turns on, we just return computeNode set
      * else add backend set and return
+     *
      * @return
      */
     @Override
@@ -264,8 +263,6 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private String toString(boolean chooseComputeNode) {
         return chooseComputeNode ? computeNodesToString() : backendsToString();
     }
-
-
 
     private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
         throw new NonRecoverableException(
@@ -308,15 +305,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes,
-                                                                        long warehouseId)
-            throws NonRecoverableException {
+                                                                        long warehouseId) {
         if (RunMode.isSharedDataMode()) {
-            try {
-                return GlobalStateMgr.getCurrentState().getWarehouseMgr().
-                        getComputeNodesFromAvailableWarehouse(warehouseId);
-            } catch (WarehouseUnavailableException e) {
-                throw new NonRecoverableException(e.getMessage());
-            }
+            ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            computeNodeIds.forEach(nodeId -> builder.put(nodeId,
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
+            return builder.build();
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode

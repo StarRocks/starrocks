@@ -78,7 +78,7 @@ public class CoordinatorPreprocessor {
 
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
-    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) throws UserException {
+    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         this.connectContext = Preconditions.checkNotNull(context);

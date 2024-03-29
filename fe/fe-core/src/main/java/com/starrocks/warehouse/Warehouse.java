@@ -48,8 +48,6 @@ public abstract class Warehouse implements Writable {
         return comment;
     }
 
-    public abstract Cluster getAnyAvailableCluster();
-
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);

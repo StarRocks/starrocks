@@ -650,7 +650,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     // Because modifying the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
-    // And reordering table schema need to provide all columns, so we use the number of columns in the alterClause to determine 
+    // And reordering table schema need to provide all columns, so we use the number of columns in the alterClause to determine
     // whether it's modifying the sorting columns or reordering the table schema
     private boolean changeSortKeyColumn(ReorderColumnsClause alterClause, OlapTable table) throws DdlException {
         List<String> orderedColumns = alterClause.getColumnsByPos();
@@ -1188,8 +1188,9 @@ public class SchemaChangeHandler extends AlterHandler {
         if (RunMode.isSharedDataMode()) {
             // check warehouse
             long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-            if (warehouse.getAnyAvailableCluster().getComputeNodeIds().isEmpty()) {
+            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            if (computeNodeIs.isEmpty()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                 throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
             }
 

@@ -33,6 +33,7 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -183,6 +184,18 @@ public class DefaultWorkerProviderTest {
                 public ImmutableMap<Long, ComputeNode> getComputeNodesFromAvailableWarehouse(long warehouseId)
                         throws WarehouseUnavailableException {
                     return id2ComputeNode;
+                }
+
+                @Mock
+                public List<Long> getAllComputeNodeIds(long warehouseId) {
+                    return new ArrayList<>(id2ComputeNode.keySet());
+                }
+            };
+
+            new MockUp<SystemInfoService>() {
+                @Mock
+                public ComputeNode getBackendOrComputeNode(long nodeId) {
+                    return id2ComputeNode.get(nodeId);
                 }
             };
 

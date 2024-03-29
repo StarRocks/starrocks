@@ -15,16 +15,13 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.After;
@@ -127,22 +124,12 @@ public class ComputeNodeProcDirTest {
     }
 
     @Test
-    public void testFetchResultSharedData(@Mocked WarehouseManager warehouseManager) throws AnalysisException {
-        Warehouse wh = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID, null);
+    public void testFetchResultSharedData() throws AnalysisException {
         new Expectations() {
             {
                 RunMode.isSharedDataMode();
                 minTimes = 1;
                 result = true;
-
-                globalStateMgr.getWarehouseMgr();
-                minTimes = 1;
-                result = warehouseManager;
-
-                warehouseManager.getWarehouse(anyLong);
-                minTimes = 1;
-                result = wh;
             }
         };
 

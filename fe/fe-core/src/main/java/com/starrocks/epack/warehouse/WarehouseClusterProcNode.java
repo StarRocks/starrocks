@@ -19,7 +19,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
 
 public class WarehouseClusterProcNode implements ProcNodeInterface {
@@ -38,8 +37,8 @@ public class WarehouseClusterProcNode implements ProcNodeInterface {
             result.addRow(Lists.newArrayList(String.valueOf(cluster.getId()),
                     String.valueOf(cluster.getWorkerGroupId()),
                     String.valueOf(cluster.getComputeNodeIds()),
-                    String.valueOf(cluster.getPendingSqls()),
-                    String.valueOf(cluster.getRunningSqls())));
+                    String.valueOf(/* cluster.getPendingSqls() */ 0),
+                    String.valueOf(/* cluster.getRunningSqls() */ 0)));
         }
 
         return result;

@@ -89,13 +89,13 @@ public class MetaScanNode extends ScanNode {
                 // random shuffle List && only collect one copy
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
                 if (RunMode.isSharedDataMode()) {
-                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                            visibleVersion, -1, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                            visibleVersion, -1, schemaHash, warehouseId);
                 } else {
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
                             visibleVersion, -1, schemaHash);
                 }
+
                 if (allQueryableReplicas.isEmpty()) {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);

@@ -69,9 +69,9 @@ public class WarehouseProcDir implements ProcDirInterface {
     public ProcResult fetchResult() {
         BaseProcResult result = new BaseProcResult();
         result.setNames(WAREHOUSE_PROC_NODE_TITLE_NAMES);
-        List<Long> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseIds();
+        List<Warehouse> warehouseIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses();
         warehouseIds.forEach(x -> {
-            LocalWarehouse wh = (LocalWarehouse) GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(x);
+            LocalWarehouse wh = (LocalWarehouse) x;
             if (wh != null) {
                 result.addRow(wh.getWarehouseInfo());
             }

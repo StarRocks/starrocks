@@ -57,6 +57,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -246,7 +247,7 @@ public class SparkLoadJobTest {
                 warehouseManager.getWarehouse(anyString);
                 minTimes = 0;
                 result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManagerEPack.DEFAULT_CLUSTER_ID,
                         "An internal warehouse contains all compute nodes in this system");
             }
         };
@@ -504,8 +505,6 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(tablet);
                 tablet.getId();
                 result = tabletId;
-                ((LakeTablet) tablet).getPrimaryComputeNodeId(anyLong);
-                result = backendId;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;

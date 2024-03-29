@@ -42,7 +42,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -55,6 +54,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStorageMedium;
@@ -128,13 +128,14 @@ public class LakeRestoreJob extends RestoreJob {
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .getBackend(tablet.getPrimaryComputeNodeId());
+                Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_NAME, tablet);
+
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
-                        backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
-                snapshotInfos.put(idChain.getTabletId(), backend.getId(), info);
-            } catch (UserException e) {
+                        computeNodeId, tbl.getSchemaHashByIndexId(index.getId()), -1);
+                snapshotInfos.put(idChain.getTabletId(), computeNodeId, info);
+            } catch (Exception e) {
                 LOG.error(e.getMessage());
                 status = new Status(Status.ErrCode.COMMON_ERROR,
                         "failed to choose replica to make snapshot for tablet " + tablet.getId());

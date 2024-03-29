@@ -342,7 +342,7 @@ public class SystemInfoServiceTest {
         new Expectations(starosAgent) {
             {
                 try {
-                    starosAgent.removeWorker("192.168.0.1:1235");
+                    starosAgent.removeWorker("192.168.0.1:1235", StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                     minTimes = 0;
                     result = null;
                 } catch (DdlException e) {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.warehouse;
+package com.starrocks.epack.warehouse;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.UserException;
@@ -58,14 +58,6 @@ public class Cluster implements Writable {
 
     public void setWorkerGroupId(long workerGroupId) {
         this.workerGroupId = workerGroupId;
-    }
-
-    public int getRunningSqls() {
-        return 0;
-    }
-
-    public int getPendingSqls() {
-        return 0;
     }
 
     public AtomicInteger getNextComputeNodeHostId() {

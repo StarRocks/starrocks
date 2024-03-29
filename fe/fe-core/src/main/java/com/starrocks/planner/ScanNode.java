@@ -83,7 +83,7 @@ public abstract class ScanNode extends PlanNode {
     public void setCanUseAnyColumn(boolean canUseAnyColumn) {
         this.canUseAnyColumn = canUseAnyColumn;
     }
-    
+
     public void setScanOptimzeOption(ScanOptimzeOption opt) {
         this.scanOptimzeOption = opt.copy();
     }

@@ -144,7 +144,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
                                  TxnCoordinator coordinator, LoadJobSourceType sourceType, long listenerId,
                                  long timeoutSecond,
-                                 long workerGroupId)
+                                 long warehouseId)
             throws LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException, AnalysisException {
 
         if (Config.disable_load_job) {
@@ -176,7 +176,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         return dbTransactionMgr.beginTransaction(tableIdList, label, requestId, coordinator, sourceType, listenerId,
-                timeoutSecond, workerGroupId);
+                timeoutSecond, warehouseId);
     }
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
@@ -188,10 +188,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TxnCoordinator coordinator,
                                  LoadJobSourceType sourceType,
-                                 long timeoutSecond, long workerGroupId)
+                                 long timeoutSecond, long warehouseId)
             throws AnalysisException, LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException {
-        return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1, 
-            timeoutSecond, workerGroupId);
+        return beginTransaction(dbId, tableIdList, label, null, coordinator, sourceType, -1,
+                timeoutSecond, warehouseId);
     }
 
     public long beginTransaction(long dbId, List<Long> tableIdList, String label, TUniqueId requestId,
@@ -199,7 +199,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                                  long timeoutSecond)
             throws AnalysisException, LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException {
         return beginTransaction(dbId, tableIdList, label, requestId, coordinator, sourceType, listenerId, timeoutSecond,
-                WarehouseManager.DEFAULT_CLUSTER_ID);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     private void checkValidTimeoutSecond(long timeoutSecond, int maxLoadTimeoutSecond, int minLoadTimeOutSecond)

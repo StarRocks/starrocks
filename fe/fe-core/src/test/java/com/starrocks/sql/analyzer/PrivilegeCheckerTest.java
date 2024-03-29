@@ -2158,6 +2158,7 @@ public class PrivilegeCheckerTest {
                 "COLUMNS(c1) FROM KAFKA " +
                 "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
                 " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,

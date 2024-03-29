@@ -79,7 +79,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -98,7 +97,6 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -414,14 +412,12 @@ public class OlapScanNode extends ScanNode {
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                 selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                        expectedVersion, -1, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                        expectedVersion, -1, schemaHash, warehouseId);
             } else {
                 selectedTablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         expectedVersion, -1, schemaHash);
             }
-
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
                 String message = String.format("Failed to get scan range, no queryable replica found in " +
@@ -442,7 +438,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setRow_count(selectedTablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {
-                    internalRange.setBucket_sequence((int)tabletId);
+                    internalRange.setBucket_sequence((int) tabletId);
                 } else {
                     internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
                 }
@@ -454,7 +450,8 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -510,7 +507,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setRow_count(tablet.getRowCount(0));
             if (isOutputChunkByBucket) {
                 if (withoutColocateRequirement) {
-                    internalRange.setBucket_sequence((int)tabletId);
+                    internalRange.setBucket_sequence((int) tabletId);
                 } else {
                     internalRange.setBucket_sequence(tabletId2BucketSeq.get(tabletId));
                 }
@@ -520,12 +517,13 @@ public class OlapScanNode extends ScanNode {
             List<Replica> allQueryableReplicas = Lists.newArrayList();
             List<Replica> localReplicas = Lists.newArrayList();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                if (warehouse.getAnyAvailableCluster().getComputeNodeIds().isEmpty()) {
-                    throw new UserException(" no backend or compute node in warehouse " + warehouse.getName());
+                List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                if (computeNodeIds.isEmpty()) {
+                    throw new UserException(" no backend or compute node in warehouse " + warehouseId);
                 }
+
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
-                        visibleVersion, localBeId, schemaHash, warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                        visibleVersion, localBeId, schemaHash, warehouseId);
             } else {
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                         visibleVersion, localBeId, schemaHash);
@@ -567,18 +565,19 @@ public class OlapScanNode extends ScanNode {
                     continue;
                 }
             }
-    
+
             // TODO: Implement a more robust strategy for tablet affinity.
             if (!enableQueryTabletAffinity) {
                 Collections.shuffle(replicas);
             }
-    
+
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -658,7 +657,8 @@ public class OlapScanNode extends ScanNode {
     private void computeTabletInfo() throws UserException {
         long localBeId = -1;
         if (Config.enable_local_replica_selection) {
-            localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+            localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
         }
         /**
          * The tablet info could be computed only once.
@@ -982,9 +982,7 @@ public class OlapScanNode extends ScanNode {
 
     // export some tablets
     public static OlapScanNode createOlapScanNodeByLocation(
-            PlanNodeId id, TupleDescriptor desc,
-            String planNodeName,
-            List<TScanRangeLocations> locationsList,
+            PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList,
             long warehouseId) {
         OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
         olapScanNode.numInstances = 1;

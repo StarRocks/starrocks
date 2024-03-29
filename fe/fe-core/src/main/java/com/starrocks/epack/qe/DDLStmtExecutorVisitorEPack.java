@@ -15,7 +15,7 @@ package com.starrocks.epack.qe;
 
 import com.starrocks.common.ErrorReport;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
-import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
@@ -170,7 +170,7 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
     @Override
     public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> {
-            WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
+            WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) context.getGlobalStateMgr().getWarehouseMgr();
             warehouseMgr.createWarehouse(stmt);
 
         });
@@ -180,7 +180,7 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
     @Override
     public ShowResultSet visitSuspendWarehouseStatement(SuspendWarehouseStmt stmt, ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> {
-            WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
+            WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) context.getGlobalStateMgr().getWarehouseMgr();
             warehouseMgr.suspendWarehouse(stmt);
 
         });
@@ -190,7 +190,7 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
     @Override
     public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> {
-            WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
+            WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) context.getGlobalStateMgr().getWarehouseMgr();
             warehouseMgr.resumeWarehouse(stmt);
         });
         return null;
@@ -199,7 +199,7 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
     @Override
     public ShowResultSet visitDropWarehouseStatement(DropWarehouseStmt stmt, ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> {
-            WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) context.getGlobalStateMgr().getWarehouseMgr();
+            WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) context.getGlobalStateMgr().getWarehouseMgr();
             warehouseMgr.dropWarehouse(stmt);
         });
         return null;

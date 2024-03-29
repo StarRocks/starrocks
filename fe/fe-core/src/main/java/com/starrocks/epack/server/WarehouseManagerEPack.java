@@ -15,6 +15,7 @@ import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DropWarehouseStmt;
 import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.epack.warehouse.Cluster;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -23,7 +24,6 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,9 +31,9 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-
-public class WarehouseManagerEpack extends WarehouseManager {
-    private static final Logger LOG = LogManager.getLogger(WarehouseManagerEpack.class);
+public class WarehouseManagerEPack extends WarehouseManager {
+    private static final Logger LOG = LogManager.getLogger(WarehouseManagerEPack.class);
+    public static final long DEFAULT_CLUSTER_ID = 0L;
 
     @Override
     public void initDefaultWarehouse() {

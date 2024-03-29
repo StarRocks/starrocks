@@ -470,7 +470,8 @@ message PPulsarLoadInfo {
     required string topic = 2;
     required string subscription = 3;
     repeated PStringPair properties = 4;
-    required int64 warehouseId = 11;
+
+    optional int64 warehouseId = 11;
 };
 
 message PPulsarMetaProxyRequest {

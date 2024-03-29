@@ -22,12 +22,10 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.Load;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +46,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,6 +66,7 @@ import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
     public static final Set<String> SUPPORTED_FORMATS;
+
     static {
         SUPPORTED_FORMATS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         SUPPORTED_FORMATS.add("parquet");
@@ -145,8 +143,8 @@ public class TableFunctionTable extends Table {
 
     // Ctor for unload data via table function
     public TableFunctionTable(String path, String format, String compressionType, List<Column> columns,
-            @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile, long targetMaxFileSize,
-            Map<String, String> properties) {
+                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile, long targetMaxFileSize,
+                              Map<String, String> properties) {
         super(TableType.TABLE_FUNCTION);
         verify(!Strings.isNullOrEmpty(path), "path is null or empty");
         verify(!(partitionColumnIDs != null && writeSingleFile));
@@ -388,30 +386,21 @@ public class TableFunctionTable extends Table {
             return Lists.newArrayList();
         }
         TNetworkAddress address;
-        try {
-            List<Long> nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
-            if (RunMode.isSharedDataMode()) {
-                long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-                nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
-            }
-
-            if (nodeIds.isEmpty()) {
-                if (RunMode.isSharedNothingMode()) {
-                    throw new DdlException("Failed to send proxy request. No alive backends");
-                } else {
-                    throw new DdlException("Failed to send proxy request. No alive backends or compute nodes");
-                }
-            }
-
-            Collections.shuffle(nodeIds);
-            ComputeNode node =
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
-            address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
-
-        } catch (WarehouseUnavailableException e) {
-            throw new DdlException(e.getMessage());
+        List<Long> nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+        if (RunMode.isSharedDataMode()) {
+            nodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(true));
         }
+        if (nodeIds.isEmpty()) {
+            if (RunMode.isSharedNothingMode()) {
+                throw new DdlException("Failed to send proxy request. No alive backends");
+            } else {
+                throw new DdlException("Failed to send proxy request. No alive backends or compute nodes");
+            }
+        }
+
+        Collections.shuffle(nodeIds);
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
+        address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
 
         PGetFileSchemaResult result;
         try {

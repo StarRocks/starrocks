@@ -32,7 +32,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.alter.AlterJobExecutorEPack;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -156,16 +155,11 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
         }
 
         // warehouse
-        try {
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-                String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseName);
-                materializedView.setWarehouseId(warehouse.getId());
-            }
-        } catch (WarehouseUnavailableException e) {
-            throw new SemanticException(e.getMessage());
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            materializedView.setWarehouseId(warehouse.getId());
         }
-
 
         if (!properties.isEmpty()) {
             if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {

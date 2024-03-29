@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.ImmutableMap;
@@ -71,8 +70,7 @@ public class KafkaProgressTest {
         progress.addPartitionOffset(new Pair<>(1, -2L));
         progress.addPartitionOffset(new Pair<>(2, 10L));
         progress.addPartitionOffset(new Pair<>(3, 10L));
-        progress.convertOffset("127.0.0.1:9020", "topic", Maps.newHashMap(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        progress.convertOffset("127.0.0.1:9020", "topic", Maps.newHashMap(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         List<Pair<Integer, Long>> partitionToOffset = new ArrayList<>();
         partitionToOffset.add(new Pair<>(3, 20L));

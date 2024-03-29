@@ -57,7 +57,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.load.Load;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -450,7 +450,7 @@ public abstract class StarRocksHttpTestCase {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
-        WarehouseManager warehouseMgr = new WarehouseManagerEpack();
+        WarehouseManager warehouseMgr = new WarehouseManagerEPack();
         new MockUp<ConnectContext>() {
             @Mock
             public long getCurrentWarehouseId() {

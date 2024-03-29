@@ -710,10 +710,6 @@ public class ConnectContext {
 
     public void setCurrentWarehouseId(long warehouseId) {
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
-        if (warehouse == null) {
-            throw new SemanticException("Warehouse " + warehouseId + " not exist");
-        }
-
         this.sessionVariable.setWarehouseName(warehouse.getName());
     }
 

@@ -27,12 +27,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.warehouse.Warehouse;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -76,16 +73,6 @@ public class LakeTabletsProcDir implements ProcDirInterface {
 
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
 
-        // get current warehouse
-        long workerGroupId;
-        try {
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-            workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-        } catch (WarehouseUnavailableException e) {
-            throw new RuntimeException(e.getMessage());
-        }
-
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
@@ -93,7 +80,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 List<Comparable> tabletInfo = Lists.newArrayList();
                 LakeTablet lakeTablet = (LakeTablet) tablet;
                 tabletInfo.add(lakeTablet.getId());
-                tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds(workerGroupId)));
+                tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds(ConnectContext.get().getCurrentWarehouseId())));
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfos.add(tabletInfo);
@@ -173,22 +160,15 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             BaseProcResult result = new BaseProcResult();
             result.setNames(TITLE_NAMES);
 
-            try {
-                // get current warehouse
-                long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-
-                List<String> row = Arrays.asList(
-                        String.valueOf(tablet.getId()),
-                        new Gson().toJson(tablet.getBackendIds(warehouse.getAnyAvailableCluster().getWorkerGroupId())),
-                        new ByteSizeValue(tablet.getDataSize(true)).toString(),
-                        String.valueOf(tablet.getRowCount(0L))
-                );
-                result.addRow(row);
-
-            } catch (WarehouseUnavailableException e) {
-                throw new RuntimeException(e.getMessage());
-            }
+            // get current warehouse
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<String> row = Arrays.asList(
+                    String.valueOf(tablet.getId()),
+                    new Gson().toJson(tablet.getBackendIds(warehouseId)),
+                    new ByteSizeValue(tablet.getDataSize(true)).toString(),
+                    String.valueOf(tablet.getRowCount(0L))
+            );
+            result.addRow(row);
 
             return result;
         }

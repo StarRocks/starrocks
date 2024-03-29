@@ -48,6 +48,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.system.SystemInfoServiceEpack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.persist.EditLog;
@@ -324,15 +325,14 @@ public class RoutineLoadManagerTest {
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
-            es.submit(() -> Assert.assertTrue(routineLoadManager.
-                    takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID) > 0));
+            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID) > 0));
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
         Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID));
-        Assert.assertEquals(-1L, routineLoadManager.takeNodeById(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L));
-        Assert.assertEquals(-1L, routineLoadManager.takeNodeById(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L));
+        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L));
 
         // release all slots
         ExecutorService es2 = Executors.newCachedThreadPool();
@@ -795,7 +795,7 @@ public class RoutineLoadManagerTest {
 
                 warehouseMgr.getWarehouse(anyLong);
                 result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManagerEPack.DEFAULT_CLUSTER_ID,
                         "An internal warehouse contains all compute nodes in this system");
                 minTimes = 0;
             }

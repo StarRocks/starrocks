@@ -22,7 +22,6 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVStartEpochTask;
@@ -88,15 +87,14 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
         MaterializedView view = mvMaintenanceJob.getView();
         long dbId = view.getDbId();
-        List<Long> tableIdList =  Arrays.asList(view.getId());
+        List<Long> tableIdList = Arrays.asList(view.getId());
         long currentTs = System.currentTimeMillis();
         String label = String.format("MV_REFRESH_%d-%d-%d", dbId, view.getId(), currentTs);
         TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
         TransactionState.LoadJobSourceType loadSource = TransactionState.LoadJobSourceType.MV_REFRESH;
         try {
             long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT, 
-                    WarehouseManager.DEFAULT_CLUSTER_ID);
+                    .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
             epoch.setTxnId(txnId);
 
             // Init OlapSink's txnId

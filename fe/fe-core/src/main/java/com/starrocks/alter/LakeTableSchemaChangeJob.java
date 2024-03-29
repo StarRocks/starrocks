@@ -49,7 +49,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -58,7 +57,9 @@ import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -309,7 +310,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             List<Column> differences = originSchema.stream().filter(element ->
                                     !shadowSchema.contains(element)).collect(Collectors.toList());
                             // can just drop one column one time, so just one element in differences
-                            Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                            int dropIdx = originSchema.indexOf(differences.get(0));
                             for (int i = 0; i < copiedSortKeyIdxes.size(); ++i) {
                                 Integer sortKeyIdx = copiedSortKeyIdxes.get(i);
                                 if (dropIdx < sortKeyIdx) {
@@ -355,19 +356,17 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     boolean createSchemaFile = true;
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
-                        LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
-
-                        Warehouse currentWh =
-                                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-
-                        Long nodeId = Utils.chooseNodeId(lakeTablet, currentWh.getAnyAvailableCluster().getWorkerGroupId());
-                        if (nodeId == null) {
-                            throw new AlterCancelException("No alive backend or compute node in warehouse " + warehouseId);
+                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME,
+                                        (LakeTablet) shadowTablet);
+                        if (computeNode == null) {
+                            //todo: fix the error message.
+                            throw new AlterCancelException("No alive backend");
                         }
-                        countDownLatch.addMark(nodeId, shadowTabletId);
+                        countDownLatch.addMark(computeNode.getId(), shadowTabletId);
 
                         CreateReplicaTask task = CreateReplicaTask.newBuilder()
-                                .setNodeId(nodeId)
+                                .setNodeId(computeNode.getId())
                                 .setDbId(dbId)
                                 .setTableId(tableId)
                                 .setPartitionId(partitionId)
@@ -454,30 +453,22 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 // the schema change task will transform the data before visible version(included).
                 long visibleVersion = partition.getVisibleVersion();
 
-                Warehouse currentWh = null;
-                try {
-                    currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-                } catch (WarehouseUnavailableException e) {
-                    throw new AlterCancelException(e.getMessage());
-                }
-
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        Long nodeId = Utils.chooseNodeId((LakeTablet) shadowTablet,
-                                currentWh.getAnyAvailableCluster().getWorkerGroupId());
-
-                        if (nodeId == null) {
-                            throw new AlterCancelException("No alive backend or compute node");
+                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_ID, (LakeTablet) shadowTablet);
+                        if (computeNode == null) {
+                            throw new AlterCancelException("No alive backend");
                         }
 
                         long shadowTabletId = shadowTablet.getId();
                         long originTabletId =
                                 physicalPartitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         AlterReplicaTask alterTask =
-                                AlterReplicaTask.alterLakeTablet(nodeId, dbId, tableId, partitionId,
+                                AlterReplicaTask.alterLakeTablet(computeNode.getId(), dbId, tableId, partitionId,
                                         shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId,
                                         watershedTxnId);
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
@@ -645,11 +636,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
-                Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion,
-                            finishedTimeMs / 1000, currentWh.getAnyAvailableCluster().getWorkerGroupId());
+                            finishedTimeMs / 1000, warehouseId);
                 }
             }
             return true;
@@ -683,7 +672,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 List<Column> differences = originSchema.stream().filter(element ->
                         !shadowSchema.contains(element)).collect(Collectors.toList());
                 // can just drop one column one time, so just one element in differences
-                Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                int dropIdx = originSchema.indexOf(differences.get(0));
                 modifiedColumns.add(originSchema.get(dropIdx).getName());
             } else {
                 // add column should not affect old mv, just ignore.

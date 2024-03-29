@@ -14,7 +14,6 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.common.UserException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 
@@ -41,7 +40,7 @@ public interface WorkerProvider {
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
                                                int numUsedComputeNodes,
-                                               long warehouseId) throws UserException;
+                                               long warehouseId);
     }
 
     /**
@@ -54,6 +53,7 @@ public interface WorkerProvider {
 
     /**
      * Select the worker with the given id.
+     *
      * @param workerId The id of the worker to choose.
      * @throws NonRecoverableException if there is no available worker with the given id.
      */

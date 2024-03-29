@@ -20,7 +20,6 @@ import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
@@ -56,7 +55,5 @@ public class UtilsTest {
                 throw new UserException("No backend or compute node alive.");
             }
         };
-
-        Assert.assertNull(Utils.chooseNodeId(new LakeTablet(1000L)));
     }
 }

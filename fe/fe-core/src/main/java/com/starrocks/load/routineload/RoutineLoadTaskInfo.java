@@ -230,13 +230,12 @@ public abstract class RoutineLoadTaskInfo {
 
         //  label = job_name+job_id+task_id
         label = Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
-        Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
 
         txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, routineLoadJob.getId(),
-                timeoutMs / 1000, currentWh.getAnyAvailableCluster().getWorkerGroupId());
+                timeoutMs / 1000, warehouseId);
     }
 
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {

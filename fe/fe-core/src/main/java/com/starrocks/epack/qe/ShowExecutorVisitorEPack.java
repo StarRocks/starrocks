@@ -43,6 +43,7 @@ import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowWarehousesStmt;
+import com.starrocks.epack.warehouse.Cluster;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -65,7 +66,6 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;

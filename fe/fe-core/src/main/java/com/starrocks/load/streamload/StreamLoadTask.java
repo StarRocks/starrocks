@@ -66,7 +66,6 @@ import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
-import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -904,17 +903,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public void unprotectedBeginTxn(boolean replay) throws UserException {
-        Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-        if (currentWh == null) {
-            throw new UserException("Warehouse " + warehouseId + " not exist");
-        }
-        long workerGroupId = currentWh.getAnyAvailableCluster().getWorkerGroupId();
         this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 dbId, Lists.newArrayList(tableId), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
-                timeoutMs / 1000, workerGroupId);
-    } 
+                timeoutMs / 1000, warehouseId);
+    }
 
     public void unprotectedPrepareTxn() throws UserException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());

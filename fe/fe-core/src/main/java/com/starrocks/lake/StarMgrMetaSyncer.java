@@ -229,7 +229,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             }
 
             for (String unusedWorkerAddress : workerAddresses) {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(unusedWorkerAddress);
+                GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .removeWorker(unusedWorkerAddress, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 LOG.info("unused worker {} removed from star mgr", unusedWorkerAddress);
                 cnt++;
             }

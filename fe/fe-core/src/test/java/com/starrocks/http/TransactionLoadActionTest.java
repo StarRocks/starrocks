@@ -22,14 +22,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperation;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
@@ -42,7 +40,6 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -117,15 +114,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             @Mock
             boolean isLeader() {
                 return true;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
-                        "An internal warehouse contains all compute nodes in this system");
             }
         };
 

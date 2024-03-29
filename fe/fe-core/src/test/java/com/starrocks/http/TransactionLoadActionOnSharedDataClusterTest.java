@@ -15,25 +15,18 @@
 package com.starrocks.http;
 
 import com.starrocks.common.DdlException;
-import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.Cluster;
-import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 
@@ -60,24 +53,6 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
             @Mock
             boolean isLeader() {
                 return true;
-            }
-        };
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
-                        "An internal warehouse contains all compute nodes in this system");
-            }
-        };
-
-        new MockUp<Cluster>() {
-            @Mock
-            public List<Long> getComputeNodeIds() {
-                List<Long> result = new ArrayList<>();
-                result.add(computeNode.getId());
-                return result;
             }
         };
 

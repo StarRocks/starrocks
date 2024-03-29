@@ -54,7 +54,6 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
@@ -84,7 +83,6 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -129,16 +127,11 @@ public class BrokerLoadJob extends BulkLoadJob {
             throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException,
             BeginTransactionException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        try {
-            Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-            transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
-                            new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                            TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                            timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
-        } catch (WarehouseUnavailableException e) {
-            throw new BeginTransactionException(e.getMessage());
-        }
+        transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
+                        new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                        TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
+                        timeoutSecond, warehouseId);
     }
 
     @Override

@@ -24,7 +24,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -102,7 +101,6 @@ public class LocalWarehouse extends Warehouse {
         return ImmutableMap.of(cluster.getId(), cluster);
     }
 
-    @Override
     public Cluster getAnyAvailableCluster() {
         return cluster;
     }

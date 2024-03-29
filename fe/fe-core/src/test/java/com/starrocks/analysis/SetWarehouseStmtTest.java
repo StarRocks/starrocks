@@ -15,7 +15,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -61,7 +61,7 @@ public class SetWarehouseStmtTest {
      * Mock {@link WarehouseManager#getWarehouse(String)} and {@link WarehouseManager#warehouseExists(String)}.
      */
     @Test
-    public void testSetWarehouse(@Mocked WarehouseManagerEpack warehouseMgr) throws Exception {
+    public void testSetWarehouse(@Mocked WarehouseManagerEPack warehouseMgr) throws Exception {
 
         new MockUp<RunMode>() {
             @Mock

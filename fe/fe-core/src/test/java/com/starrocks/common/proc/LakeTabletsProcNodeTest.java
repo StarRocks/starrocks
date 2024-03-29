@@ -35,7 +35,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,33 +59,13 @@ public class LakeTabletsProcNodeTest {
     }
 
     @Test
-    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr,
-                                @Mocked StarOSAgent agent,
-                                @Mocked WarehouseManager warehouseManager) throws UserException {
+    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked WarehouseManager agent) throws UserException {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
         long tablet1Id = 10L;
         long tablet2Id = 11L;
-
-        new Expectations() {
-            {
-                ConnectContext.get();
-                result = connectContext;
-
-                globalStateMgr.getCurrentState().getStarOSAgent();
-                result = agent;
-                agent.getBackendIdsByShard(tablet1Id, 0);
-                result = Sets.newHashSet(10000, 10001);
-                agent.getBackendIdsByShard(tablet2Id, 0);
-                result = Sets.newHashSet(10001, 10002);
-
-                globalStateMgr.getCurrentState().getWarehouseMgr();
-                result = warehouseManager;
-
-            }
-        };
 
         // Schema
         List<Column> columns = Lists.newArrayList();
@@ -98,6 +77,19 @@ public class LakeTabletsProcNodeTest {
         // Tablet
         Tablet tablet1 = new LakeTablet(tablet1Id);
         Tablet tablet2 = new LakeTablet(tablet2Id);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                result = agent;
+
+                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet1);
+                result = Sets.newHashSet(10000, 10001);
+
+                agent.getAllComputeNodeIdsAssignToTablet(0L, (LakeTablet) tablet2);
+                result = Sets.newHashSet(10001, 10002);
+            }
+        };
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);

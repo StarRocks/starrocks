@@ -31,9 +31,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -42,7 +40,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -356,34 +353,28 @@ public class CompactionScheduler extends Daemon {
         return tasks;
     }
 
-    static long getCompactionWorkerGroupId() throws WarehouseUnavailableException {
-        String warehouseName = Config.lake_compaction_warehouse;
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseName);
-        return warehouse.getAnyAvailableCluster().getWorkerGroupId();
-    }
-
     @NotNull
-    private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition)
-            throws WarehouseUnavailableException {
+    private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition) {
         List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
-        Map<Long, List<Long>> nodeToTablets = new HashMap<>();
+        Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long nodeId = Utils.chooseNodeId((LakeTablet) tablet, getCompactionWorkerGroupId());
-                if (nodeId == null) {
-                    nodeToTablets.clear();
-                    return nodeToTablets;
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeAssignedToTablet(
+                        Config.lake_compaction_warehouse, (LakeTablet) tablet);
+                if (computeNode == null) {
+                    beToTablets.clear();
+                    return beToTablets;
                 }
-                nodeToTablets.computeIfAbsent(nodeId, k -> Lists.newArrayList()).add(tablet.getId());
+
+                beToTablets.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
             }
         }
-        return nodeToTablets;
+        return beToTablets;
     }
 
     // REQUIRE: has acquired the exclusive lock of Database.
     protected long beginTransaction(PartitionIdentifier partition)
-            throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException,
-            BeginTransactionException, WarehouseUnavailableException {
+            throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
         long partitionId = partition.getPartitionId();
@@ -393,8 +384,10 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
 
+        String warehouseName = Config.lake_compaction_warehouse;
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, Config.lake_compaction_default_timeout_second, getCompactionWorkerGroupId());
+                loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)

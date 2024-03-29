@@ -59,7 +59,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -861,7 +861,7 @@ public class StarRocksAssert {
     // With warehouse
     public StarRocksAssert withWarehouse(String sql) throws Exception {
         CreateWarehouseStmt createWarehouseStmt = (CreateWarehouseStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        WarehouseManagerEPack warehouseMgr = (WarehouseManagerEPack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseMgr.createWarehouse(createWarehouseStmt);
         return this;
     }

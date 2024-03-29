@@ -144,7 +144,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
     private List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
-    // backend id => backend lastStartTime 
+    // backend id => backend lastStartTime
     private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
 
     @SerializedName("id")

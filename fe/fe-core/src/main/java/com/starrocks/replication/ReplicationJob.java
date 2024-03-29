@@ -39,7 +39,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -388,7 +387,7 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     public ReplicationJob(String jobId, String srcToken, long databaseId, OlapTable table, OlapTable srcTable,
-            SystemInfoService srcSystemInfoService) {
+                          SystemInfoService srcSystemInfoService) {
         if (Strings.isNullOrEmpty(jobId)) {
             this.jobId = UUIDUtil.genUUID().toString();
         } else {
@@ -559,7 +558,7 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private PartitionInfo initPartitionInfo(OlapTable olapTable, TPartitionReplicationInfo tPartitionInfo,
-            Partition partition) throws MetaNotFoundException {
+                                            Partition partition) throws MetaNotFoundException {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (TIndexReplicationInfo tIndexInfo : tPartitionInfo.index_replication_infos.values()) {
             MaterializedIndex index = partition.getIndex(tIndexInfo.index_id);
@@ -615,7 +614,7 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
-            SystemInfoService srcSystemInfoService) {
+                                                        SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
         for (Partition partition : table.getPartitions()) {
             Partition srcPartition = srcTable.getPartition(partition.getName());
@@ -636,7 +635,7 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private PartitionInfo initPartitionInfo(OlapTable table, OlapTable srcTable, Partition partition,
-            Partition srcPartition, SystemInfoService srcSystemInfoService) {
+                                            Partition srcPartition, SystemInfoService srcSystemInfoService) {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (Map.Entry<String, Long> indexNameToId : table.getIndexNameToId().entrySet()) {
             long indexId = indexNameToId.getValue();
@@ -651,8 +650,8 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private IndexInfo initIndexInfo(OlapTable table, OlapTable srcTable, MaterializedIndex index,
-            MaterializedIndex srcIndex,
-            SystemInfoService srcSystemInfoService) {
+                                    MaterializedIndex srcIndex,
+                                    SystemInfoService srcSystemInfoService) {
         int schemaHash = table.getSchemaHashByIndexId(index.getId());
         int srcSchemaHash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
 
@@ -670,7 +669,7 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private TabletInfo initTabletInfo(Tablet tablet, Tablet srcTablet,
-            SystemInfoService srcSystemInfoService) {
+                                      SystemInfoService srcSystemInfoService) {
         Map<Long, ReplicaInfo> replicaInfos = Maps.newHashMap();
         List<Replica> replicas = tablet.getAllReplicas();
         List<Replica> srcReplicas = srcTablet.getAllReplicas();
@@ -706,7 +705,7 @@ public class ReplicationJob implements GsonPostProcessable {
         String label = String.format("REPLICATION_%d_%d_%s", databaseId, tableId, jobId);
         transactionId = GlobalStateMgr.getServingState().getGlobalTransactionMgr().beginTransaction(databaseId,
                 Lists.newArrayList(tableId), label, coordinator, loadJobSourceType,
-                Config.replication_transaction_timeout_sec, WarehouseManager.DEFAULT_CLUSTER_ID);
+                Config.replication_transaction_timeout_sec);
     }
 
     private void commitTransaction() throws UserException {

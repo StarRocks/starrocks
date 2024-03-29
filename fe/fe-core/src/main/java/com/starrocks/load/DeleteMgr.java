@@ -103,7 +103,6 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -279,15 +278,13 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         if (ConnectContext.get() != null) {
             warehouseId = ConnectContext.get().getCurrentWarehouseId();
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
-        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
 
         // begin txn here and generate txn id
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(olapTable.getId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second,
-                workerGroupId);
+                warehouseId);
 
         MultiDeleteInfo deleteInfo =
                 new MultiDeleteInfo(db.getId(), olapTable.getId(), olapTable.getName(), deleteConditions);
@@ -295,9 +292,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 partitions.stream().map(Partition::getId).collect(Collectors.toList()), partitionNames);
         DeleteJob deleteJob = null;
 
-
         if (olapTable.isCloudNativeTable()) {
-            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, workerGroupId);
+            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, warehouseId);
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }
@@ -888,7 +884,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             count += value.size();
         }
         return ImmutableMap.of("DeleteInfo", getDeleteInfoCount(),
-                               "DeleteJob", (long) idToDeleteJob.size());
+                "DeleteJob", (long) idToDeleteJob.size());
     }
 
 }

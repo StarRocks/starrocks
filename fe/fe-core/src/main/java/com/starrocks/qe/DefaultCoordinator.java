@@ -200,8 +200,7 @@ public class DefaultCoordinator extends Coordinator {
                                                               List<PlanFragment> fragments, List<ScanNode> scanNodes,
                                                               String timezone,
                                                               long startTime, Map<String, String> sessionVariables,
-                                                              long execMemLimit, long warehouseId)
-                throws UserException {
+                                                              long execMemLimit, long warehouseId) {
             ConnectContext context = new ConnectContext();
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -237,7 +236,7 @@ public class DefaultCoordinator extends Coordinator {
                                                                        long startTime,
                                                                        Map<String, String> sessionVariables,
                                                                        ConnectContext context, long execMemLimit,
-                                                                       long warehouseId) throws UserException {
+                                                                       long warehouseId) {
             JobSpec jobSpec = JobSpec.Factory.fromNonPipelineBrokerLoadJobSpec(context, jobId, queryId, descTable,
                     fragments, scanNodes, timezone,
                     startTime, sessionVariables, execMemLimit, warehouseId);
@@ -268,7 +267,7 @@ public class DefaultCoordinator extends Coordinator {
         this.coordinatorPreprocessor = null;
     }
 
-    DefaultCoordinator(ConnectContext context, JobSpec jobSpec) throws UserException {
+    DefaultCoordinator(ConnectContext context, JobSpec jobSpec) {
         this.connectContext = context;
         this.jobSpec = jobSpec;
         this.returnedAllResults = false;

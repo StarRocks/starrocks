@@ -35,7 +35,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -146,7 +145,7 @@ public class PulsarUtil {
             try {
                 // TODO: need to refactor after be split into cn + dn
                 List<Long> nodeIds = new ArrayList<>();
-                if (RunMode.isSharedDataMode()) {
+                if ((RunMode.isSharedDataMode())) {
                     long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                     if (request.pulsarMetaRequest != null) {
                         warehouseId = request.pulsarMetaRequest.pulsarInfo.warehouseId;
@@ -158,14 +157,7 @@ public class PulsarUtil {
                         warehouseId = req.pulsarInfo.warehouseId;
                     }
 
-                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                    for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                        ComputeNode node =
-                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
-                        if (node != null && node.isAlive()) {
-                            nodeIds.add(nodeId);
-                        }
-                    }
+                    nodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
                     if (nodeIds.isEmpty()) {
                         throw new LoadException("Failed to send proxy request. No alive backends or computeNodes");
                     }

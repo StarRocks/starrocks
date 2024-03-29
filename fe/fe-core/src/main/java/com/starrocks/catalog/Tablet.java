@@ -50,7 +50,7 @@ public abstract class Tablet extends MetaObject implements Writable {
                                               long visibleVersion, long localBeId, int schemaHash);
 
     public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
-                                             long visibleVersion, long localBeId, int schemaHash, long workerGroupId);
+                                              long visibleVersion, long localBeId, int schemaHash, long warehouseId);
 
     @Override
     public String toString() {

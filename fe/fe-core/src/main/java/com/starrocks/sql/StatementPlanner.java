@@ -77,7 +77,6 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -486,8 +485,6 @@ public class StatementPlanner {
             // schema table and iceberg and hive table does not need txn
         } else {
             long warehouseId = session.getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(
                     dbId,
@@ -497,7 +494,7 @@ public class StatementPlanner {
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
                     session.getSessionVariable().getQueryTimeoutS(),
-                    workerGroupId);
+                    warehouseId);
 
             // add table indexes to transaction state
             if (targetTable instanceof OlapTable) {

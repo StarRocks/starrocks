@@ -140,7 +140,6 @@ import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
-import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
@@ -1417,7 +1416,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // build partitions
             List<Partition> partitionList = newPartitions.stream().map(x -> x.first).collect(Collectors.toList());
-            // TODO: adapt to dynamic partitions
             long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
             if (ConnectContext.get() != null) {
                 warehouseId = ConnectContext.get().getCurrentWarehouseId();
@@ -1901,8 +1899,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (RunMode.isSharedDataMode()) {
             numAliveNodes = 0;
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long nodeId : computeNodeIds) {
                 if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId).isAlive()) {
                     ++numAliveNodes;
                 }
@@ -1972,8 +1970,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions, int numReplicas,
+    private void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                             int numReplicas,
                                              int numBackends, long warehouseId) throws DdlException {
+        long start = System.currentTimeMillis();
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(
                 partition -> partition.getMaterializedIndices(IndexExtState.VISIBLE).size()).sum();
@@ -2035,9 +2035,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
-                                                            List<PhysicalPartition> partitions, long warehouseId)
-            throws DdlException {
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                                            long warehouseId) throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (PhysicalPartition partition : partitions) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, warehouseId));
@@ -2045,9 +2044,8 @@ public class LocalMetastore implements ConnectorMetadata {
         return tasks;
     }
 
-    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
-                                                            PhysicalPartition partition, long warehouseId)
-            throws DdlException {
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
+                                                            long warehouseId) throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.storageReplicaCount());
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index, warehouseId));
@@ -2083,17 +2081,10 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Tablet tablet : index.getTablets()) {
             List<Long> nodeIdsOfReplicas = new ArrayList<>();
             if (isCloudNativeTable) {
-                try {
-                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                    if (warehouse == null) {
-                        throw new UserException("Warehouse " + warehouseId + "not exist!");
-                    }
-                    long nodeId = ((LakeTablet) tablet).
-                            getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
-                    nodeIdsOfReplicas.add(nodeId);
-                } catch (UserException e) {
-                    throw new DdlException(e.getMessage());
-                }
+                long nodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet).getId();
+
+                nodeIdsOfReplicas.add(nodeId);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                     nodeIdsOfReplicas.add(replica.getBackendId());
@@ -3583,21 +3574,17 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // warehouse
             if (materializedView.isCloudNativeMaterializedView()) {
-                try {
-                    // use warehouse for current session（if u exec "set warehouse aaa" before you create mv1, then use aaa）
-                    long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-                        String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-                        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                                .getAvailbleWarehouse(warehouseName);
-                        warehouseId = warehouse.getId();
-                    }
-
-                    materializedView.setWarehouseId(warehouseId);
-                    LOG.debug("set warehouse {} in materializedView", warehouseId);
-                } catch (WarehouseUnavailableException e) {
-                    throw new DdlException(e.getMessage());
+                // use warehouse for current session（if u exec "set warehouse aaa" before you create mv1, then use aaa）
+                long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                    String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                            .getWarehouse(warehouseName);
+                    warehouseId = warehouse.getId();
                 }
+
+                materializedView.setWarehouseId(warehouseId);
+                LOG.debug("set warehouse {} in materializedView", warehouseId);
             }
 
             // datacache.partition_duration

@@ -127,7 +127,7 @@ import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.privilege.ranger.starrocks.RangerStarRocksAccessControllerEPack;
 import com.starrocks.epack.qe.DDLStmtExecutorVisitorEPack;
 import com.starrocks.epack.qe.ShowExecutorVisitorEPack;
-import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.analyzer.AnalyzerVisitorEPack;
 import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
@@ -236,7 +236,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -504,18 +503,12 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
-    public TNodesInfo createNodesInfo() {
-        return createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-    }
-
     public TNodesInfo createNodesInfo(long warehouseId) {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
-        Warehouse warehouse = warehouseMgr.getWarehouse(warehouseId);
-        // TODO: need to refactor after be split into cn + dn
-        if (warehouse != null && RunMode.isSharedDataMode()) {
-            com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
-            for (Long cnId : cluster.getComputeNodeIds()) {
+        if (RunMode.isSharedDataMode()) {
+            List<Long> computeNodeIds = warehouseMgr.getAllComputeNodeIds(warehouseId);
+            for (Long cnId : computeNodeIds) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
             }
@@ -704,7 +697,7 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
-        this.warehouseMgr = new WarehouseManagerEpack();
+        this.warehouseMgr = new WarehouseManagerEPack();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
@@ -1526,7 +1519,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
                 .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                 .put(SRMetaBlockIDEPack.SECURITY_POLICY_MGR, securityPolicyManager::load)
-                .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, ((WarehouseManagerEpack) warehouseMgr)::load)
+                .put(SRMetaBlockIDEPack.WAREHOUSE_MGR, ((WarehouseManagerEPack) warehouseMgr)::load)
                 .put(SRMetaBlockIDEPack.FAILOVER_GROUP_MGR, failoverGroupMgr::load)
                 .build();
 
@@ -1698,7 +1691,7 @@ public class GlobalStateMgr {
                 dictionaryMgr.save(dos);
                 replicationMgr.save(dos);
                 securityPolicyManager.save(dos);
-                ((WarehouseManagerEpack) warehouseMgr).save(dos);
+                ((WarehouseManagerEPack) warehouseMgr).save(dos);
                 failoverGroupMgr.save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);

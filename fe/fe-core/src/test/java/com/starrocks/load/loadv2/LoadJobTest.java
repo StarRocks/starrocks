@@ -44,14 +44,12 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.epack.server.WarehouseManagerEpack;
-import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -132,7 +130,7 @@ public class LoadJobTest {
     @Test
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
                             @Mocked LeaderTaskExecutor leaderTaskExecutor,
-                            @Mocked WarehouseManagerEpack warehouseMgr)
+                            @Mocked WarehouseManagerEPack warehouseMgr)
             throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException,
             WarehouseUnavailableException {
         LoadJob loadJob = new BrokerLoadJob();
@@ -146,20 +144,6 @@ public class LoadJobTest {
                 leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseMgr;
-
-                warehouseMgr.getAvailbleWarehouse(anyLong);
-                minTimes = 0;
-                result = new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
-                        "An internal warehouse contains all compute nodes in this system");
             }
         };
 

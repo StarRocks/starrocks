@@ -1761,6 +1761,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = WAREHOUSE_NAME)
     private String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
     @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionColumnValueOnlyOptimization = true;
 
@@ -2253,7 +2254,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setWarehouseName(String warehouseName) {
         this.warehouseName = warehouseName;
     }
-    
+
     public String getHdfsBackendSelectorHashAlgorithm() {
         return hdfsBackendSelectorHashAlgorithm;
     }
