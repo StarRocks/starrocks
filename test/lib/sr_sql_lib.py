@@ -196,7 +196,7 @@ class StarrocksSQLApiLib(object):
         # TODO: 判断是不是巡检，不然不需要创建issue
 
         # analyse be crash info
-        log.warn("Cluster status is abnormal, begin to get crash log...")
+        log.warning("Cluster status is abnormal, begin to get crash log...")
         be_crash_log = self.get_crash_log(cluster_status_dict["ip"][0])
 
         if be_crash_log != "":
@@ -223,7 +223,7 @@ class StarrocksSQLApiLib(object):
                 create_issue_res = GitHubApi.create_issue(title, body, label, assignee)
                 log.info(create_issue_res)
         else:
-            log.warn("Crash log is empty, please check. cluster status is %s" % cluster_status_dict)
+            log.warning("Crash log is empty, please check. cluster status is %s" % cluster_status_dict)
 
         # after create issue, restart crash be
         start_be_status = "success"
@@ -289,7 +289,7 @@ class StarrocksSQLApiLib(object):
         return similarity
 
     def get_crash_log(self, ip):
-        log.warn("Get crash log from %s" % ip)
+        log.warning("Get crash log from %s" % ip)
         cmd = (
             f'cd {self.cluster_path}/be/log/; grep -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
         )
@@ -300,7 +300,7 @@ class StarrocksSQLApiLib(object):
         """
         wait until be was exited
         """
-        log.warn("Wait be exit...")
+        log.warning("Wait be exit...")
         timeout = 60
         while timeout > 0:
             status_dict = self.get_cluster_status()
@@ -324,7 +324,7 @@ class StarrocksSQLApiLib(object):
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=30, shell=True
         )
         if res.returncode != 0:
-            log.warn("Show backends cmd execute failed, cmd: %s, err_msg: %s" % (cmd, res.stderr))
+            log.warning("Show backends cmd execute failed, cmd: %s, err_msg: %s" % (cmd, res.stderr))
             return "abnormal"
 
         status_dict = {"ip": [], "status": "normal"}
@@ -702,7 +702,7 @@ class StarrocksSQLApiLib(object):
                 try:
                     res = ast.literal_eval(res.replace("null", "None"))
                 except Exception as e:
-                    log.warn("converse array error: %s, %s" % (res, e))
+                    log.warning("converse array error: %s, %s" % (res, e))
 
         return res, res_for_log
 
@@ -766,7 +766,7 @@ class StarrocksSQLApiLib(object):
                     tools.assert_true(re.match(exp_std, act_std, flags=re.S),
                                       "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
                 except Exception as e:
-                    log.warn("Try to treat res as regex, failed!\n:%s" % e)
+                    log.warning("Try to treat res as regex, failed!\n:%s" % e)
 
                 tools.assert_true(False, "shell result str|re not match,\n[exp]: %s,\n [act]: %s" % (exp_std, act_std))
 
@@ -801,7 +801,7 @@ class StarrocksSQLApiLib(object):
                         try:
                             expect_res = ast.literal_eval(exp.replace("null", "None"))
                         except Exception as e:
-                            log.warn("converse array error: %s, %s" % (exp, e))
+                            log.warning("converse array error: %s, %s" % (exp, e))
                             expect_res = str(exp)
 
                     tools.assert_equal(type(expect_res), type(act), "exp and act results' type not match")
@@ -832,7 +832,7 @@ class StarrocksSQLApiLib(object):
                     )
                     return
             except Exception as e:
-                log.warn("analyse result before check error, %s" % e)
+                log.warning("analyse result before check error, %s" % e)
 
             # check str
             log.info("[check type]: Str")
