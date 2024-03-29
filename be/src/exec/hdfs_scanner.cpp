@@ -388,7 +388,7 @@ void HdfsScannerContext::update_materialized_columns(const std::unordered_set<st
 }
 
 void HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.empty() || row_count < 0) return;
+    if (not_existed_slots.empty()) return;
     ChunkPtr& ck = (*chunk);
     for (auto* slot_desc : not_existed_slots) {
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
@@ -433,7 +433,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 }
 
 void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0 || row_count < 0) return;
+    if (partition_columns.size() == 0) return;
     ChunkPtr& ck = (*chunk);
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
