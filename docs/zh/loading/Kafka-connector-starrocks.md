@@ -68,7 +68,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
     :::info
 
     - 在本场景中，starrocks-kafka-connector 是 sink connector，用于将 Kafka 的数据写入 StarRocks。
-    - 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要在starrocks-kafka-connector 的配置文件 **connect-StarRocks-sink.properties**中 [配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
+    - 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要在 starrocks-kafka-connector 的配置文件 **connect-StarRocks-sink.properties** 中 [配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
     :::
 
@@ -98,7 +98,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
-        # 注意本示例使用 PLAINTEXT  安全协议访问 Kafka 集群，如果使用其他安全协议访问 Kafka 集群，则您需要在本文件中配置相关信息。
+        # 注意本示例使用 PLAINTEXT 安全协议访问 Kafka 集群，如果使用其他安全协议访问 Kafka 集群，则您需要在本文件中配置相关信息。
         bootstrap.servers=<kafka_broker_ip>:9092
         offset.storage.file.filename=/tmp/connect.offsets
         offset.flush.interval.ms=10000
@@ -106,7 +106,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # 修改 starrocks-kafka-connector 为解压后的绝对路径，例如：
+        # starrocks-kafka-connector 解压后所在的绝对路径，例如：
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
@@ -130,7 +130,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # 修改 starrocks-kafka-connector 为解压后的绝对路径，例如：
+        # starrocks-kafka-connector 解压后所在的绝对路径，例如：
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
   
@@ -145,7 +145,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
     :::info
 
     - 在本场景中，starrocks-kafka-connector 是 sink connector，用于将 Kafka 的数据写入 StarRocks。
-    - 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要在starrocks-kafka-connector 的配置文件 **connect-StarRocks-sink.properties**中 [配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
+    - 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要在 starrocks-kafka-connector 的配置文件 **connect-StarRocks-sink.properties** 中 [配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
     :::
 
@@ -219,12 +219,6 @@ MySQL [example_db]> select * from test_tbl;
 ### 导入 Debezium CDC 格式数据
 
 如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键表，则在 starrocks-kafka-connector 配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#使用示例)外，还需要配置 `transforms` 以及相关参数。
-
-  :::tip
-
-  在本场景中，StarRocks 提供的 starrocks-kafka-connector 是 sink connector，用于将 Kafka 的数据写入 StarRocks。
-
-  :::
 
 ```Properties
 transforms=addfield,unwrap
