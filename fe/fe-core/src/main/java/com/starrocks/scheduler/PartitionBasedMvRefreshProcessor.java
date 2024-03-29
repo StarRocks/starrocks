@@ -83,6 +83,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -1016,7 +1017,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         refBaseTablePartitionMap.get(refBaseTable), mvRangePartitionMap, differ));
             }
 
-        } catch (UserException e) {
+        } catch (UserException | SemanticException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return null;
         } finally {
