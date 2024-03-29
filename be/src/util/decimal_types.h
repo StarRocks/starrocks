@@ -21,6 +21,7 @@
 namespace starrocks {
 
 typedef __int128 int128_t;
+typedef unsigned __int128 uint128_t;
 
 template <typename T>
 inline constexpr bool is_underlying_type_of_decimal = false;
