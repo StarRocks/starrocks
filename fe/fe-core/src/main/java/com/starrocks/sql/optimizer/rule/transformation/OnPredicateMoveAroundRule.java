@@ -39,13 +39,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class JoinOnPredicatePropagateRule extends TransformationRule {
+public class OnPredicateMoveAroundRule extends TransformationRule {
 
-    public static final JoinOnPredicatePropagateRule INSTANCE = new JoinOnPredicatePropagateRule(RuleType.TF_PREDICATE_PROPAGATE,
+    public static final OnPredicateMoveAroundRule INSTANCE = new OnPredicateMoveAroundRule(RuleType.TF_PREDICATE_PROPAGATE,
             Pattern.create(OperatorType.LOGICAL_JOIN).
                     addChildren(Pattern.create(OperatorType.PATTERN_LEAF), Pattern.create(OperatorType.PATTERN_LEAF)));
 
-    private JoinOnPredicatePropagateRule(RuleType type, Pattern pattern) {
+    private OnPredicateMoveAroundRule(RuleType type, Pattern pattern) {
         super(type, pattern);
     }
 

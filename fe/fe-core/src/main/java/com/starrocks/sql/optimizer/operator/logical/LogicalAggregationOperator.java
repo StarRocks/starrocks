@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
@@ -200,7 +201,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
             }
         }
         ValueProperty valueProperty = new ValueProperty(newValueMap);
-        // todo consider having filter
+        if (predicate != null) {
+            ValuePropertyDeriver deriver = new ValuePropertyDeriver();
+            ValueProperty property = deriver.derive(predicate);
+            valueProperty = valueProperty.filterValueProperty(property);
+        }
         return valueProperty;
     }
 
