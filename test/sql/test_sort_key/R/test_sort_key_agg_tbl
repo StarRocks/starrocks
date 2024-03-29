@@ -54,6 +54,26 @@ CREATE TABLE `agg_test` (
 AGGREGATE KEY(k1, k2)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
+ORDER BY (k2,k1,k1)
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false"
+);
+-- result:
+E: (1064, 'Duplicate sort key column k1 is not allowed.')
+-- !result
+CREATE TABLE `agg_test` (
+    `k1` int(11) NOT NULL COMMENT "",
+    `k2` int(11) NOT NULL COMMENT "",
+    `v1` bigint REPLACE NULL COMMENT "",
+    `v2` bigint REPLACE NULL COMMENT "",
+    `v3` bigint REPLACE NULL COMMENT ""
+)
+AGGREGATE KEY(k1, k2)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
@@ -103,6 +123,10 @@ E: (1064, 'The sort columns of AGGREGATE KEY table must be same with key columns
 alter table agg_test order by (k2);
 -- result:
 E: (1064, 'The sort columns of AGGREGATE KEY table must be same with key columns')
+-- !result
+alter table agg_test order by (k1,k2,k2);
+-- result:
+E: (1064, 'Duplicated column[k2]')
 -- !result
 alter table agg_test order by (k1,k2);
 -- result:
