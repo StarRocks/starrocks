@@ -154,9 +154,6 @@ Status hostname_to_ipv4(const std::string& host, std::string& ip) {
     hints.ai_family = AF_INET;
     int err = getaddrinfo(host.c_str(), nullptr, &hints, &res);
     if (err != 0) {
-        if (res != nullptr) {
-            freeaddrinfo(res);
-        }
         std::string err_msg = strings::Substitute("failed to get ipv4 from host: $0, err: $1", host, gai_strerror(err));
         LOG(WARNING) << err_msg;
         return Status::InternalError(err_msg);
@@ -180,9 +177,6 @@ Status hostname_to_ipv6(const std::string& host, std::string& ip) {
 
     int err = getaddrinfo(host.c_str(), nullptr, &hint, &answer);
     if (err != 0) {
-        if (answer != nullptr) {
-            freeaddrinfo(answer);
-        }
         std::string err_msg = strings::Substitute("failed to get ipv6 from host: $0, err: $1", host, gai_strerror(err));
         LOG(WARNING) << err_msg;
         return Status::InternalError(err_msg);
