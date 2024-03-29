@@ -638,6 +638,8 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_split_context(split_context);
+
+    _data_source->set_morsel(scan_morsel);
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);

@@ -67,8 +67,21 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
 
     _morsel_queue->set_key_ranges(_ctx->key_ranges());
-    _morsel_queue->set_tablets(_ctx->tablets());
-    _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
+    std::vector<BaseTabletSharedPtr> tablets;
+    for (auto& tablet : _ctx->tablets()) {
+        tablets.emplace_back(tablet);
+    }
+    _morsel_queue->set_tablets(std::move(tablets));
+
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    for (auto& rowsets : _ctx->tablet_rowsets()) {
+        tablet_rowsets.emplace_back();
+        auto& rss = tablet_rowsets.back();
+        for (auto& rowset : rowsets) {
+            rss.emplace_back(rowset);
+        }
+    }
+    _morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
 
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();

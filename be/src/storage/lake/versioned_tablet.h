@@ -73,6 +73,8 @@ public:
 
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
 
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically);
+
     TabletManager* tablet_manager() const { return _tablet_mgr; }
 
     bool has_delete_predicates() const;

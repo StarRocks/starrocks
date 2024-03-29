@@ -47,6 +47,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"
 
@@ -131,7 +132,7 @@ private:
     RowsetState _rowset_state{ROWSET_UNLOADED};
 };
 
-class Rowset : public std::enable_shared_from_this<Rowset> {
+class Rowset : public std::enable_shared_from_this<Rowset>, public BaseRowset {
 public:
     Rowset(const TabletSchemaCSPtr&, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
     Rowset(const Rowset&) = delete;
@@ -148,7 +149,7 @@ public:
     //
     // May be called multiple times, subsequent calls will no-op.
     // Derived class implements the load logic by overriding the `do_load_once()` method.
-    Status load();
+    Status load() override;
 
     // reload this rowset after the underlying segment file is changed
     Status reload();
@@ -174,6 +175,8 @@ public:
     const RowsetMetaSharedPtr& rowset_meta() const { return _rowset_meta; }
 
     std::vector<SegmentSharedPtr>& segments() { return _segments; }
+
+    std::vector<SegmentSharedPtr> get_segments() override { return _segments; }
 
     // only used for updatable tablets' rowset
     // simply get iterators to iterate all rows without complex options like predicates
@@ -224,11 +227,11 @@ public:
     int64_t end_version() const { return rowset_meta()->version().second; }
     size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
-    size_t num_rows() const { return rowset_meta()->num_rows(); }
+    int64_t num_rows() const override { return rowset_meta()->num_rows(); }
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
     size_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
     Version version() const { return rowset_meta()->version(); }
-    RowsetId rowset_id() const { return rowset_meta()->rowset_id(); }
+    RowsetId rowset_id() const override { return rowset_meta()->rowset_id(); }
     std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
     int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
@@ -239,6 +242,7 @@ public:
     uint32_t num_update_files() const { return rowset_meta()->get_num_update_files(); }
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
     KeysType keys_type() const { return _keys_type; }
+    bool is_overlapped() const override { return rowset_meta()->is_segments_overlapping(); }
 
     const TabletSchemaCSPtr tablet_schema() { return rowset_meta()->tablet_schema(); }
 

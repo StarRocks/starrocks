@@ -360,8 +360,13 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
     RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
 
+    std::vector<RowsetSharedPtr> rowsets;
+    for (auto& rowset : _morsel->rowsets()) {
+        rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
+    }
+
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
-                                             std::move(child_schema), _morsel->rowsets(), &_tablet_schema);
+                                             std::move(child_schema), std::move(rowsets), &_tablet_schema);
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {

@@ -774,6 +774,9 @@ CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
 CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
+// Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
+CONF_Double(lake_tablet_rows_splitted_ratio, "1.5");
+
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
 // The max hdfs file handle.
