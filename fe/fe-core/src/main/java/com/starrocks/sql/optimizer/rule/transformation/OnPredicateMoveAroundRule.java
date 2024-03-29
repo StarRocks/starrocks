@@ -51,6 +51,9 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnablePredicateMoveAround()) {
+            return false;
+        }
         LogicalJoinOperator joinOperator = input.getOp().cast();
         if (joinOperator.getJoinType().isFullOuterJoin() || joinOperator.getJoinType().isCrossJoin()) {
             return false;

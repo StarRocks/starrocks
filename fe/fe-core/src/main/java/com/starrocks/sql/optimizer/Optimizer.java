@@ -48,10 +48,10 @@ import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateR
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
-import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;

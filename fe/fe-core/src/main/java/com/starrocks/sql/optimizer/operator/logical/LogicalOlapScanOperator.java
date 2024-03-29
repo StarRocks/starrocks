@@ -18,16 +18,26 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.ValueProperty;
+import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.List;
 import java.util.Map;
@@ -161,6 +171,43 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalOlapScan(this, context);
+    }
+
+    @Override
+    public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
+        Map<ScalarOperator, ValueProperty.ValueWrapper> valueMap = Maps.newHashMap();
+        for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
+            Column col = entry.getKey();
+            ColumnRefOperator colRef = entry.getValue();
+            Type type = colRef.getType();
+            ColumnStatistic stats = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                    .getColumnStatistic(table, col.getName());
+            if (!stats.isUnknown() && !stats.hasNaNValue()) {
+                if (type.isInt() || type.isSmallint() || type.isTinyint()) {
+                    valueMap.put(colRef, buildRangeDesc(colRef, ConstantOperator.createInt((int) stats.getMinValue()),
+                            ConstantOperator.createInt((int) stats.getMaxValue())));
+                } else if (type.isBigint()) {
+                    long min = (long) stats.getMinValue();
+                    long max = (long) stats.getMaxValue();
+                    valueMap.put(colRef, buildRangeDesc(colRef, ConstantOperator.createBigint(min),
+                            ConstantOperator.createBigint(max)));
+                }
+            }
+        }
+        if (predicate == null) {
+            return new ValueProperty(valueMap);
+        }
+
+        ValuePropertyDeriver deriver = new ValuePropertyDeriver();
+        return deriver.derive(predicate);
+    }
+
+    private ValueProperty.ValueWrapper buildRangeDesc(ColumnRefOperator col, ConstantOperator min, ConstantOperator max) {
+        BinaryPredicateOperator lessEqual = new BinaryPredicateOperator(BinaryType.LE, col, max);
+        BinaryPredicateOperator greaterEqual = new BinaryPredicateOperator(BinaryType.GE, col, min);
+        ScalarOperator compoundAnd = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                greaterEqual, lessEqual);
+        return new ValueProperty.ValueWrapper(compoundAnd);
     }
 
     @Override
