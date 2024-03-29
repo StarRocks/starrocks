@@ -55,9 +55,9 @@ StatusOr<ConnectorChunkSink::Futures> HiveChunkSink::add(ChunkPtr chunk) {
                                                                    _partition_column_evaluators, chunk.get()));
     }
 
-    return HiveUtils::hive_style_partitioning_write_chunk(partitioned, partition, _partition_writers,
-                                                          _location_provider.get(), _file_writer_factory.get(),
-                                                          _max_file_size, chunk);
+    return HiveUtils::hive_style_partitioning_write_chunk(chunk, partitioned, partition, _max_file_size,
+                                                          _file_writer_factory.get(), _location_provider.get(),
+                                                          _partition_writers);
 }
 
 ConnectorChunkSink::Futures HiveChunkSink::finish() {
