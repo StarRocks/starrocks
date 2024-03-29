@@ -9,26 +9,36 @@
 github issue api, used for issue operation
 """
 import os
+
+import requests
 from github import Github
 
 # Authentication is defined via GitHub.Auth
-# using an access token
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-# Public Web GitHub
-gh = Github(GITHUB_TOKEN)
+ISSUE_URL = os.environ.get('ISSUE_URL')
 
 
 class GitHubApi:
-    def __init__(self, repo):
-        # default is StarRocks/StarRocks
-        self.repo = gh.get_repo(repo)
+    @staticmethod
+    def create_issue(title, body, label, assignee):
 
-    def create_issue(self, title, body, label, assignee):
+        if not ISSUE_URL:
+            return 'Skip the task of creating issues!'
+
+        issue_json = {
+            'title': title,
+            'body': body,
+            'label': label,
+            'assign': assignee
+        }
+        header = {
+            'Content-Type': 'application/json'
+        }
         try:
-            self.repo.create_issue(title=title, body=body, labels=[label], assignee=assignee)
+            create_res = requests.post(ISSUE_URL, headers=header, json=issue_json)
+            if create_res.status_code == 200:
+                return create_res.text
+            else:
+                return f"Create issue error, [{create_res.status_code}] {create_res.text}"
+
         except Exception as e:
-            print("Create issue error, Exception: %s" % e)
-
-
-if __name__ == "__main__":
-    pass
+            return "Create issue error, Exception: %s" % e

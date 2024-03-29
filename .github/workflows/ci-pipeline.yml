@@ -681,7 +681,6 @@ jobs:
     name: SQL-Tester
     needs: [ build, deploy ]
     if: always() && needs.deploy.result == 'success'
-    timeout-minutes: 60
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}

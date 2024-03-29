@@ -220,8 +220,8 @@ class StarrocksSQLApiLib(object):
                 assignee = os.environ.get("ISSUE_AUTHOR")
                 repo = os.environ.get("GITHUB_REPOSITORY")
                 label = os.environ.get("ISSUE_LABEL")
-                github_api = GitHubApi(repo)
-                github_api.create_issue(title, body, label, assignee)
+                create_issue_res = GitHubApi.create_issue(title, body, label, assignee)
+                log.info(create_issue_res)
         else:
             log.warn("Crash log is empty, please check. cluster status is %s" % cluster_status_dict)
 
