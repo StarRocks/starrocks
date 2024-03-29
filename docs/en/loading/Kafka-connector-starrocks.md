@@ -282,25 +282,25 @@ The data is successfully loaded when the above result is returned.
 **Default value**: 94371840(90M)<br/>
 **Description**: The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. The maximum value ranges from 64 MB to 10 GB. Keep in mind that the Stream Load SDK buffer may create multiple Stream Load jobs to buffer data. Therefore, the threshold mentioned here refers to the total data size.
 
-### bufferflush.intervalms              
+### bufferflush.intervalms
 
 **Required**: NO<br/>
 **Default value**: 300000<br/>
 **Description**: Interval for sending a batch of data which controls the load latency. Range: [1000, 3600000].
 
-### connect.timeoutms                   
+### connect.timeoutms
 
 **Required**: NO<br/>
 **Default value**: 1000<br/>
 **Description**: Timeout for connecting to the HTTP URL. Range: [100, 60000].
 
-### sink.properties.*                   
+### sink.properties.*
 
 **Required**:<br/>
 **Default value**:<br/>
 **Description**:  Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM LOAD.md).
 
-### sink.properties.format              
+### sink.properties.format
 
 **Required**: NO<br/>
 **Default value**: json<br/>
