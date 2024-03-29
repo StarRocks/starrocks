@@ -95,7 +95,8 @@ void FragmentContext::count_down_pipeline(size_t val) {
 
     finish();
     auto status = final_status();
-    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true,
+                                                               query_ctx->enable_profile());
 
     destroy_pass_through_chunk_buffer();
 
