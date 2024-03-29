@@ -2758,4 +2758,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int jdbc_connection_idle_timeout_ms = 600000;
+
+    // When the number of failed task of a pipe job exceeds the configured value,
+    // the task is set to the ERROR state and will no longer be scheduled.
+    // When the configured value is set to 0, the task ignores the number of failed tasks and retries continuously.
+    @ConfField(mutable = true)
+    public static int pipe_failed_task_threshold = 5;
 }

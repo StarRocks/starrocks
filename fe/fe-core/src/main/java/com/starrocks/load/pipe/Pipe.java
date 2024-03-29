@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.CloseableLock;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -79,7 +80,7 @@ public class Pipe implements GsonPostProcessable {
     public static final int DEFAULT_POLL_INTERVAL = 10;
     public static final long DEFAULT_BATCH_SIZE = 1 << 30;
     public static final long DEFAULT_BATCH_FILES = 256;
-    public static final int FAILED_TASK_THRESHOLD = 5;
+    public static final int DEFAULT_FAILED_TASK_THRESHOLD = 5;
 
     private static final ImmutableMap<String, String> DEFAULT_TASK_EXECUTION_VARIABLES =
             ImmutableMap.<String, String>builder()
@@ -167,6 +168,10 @@ public class Pipe implements GsonPostProcessable {
                 case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
                     // put the warehouse into variables, and it would be processed by TaskRun
                     this.taskExecutionVariables.put(key, value);
+                    break;
+                }
+                case PipeAnalyzer.PROPERTY_FAILED_TASKS_THRESHOLD: {
+                    pipeSource.setFailedTaskThreshold(Integer.parseInt(value));
                     break;
                 }
                 default: {
@@ -320,7 +325,7 @@ public class Pipe implements GsonPostProcessable {
             String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);
             PipeTaskDesc taskDesc = new PipeTaskDesc(taskId, uniqueName, dbName, sqlTask, piece);
             taskDesc.getVariables().putAll(taskExecutionVariables);
-            taskDesc.setErrorLimit(FAILED_TASK_THRESHOLD);
+            taskDesc.setErrorLimit(DEFAULT_FAILED_TASK_THRESHOLD);
 
             // Persist the loading state
             fileSource.getFileListRepo()
@@ -361,7 +366,11 @@ public class Pipe implements GsonPostProcessable {
                 }
                 if (task.isError()) {
                     failedTaskExecutionCount++;
-                    if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
+
+                    int threshold = pipeSource.getFailedTaskThreshold() >= 0
+                            ? pipeSource.getFailedTaskThreshold() : Config.pipe_failed_task_threshold;
+                    // threshold = 0, ignore failedTaskExecutionCount
+                    if (threshold > 0 && failedTaskExecutionCount > threshold) {
                         changeState(State.ERROR, false);
                     }
                 }
