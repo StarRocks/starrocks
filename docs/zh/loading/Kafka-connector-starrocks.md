@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 使用 Kafka connector 导入数据
 
-StarRocks 提供 Apache Kafka® 连接器 (StarRocks Connector for Apache Kafka®，以下简称 Kafka connector)，作为 sink connector，持续消费 Kafka 的消息并导入至 StarRocks 中。
+StarRocks 提供 Apache Kafka® 连接器 (StarRocks Connector for Apache Kafka®，简称 Kafka connector)，作为 sink connector，持续消费 Kafka 的消息并导入至 StarRocks 中。
 
 使用 Kafka connector 可以更好的融入 Kafka 生态，StarRocks 可以与 Kafka Connect 无缝对接。为 StarRocks 准实时接入链路提供了更多的选择。相比于 Routine Load，您可以在以下场景中优先考虑使用 Kafka connector 导入数据：
 
