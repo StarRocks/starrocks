@@ -57,6 +57,8 @@ public class PipeAnalyzer {
     public static final String PROPERTY_BATCH_SIZE = "batch_size";
     public static final String PROPERTY_BATCH_FILES = "batch_files";
 
+    public static final String PROPERTY_FAILED_TASKS_THRESHOLD = "failed_tasks_threshold";
+
     public static final ImmutableSet<String> SUPPORTED_PROPERTIES =
             new ImmutableSortedSet.Builder<String>(String.CASE_INSENSITIVE_ORDER)
                     .add(PROPERTY_AUTO_INGEST)
@@ -64,6 +66,7 @@ public class PipeAnalyzer {
                     .add(PROPERTY_BATCH_SIZE)
                     .add(PROPERTY_BATCH_FILES)
                     .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+                    .add(PROPERTY_FAILED_TASKS_THRESHOLD)
                     .build();
 
     public static void analyzePipeName(PipeName pipeName, String defaultDbName) {
@@ -144,6 +147,19 @@ public class PipeAnalyzer {
                 }
                 case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
                     analyzeWarehouseProperty(valueStr);
+                    break;
+                }
+                case PROPERTY_FAILED_TASKS_THRESHOLD: {
+                    // Default value is -1
+                    int value = -2;
+                    try {
+                        value = Integer.parseInt(valueStr);
+                    } catch (Exception ignored) {
+                    }
+                    if (value < -1) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                                PROPERTY_FAILED_TASKS_THRESHOLD + " should be no less than -1");
+                    }
                     break;
                 }
                 default: {

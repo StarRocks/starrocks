@@ -66,6 +66,9 @@ public class FilePipeSource implements GsonPostProcessable {
     @SerializedName(value = "eos")
     private boolean eos = false;
 
+    @SerializedName(value = "failed_task_threshold")
+    private int failedTaskThreshold = -1;
+
     private FileListRepo fileListRepo;
 
     public FilePipeSource(String path, String format, Map<String, String> sourceProperties) {
@@ -202,6 +205,10 @@ public class FilePipeSource implements GsonPostProcessable {
         this.pipeId = id;
     }
 
+    public void setFailedTaskThreshold(int threshold) {
+        this.failedTaskThreshold = threshold;
+    }
+
     public String getPath() {
         return path;
     }
@@ -253,5 +260,9 @@ public class FilePipeSource implements GsonPostProcessable {
     @Override
     public String toString() {
         return "FILE_SOURCE(path=" + path + ")";
+    }
+
+    public int getFailedTaskThreshold() {
+        return failedTaskThreshold;
     }
 }

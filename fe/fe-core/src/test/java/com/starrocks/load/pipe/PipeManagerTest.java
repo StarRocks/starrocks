@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -491,7 +492,7 @@ public class PipeManagerTest {
         Thread.sleep(1000);
         Assert.assertEquals(1, p3.getRunningTasks().size());
         // retry several times, until failed
-        for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
+        for (int i = 0; i < Config.pipe_failed_task_threshold; i++) {
             p3.schedule();
             Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
             Assert.assertEquals(1, p3.getRunningTasks().size());
@@ -504,7 +505,7 @@ public class PipeManagerTest {
                     p3.getRunningTasks().stream().allMatch(PipeTaskDesc::isRunnable));
         }
         p3.schedule();
-        Assert.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
+        Assert.assertEquals(Config.pipe_failed_task_threshold + 1, p3.getFailedTaskExecutionCount());
         Assert.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // retry all
@@ -519,7 +520,7 @@ public class PipeManagerTest {
 
     private void pipeRetryFailedTask(Pipe p3, boolean retryAll) throws Exception {
         // retry several times, until failed
-        for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
+        for (int i = 0; i < Config.pipe_failed_task_threshold; i++) {
             // submit task, turn into running
             p3.schedule();
             Assert.assertEquals(String.format("iteration %d", i), Pipe.State.RUNNING, p3.getState());
@@ -540,7 +541,7 @@ public class PipeManagerTest {
         }
         p3.schedule();
         p3.schedule();
-        Assert.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, p3.getFailedTaskExecutionCount());
+        Assert.assertEquals(Config.pipe_failed_task_threshold + 1, p3.getFailedTaskExecutionCount());
         Assert.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // retry all
