@@ -558,6 +558,26 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(0, input_rowsets3.size());
     EXPECT_EQ(0, compaction_score(_tablet_mgr.get(), *tablet_metadata));
+
+    {
+        // do compaction without input rowsets
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+        CompactionTask::Progress progress;
+        ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+        EXPECT_EQ(100, progress.value());
+        ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+        version++;
+        if (GetParam().enable_persistent_index) {
+            check_local_persistent_index_meta(tablet_id, version);
+        }
+        ASSERT_EQ(kChunkSize * 4, read(version));
+
+        ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        EXPECT_EQ(new_tablet_metadata->rowsets_size(), 4);
+        EXPECT_EQ(0, new_tablet_metadata->compaction_inputs_size());
+    }
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
