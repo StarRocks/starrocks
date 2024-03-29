@@ -187,26 +187,22 @@ public class JDBCTable extends Table {
         // currently we use this uri as part of name of download file.
         // so if this uri is too long, we might fail to write file on BE side.
         // so here we have to shorten it to reduce fail probability because of long file name.
-        // in most cases, jdbc uri is not that long, so we can preserve original information.
 
         final String prefix = "jdbc_";
-        final int signLength = 64;
-        if (ans.length() > (signLength + prefix.length())) {
-            try {
-                // 256bits = 32bytes = 64hex chars.
-                MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                digest.update(ans.getBytes());
-                byte[] hashBytes = digest.digest();
-                StringBuilder sb = new StringBuilder();
-                // it's for be side parsing: expect a _ in name.
-                sb.append(prefix);
-                for (byte b : hashBytes) {
-                    sb.append(String.format("%02x", b));
-                }
-                ans = sb.toString();
-            } catch (NoSuchAlgorithmException e) {
-                // don't update `ans`.
+        try {
+            // 256bits = 32bytes = 64hex chars.
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(ans.getBytes());
+            byte[] hashBytes = digest.digest();
+            StringBuilder sb = new StringBuilder();
+            // it's for be side parsing: expect a _ in name.
+            sb.append(prefix);
+            for (byte b : hashBytes) {
+                sb.append(String.format("%02x", b));
             }
+            ans = sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // don't update `ans`.
         }
         return ans;
     }

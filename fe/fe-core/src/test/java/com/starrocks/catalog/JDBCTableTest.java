@@ -239,7 +239,7 @@ public class JDBCTableTest {
             JDBCTable jdbcTable = new JDBCTable(10, "tbl", schema, "db", "jdbc_catalog", properties);
             TTableDescriptor tableDescriptor = jdbcTable.toThrift(null);
             TJDBCTable table = tableDescriptor.getJdbcTable();
-            Assert.assertEquals(table.getJdbc_driver_name(), "jdbc_postgresql___172_26_194_237_5432_db_pg_select");
+            Assert.assertEquals(table.getJdbc_driver_name(), "jdbc_f2ef8bf476c54395197451dd655c89dd6041f3d0dd9b906dc38518524af1ec64");
             Assert.assertEquals(table.getJdbc_driver_url(), "http://x.com/postgresql-42.3.3.jar");
             Assert.assertEquals(table.getJdbc_driver_checksum(), "bef0b2e1c6edcd8647c24bed31e1a4ac");
             Assert.assertEquals(table.getJdbc_driver_class(), "org.postgresql.Driver");
