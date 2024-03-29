@@ -42,6 +42,9 @@
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/memory/mem_chunk_allocator.h"
@@ -183,6 +186,9 @@ void calculate_metrics(void* arg_this) {
                 auto datacache_metrics = block_cache->cache_metrics();
                 datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
             }
+#ifdef USE_STAROS
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+#endif
             datacache_mem_tracker->set(datacache_mem_bytes);
         }
 
