@@ -109,4 +109,33 @@ StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, c
     }
 }
 
+StatusOr<ConnectorChunkSink::Futures> HiveUtils::hive_style_partitioning_write_chunk(
+        const ChunkPtr& chunk, bool partitioned, const std::string& partition, int64_t max_file_size,
+        const formats::FileWriterFactory* file_writer_factory, LocationProvider* location_provider,
+        std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers) {
+    ConnectorChunkSink::Futures futures;
+    auto it = partition_writers.find(partition);
+    if (it != partition_writers.end()) {
+        auto* writer = it->second.get();
+        if (writer->get_written_bytes() >= max_file_size) {
+            futures.commit_file_futures.push_back(writer->commit());
+            partition_writers.erase(it);
+            auto path = partitioned ? location_provider->get(partition) : location_provider->get();
+            ASSIGN_OR_RETURN(auto new_writer, file_writer_factory->create(path));
+            RETURN_IF_ERROR(new_writer->init());
+            futures.add_chunk_futures.push_back(new_writer->write(chunk));
+            partition_writers.emplace(partition, std::move(new_writer));
+        } else {
+            futures.add_chunk_futures.push_back(writer->write(chunk));
+        }
+    } else {
+        auto path = partitioned ? location_provider->get(partition) : location_provider->get();
+        ASSIGN_OR_RETURN(auto new_writer, file_writer_factory->create(path));
+        RETURN_IF_ERROR(new_writer->init());
+        futures.add_chunk_futures.push_back(new_writer->write(chunk));
+        partition_writers.emplace(partition, std::move(new_writer));
+    }
+    return futures;
+}
+
 } // namespace starrocks::connector

@@ -63,7 +63,7 @@ public:
 
     virtual Status init() = 0;
 
-    virtual StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) = 0;
+    virtual StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const = 0;
 };
 
 class UnknownFileWriterFactory : public FileWriterFactory {
@@ -72,7 +72,7 @@ public:
 
     Status init() override { return Status::NotSupported(fmt::format("got unsupported file format: {}", _format)); }
 
-    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override {
+    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const override {
         return Status::NotSupported(fmt::format("got unsupported file format: {}", _format));
     }
 
