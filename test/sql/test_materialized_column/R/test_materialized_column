@@ -1033,7 +1033,8 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"compression" = "LZ4"
+"compression" = "LZ4",
+"fast_schema_evolution" = "true"
 );
 -- result:
 -- !result
