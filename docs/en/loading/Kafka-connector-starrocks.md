@@ -68,7 +68,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
     :::info
 
     - In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
-    - If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
+    - If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in the configuration file **connect-StarRocks-sink.properties** for the Kafka connector provided by StarRocks, to synchronize the source data changes to the Primary Key table.
 
     :::
 
@@ -147,7 +147,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
     :::info
 
     - In this example, the Kafka connector provided by StarRocks is a sink connector that can continuously consume data from Kafka and load data into StarRocks.
-    - If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
+    - If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in the configuration file **connect-StarRocks-sink.properties** for the Kafka connector provided by StarRocks, to synchronize the source data changes to the Primary Key table.
 
     :::
 
@@ -315,7 +315,7 @@ The data is successfully loaded when the above result is returned.
 
 ### Load Debezium-formatted CDC data
 
-If the Kafka data is in Debezium CDC format and the StarRocks table is a Primary Key table, you also need to configure the `transforms` parameter and other related parameters.
+If the Kafka data is in Debezium CDC format and the StarRocks table is a Primary Key table, you also need to configure the `transforms` parameter and other related parameters in the configuration file **connect-StarRocks-sink.properties** for the Kafka connector provided by StarRocks.
 
 :::info
 
