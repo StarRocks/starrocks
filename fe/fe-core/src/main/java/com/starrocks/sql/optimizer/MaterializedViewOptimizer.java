@@ -33,7 +33,7 @@ public class MaterializedViewOptimizer {
         // Disable partition prune for mv's plan so no needs  to compensate pruned predicates anymore.
         // Only needs to compensate mv's ref-base-table's partition predicates when mv's freshness cannot be satisfied.
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
-        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        optimizerConfig.disableRuleSet(RuleSetType.ALL_MV_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
