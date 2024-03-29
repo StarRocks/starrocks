@@ -49,7 +49,7 @@ protected:
 class MockFileWriterFactory : public formats::FileWriterFactory {
 public:
     MOCK_METHOD(Status, init, (), (override));
-    MOCK_METHOD(StatusOr<std::shared_ptr<formats::FileWriter>>, create, (const std::string&), (override));
+    MOCK_METHOD(StatusOr<std::shared_ptr<formats::FileWriter>>, create, (const std::string&), (const override));
 };
 
 class MockFileWriter : public formats::FileWriter {
