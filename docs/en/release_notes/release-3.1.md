@@ -4,6 +4,32 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.10
+
+Release date: March 29, 2024
+
+### New Features
+
+- Primary Key tables support Size-tiered Compaction. [#42474](https://github.com/StarRocks/starrocks/pull/42474)
+
+### Behavior Changes
+
+- When null values in JSON data are evaluated based on the `IS NULL` operator, they are considered NULL values following SQL language. For example, `true` is returned for `SELECT parse_json('{"a": null}') -> 'a' IS NULL` (before this behavior change, `false` is returned). [#42815](https://github.com/StarRocks/starrocks/pull/42815)
+
+### Improvements
+
+- When Broker Load is used to load data from ORC files that contain TIMESTAMP-type data, StarRocks supports retaining microseconds in the timestamps when converting the timestamps to match its own DATETIME data type. [#42348](https://github.com/StarRocks/starrocks/pull/42348)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- In shared-data mode, the garbage collection and thread eviction mechanisms for handling persistent indexes created on Primary Key tables cannot take effect on CN nodes. As a result, obsolete data cannot be deleted. [#42241](https://github.com/StarRocks/starrocks/pull/42241)
+- When users query ORC files by using Hive catalogs, the query results may be incorrect because StarRocks used to read ORC files from Hive based on mapping by position. To resolve this issue, users can set the session variable `orc_use_column_names` to `true`, which specifies to read ORC files from Hive based on mapping by column name. [#42905](https://github.com/StarRocks/starrocks/pull/42905)
+- When LDAP authentication for the AD system is adopted, logins without passwords are allowed. [#42476](https://github.com/StarRocks/starrocks/pull/42476)
+- When disk device names end with digits, the values of monitoring metrics remain 0s because the disk device names may be invalid after such digits are removed. [#42741](https://github.com/StarRocks/starrocks/pull/42741)
+- When users use INSERT FROM FILES to load non-string-type (for example, ARRAY or MAP) data into a string-type column, data conversion errors are thrown.
+
 ## 3.1.9
 
 Release date: March 8, 2024

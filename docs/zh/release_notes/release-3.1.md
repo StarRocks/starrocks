@@ -4,6 +4,31 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.10
+
+发布日期：2024 年 3 月 29 日
+
+### 新增特性
+
+- 主键表支持 Size-tiered Compaction。[#42474](https://github.com/StarRocks/starrocks/pull/42474)
+
+### 行为变更
+
+- JSON 中的 null 值通过 `IS NULL` 等方式判断时，修改为按照 SQL 的 NULL 值计算。即，`SELECT parse_json('{"a": null}') -> 'a' IS NULL` 会返回 `true`（原来是返回 `false` ）。[#42815](https://github.com/StarRocks/starrocks/pull/42815)
+
+### 功能优化
+
+- 通过 Broker Load 导入 ORC 格式的数据，在 TIMESTAMP 类型的数据转化为 StarRocks 中的 DATETIME 类型的数据时，新增支持保留微秒信息。[#42348](https://github.com/StarRocks/starrocks/pull/42348)
+
+### 问题修复
+
+修复了如下问题：
+
+- 对于存算分离中的主键表，本地持久化索引的垃圾回收 (Garbage Collection) 和淘汰线程对 CN 节点没有生效，导致无用数据没有被删除。[#42241](https://github.com/StarRocks/starrocks/pull/42241)
+- 通过 Hive Catalog 查询 ORC 格式文件的数据时，可能出现结果错误。原因在于之前采用的是按位置映射的方式从 Hive 读取 ORC 格式文件的数据。用户可以通过修改会话变量 `set orc_use_column_names = true;`，指定按列名映射的方式正确读取 Hive 中的 ORC 格式文件的数据。[#42905](https://github.com/StarRocks/starrocks/pull/42905)
+- 采用 AD 系统的 LDAP 认证方式时，不用密码也能登陆 。[#42476](https://github.com/StarRocks/starrocks/pull/42476)
+- 当磁盘设备名称以数字结尾时，监控指标的值始终为零。原因是通过删除设备名称尾部的数字而得到的设备名可能是无效的。[#42741](https://github.com/StarRocks/starrocks/pull/42741)
+
 ## 3.1.9
 
 发布日期：2024 年 3 月 8 日
