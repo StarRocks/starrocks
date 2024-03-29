@@ -320,24 +320,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
     }
 
-    // TODO Try to reuse HdfsScannerContext::append_partition_column_to_chunk() function
-    // Start to append partition column
-    for (size_t p = 0; p < _scanner_ctx.partition_columns.size(); ++p) {
-        size_t chunk_index = _scanner_params.partition_index_in_chunk[p];
-        Column* column = _column_raw_ptrs[chunk_index];
-        ColumnPtr partition_value = _scanner_ctx.partition_values[p];
-        DCHECK(partition_value->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
-        const ColumnPtr& data_column = const_column->data_column();
-
-        if (data_column->is_nullable()) {
-            column->append_default(1);
-        } else {
-            column->append(*data_column, 0, 1);
-        }
-
-        column->assign(rows_read, 0);
-    }
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     // Check chunk's row number for each column
     chunk->get()->check_or_die();
