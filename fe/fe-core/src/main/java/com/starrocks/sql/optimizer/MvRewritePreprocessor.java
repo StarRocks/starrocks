@@ -217,13 +217,24 @@ public class MvRewritePreprocessor {
                 Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
 
                 // 2. choose best related mvs by user's config or related mv limit
-                Set<MaterializedView> selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
+                Set<MaterializedView> selectedRelatedMVs;
+                try (PlannerProfile.ScopedTimer t1 =
+                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.chooseCandidates")) {
+                    selectedRelatedMVs = chooseBestRelatedMVs(queryTables, relatedMVs, queryOptExpression);
+                }
 
                 // 3. convert to mv with planContext, skip if mv has no valid plan(not SPJG)
-                Set<MvWithPlanContext> mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
+                Set<MvWithPlanContext> mvWithPlanContexts;
+                try (PlannerProfile.ScopedTimer t1 =
+                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.generateMvPlan")) {
+                    mvWithPlanContexts = getMvWithPlanContext(selectedRelatedMVs);
+                }
 
                 // 4. process related mvs to candidates
-                prepareRelatedMVs(queryTables, mvWithPlanContexts);
+                try (PlannerProfile.ScopedTimer t1 =
+                        PlannerProfile.getScopedTimer("Optimizer.preprocessMvs.validateMv")) {
+                    prepareRelatedMVs(queryTables, mvWithPlanContexts);
+                }
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Prepare query tables {} for mv failed:{}", tableNames, e.getMessage());
