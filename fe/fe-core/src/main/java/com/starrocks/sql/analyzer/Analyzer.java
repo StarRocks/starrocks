@@ -67,7 +67,6 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -726,13 +725,6 @@ public class Analyzer {
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
-            return null;
-        }
-
-        @Override
-        public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
-                                                            ConnectContext context) {
-            SecurityIntegrationStatementAnalyzer.analyze(statement, context);
             return null;
         }
 
