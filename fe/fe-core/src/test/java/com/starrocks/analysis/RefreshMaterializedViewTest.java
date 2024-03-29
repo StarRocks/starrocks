@@ -837,36 +837,34 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
                 ") ");
 
         {
-            starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
+            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
                             "PARTITION BY date_trunc('day', observation_date)\n" +
                             "DISTRIBUTED BY HASH(leg_id)\n" +
                             "REFRESH ASYNC\n" +
                             "AS \n" +
                             "SELECT * FROM mv_union_t1 t1\n" +
                             "UNION ALL\n" +
-                    "SELECT * FROM mv_union_t2 t2\n");
-            MaterializedView mv = starRocksAssert.getMv("test", "mv1");
-            Assert.assertEquals(Sets.newHashSet("p20240321_20240322", "p00010101_20240321"),
-                    mv.getPartitionNames());
+                            "SELECT * FROM mv_union_t2 t2\n"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }
 
         {
-            starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
+            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
                             "PARTITION BY date_trunc('day', observation_date)\n" +
                             "DISTRIBUTED BY HASH(leg_id)\n" +
                             "REFRESH ASYNC\n" +
                             "AS \n" +
                             "SELECT * FROM mv_union_t1 t1\n" +
                             "UNION ALL\n" +
-                    "SELECT * FROM mv_union_t3 t2\n");
-
-            MaterializedView mv = starRocksAssert.getMv("test", "mv2");
-            Assert.assertEquals(Sets.newHashSet("p20240321_20240421", "p00010101_20240321"),
-                    mv.getPartitionNames());
+                            "SELECT * FROM mv_union_t3 t2\n"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }
 
         {
-            starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv3 \n" +
+            // create succeed, but refresh fail
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
                     "PARTITION BY date_trunc('day', observation_date)\n" +
                     "REFRESH ASYNC\n" +
                     "AS \n" +
@@ -877,18 +875,15 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
             starRocksAssert.ddl("alter table mv_union_t4 add partition p20240325 values less than ('2024-03-25')");
             starRocksAssert.ddl("alter table mv_union_t1 add partition p20240326 values less than ('2024-03-26')");
 
-            starRocksAssert.refreshMvPartition("refresh materialized view mv3");
-            MaterializedView mv = starRocksAssert.getMv("test", "mv2");
-            Assert.assertEquals(Sets.newHashSet("p20240321_20240421", "p00010101_20240321"),
-                    mv.getPartitionNames());
+            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                    starRocksAssert.refreshMvPartition("refresh materialized view mv2"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
         }
 
         // cleanup
         starRocksAssert.dropTable("mv_union_t1");
         starRocksAssert.dropTable("mv_union_t2");
         starRocksAssert.dropMaterializedView("mv1");
-        starRocksAssert.dropMaterializedView("mv2");
-        starRocksAssert.dropMaterializedView("mv3");
     }
 
 }

@@ -76,7 +76,6 @@ public class RangePartitionDiff {
         RangePartitionDiff result = new RangePartitionDiff();
         RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
         for (RangePartitionDiff diff : diffList) {
-            boolean intersected = false;
             for (Map.Entry<String, Range<PartitionKey>> add : diff.getAdds().entrySet()) {
                 Map<Range<PartitionKey>, String> intersectedRange =
                         addRanges.subRangeMap(add.getValue()).asMapOfRanges();
@@ -86,18 +85,15 @@ public class RangePartitionDiff {
                     if (intersectedRange.size() > 1 ||
                             !existingRange.equals(add.getValue()) ||
                             !addRanges.getEntry(existingRange.lowerEndpoint()).getKey().equals(add.getValue())) {
-                        intersected = true;
-                        LOG.warn("partitions are intersected: " + existingRange + " and " + add);
-                        break;
+                        throw new IllegalArgumentException(
+                                "partitions are intersected: " + existingRange + " and " + add);
                     }
                 }
             }
-            if (!intersected) {
-                diff.getAdds().forEach((key, value) -> addRanges.put(value, key));
-                result.getAdds().putAll(diff.getAdds());
-                result.getDeletes().putAll(diff.getDeletes());
-                result.getRollupToBasePartitionMap().putAll(diff.getRollupToBasePartitionMap());
-            }
+            diff.getAdds().forEach((key, value) -> addRanges.put(value, key));
+            result.getAdds().putAll(diff.getAdds());
+            result.getDeletes().putAll(diff.getDeletes());
+            result.getRollupToBasePartitionMap().putAll(diff.getRollupToBasePartitionMap());
         }
         result.getDeletes().keySet().removeAll(result.getAdds().keySet());
         return result;
