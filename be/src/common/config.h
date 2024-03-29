@@ -58,6 +58,7 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // this is a list in semicolon-delimited format, in CIDR notation, e.g. 10.10.10.0/24
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
+CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
 
 CONF_mBool(enable_auto_adjust_pagecache, "true");
 // Memory urget water level, if the memory usage exceeds this level, reduce the size of

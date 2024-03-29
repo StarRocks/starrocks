@@ -35,6 +35,7 @@ package com.starrocks.mysql.nio;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.mysql.MysqlServer;
 import com.starrocks.qe.ConnectScheduler;
 import org.apache.logging.log4j.LogManager;
@@ -47,7 +48,6 @@ import org.xnio.XnioWorker;
 import org.xnio.channels.AcceptingChannel;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
 import javax.net.ssl.SSLContext;
 
@@ -82,7 +82,7 @@ public class NMysqlServer extends MysqlServer {
     @Override
     public boolean start() {
         try {
-            server = xnioWorker.createStreamConnectionServer(new InetSocketAddress(port),
+            server = xnioWorker.createStreamConnectionServer(NetUtils.getSockAddrBasedOnCurrIpVersion(port),
                     acceptListener,
                     OptionMap.create(Options.TCP_NODELAY, true, Options.BACKLOG, Config.mysql_nio_backlog_num));
             server.resumeAccepts();

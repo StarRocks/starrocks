@@ -203,6 +203,7 @@ public class BDBEnvironment {
         replicationConfig
                 .setConfigParam(ReplicationConfig.REPLAY_COST_PERCENT,
                         String.valueOf(Config.bdbje_replay_cost_percent));
+        replicationConfig.setConfigParam(ReplicationConfig.BIND_INADDR_ANY, "true");
 
         if (isElectable) {
             replicationConfig.setReplicaAckTimeout(Config.bdbje_replica_ack_timeout_second, TimeUnit.SECONDS);
