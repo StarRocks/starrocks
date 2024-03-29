@@ -293,7 +293,7 @@ class StarrocksSQLApiLib(object):
         cmd = (
             f'cd {self.cluster_path}/be/log/; grep -A10000 "*** Check failure stack trace: ***\|ERROR: AddressSanitizer:" be.out'
         )
-        crash_log = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=True)
+        crash_log = shell.expect.go_ex(ip, self.host_user, self.host_password, cmd, timeout=20, b_print_stdout=False)
         return crash_log["result"]
 
     def wait_until_be_exit(self):
