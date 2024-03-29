@@ -2996,27 +2996,27 @@ TEST_P(PersistentIndexTest, pindex_compaction_disk_limit) {
     TabletSharedPtr tablet3 = create_tablet(rand(), rand());
     config::pindex_major_compaction_limit_per_disk = 1;
     PersistentIndexCompactionManager mgr;
-    ASSERT_FALSE(mgr.disk_limit(tablet.get()));
-    mgr.mark_running(tablet.get());
-    ASSERT_TRUE(mgr.is_running(tablet.get()));
-    ASSERT_FALSE(mgr.is_running(tablet2.get()));
-    ASSERT_FALSE(mgr.is_running(tablet3.get()));
-    ASSERT_TRUE(mgr.disk_limit(tablet.get()));
-    ASSERT_TRUE(mgr.disk_limit(tablet2.get()));
-    ASSERT_TRUE(mgr.disk_limit(tablet3.get()));
+    ASSERT_FALSE(mgr.disk_limit(tablet->data_dir()));
+    mgr.mark_running(tablet->tablet_id(), tablet->data_dir());
+    ASSERT_TRUE(mgr.is_running(tablet->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet2->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet3->tablet_id()));
+    ASSERT_TRUE(mgr.disk_limit(tablet->data_dir()));
+    ASSERT_TRUE(mgr.disk_limit(tablet2->data_dir()));
+    ASSERT_TRUE(mgr.disk_limit(tablet3->data_dir()));
     config::pindex_major_compaction_limit_per_disk = 2;
-    ASSERT_FALSE(mgr.disk_limit(tablet2.get()));
-    mgr.mark_running(tablet2.get());
-    ASSERT_TRUE(mgr.is_running(tablet.get()));
-    ASSERT_TRUE(mgr.is_running(tablet2.get()));
-    ASSERT_FALSE(mgr.is_running(tablet3.get()));
-    ASSERT_TRUE(mgr.disk_limit(tablet3.get()));
+    ASSERT_FALSE(mgr.disk_limit(tablet2->data_dir()));
+    mgr.mark_running(tablet2->tablet_id(), tablet2->data_dir());
+    ASSERT_TRUE(mgr.is_running(tablet->tablet_id()));
+    ASSERT_TRUE(mgr.is_running(tablet2->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet3->tablet_id()));
+    ASSERT_TRUE(mgr.disk_limit(tablet3->data_dir()));
 
-    mgr.unmark_running(tablet.get());
-    ASSERT_FALSE(mgr.is_running(tablet.get()));
-    ASSERT_TRUE(mgr.is_running(tablet2.get()));
-    ASSERT_FALSE(mgr.is_running(tablet3.get()));
-    ASSERT_FALSE(mgr.disk_limit(tablet3.get()));
+    mgr.unmark_running(tablet->tablet_id(), tablet->data_dir());
+    ASSERT_FALSE(mgr.is_running(tablet->tablet_id()));
+    ASSERT_TRUE(mgr.is_running(tablet2->tablet_id()));
+    ASSERT_FALSE(mgr.is_running(tablet3->tablet_id()));
+    ASSERT_FALSE(mgr.disk_limit(tablet3->data_dir()));
 }
 
 TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
@@ -3030,9 +3030,9 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule) {
     ASSERT_OK(mgr.init());
     mgr.schedule([&]() {
         std::vector<TabletAndScore> ret;
-        ret.emplace_back(tablet, 1.0);
-        ret.emplace_back(tablet2, 2.0);
-        ret.emplace_back(tablet3, 3.0);
+        ret.emplace_back(tablet->tablet_id(), 1.0);
+        ret.emplace_back(tablet2->tablet_id(), 2.0);
+        ret.emplace_back(tablet3->tablet_id(), 3.0);
         return ret;
     });
 }

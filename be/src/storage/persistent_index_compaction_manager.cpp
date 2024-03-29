@@ -49,7 +49,7 @@ public:
 
     void run() override {
         WARN_IF_ERROR(_tablet->updates()->pk_index_major_compaction(), "Failed to run PkIndexMajorCompactionTask");
-        _mgr->unmark_running(_tablet.get());
+        _mgr->unmark_running(_tablet->tablet_id(), _tablet->data_dir());
     }
 
 private:
@@ -61,22 +61,24 @@ void PersistentIndexCompactionManager::schedule(const std::function<std::vector<
     update_ready_tablet_queue(pick_algo);
     for (auto it = _ready_tablets_queue.begin(); it != _ready_tablets_queue.end();) {
         auto& tablet_score = *it;
-        if (is_running(tablet_score.first.get())) {
+        auto tablet_id = tablet_score.first;
+        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+        if (is_running(tablet_id)) {
             // remove this tablet because it is already running
             it = _ready_tablets_queue.erase(it);
             continue;
         }
-        if (disk_limit(tablet_score.first.get())) {
-            // skip it, may re-run it next round.
+        if (disk_limit(tablet->data_dir())) {
+            // skip it, may re - run it next round.
             ++it;
             continue;
         }
-        mark_running(tablet_score.first.get());
-        std::shared_ptr<Runnable> r = std::make_shared<PkIndexMajorCompactionTask>(tablet_score.first, this);
+        mark_running(tablet_id, tablet->data_dir());
+        std::shared_ptr<Runnable> r = std::make_shared<PkIndexMajorCompactionTask>(tablet, this);
         auto st = _worker_thread_pool->submit(std::move(r));
         if (!st.ok()) {
             // Resource busy, break and quit
-            unmark_running(tablet_score.first.get());
+            unmark_running(tablet_id, tablet->data_dir());
             LOG(ERROR) << strings::Substitute("submit pk index compaction task failed: $0", st.to_string());
             break;
         }
@@ -94,26 +96,26 @@ void PersistentIndexCompactionManager::update_ready_tablet_queue(
     }
 }
 
-void PersistentIndexCompactionManager::mark_running(Tablet* tablet) {
+void PersistentIndexCompactionManager::mark_running(int64_t tablet_id, DataDir* data_dir) {
     std::lock_guard<std::mutex> guard(_mutex);
-    _running_tablets.insert(tablet->tablet_id());
-    _data_dir_to_task_num_map[tablet->data_dir()]++;
+    _running_tablets.insert(tablet_id);
+    _data_dir_to_task_num_map[data_dir]++;
 }
 
-void PersistentIndexCompactionManager::unmark_running(Tablet* tablet) {
+void PersistentIndexCompactionManager::unmark_running(int64_t tablet_id, DataDir* data_dir) {
     std::lock_guard<std::mutex> guard(_mutex);
-    _running_tablets.erase(tablet->tablet_id());
-    _data_dir_to_task_num_map[tablet->data_dir()]--;
+    _running_tablets.erase(tablet_id);
+    _data_dir_to_task_num_map[data_dir]--;
 }
 
-bool PersistentIndexCompactionManager::is_running(Tablet* tablet) {
+bool PersistentIndexCompactionManager::is_running(int64_t tablet_id) {
     std::lock_guard<std::mutex> guard(_mutex);
-    return _running_tablets.count(tablet->tablet_id()) > 0;
+    return _running_tablets.count(tablet_id) > 0;
 }
 
-bool PersistentIndexCompactionManager::disk_limit(Tablet* tablet) {
+bool PersistentIndexCompactionManager::disk_limit(DataDir* data_dir) {
     std::lock_guard<std::mutex> guard(_mutex);
-    return _data_dir_to_task_num_map[tablet->data_dir()] >= std::max(1, config::pindex_major_compaction_limit_per_disk);
+    return _data_dir_to_task_num_map[data_dir] >= std::max(1, config::pindex_major_compaction_limit_per_disk);
 }
 
 Status PersistentIndexCompactionManager::update_max_threads(int max_threads) {

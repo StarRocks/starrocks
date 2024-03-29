@@ -66,18 +66,6 @@ public:
         T _value;
     };
 
-    class EntryGuard {
-    public:
-        EntryGuard(Entry* entry) : _entry(entry) { _entry->_ref++; }
-
-        ~EntryGuard() { _entry->_ref--; }
-
-        Entry* entry() const { return _entry; }
-
-    private:
-        Entry* _entry;
-    };
-
     typedef typename std::list<Entry*> List;
     typedef typename List::const_iterator Handle;
     typedef typename std::unordered_map<Key, Handle> Map;
@@ -342,14 +330,14 @@ public:
         return _evict(target_capacity, entry_list);
     }
 
-    std::vector<std::pair<Key, std::unique_ptr<EntryGuard>>> get_key_entries() const {
+    std::vector<Key> get_keys() const {
         std::lock_guard<std::mutex> lg(_lock);
-        std::vector<std::pair<Key, std::unique_ptr<EntryGuard>>> ret;
+        std::vector<Key> ret;
         ret.reserve(_map.size());
         auto itr = _list.begin();
         while (itr != _list.end()) {
             Entry* entry = (*itr);
-            ret.emplace_back(entry->key(), std::make_unique<EntryGuard>(entry));
+            ret.emplace_back(entry->key());
             itr++;
         }
         return ret;

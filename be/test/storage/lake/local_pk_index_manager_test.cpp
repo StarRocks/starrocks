@@ -260,7 +260,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
 
 TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
     SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::pick_tablets_to_do_pk_index_major_compaction:1",
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1",
                                           [](void* arg) { *(double*)arg = 1.0; });
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
@@ -305,9 +305,20 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
                                                  std::to_string(_tablet_metadata->id())));
     auto local_pk_index_manager = std::make_unique<LocalPkIndexManager>();
     ASSERT_OK(local_pk_index_manager->init());
-    local_pk_index_manager->schedule([&]() { return _update_mgr->pick_tablets_to_do_pk_index_major_compaction(); },
-                                     _update_mgr.get());
-    SyncPoint::GetInstance()->ClearCallBack("LocalPkIndexManager::pick_tablets_to_do_pk_index_major_compaction:1");
+    local_pk_index_manager->schedule([&]() { return _update_mgr->pick_tablets_to_do_pk_index_major_compaction(); });
+    // LocalPkIndexManager use the global update manager to do major compaction.
+    // But we are using _update_mgr constructed in ut, so we have to call pk_index_major_compaction explicitly.
+    std::vector<TabletAndScore> pick_tablets = _update_mgr->pick_tablets_to_do_pk_index_major_compaction();
+    for (auto& tablet_score : pick_tablets) {
+        auto tablet_id = tablet_score.first;
+        auto* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
+        if (data_dir == nullptr) {
+            continue;
+        }
+        _update_mgr->pk_index_major_compaction(tablet_id, data_dir);
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1");
     SyncPoint::GetInstance()->DisableProcessing();
 
     txn_id = next_id();

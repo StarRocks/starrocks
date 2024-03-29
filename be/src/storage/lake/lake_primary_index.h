@@ -69,6 +69,10 @@ public:
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
     Status major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log);
+    
+    double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
+
+    void set_pk_index_write_amp_score(double score) { _pk_index_write_amp_score.store(score); }
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
@@ -80,6 +84,7 @@ private:
     // make sure at most 1 thread is read or write primary index
     std::timed_mutex _mutex;
     bool _enable_persistent_index = false;
+    std::atomic<double> _pk_index_write_amp_score{0.0};
 };
 
 } // namespace lake

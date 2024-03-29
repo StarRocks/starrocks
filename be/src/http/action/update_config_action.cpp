@@ -55,7 +55,6 @@
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
-#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -71,6 +70,7 @@
 #ifdef USE_STAROS
 #include "common/gflags_utils.h"
 #include "service/staros_worker.h"
+#include "storage/lake/local_pk_index_manager.h"
 #endif // USE_STAROS
 
 namespace starrocks {

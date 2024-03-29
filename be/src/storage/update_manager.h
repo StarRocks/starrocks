@@ -38,6 +38,7 @@ class RowsetUpdateState;
 class RowsetColumnUpdateState;
 class Tablet;
 class PersistentIndexCompactionManager;
+using TabletAndScore = std::pair<int64_t, double>;
 
 class LocalDelvecLoader : public DelvecLoader {
 public:
