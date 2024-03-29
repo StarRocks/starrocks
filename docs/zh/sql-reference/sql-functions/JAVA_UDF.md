@@ -554,10 +554,11 @@ DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 
 ## 参数配置
 
-JVM 参数配置：在 **be/conf/be.conf** 中配置如下参数，可以控制 JVM 的行为。使用 JDK8 配置 `JAVA_OPTS`，如果使用的 JDK 版本 >= 8 则用 `JAVA_OPTS_FOR_JDK_9_AND_LATER`
+JVM 参数配置：在 **be/conf/be.conf** 中配置如下参数，可以控制 JVM 的内存使用。如果使用 JDK 8，请配置 `JAVA_OPTS`。如果 JDK 版本高于 JDK 8，则配置 `JAVA_OPTS_FOR_JDK_9_AND_LATER`
 
 ```Bash
 JAVA_OPTS="-Xmx12G"
+
 JAVA_OPTS_FOR_JDK_9_AND_LATER="-Xmx12G"
 ```
 
