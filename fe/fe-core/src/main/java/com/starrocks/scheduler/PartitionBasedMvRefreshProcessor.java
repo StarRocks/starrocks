@@ -45,7 +45,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -81,6 +80,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -805,7 +805,52 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void syncPartitionsForExpr(TaskRunContext context) {
+        Pair<String, String> partitionRange = Pair.create(
+                context == null ? null : context.getProperties().get(TaskRun.PARTITION_START),
+                context == null ? null : context.getProperties().get(TaskRun.PARTITION_END));
+        DiffResult result = computePartitionRangeDiff(db, materializedView, partitionRange);
+        if (result == null) {
+            return;
+        }
+        Map<String, Range<PartitionKey>> deletes = result.rangePartitionDiff.getDeletes();
+
+        // Delete old partitions and then add new partitions because the old and new partitions may overlap
+        for (String mvPartitionName : deletes.keySet()) {
+            dropPartition(db, materializedView, mvPartitionName);
+        }
+        LOG.info("The process of synchronizing materialized view [{}] delete partitions range [{}]",
+                materializedView.getName(), deletes);
+
+        // Create new added materialized views' ranges
+        Map<String, String> partitionProperties = getPartitionProperties(materializedView);
+        DistributionDesc distributionDesc = getDistributionDesc(materializedView);
+        Map<String, Range<PartitionKey>> adds = result.rangePartitionDiff.getAdds();
+        addRangePartitions(db, materializedView, adds, partitionProperties, distributionDesc);
+        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
+            String mvPartitionName = addEntry.getKey();
+            result.mvRangePartitionMap.put(mvPartitionName, addEntry.getValue());
+        }
+        LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
+                materializedView.getName(), adds);
+
+        // used to get partitions to refresh
+        Map<Table, Expr> tableToExprMap = materializedView.getTableToPartitionExprMap();
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef = SyncPartitionUtils
+                .generateBaseRefMap(result.refBaseTablePartitionMap, tableToExprMap, result.mvRangePartitionMap);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = SyncPartitionUtils
+                .generateMvRefMap(result.mvRangePartitionMap, tableToExprMap, result.refBaseTablePartitionMap);
+        mvContext.setMvRangePartitionMap(result.mvRangePartitionMap);
+        mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
+        mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
+        mvContext.setRefBaseTableRangePartitionMap(result.refBaseTablePartitionMap);
+        mvContext.setExternalRefBaseTableMVPartitionMap(result.refBaseTableMVPartitionMap);
+    }
+
+    public static DiffResult computePartitionRangeDiff(Database db,
+                                                       MaterializedView materializedView,
+                                                       Pair<String, String> partitionRange) {
         Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
+<<<<<<< HEAD
         Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
         Table refBaseTable = partitionTableAndColumn.first;
         Preconditions.checkNotNull(refBaseTable);
@@ -813,6 +858,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Preconditions.checkNotNull(refBaseTablePartitionColumn);
 
         RangePartitionDiff rangePartitionDiff = null;
+=======
+        Map<Table, Column> partitionTableAndColumn = materializedView.getRelatedPartitionTableAndColumn();
+        Preconditions.checkArgument(!partitionTableAndColumn.isEmpty());
+        List<RangePartitionDiff> rangePartitionDiffList = Lists.newArrayList();
+>>>>>>> 9bc2d08928 ([BugFix] fix union mv when the partitions is unaligned (#42950))
 
         database.readLock();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = materializedView.getRangePartitionMap();
@@ -823,6 +873,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             refBaseTablePartitionMap = PartitionUtil.getPartitionKeyRange(
                     refBaseTable, refBaseTablePartitionColumn, partitionExpr);
 
+<<<<<<< HEAD
             // To solve multi partition columns' problem of external table, record the mv partition name to all the same
             // partition names map here.
             if (!refBaseTable.isNativeTableOrMaterializedView()) {
@@ -836,14 +887,36 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             rangePartitionDiff = PartitionUtil.getPartitionDiff(
                     partitionExpr, partitionColumn, refBaseTablePartitionMap, mvRangePartitionMap, differ);
         } catch (UserException e) {
+=======
+                // To solve multi partition columns' problem of external table, record the mv partition name to all the same
+                // partition names map here.
+                if (!refBaseTable.isNativeTableOrMaterializedView()) {
+                    refBaseTableMVPartitionMap.put(refBaseTable,
+                            PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
+                                    refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable)));
+                }
+
+                Column partitionColumn = (materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+                PartitionDiffer differ = PartitionDiffer.build(materializedView, partitionRange);
+                rangePartitionDiffList.add(PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
+                        refBaseTablePartitionMap.get(refBaseTable), mvRangePartitionMap, differ));
+            }
+
+        } catch (UserException | SemanticException e) {
+>>>>>>> 9bc2d08928 ([BugFix] fix union mv when the partitions is unaligned (#42950))
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
-            return;
+            return null;
         } finally {
             database.readUnlock();
         }
 
-        Map<String, Range<PartitionKey>> deletes = rangePartitionDiff.getDeletes();
+        // UnionALL MV may generate multiple PartitionDiff, needs to be merged into one PartitionDiff
+        RangePartitionDiff rangePartitionDiff = RangePartitionDiff.merge(rangePartitionDiffList);
+        return new DiffResult(mvRangePartitionMap, refBaseTablePartitionMap, refBaseTableMVPartitionMap,
+                rangePartitionDiff);
+    }
 
+<<<<<<< HEAD
         // Delete old partitions and then add new partitions because the old and new partitions may overlap
         for (String mvPartitionName : deletes.keySet()) {
             dropPartition(database, materializedView, mvPartitionName);
@@ -873,6 +946,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
         mvContext.setRefBaseTableRangePartitionMap(refBaseTablePartitionMap);
         mvContext.setExternalRefBaseTableMVPartitionMap(refBaseTableMVPartitionMap);
+=======
+    private static class DiffResult {
+        public final Map<String, Range<PartitionKey>> mvRangePartitionMap;
+        public final Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap;
+        public final Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap;
+        public final RangePartitionDiff rangePartitionDiff;
+
+        public DiffResult(Map<String, Range<PartitionKey>> mvRangePartitionMap,
+                          Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap,
+                          Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap,
+                          RangePartitionDiff rangePartitionDiff) {
+            this.mvRangePartitionMap = mvRangePartitionMap;
+            this.refBaseTablePartitionMap = refBaseTablePartitionMap;
+            this.refBaseTableMVPartitionMap = refBaseTableMVPartitionMap;
+            this.rangePartitionDiff = rangePartitionDiff;
+        }
+>>>>>>> 9bc2d08928 ([BugFix] fix union mv when the partitions is unaligned (#42950))
     }
 
     private void syncPartitionsForList() {

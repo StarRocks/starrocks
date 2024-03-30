@@ -452,6 +452,10 @@ public class SyncPartitionUtils {
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);
         }
+        final DateLiteral maxDateTime = DateLiteral.createMaxValue(Type.DATETIME);
+        if (truncUpperDateTime.isAfter(maxDateTime.toLocalDateTime())) {
+            return upperDateTime;
+        }
         return truncUpperDateTime;
     }
 
