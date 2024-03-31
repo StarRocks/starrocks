@@ -126,6 +126,12 @@ jobs:
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
+      - name: add branch-3.3 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.3')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.3'
+
       - name: add branch-3.2 label
         if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
         uses: actions-ecosystem/action-add-labels@v1
@@ -149,6 +155,12 @@ jobs:
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: '2.5'
+
+      - name: remove branch-3.3 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.3') && contains(github.event.pull_request.labels.*.name, '3.3')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '3.3'
 
       - name: remove branch-3.2 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
