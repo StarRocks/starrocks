@@ -213,9 +213,10 @@ class StarrocksSQLApiLib(object):
                 be_crash_case = self.case_info.name
 
                 title = f"[{self.run_info}] SQL-Tester crash"
+                run_link = os.environ.get('WORKFLOW_URL')
                 body = (
-                        """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\n\n```"""
-                        % (be_crash_case, be_crash_log, cluster_status_dict["version"], cluster_status_dict["ip"][0])
+                        """```\nTest Case:\n    %s\n```\n\n ```\nCrash Log: \n%s\n```\n\n```\nSR Version: %s\nBE: %s\nURL: %s\n\n```"""
+                        % (be_crash_case, be_crash_log, cluster_status_dict["version"], cluster_status_dict["ip"][0], run_link)
                 )
                 assignee = os.environ.get("ISSUE_AUTHOR")
                 repo = os.environ.get("GITHUB_REPOSITORY")
