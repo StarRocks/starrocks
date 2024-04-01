@@ -142,6 +142,8 @@ public class GINIndexTest extends PlanTestBase {
             put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
         }});
 
+        index.hashCode();
+
         TOlapTableIndex olapIndex = index.toThrift();
         Assertions.assertEquals(indexId, olapIndex.getIndex_id());
         Assertions.assertEquals(indexName, olapIndex.getIndex_name());
