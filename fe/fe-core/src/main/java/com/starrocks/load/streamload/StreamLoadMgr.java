@@ -410,7 +410,6 @@ public class StreamLoadMgr implements MemoryTrackable {
                 if (streamLoadTask.checkNeedRemove(currentMs, isForce)) {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
-                    idToStreamLoadTask.remove(streamLoadTask.getId());
                     if (streamLoadTask.isSyncStreamLoad()) {
                         txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
                     }
