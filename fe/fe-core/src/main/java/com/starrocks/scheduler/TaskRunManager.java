@@ -85,12 +85,17 @@ public class TaskRunManager implements MemoryTrackable {
         status.setPriority(option.getPriority());
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
-        GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
         if (!arrangeTaskRun(taskRun)) {
             LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
+<<<<<<< HEAD
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
+=======
+        // Only log create task run status when it's not rejected and created.
+        GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
+        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
+>>>>>>> b08ee3fc11 ([BugFix] Only log create task run status log when it's not rejected and created (#43064))
     }
 
     public boolean killTaskRun(Long taskId) {
@@ -155,6 +160,13 @@ public class TaskRunManager implements MemoryTrackable {
                     LOG.info("Merge redundant task run, oldTaskRun: {}, taskRun: {}",
                             oldTaskRun, taskRun);
                     iter.remove();
+
+                    // Update follower's state to SUCCESS, otherwise the merged task run will always be PENDING.
+                    // TODO: 1. add a MERGED state later. 2. support batch update to reduce the number of edit logs.
+                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
+                    TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
+                            oldTaskRun.getStatus().getState(), Constants.TaskRunState.SUCCESS);
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
                 }
             }
             if (!taskRuns.offer(taskRun)) {
