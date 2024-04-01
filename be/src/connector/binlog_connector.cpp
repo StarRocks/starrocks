@@ -86,7 +86,8 @@ void BinlogDataSource::close(RuntimeState* state) {
 }
 
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    SCOPED_RAW_TIMER(&_cpu_time_ns);
+    MonotonicStopWatch watch;
+    watch.start();
 
 #ifdef BE_TEST
     // for ut
@@ -108,6 +109,16 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
                              << ", binlog reader id: " << _binlog_reader->reader_id()
                              << ", start_version: " << _start_version << ", _start_seq_id: " << _start_seq_id
                              << ", _max_version_exclusive: " << _max_version_exclusive << ", " << status;
+
+    auto time_ns = watch.elapsed_time();
+    _cpu_time_ns += time_ns;
+    _cpu_time_spent_in_epoch += time_ns;
+    Chunk* ck = chunk->get();
+    if (ck) {
+        _rows_read_number += ck->num_rows();
+        _bytes_read += ck->bytes_usage();
+        _rows_read_in_epoch += ck->num_rows();
+    }
     return status;
 }
 
@@ -143,9 +154,8 @@ Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id)
 }
 
 Status BinlogDataSource::reset_status() {
-    _rows_read_number = 0;
-    _bytes_read = 0;
-    _cpu_time_ns = 0;
+    _rows_read_in_epoch = 0;
+    _cpu_time_spent_in_epoch = 0;
     VLOG(3) << "Binlog connector reset status, tablet: " << _tablet->full_name()
             << ", binlog reader id: " << _binlog_reader->reader_id();
     return Status::OK();
