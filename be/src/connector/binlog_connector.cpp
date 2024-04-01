@@ -89,12 +89,13 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     MonotonicStopWatch watch;
     watch.start();
 
+    Status status;
 #ifdef BE_TEST
     // for ut
     if (state->fragment_ctx()->is_stream_test()) {
-        return _mock_chunk_test(chunk);
+        status = _mock_chunk_test(chunk);
     }
-#endif
+#else
     if (_need_seek_binlog.load(std::memory_order::acquire)) {
         if (!_is_stream_pipeline) {
             RETURN_IF_ERROR(_prepare_non_stream_pipeline());
@@ -104,11 +105,12 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     _init_chunk(chunk, state->chunk_size());
-    Status status = _binlog_reader->get_next(chunk, _max_version_exclusive);
+    status = _binlog_reader->get_next(chunk, _max_version_exclusive);
     VLOG_IF(3, !status.ok()) << "Fail to read binlog, tablet: " << _tablet->full_name()
                              << ", binlog reader id: " << _binlog_reader->reader_id()
                              << ", start_version: " << _start_version << ", _start_seq_id: " << _start_seq_id
                              << ", _max_version_exclusive: " << _max_version_exclusive << ", " << status;
+#endif
 
     auto time_ns = watch.elapsed_time();
     _cpu_time_ns += time_ns;
