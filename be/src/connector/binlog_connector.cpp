@@ -58,10 +58,88 @@ Status BinlogDataSource::open(RuntimeState* state) {
 void BinlogDataSource::close(RuntimeState* state) {}
 
 Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+<<<<<<< HEAD
     SCOPED_RAW_TIMER(&_cpu_time_ns);
     _init_chunk(chunk, state->chunk_size());
     // TODO replace with BinlogReader
     return _mock_chunk(chunk->get());
+=======
+    MonotonicStopWatch watch;
+    watch.start();
+
+    Status status;
+#ifdef BE_TEST
+    // for ut
+    if (state->fragment_ctx()->is_stream_test()) {
+        status = _mock_chunk_test(chunk);
+    }
+#else
+    if (_need_seek_binlog.load(std::memory_order::acquire)) {
+        if (!_is_stream_pipeline) {
+            RETURN_IF_ERROR(_prepare_non_stream_pipeline());
+        }
+        RETURN_IF_ERROR(_binlog_reader->seek(_start_version, _start_seq_id));
+        _need_seek_binlog.store(false);
+    }
+
+    _init_chunk(chunk, state->chunk_size());
+    status = _binlog_reader->get_next(chunk, _max_version_exclusive);
+    VLOG_IF(3, !status.ok()) << "Fail to read binlog, tablet: " << _tablet->full_name()
+                             << ", binlog reader id: " << _binlog_reader->reader_id()
+                             << ", start_version: " << _start_version << ", _start_seq_id: " << _start_seq_id
+                             << ", _max_version_exclusive: " << _max_version_exclusive << ", " << status;
+#endif
+
+    auto time_ns = watch.elapsed_time();
+    _cpu_time_ns += time_ns;
+    _cpu_time_spent_in_epoch += time_ns;
+    Chunk* ck = chunk->get();
+    if (ck) {
+        _rows_read_number += ck->num_rows();
+        _bytes_read += ck->bytes_usage();
+        _rows_read_in_epoch += ck->num_rows();
+    }
+    return status;
+}
+
+Status BinlogDataSource::_prepare_non_stream_pipeline() {
+    BinlogRange binlog_range = _tablet->binlog_manager()->current_binlog_range();
+    if (binlog_range.is_empty()) {
+        VLOG(3) << "There is no binlog to scan, tablet: " << _tablet->full_name()
+                << ", binlog reader id: " << _binlog_reader->reader_id();
+        return Status::EndOfFile("There is no binlog");
+    }
+
+    _start_version.store(binlog_range.start_version());
+    _start_seq_id.store(binlog_range.start_seq_id());
+    _max_version_exclusive.store(binlog_range.end_version() + 1);
+
+    VLOG(3) << "Prepare to scan binlog, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id() << ", " << binlog_range.debug_string();
+
+    return Status::OK();
+}
+
+Status BinlogDataSource::set_offset(int64_t table_version, int64_t changelog_id) {
+    _mock_chunk_num = 0;
+    _need_seek_binlog.store(true);
+    _start_version.store(table_version);
+    _start_seq_id.store(changelog_id);
+    // Note MV can't read binlog across versions currently, so the max_version_exclusive is _start_version + 1
+    _max_version_exclusive.store(table_version + 1);
+    VLOG(3) << "Binlog connector set offset, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id() << ", version: " << table_version
+            << ", seq_id: " << changelog_id;
+    return Status::OK();
+}
+
+Status BinlogDataSource::reset_status() {
+    _rows_read_in_epoch = 0;
+    _cpu_time_spent_in_epoch = 0;
+    VLOG(3) << "Binlog connector reset status, tablet: " << _tablet->full_name()
+            << ", binlog reader id: " << _binlog_reader->reader_id();
+    return Status::OK();
+>>>>>>> 4f1e3e52f1 ([BugFix] BinlogDataSource does not update total cpu time correctly (#43453))
 }
 
 BinlogMetaFieldMap BinlogDataSource::_build_binlog_meta_fields(ColumnId start_cid) {
