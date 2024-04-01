@@ -291,8 +291,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
         auto func = resolve_convert_func(element_type_desc.type, element_arrow_type->id(), element_is_nullable);
         if (func == nullptr) {
             return arrow::Status::NotImplemented(fmt::format(
-                    "Can't find convert function for array element, logical type: {}, arrow type: {}, nullable: {}",
-                    type_to_string(element_type_desc.type), element_arrow_type->name(), element_is_nullable));
+                    "Not support to convert type {} with nullable {} to arrow type {} for array element",
+                    type_to_string(element_type_desc.type), element_is_nullable, element_arrow_type->name()));
         }
         column_context->child_column_contexts.push_back({element_type_desc, element_arrow_type, func});
         return arrow::Status::OK();
@@ -366,11 +366,10 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvStructGuard<LT, AT>> {
             bool child_is_nullable = data_column->fields()[i]->is_nullable();
             auto func = resolve_convert_func(child_type_desc.type, child_arrow_type->id(), child_is_nullable);
             if (func == nullptr) {
-                return arrow::Status::NotImplemented(
-                        fmt::format("Can't find convert function for struct field {}, logical type: {}, arrow type: "
-                                    "{}, nullable: {}",
-                                    type_desc.field_names[i], type_to_string(child_type_desc.type),
-                                    child_arrow_type->name(), child_is_nullable));
+                return arrow::Status::NotImplemented(fmt::format(
+                        "Not support to convert type {} with nullable {} to arrow type {} for struct field {}",
+                        type_to_string(child_type_desc.type), child_is_nullable, child_arrow_type->name(),
+                        type_desc.field_names[i]));
             }
             column_context->child_column_contexts.push_back({child_type_desc, child_arrow_type, func});
         }
@@ -446,9 +445,9 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
         }
         auto key_func = resolve_convert_func(key_type_desc.type, key_arrow_type->id(), key_is_nullable);
         if (key_func == nullptr) {
-            return arrow::Status::NotImplemented(fmt::format(
-                    "Can't find convert function for map key, logical type: {}, arrow type: {}, nullable: {}",
-                    type_to_string(key_type_desc.type), key_arrow_type->name(), key_is_nullable));
+            return arrow::Status::NotImplemented(
+                    fmt::format("Not support to convert type {} with nullable {} to arrow type {} for map key",
+                                type_to_string(key_type_desc.type), key_is_nullable, key_arrow_type->name()));
         }
         column_context->child_column_contexts.push_back({key_type_desc, key_arrow_type, key_func});
 
@@ -457,9 +456,9 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
         bool value_is_nullable = data_column->values_column()->is_nullable();
         auto value_func = resolve_convert_func(value_type_desc.type, value_arrow_type->id(), value_is_nullable);
         if (value_func == nullptr) {
-            return arrow::Status::NotImplemented(fmt::format(
-                    "Can't find convert function for map value, logical type: {}, arrow type: {}, nullable: {}",
-                    type_to_string(value_type_desc.type), value_arrow_type->name(), value_is_nullable));
+            return arrow::Status::NotImplemented(
+                    fmt::format("Not support to convert type {} with nullable {} to arrow type {} for map value",
+                                type_to_string(value_type_desc.type), value_is_nullable, value_arrow_type->name()));
         }
         column_context->child_column_contexts.push_back({value_type_desc, value_arrow_type, value_func});
         return arrow::Status::OK();
@@ -557,19 +556,19 @@ public:
 
     using arrow::TypeVisitor::Visit;
 
-#define DEF_VISIT_METHOD(Type)                                                                                 \
-    arrow::Status Visit(const arrow::Type& type) override {                                                    \
-        auto func = resolve_convert_func(_type_desc.type, type.type_id, _column->is_nullable());               \
-        if (func == nullptr) {                                                                                 \
-            return arrow::Status::NotImplemented(                                                              \
-                    fmt::format("Can't find convert function, logical type: {}, arrow type: {}, nullable: {}", \
-                                type_to_string(_type_desc.type), type.name(), _column->is_nullable()));        \
-        }                                                                                                      \
-        ColumnContext column_context(_type_desc, _arrow_type, func);                                           \
-        std::unique_ptr<arrow::ArrayBuilder> builder;                                                          \
-        ARROW_RETURN_NOT_OK(arrow::MakeBuilder(_pool, _arrow_type, &builder));                                 \
-        ARROW_RETURN_NOT_OK(func(_column, 0, _column->size(), &column_context, builder.get()));                \
-        return builder->Finish(&_array);                                                                       \
+#define DEF_VISIT_METHOD(Type)                                                                          \
+    arrow::Status Visit(const arrow::Type& type) override {                                             \
+        auto func = resolve_convert_func(_type_desc.type, type.type_id, _column->is_nullable());        \
+        if (func == nullptr) {                                                                          \
+            return arrow::Status::NotImplemented(                                                       \
+                    fmt::format("Not support to convert type {} with nullable {} to arrow type {}",     \
+                                type_to_string(_type_desc.type), _column->is_nullable(), type.name())); \
+        }                                                                                               \
+        ColumnContext column_context(_type_desc, _arrow_type, func);                                    \
+        std::unique_ptr<arrow::ArrayBuilder> builder;                                                   \
+        ARROW_RETURN_NOT_OK(arrow::MakeBuilder(_pool, _arrow_type, &builder));                          \
+        ARROW_RETURN_NOT_OK(func(_column, 0, _column->size(), &column_context, builder.get()));         \
+        return builder->Finish(&_array);                                                                \
     }
 
     DEF_VISIT_METHOD(Decimal128Type);
