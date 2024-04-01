@@ -14,11 +14,9 @@
 
 package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
@@ -34,7 +32,6 @@ import org.apache.commons.lang.text.StrTokenizer;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -48,25 +45,6 @@ public class SubfieldAccessPathNormalizer {
     public static int JSON_FLATTEN_DEPTH = 1;
     // simple json patten, same as BE's JsonPathPiece, match: abc[1][2], group: (abc)([1][2])
     private static final Pattern JSON_ARRAY_PATTEN = Pattern.compile("^([\\w#.]+)((?:\\[[\\d:*]+])*)");
-
-    /*
-    get_json_int,    BIGINT,    011110 00, 120
-    get_json_double, DOUBLE,    011100 00, 112
-    get_json_bool,   VARCHAR,   100000 00, 128
-    get_json_string, VARCHAR,   100000 00, 128
-    json_exists,     VARCHAR,   100000 00, 128
-    json_query,      JSON,      000000 00, 0
-    json_length,     JSON,      000000 00, 0
-
-    bool will flatting as string, because it's need save string-literal(true/false)
-     */
-    private static final Map<PrimitiveType, Byte> JSON_COMPATIBLE_TYPE =
-            ImmutableMap.<PrimitiveType, Byte>builder()
-                    .put(PrimitiveType.BIGINT, (byte) 120)
-                    .put(PrimitiveType.DOUBLE, (byte) 112)
-                    .put(PrimitiveType.VARCHAR, (byte) 128)
-                    .put(PrimitiveType.JSON, (byte) 0)
-                    .build();
 
     private final Deque<AccessPath> allAccessPaths = Lists.newLinkedList();
 
@@ -151,12 +129,16 @@ public class SubfieldAccessPathNormalizer {
         if (one == Type.INVALID || two == Type.INVALID) {
             return Type.INVALID;
         }
-        byte bits = (byte) (JSON_COMPATIBLE_TYPE.getOrDefault(one.getPrimitiveType(), (byte) 0) &
-                JSON_COMPATIBLE_TYPE.getOrDefault(two.getPrimitiveType(), (byte) 0));
 
-        PrimitiveType type = JSON_COMPATIBLE_TYPE.entrySet().stream().filter(e -> e.getValue() == bits).findFirst()
-                .map(Map.Entry::getKey).orElse(PrimitiveType.JSON);
-        return Type.fromPrimitiveType(type);
+        if (one.getPrimitiveType() == two.getPrimitiveType()) {
+            return one;
+        }
+
+        // the compatible type of two types use JSON,
+        // the be can't promise cast(cast(xx as IntermediateType) as TargetType) is same as cast(xx as TargetType)
+        // e.g: cast(cast("1.1" as double) as int) is different with cast("1.1" as int)
+        // so we use JSON as the compatible type
+        return Type.JSON;
     }
 
     public boolean hasPath(ColumnRefOperator root) {
@@ -224,11 +206,9 @@ public class SubfieldAccessPathNormalizer {
                     boolean isOverflown = formatJsonPath(path, flatPaths);
                     p.appendFieldNames(flatPaths);
                     if (isOverflown || FunctionSet.JSON_LENGTH.equals(call.getFnName())
-                            || FunctionSet.GET_JSON_BOOL.equals(call.getFnName())) {
+                            || FunctionSet.GET_JSON_BOOL.equals(call.getFnName())
+                            || FunctionSet.JSON_EXISTS.equals(call.getFnName())) {
                         p.setValueType(Type.JSON);
-                    } else if (FunctionSet.JSON_EXISTS.equals(call.getFnName()) ||
-                            FunctionSet.JSON_OBJECT.equals(call.getFnName())) {
-                        p.setValueType(Type.STRING);
                     } else {
                         p.setValueType(call.getType());
                     }

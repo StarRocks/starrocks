@@ -16,6 +16,7 @@
 
 #include "column/column_builder.h"
 #include "column/type_traits.h"
+#include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "util/json.h"
 
@@ -37,35 +38,59 @@ static StatusOr<RunTimeCppType<ResultType>> get_number_from_vpjson(const vpack::
     // signed interger type
     if constexpr (lt_is_integer<ResultType>) {
         // signed integral type
-        if (slice.isDouble()) {
+        if (LIKELY(slice.isInt() || slice.isSmallInt())) {
+            auto v = slice.getIntUnchecked();
+            if constexpr (ResultType != TYPE_BIGINT && ResultType != TYPE_LARGEINT) {
+                // small to big, don't need check
+                if (v < static_cast<int64_t>(min) || v > static_cast<int64_t>(max)) {
+                    return Status::JsonFormatError("cast number overflow");
+                }
+            }
+            return static_cast<RunTimeCppType<ResultType>>(v);
+        } else if (slice.isDouble()) {
             auto v = slice.getDouble();
             if (v < static_cast<double>(min) || v > static_cast<double>(max)) {
                 return Status::JsonFormatError("cast number overflow");
             }
             return static_cast<RunTimeCppType<ResultType>>(v);
-        } else if (slice.isInt() || slice.isSmallInt()) {
-            auto v = slice.getIntUnchecked();
-            if (v < static_cast<int64_t>(min) || v > static_cast<int64_t>(max)) {
-                return Status::JsonFormatError("cast number overflow");
-            }
-            return static_cast<RunTimeCppType<ResultType>>(v);
         } else if (slice.isUInt()) {
             auto v = slice.getUIntUnchecked();
-            if (v < static_cast<uint64_t>(min) || v > static_cast<uint64_t>(max)) {
-                return Status::JsonFormatError("cast number overflow");
+            if constexpr (ResultType != TYPE_LARGEINT) {
+                // uint must be positive
+                if (v > static_cast<uint64_t>(max)) {
+                    return Status::JsonFormatError("cast number overflow");
+                }
             }
             return static_cast<RunTimeCppType<ResultType>>(v);
+        } else if (slice.isString()) {
+            // keep same as cast(string as int)
+            vpack::ValueLength len;
+            const char* str = slice.getStringUnchecked(len);
+            StringParser::ParseResult parseResult;
+            auto r = StringParser::string_to_int<RunTimeCppType<ResultType>>(str, len, &parseResult);
+            if (parseResult != StringParser::PARSE_SUCCESS) {
+                return Status::JsonFormatError("cast number from string failed");
+            }
+            return r;
         }
     } else if (lt_is_float<ResultType>) {
         // floating point type
-        if (slice.isDouble()) {
+        if (LIKELY(slice.isDouble())) {
             return static_cast<RunTimeCppType<ResultType>>(slice.getDouble());
-        }
-        if (slice.isInt() || slice.isSmallInt()) {
+        } else if (slice.isInt() || slice.isSmallInt()) {
             return static_cast<RunTimeCppType<ResultType>>(slice.getIntUnchecked());
-        }
-        if (slice.isUInt()) {
+        } else if (slice.isUInt()) {
             return static_cast<RunTimeCppType<ResultType>>(slice.getUIntUnchecked());
+        } else if (slice.isString()) {
+            // keep same as cast(string as double)
+            vpack::ValueLength len;
+            const char* str = slice.getStringUnchecked(len);
+            StringParser::ParseResult parseResult;
+            auto r = StringParser::string_to_float<RunTimeCppType<ResultType>>(str, len, &parseResult);
+            if (parseResult != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
+                return Status::JsonFormatError("cast float from string failed");
+            }
+            return r;
         }
     }
     return Status::JsonFormatError("not a number");
@@ -73,7 +98,7 @@ static StatusOr<RunTimeCppType<ResultType>> get_number_from_vpjson(const vpack::
 
 template <LogicalType ResultType, bool AllowThrowException>
 static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType>& result) {
-    if constexpr (!lt_is_arithmetic<ResultType> || !lt_is_string<ResultType> || ResultType != TYPE_JSON) {
+    if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && ResultType != TYPE_JSON) {
         if constexpr (AllowThrowException) {
             return Status::NotSupported(fmt::format("not supported type {}", type_to_string(ResultType)));
         }
@@ -88,7 +113,7 @@ static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType
 
     if constexpr (ResultType == TYPE_JSON) {
         JsonValue jv(slice);
-        result.append(jv);
+        result.append(std::move(jv));
         return Status::OK();
     }
 
@@ -97,20 +122,25 @@ static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType
             if (LIKELY(slice.isBoolean())) {
                 result.append(slice.getBool());
             } else if (slice.isString()) {
+                // keep same as cast(string as boolean)
                 vpack::ValueLength len;
                 const char* str = slice.getStringUnchecked(len);
                 StringParser::ParseResult parseResult;
-                bool b = StringParser::string_to_bool(str, len, &parseResult);
-
-                if (parseResult != StringParser::PARSE_SUCCESS) {
-                    if constexpr (AllowThrowException) {
-                        return Status::JsonFormatError(
-                                fmt::format("cast from JSON({}) to BOOLEAN failed", std::string(str, len)));
+                auto r = StringParser::string_to_int<int32_t>(str, len, &parseResult);
+                if (parseResult != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
+                    bool b = StringParser::string_to_bool(str, len, &parseResult);
+                    if (parseResult != StringParser::PARSE_SUCCESS) {
+                        if constexpr (AllowThrowException) {
+                            return Status::JsonFormatError(
+                                    fmt::format("cast from JSON({}) to BOOLEAN failed", std::string(str, len)));
+                        }
+                        result.append_null();
+                        return Status::OK();
                     }
-                    result.append_null();
-                    return Status::OK();
+                    result.append(b);
+                } else {
+                    result.append(r != 0);
                 }
-                result.append(b);
             } else {
                 auto res = get_number_from_vpjson<TYPE_DOUBLE>(slice);
                 res.ok() ? result.append(res.value() != 0) : result.append_null();

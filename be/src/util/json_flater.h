@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -55,6 +56,6 @@ public:
 private:
     std::vector<std::string> _flat_paths;
     std::vector<uint8_t> _flat_types;
-    std::unordered_map<std::string_view, int> _flat_index;
+    std::unordered_map<std::string, int> _flat_index;
 };
 } // namespace starrocks

@@ -18,6 +18,7 @@
 #include "util/json_flater.h"
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 
@@ -32,6 +33,7 @@
 #include "gutil/casts.h"
 #include "types/logical_type.h"
 #include "util/json.h"
+#include "util/json_converter.h"
 
 namespace starrocks {
 
@@ -43,6 +45,21 @@ void append_to_bool(const vpack::Slice* json, NullableColumn* result) {
             result->null_column()->append(0);
             auto res = json->getBool();
             down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(res);
+        } else if (json->isString()) {
+            vpack::ValueLength len;
+            const char* str = json->getStringUnchecked(len);
+            StringParser::ParseResult parseResult;
+            auto r = StringParser::string_to_int<int32_t>(str, len, &parseResult);
+            if (parseResult != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
+                bool b = StringParser::string_to_bool(str, len, &parseResult);
+                if (parseResult != StringParser::PARSE_SUCCESS) {
+                    result->append_nulls(1);
+                } else {
+                    down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(b);
+                }
+            } else {
+                down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(result->data_column().get())->append(r != 0);
+            }
         } else if (json->isNumber()) {
             result->null_column()->append(0);
             auto res = json->getNumber<double>();
@@ -58,16 +75,19 @@ void append_to_bool(const vpack::Slice* json, NullableColumn* result) {
 template <LogicalType TYPE>
 void append_to_number(const vpack::Slice* json, NullableColumn* result) {
     try {
-        if (json->isNone() || json->isNull()) {
+        if (LIKELY(json->isNumber() || json->isString())) {
+            auto st = get_number_from_vpjson<TYPE>(*json);
+            if (st.ok()) {
+                result->null_column()->append(0);
+                down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(st.value());
+            } else {
+                result->append_nulls(1);
+            }
+        } else if (json->isNone() || json->isNull()) {
             result->append_nulls(1);
-        } else if (json->isNumber()) {
-            result->null_column()->append(0);
-            RunTimeCppType<TYPE> res = json->getNumber<RunTimeCppType<TYPE>>();
-            down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(res);
         } else if (json->isBool()) {
             result->null_column()->append(0);
-            RunTimeCppType<TYPE> res = json->getBool();
-            down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(res);
+            down_cast<RunTimeColumnType<TYPE>*>(result->data_column().get())->append(json->getBool());
         } else {
             result->append_nulls(1);
         }
@@ -102,7 +122,7 @@ void append_to_json(const vpack::Slice* json, NullableColumn* result) {
         result->append_nulls(1);
     } else {
         result->null_column()->append(0);
-        down_cast<JsonColumn*>(result->data_column().get())->append(JsonValue(*json));
+        down_cast<JsonColumn*>(result->data_column().get())->append(std::move(JsonValue(*json)));
     }
 }
 
@@ -156,8 +176,7 @@ JsonFlater::JsonFlater(std::vector<std::string>& paths) : _flat_paths(paths) {
     }
 };
 
-JsonFlater::JsonFlater(std::vector<std::string>& paths, const std::vector<LogicalType>& types) {
-    _flat_paths = paths;
+JsonFlater::JsonFlater(std::vector<std::string>& paths, const std::vector<LogicalType>& types) : _flat_paths(paths) {
     for (const auto& t : types) {
         for (const auto& [k, v] : JSON_BITS_TO_LOGICAL_TYPE) {
             if (t == v) {
@@ -332,8 +351,9 @@ void JsonFlater::flatten(const Column* json_column, std::vector<ColumnPtr>* resu
 
         for (const auto& it : iter) {
             std::string_view path = it.key.stringView();
-            if (_flat_index.contains(path)) {
-                int index = _flat_index[path];
+            auto iter = _flat_index.find(std::string(path));
+            if (iter != _flat_index.end()) {
+                int index = iter->second;
                 uint8_t type = _flat_types[index];
                 auto func = JSON_BITS_FUNC.at(type);
                 func(&it.value, flat_jsons[index]);
