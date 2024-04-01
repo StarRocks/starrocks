@@ -167,8 +167,14 @@ public class Checkpoint extends FrontendDaemon {
                 continue;
             }
 
+<<<<<<< HEAD
             String url = "http://" + frontend.getHost() + ":" + Config.http_port
                     + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir;
+=======
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+                    + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir
+                    + "&for_global_state=" + belongToGlobalStateMgr;
+>>>>>>> 49765d445b ([BugFix] Fix metrics of meta_log_count wrong bug on share-data mode (#41996))
             try {
                 MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
                 successPushedCnt++;
