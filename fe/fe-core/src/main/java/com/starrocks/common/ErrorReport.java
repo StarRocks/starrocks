@@ -39,6 +39,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 
+import java.util.MissingFormatArgumentException;
+
 // Used to report error happened when execute SQL of user
 public class ErrorReport {
 
@@ -47,7 +49,11 @@ public class ErrorReport {
         if (pattern == null) {
             errMsg = errorCode.formatErrorMsg(objs);
         } else {
-            errMsg = String.format(pattern, objs);
+            try {
+                errMsg = String.format(pattern, objs);
+            } catch (MissingFormatArgumentException e) {
+                errMsg = pattern;
+            }
         }
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
