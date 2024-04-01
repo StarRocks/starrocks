@@ -52,7 +52,7 @@ LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr 
         : _type_desc(std::move(type_desc)), _root(std::move(root)) {}
 
 Status LevelBuilder::write(const LevelBuilderContext& ctx, const ColumnPtr& col,
-                           const std::function<void(const LevelBuilderResult&)>& write_leaf_callback) {
+                           const CallbackFunction& write_leaf_callback) {
     return _write_column_chunk(ctx, _type_desc, _root, col, write_leaf_callback);
 }
 
