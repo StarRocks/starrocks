@@ -95,12 +95,38 @@ displayed_sidebar: "Chinese"
      helm uninstall starrocks
      ```
 
-## 常见问题
+## 更多信息
 
-- 您可以挂载持久卷到 FE 和 BE pods，来存储 FE 元数据和日志，以及 BE 数据和日志。具体操作，参见 [Mounting Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart)。如果您未挂载持久卷，则 StarRocks Operator 将使用 emptyDir 来存储 FE 元数据和日志，以及 BE 数据和日志。当容器重新启动时，这些数据将丢失。
+- Github 仓库的地址：[starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)
 
-- 如果
+- Github 仓库中的指导文档包含更多信息，能够帮助您解决常见问题，例如：
 
-- 在 Artifict Hub 上搜索 StarRocks 维护的 Helm Chart
+  - 如果需要通过 Kubernetes API 管理对象，例如 StarRocks 集群，参见 [API refenrence](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md)。
 
-  请参见 [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。
+  - 如果需要挂载持久卷到 FE 和 BE pods，来存储 FE 元数据和日志，以及 BE 数据和日志，参见 [Mounting Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart)。
+
+    :::danger
+
+    如果您未挂载持久卷，则 StarRocks Operator 将使用 emptyDir 来存储 FE 元数据和日志，以及 BE 数据和日志。当容器重新启动时，这些数据将丢失。
+
+    :::
+
+  - 如果需要设置 root 用户密码：
+
+    - 部署 StarRocks 集群后手动设置 root 用户的密码，参见[Change root user password HOWTO](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md)。
+
+    - 部署 StarRocks 集群时自动设置 root 用户的密码，参见[Initializing the Root User Password in StarRocks](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md)。
+
+- 执行建表语句后出现如下报错，该如何解决：
+
+  - **报错信息**
+
+      ```plaintext
+      ERROR 1064 (HY000): Table replication num should be less than or equal to the number of available BE nodes. You can change this default by setting the replication_num table properties. Current alive backend is [10001]. , table=orders1, default_replication_num=3
+      ```
+
+  - **解决措施**
+
+      因为您部署的 StarRocks 集群中只有一个 BE，仅支持副本数量为 1，但是默认的副本数量为 3。您可以在 PROPERTIES 中修改副本数为 1 ，即 PROPERTIES( "replication_num" = "1" ) 。
+  
+- Artifict Hub 上 StarRocks 维护的 Helm Chart 地址：[kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。
