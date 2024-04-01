@@ -82,18 +82,25 @@ displayed_sidebar: "Chinese"
 
 ## 后续步骤
 
-**访问 StarRocks 集群**
+- **访问 StarRocks 集群**
 
-支持从 Kubernetes 集群内外访问 StarRocks 集群，具体操作，请参见[访问 StarRocks 集群](./sr_operator.md#访问-starrocks-集群)。
+   支持从 Kubernetes 集群内外访问 StarRocks 集群，具体操作，请参见[访问 StarRocks 集群](./sr_operator.md#访问-starrocks-集群)。
 
-**管理 StarRocks Operator 和 StarRocks 集群**
+- **管理 StarRocks Operator 和 StarRocks 集群**
 
-- 如果需要更新 StarRocks Operator 和 StarRocks 集群的配置，请参见 [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/)。
-- 如果需要卸载 StarRocks Operator 和 StarRocks 集群，可以执行如下命令：
+  - 如果需要更新 StarRocks Operator 和 StarRocks 集群的配置，请参见 [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/)。
+  - 如果需要卸载 StarRocks Operator 和 StarRocks 集群，可以执行如下命令：
 
-    ```Bash
-    helm uninstall starrocks
-    ```
+     ```Bash
+     helm uninstall starrocks
+     ```
 
-**在 Artifict Hub 上搜索 StarRocks 维护的 Helm Chart**
-请参见 [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。
+## 常见问题
+
+- 您可以挂载持久卷到 FE 和 BE pods，来存储 FE 元数据和日志，以及 BE 数据和日志。具体操作，参见 [Mounting Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart)。如果您未挂载持久卷，则 StarRocks Operator 将使用 emptyDir 来存储 FE 元数据和日志，以及 BE 数据和日志。当容器重新启动时，这些数据将丢失。
+
+- 如果
+
+- 在 Artifict Hub 上搜索 StarRocks 维护的 Helm Chart
+
+  请参见 [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。
