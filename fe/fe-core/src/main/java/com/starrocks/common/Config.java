@@ -331,6 +331,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int task_runs_max_history_number = 10000;
 
+    @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
+    public static int task_min_schedule_interval_s = 10;
+
     /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.
@@ -611,6 +614,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static String priority_networks = "";
 
+    @ConfField
+    public static boolean net_use_ipv6_when_priority_networks_empty = false;
+
     /**
      * Fe http port
      * Currently, all FEs' http port must be same.
@@ -623,7 +629,8 @@ public class Config extends ConfigBase {
      * some I/O operations. If set with a non-positive value, it will use netty's default
      * value <code>DEFAULT_EVENT_LOOP_THREADS</code> which is availableProcessors * 2. The
      * default value is 0 which is same as the previous behaviour.
-     * See <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
+     * See
+     * <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
      * for details.
      */
     @ConfField
@@ -771,14 +778,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String mysql_server_version = "5.1.0";
-
-    /**
-     * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
-     * Cluster id is usually a random integer generated when master FE start at first time.
-     * You can also specify one.
-     */
-    @ConfField
-    public static int cluster_id = -1;
 
     /**
      * If a backend is down for *max_backend_down_time_second*, a BACKEND_DOWN event will be triggered.
@@ -1234,6 +1233,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_create_partial_partition_in_batch = false;
+
+    @ConfField(mutable = true, comment = "The interval of create partition batch, to avoid too frequent")
+    public static long mv_create_partition_batch_interval_ms = 1000;
 
     /**
      * The number of query retries.
@@ -2044,13 +2046,6 @@ public class Config extends ConfigBase {
     public static int hms_process_events_parallel_num = 4;
 
     /**
-     * Used to split files stored in dfs such as object storage
-     * or hdfs into smaller files for hive external table
-     */
-    @ConfField(mutable = true)
-    public static long hive_max_split_size = 64L * 1024L * 1024L;
-
-    /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField(mutable = true)
@@ -2086,6 +2081,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_refresh_hive_partitions_statistics = true;
+
+    /**
+     * Enable reuse spark column statistics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_reuse_spark_column_statistics = true;
 
     /**
      * size of iceberg worker pool
@@ -2436,6 +2437,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
+    @ConfField(mutable = true)
+    public static String lake_compaction_warehouse = "default_warehouse";
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
 
@@ -2462,7 +2466,7 @@ public class Config extends ConfigBase {
                     "REMINDER: Set this to a value longer than the maximum possible execution time of queries," +
                     " to avoid deletion of versions still being accessed.\n" +
                     "NOTE: Increasing this value may increase the space usage of the remote storage system.")
-    public static long lake_autovacuum_grace_period_minutes = 5;
+    public static long lake_autovacuum_grace_period_minutes = 30;
 
     @ConfField(mutable = true, comment =
             "time threshold in hours, if a partition has not been updated for longer than this " +
@@ -2508,14 +2512,21 @@ public class Config extends ConfigBase {
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
      * e.g. 495501,495503
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     /**
      * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
      */
     @ConfField
-    public static boolean metadata_journal_ignore_replay_failure = false;
+    public static boolean metadata_journal_ignore_replay_failure = true;
+
+    /**
+     * In this mode, system will start some damon to recover metadata (Currently only partition version is supported)
+     * and any kind of loads will be rejected.
+     */
+    @ConfField
+    public static boolean metadata_enable_recovery_mode = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
@@ -2839,6 +2850,8 @@ public class Config extends ConfigBase {
     public static int replication_max_parallel_data_size_mb = 10240; // 10g
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+    @ConfField(mutable = true)
+    public static boolean enable_legacy_compatibility_for_replication = false;
 
     @ConfField(mutable = true)
     public static boolean jdbc_meta_default_cache_enable = false;
@@ -2866,4 +2879,7 @@ public class Config extends ConfigBase {
     // The longest supported VARCHAR length.
     @ConfField(mutable = true)
     public static int max_varchar_length = 1048576;
+
+    @ConfField(mutable = true)
+    public static int adaptive_choose_instances_threshold = 32;
 }

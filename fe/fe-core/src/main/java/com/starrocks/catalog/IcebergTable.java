@@ -100,13 +100,14 @@ public class IcebergTable extends Table {
     }
 
     public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
-                        String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
-                        Map<String, String> icebergProperties) {
+                        String remoteTableName, String comment, List<Column> schema,
+                        org.apache.iceberg.Table nativeTable, Map<String, String> icebergProperties) {
         super(id, srTableName, TableType.ICEBERG, schema);
         this.catalogName = catalogName;
         this.resourceName = resourceName;
         this.remoteDbName = remoteDbName;
         this.remoteTableName = remoteTableName;
+        this.comment =  comment;
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
     }
@@ -304,7 +305,7 @@ public class IcebergTable extends Table {
         Preconditions.checkNotNull(partitions);
 
         TIcebergTable tIcebergTable = new TIcebergTable();
-        tIcebergTable.setLocation(nativeTable.location());
+        tIcebergTable.setLocation(getNativeTable().location());
 
         List<TColumn> tColumns = Lists.newArrayList();
         for (Column column : getBaseSchema()) {
@@ -314,6 +315,12 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
+        if (nativeTable.schema().identifierFieldIds().size() > 0) {
+            tIcebergTable.setIceberg_equal_delete_schema(IcebergApiConverter.getTIcebergSchema(
+                    new Schema(nativeTable.schema().identifierFieldIds().stream()
+                            .map(id -> nativeTable.schema().findField(id)).collect(Collectors.toList()))));
+        }
+
 
         if (!partitions.isEmpty()) {
             TPartitionMap tPartitionMap = new TPartitionMap();
@@ -433,6 +440,8 @@ public class IcebergTable extends Table {
         private String resourceName;
         private String remoteDbName;
         private String remoteTableName;
+
+        private String comment;
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
@@ -452,6 +461,12 @@ public class IcebergTable extends Table {
 
         public Builder setCatalogName(String catalogName) {
             this.catalogName = catalogName;
+            return this;
+        }
+
+
+        public Builder setComment(String comment) {
+            this.comment = comment;
             return this;
         }
 
@@ -487,7 +502,7 @@ public class IcebergTable extends Table {
 
         public IcebergTable build() {
             return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
-                    fullSchema, nativeTable, icebergProperties);
+                    comment, fullSchema, nativeTable, icebergProperties);
         }
     }
 }

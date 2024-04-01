@@ -48,5 +48,5 @@ SELECT named_struct('a', null, 'b', 2, 'c', 3);
 
 ## 相关文档
 
-- [STRUCT data type](../../sql-statements/data-types/STRUCT.md)
+- [STRUCT data type](../../data-types/semi_structured/STRUCT.md)
 - [row/struct](row.md)

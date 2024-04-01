@@ -43,6 +43,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
+import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
@@ -108,8 +109,6 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BF_COLUMNS = "bloom_filter_columns";
     public static final String PROPERTIES_BF_FPP = "bloom_filter_fpp";
-    private static final double MAX_FPP = 0.05;
-    private static final double MIN_FPP = 0.0001;
 
     public static final String PROPERTIES_COLUMN_SEPARATOR = "column_separator";
     public static final String PROPERTIES_LINE_DELIMITER = "line_delimiter";
@@ -198,6 +197,7 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+    public static final String PROPERTY_MV_ENABLE_QUERY_REWRITE = "enable_query_rewrite";
 
     /**
      * Materialized View sort keys
@@ -236,6 +236,14 @@ public class PropertyAnalyzer {
         }
 
         if (properties == null) {
+            return inferredDataProperty;
+        }
+
+        // Data property is not supported in shared mode. Return the inferredDataProperty directly.
+        if (RunMode.isSharedDataMode()) {
+            properties.remove(mediumKey);
+            properties.remove(coolDownTimeKey);
+            properties.remove(coolDownTTLKey);
             return inferredDataProperty;
         }
 
@@ -562,12 +570,6 @@ public class PropertyAnalyzer {
                 if (olapTable.getColumns().stream().filter(column -> !column.isKey()).count() == 0) {
                     throw new AnalysisException("column_with_row storage type must have some non-key columns");
                 }
-                for (Column column : olapTable.getColumns()) {
-                    if (!column.isKey() && column.getType().isComplexType()) {
-                        throw new AnalysisException(
-                                "column_with_row storage type does not support complex type. column: " + column.getName());
-                    }
-                }
             } else {
                 throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");
             }
@@ -709,18 +711,8 @@ public class PropertyAnalyzer {
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {
         double bfFpp = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BF_FPP)) {
-            String bfFppStr = properties.get(PROPERTIES_BF_FPP);
-            try {
-                bfFpp = Double.parseDouble(bfFppStr);
-            } catch (NumberFormatException e) {
-                throw new AnalysisException("Bloom filter fpp is not Double");
-            }
-
-            // check range
-            if (bfFpp < MIN_FPP || bfFpp > MAX_FPP) {
-                throw new AnalysisException("Bloom filter fpp should in [" + MIN_FPP + ", " + MAX_FPP + "]");
-            }
-
+            bfFpp = BloomFilterIndexUtil.analyzeBloomFilterFpp(properties);
+            // have to remove this from properties, which means it's valid and checked already
             properties.remove(PROPERTIES_BF_FPP);
         }
 
@@ -1005,7 +997,8 @@ public class PropertyAnalyzer {
             if (Strings.isNullOrEmpty(uniqueConstraintStr)) {
                 return uniqueConstraints;
             }
-            uniqueConstraints = UniqueConstraint.parse(uniqueConstraintStr);
+            uniqueConstraints = UniqueConstraint.parse(table.getCatalogName(), db.getFullName(), table.getName(),
+                    uniqueConstraintStr);
             if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
                 throw new SemanticException(String.format("invalid unique constraint:%s", uniqueConstraintStr));
             }

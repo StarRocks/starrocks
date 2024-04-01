@@ -2021,6 +2021,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
+        starRocksAssert.dropMaterializedView("mv_insert");
     }
 
     /**
@@ -2088,7 +2089,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             String mvName = mvNameGen.apply(i);
             starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
                     "refresh async " +
-                    "properties('query_rewrite_consistency'='loose') " +
+                    "properties('query_rewrite_consistency'='nocheck') " +
                     "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension);
         }
 
@@ -2114,20 +2115,21 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testOuterJoinRewrite() throws Exception {
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` (`event_id`, `event_time`, `event_time1`)\n" +
-                "PARTITION BY (`event_time`)\n" +
-                "DISTRIBUTED BY HASH(`event_id`) BUCKETS 1\n" +
-                "REFRESH ASYNC\n" +
-                "PROPERTIES (\n" +
-                "\"replicated_storage\" = \"true\",\n" +
-                "\"partition_refresh_number\" = \"2\",\n" +
-                "\"force_external_table_query_rewrite\" = \"CHECKED\",\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"HDD\"\n" +
-                ")\n" +
-                "AS SELECT `a`.`event_id`, `a`.`event_time`, `b`.`event_time1`\n" +
-                "FROM `test`.`test10` AS `a` LEFT OUTER JOIN `test`.`test11` AS `b`" +
-                " ON (`a`.`event_id` = `b`.`event_id1`) AND (`a`.`event_time` = `b`.`event_time1`);");
+        starRocksAssert.withMaterializedView(
+                "CREATE MATERIALIZED VIEW `mv1` (`event_id`, `event_time`, `event_time1`)\n" +
+                        "PARTITION BY (`event_time`)\n" +
+                        "DISTRIBUTED BY HASH(`event_id`) BUCKETS 1\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES (\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"partition_refresh_number\" = \"2\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"CHECKED\",\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `a`.`event_id`, `a`.`event_time`, `b`.`event_time1`\n" +
+                        "FROM `test`.`test10` AS `a` LEFT OUTER JOIN `test`.`test11` AS `b`" +
+                        " ON (`a`.`event_id` = `b`.`event_id1`) AND (`a`.`event_time` = `b`.`event_time1`);");
 
         connectContext.executeSql("refresh materialized view mv1 with sync mode");
         {
@@ -2199,6 +2201,69 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     ") > 0\n";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "mv11", "PREDICATES: 10: ct > 0");
+        }
+    }
+
+    @Test
+    public void testMvRewriteWithSortKey() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
+        {
+            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v1 " +
+                    "DISTRIBUTED BY RANDOM buckets 1 " +
+                    "order by (v1) " +
+                    "REFRESH MANUAL " +
+                    "as\n" +
+                    "select v1, v2, sum(v3) from t0 group by v1, v2");
+            cluster.runSql("test", "refresh materialized view mv_order_by_v1 with sync mode");
+            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v2 " +
+                    "DISTRIBUTED BY RANDOM buckets 1 " +
+                    "order by (v2) " +
+                    "REFRESH MANUAL " +
+                    "as\n" +
+                    "select v1, v2, sum(v3) from t0 group by v1, v2");
+            cluster.runSql("test", "refresh materialized view mv_order_by_v2 with sync mode");
+            {
+                // in predicate
+                String query = "select v1, v2, sum(v3) from t0 where v1 in (1, 2, 3) group by v1, v2;";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_order_by_v1");
+            }
+            {
+                // equal predicate
+                String query = "select v1, v2, sum(v3) from t0 where v1 = 1 group by v1, v2;";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_order_by_v1");
+            }
+            starRocksAssert.dropMaterializedView("mv_order_by_v1");
+            starRocksAssert.dropMaterializedView("mv_order_by_v2");
+        }
+        {
+            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v1 " +
+                    "DISTRIBUTED BY RANDOM buckets 1 " +
+                    "order by (v1) " +
+                    "REFRESH MANUAL " +
+                    "as\n" +
+                    "select v1, v2, v3 from t0");
+            cluster.runSql("test", "refresh materialized view mv_order_by_v1 with sync mode");
+            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v2 " +
+                    "DISTRIBUTED BY RANDOM buckets 1 " +
+                    "order by (v2) " +
+                    "REFRESH MANUAL " +
+                    "as\n" +
+                    "select v1, v2, v3 from t0");
+            cluster.runSql("test", "refresh materialized view mv_order_by_v2 with sync mode");
+            {
+                String query = "select v1, v2, v3 from t0 where v1 in (1, 2, 3);";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_order_by_v1");
+            }
+            {
+                String query = "select v1, v2, v3 from t0 where v1 = 1;";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "mv_order_by_v1");
+            }
+            starRocksAssert.dropMaterializedView("mv_order_by_v1");
+            starRocksAssert.dropMaterializedView("mv_order_by_v2");
         }
     }
 }

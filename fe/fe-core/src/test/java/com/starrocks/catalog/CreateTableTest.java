@@ -884,8 +884,8 @@ public class CreateTableTest {
         String showSql = "show create table test.`test_location_no_prop`";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
-        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        ShowResultSet showResultSet = showExecutor.execute();
+        
+        ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
@@ -916,8 +916,7 @@ public class CreateTableTest {
         showSql = "show create table test.`test_location_no_backend_prop`";
         showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
-        showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-        showResultSet = showExecutor.execute();
+        showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
         System.out.println(showResultSet.getResultRows());
         Assert.assertFalse(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
@@ -989,8 +988,7 @@ public class CreateTableTest {
                 showSql = "show create table test.`test_location_prop_" + i + "`";
                 showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                         connectContext);
-                showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
-                showResultSet = showExecutor.execute();
+                showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
                 System.out.println(showResultSet.getResultRows());
                 Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                         PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"" + expectedAnalyzedProp + "\""));

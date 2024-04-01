@@ -35,4 +35,9 @@ public class AnalyzeHistogramDesc extends AnalyzeTypeDesc {
     public void setBuckets(long buckets) {
         this.buckets = buckets;
     }
+
+    @Override
+    public boolean isHistogram() {
+        return true;
+    }
 }

@@ -20,22 +20,11 @@ public class ImageHeader {
     @SerializedName("beid")
     private long batchEndId;
 
-    @SerializedName("dcc")
-    private boolean isDefaultClusterCreated;
-
     public long getBatchEndId() {
         return batchEndId;
     }
 
     public void setBatchEndId(long batchEndId) {
         this.batchEndId = batchEndId;
-    }
-
-    public boolean isDefaultClusterCreated() {
-        return isDefaultClusterCreated;
-    }
-
-    public void setDefaultClusterCreated(boolean defaultClusterCreated) {
-        isDefaultClusterCreated = defaultClusterCreated;
     }
 }

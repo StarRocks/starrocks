@@ -75,7 +75,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 

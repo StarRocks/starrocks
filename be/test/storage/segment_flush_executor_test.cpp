@@ -35,6 +35,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
 #include "testutil/assert.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -281,6 +282,12 @@ TEST_F(SegmentFlushExecutorTest, test_write_and_commit_segment) {
     ASSERT_OK(get_prepared_rowset(_tablet->tablet_id(), delta_writer->txn_id(), _partition_id, &prepared_rowset));
     check_single_segment_rowset_result(prepared_rowset, 10);
     ASSERT_OK(StorageEngine::instance()->txn_manager()->delete_txn(_partition_id, _tablet, delta_writer->txn_id()));
+
+    // just verify the metrics have value, rather than verify it accurately
+    // because other test cases may also update the metrics concurrently if
+    // run tests in parallel, and it's hard to get the accurate value
+    ASSERT_TRUE(StarRocksMetrics::instance()->segment_flush_total.value() > 0);
+    ASSERT_TRUE(StarRocksMetrics::instance()->segment_flush_bytes_total.value() > 0);
 }
 
 TEST_F(SegmentFlushExecutorTest, test_submit_after_cancel) {

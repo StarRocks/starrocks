@@ -158,6 +158,9 @@ public:
     RuntimeProfile* runtime_profile() { return _profile.get(); }
     std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _profile; }
 
+    RuntimeProfile* load_channel_profile() { return _load_channel_profile.get(); }
+    std::shared_ptr<RuntimeProfile> load_channel_profile_ptr() { return _load_channel_profile; }
+
     [[nodiscard]] Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
@@ -434,7 +437,27 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
-    bool is_jit_enabled() const { return _query_options.__isset.enable_jit && _query_options.enable_jit; }
+    bool enable_wait_dependent_event() const {
+        return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
+    }
+
+    bool is_jit_enabled() const;
+
+    bool is_adaptive_jit() const { return _query_options.__isset.jit_level && _query_options.jit_level == 1; }
+
+    void set_jit_level(const int level) { _query_options.__set_jit_level(level); }
+
+    // CompilableExprType
+    // arithmetic -> 2, except /, %
+    // cast -> 4
+    // case -> 8
+    // cmp -> 16
+    // logical -> 32
+    // div -> 64
+    // mod -> 128
+    bool can_jit_expr(const int jit_label) {
+        return (_query_options.jit_level == 1) || ((_query_options.jit_level & jit_label));
+    }
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 
@@ -451,6 +474,7 @@ private:
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
     std::shared_ptr<RuntimeProfile> _profile;
+    std::shared_ptr<RuntimeProfile> _load_channel_profile;
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
     int _func_version = 0;

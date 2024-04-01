@@ -132,19 +132,20 @@ StarRocks 集群的运行模式。有效值：
 
 <SharedDataUseIntro />
 
-以下示例使用 HMAC Access Key 以及 Secret Key 认证为 GCS 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活并将其设置为默认存储卷：
+以下示例使用 HMAC Access Key 以及 Secret Key 认证为 GCS 存储空间 `defaultbucket` 创建存储卷 `def_volume`，激活[分区前缀](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md#分区前缀)功能，并将其设置为默认存储卷：
 
 ```SQL
 CREATE STORAGE VOLUME def_volume
 TYPE = S3
-LOCATIONS = ("s3://defaultbucket/test/")
+LOCATIONS = ("s3://defaultbucket")
 PROPERTIES
 (
     "enabled" = "true",
     "aws.s3.region" = "us-east1",
     "aws.s3.endpoint" = "https://storage.googleapis.com",
     "aws.s3.access_key" = "<HMAC_access_key>",
-    "aws.s3.secret_key" = "<HMAC_secret_key>"
+    "aws.s3.secret_key" = "<HMAC_secret_key>",
+    "aws.s3.enable_partitioned_prefix" = "true"
 );
 
 SET def_volume AS DEFAULT STORAGE VOLUME;

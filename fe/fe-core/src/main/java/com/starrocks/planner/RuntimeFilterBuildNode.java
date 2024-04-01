@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.starrocks.analysis.DescriptorTable;
@@ -23,7 +22,8 @@ import java.util.List;
 public interface RuntimeFilterBuildNode {
     List<RuntimeFilterDescription> getBuildRuntimeFilters();
 
-    void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl);
+    void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl,
+                             ExecGroupSets execGroupSets);
 
     void clearBuildRuntimeFilters();
 }

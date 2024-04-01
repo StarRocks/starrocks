@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,16 +35,6 @@ public class CTETransformerContext {
         this.cteRefIdMapping = new HashMap<>();
         this.uniqueId = new AtomicInteger();
         this.cteMaxLimit = cteMaxLimit;
-    }
-
-    public CTETransformerContext(CTETransformerContext other) {
-        // This must be a copy of the context, because the new Relation may contain cte with the same name,
-        // and the internal cte with the same name will overwrite the original mapping
-        this.cteExpressions = Maps.newHashMap(other.cteExpressions);
-        // must use one instance
-        this.cteRefIdMapping = other.cteRefIdMapping;
-        this.uniqueId = other.uniqueId;
-        this.cteMaxLimit = other.cteMaxLimit;
     }
 
     public Map<Integer, ExpressionMapping> getCteExpressions() {

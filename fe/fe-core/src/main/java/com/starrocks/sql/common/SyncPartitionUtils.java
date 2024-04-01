@@ -566,7 +566,6 @@ public class SyncPartitionUtils {
                     mvNeedRefreshPartitions.addAll(mvAssociatedPartitions);
                 }
 
-                Preconditions.checkState(mvNeedRefreshPartitions.contains(needRefreshMvPartitionName));
                 if (mvNeedRefreshPartitions.size() > 1) {
                     needRefreshMvPartitionNames.addAll(mvNeedRefreshPartitions);
                     mvPotentialRefreshPartitionNames.add(needRefreshMvPartitionName);
@@ -665,6 +664,10 @@ public class SyncPartitionUtils {
                 break;
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);
+        }
+        final DateLiteral maxDateTime = DateLiteral.createMaxValue(Type.DATETIME);
+        if (truncUpperDateTime.isAfter(maxDateTime.toLocalDateTime())) {
+            return upperDateTime;
         }
         return truncUpperDateTime;
     }

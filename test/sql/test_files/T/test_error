@@ -1,0 +1,5 @@
+-- name: test_error
+
+-- path error
+select * from files("path" = "xxx", "format" = "parquet");
+select * from files("path" = "hdfs://hdfs://test/x", "format" = "parquet");

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "English"
 toc_max_heading_level: 4
+keywords: ['Broker Load']
 ---
 
 # Load data from HDFS
@@ -136,14 +137,6 @@ The system returns the following query result:
 +--------------+-----------+------+-------+---------+-------+
 ```
 
-Compare the inferred schema with the schema created by hand:
-
-- data types
-- nullable
-- key fields
-
-To better control the schema of the destination table and for better query performance, we recommend that you specify the table schema by hand in production environments.
-
 Query the table to verify that the data has been loaded into it. Example:
 
 ```SQL
@@ -203,6 +196,37 @@ DUPLICATE KEY(UserID)
 DISTRIBUTED BY HASH(UserID);
 ```
 
+Display the schema so that you can compare it with the inferred schema produced by the `FILES()` table function:
+
+```sql
+DESCRIBE user_behavior_declared;
+```
+
+```plaintext
++--------------+----------------+------+-------+---------+-------+
+| Field        | Type           | Null | Key   | Default | Extra |
++--------------+----------------+------+-------+---------+-------+
+| UserID       | int            | NO   | true  | NULL    |       |
+| ItemID       | int            | NO   | false | NULL    |       |
+| CategoryID   | int            | NO   | false | NULL    |       |
+| BehaviorType | varchar(65533) | NO   | false | NULL    |       |
+| Timestamp    | varbinary      | NO   | false | NULL    |       |
++--------------+----------------+------+-------+---------+-------+
+5 rows in set (0.00 sec)
+```
+
+:::tip
+
+Compare the schema you just created with the schema inferred earlier using the `FILES()` table function. Look at:
+
+- data types
+- nullable
+- key fields
+
+To better control the schema of the destination table and for better query performance, we recommend that you specify the table schema by hand in production environments.
+
+:::
+
 After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
 
 ```SQL
@@ -243,6 +267,8 @@ You can query the progress of INSERT jobs from the [`loads`](../reference/inform
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
 ```SQL
@@ -272,8 +298,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
 
 > **NOTE**
 >
@@ -526,7 +550,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
   1 row in set (0.00 sec)
   ```
 
-- Query the progress of Pipe jobs from the [`information_schema.pipes`](../reference/information_schema/pipes.md) view.
+- Query the progress of Pipe jobs from the [`pipes`](../reference/information_schema/pipes.md) view in the StarRocks Information Schema.
 
   ```SQL
   SELECT * FROM information_schema.pipes;
@@ -550,7 +574,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
 
 #### Check file status
 
-You can query the load status of the files loaded from the [`information_schema.pipe_files`](../reference/information_schema/pipe_files.md) view.
+You can query the load status of the files loaded from the [`pipe_files`](../reference/information_schema/pipe_files.md) view in the StarRocks Information Schema.
 
 ```SQL
 SELECT * FROM information_schema.pipe_files;

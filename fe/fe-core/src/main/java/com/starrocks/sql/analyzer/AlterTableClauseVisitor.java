@@ -87,7 +87,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
-public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
+public class AlterTableClauseVisitor implements AstVisitor<Void, ConnectContext> {
 
     private Table table;
 

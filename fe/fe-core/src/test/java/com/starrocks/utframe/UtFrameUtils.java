@@ -41,8 +41,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.starlet.StarletAgentFactory;
+import com.starrocks.analysis.HintNode;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
@@ -74,6 +77,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
@@ -91,20 +95,22 @@ import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -121,10 +127,10 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.codec.binary.Hex;
@@ -144,6 +150,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -321,6 +328,13 @@ public class UtFrameUtils {
         return addMockBackend(backend, backendId);
     }
 
+    public static ComputeNode addMockComputeNode(int backendId) throws Exception {
+        // start be
+        MockedBackend backend = new MockedBackend("127.0.108.1");
+        // add be
+        return addMockComputeNode(backend, backendId);
+    }
+
     private static Backend addMockBackend(MockedBackend backend, int backendId) {
         Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
@@ -338,12 +352,29 @@ public class UtFrameUtils {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             String workerAddress = backend.getHost() + ":" + starletPort;
-            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress,
+                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         }
         return be;
+    }
+
+    private static ComputeNode addMockComputeNode(MockedBackend backend, int backendId) {
+        ComputeNode cn = new ComputeNode(backendId, backend.getHost(), backend.getHeartBeatPort());
+        cn.setAlive(true);
+        cn.setBePort(backend.getBeThriftPort());
+        cn.setBrpcPort(backend.getBrpcPort());
+        cn.setHttpPort(backend.getHttpPort());
+        cn.setStarletPort(backend.getStarletPort());
+        cn.setIsStoragePath(false);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = backend.getStarletPort();
+            String workerAddress = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(cn.getId(), workerAddress,
+                    StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        }
+        return cn;
     }
 
     public static void addBroker(String brokerName) throws Exception {
@@ -432,18 +463,8 @@ public class UtFrameUtils {
 
         try {
             // update session variable by adding optional hints.
-            if (statementBase instanceof QueryStatement &&
-                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
-                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    connectContext.setSessionVariable(sessionVariable);
-                }
+            if (statementBase.isExistQueryScopeHint()) {
+                processQueryScopeHint(statementBase, connectContext);
             }
 
             ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
@@ -451,8 +472,7 @@ public class UtFrameUtils {
             CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
             return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
         } finally {
-            // before returning we have to restore session variable.
-            connectContext.setSessionVariable(oldSessionVariable);
+            clearQueryScopeHintContext(connectContext, oldSessionVariable);
         }
     }
 
@@ -483,19 +503,8 @@ public class UtFrameUtils {
         StatementBase statementBase = statements.get(0);
 
         try {
-            // update session variable by adding optional hints.
-            if (statementBase instanceof QueryStatement &&
-                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
-                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    connectContext.setSessionVariable(sessionVariable);
-                }
+            if (statementBase.isExistQueryScopeHint()) {
+                processQueryScopeHint(statementBase, connectContext);
             }
 
             ExecPlan execPlan;
@@ -508,8 +517,7 @@ public class UtFrameUtils {
             validatePlanConnectedness(execPlan);
             return returnedSupplier.apply(connectContext, statementBase, execPlan);
         } finally {
-            // before returning we have to restore session variable.
-            connectContext.setSessionVariable(oldSessionVariable);
+            clearQueryScopeHintContext(connectContext, oldSessionVariable);
         }
     }
 
@@ -604,6 +612,9 @@ public class UtFrameUtils {
 
     private static void testView(ConnectContext connectContext, String originStmt, StatementBase statementBase)
             throws Exception {
+        if (!FeConstants.unitTestView) {
+            return;
+        }
         if (statementBase instanceof QueryStatement && !connectContext.getDatabase().isEmpty() &&
                 !statementBase.isExplain()) {
             String viewName = "view" + INDEX.getAndIncrement();
@@ -618,7 +629,7 @@ public class UtFrameUtils {
                     com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
                 } catch (Exception e) {
                     System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
-                            + "\nError msg:"  + e.getMessage());
+                            + "\nError msg:" + e.getMessage());
                     throw e;
                 }
             } catch (SemanticException | AnalysisException e) {
@@ -691,6 +702,15 @@ public class UtFrameUtils {
             UtFrameUtils.dropMockBackend(backendId++);
         }
 
+        // mock be num
+        backendId = 10002;
+        int beNumToAdd = Math.min(3, replayDumpInfo.getBeNum());
+        for (int i = 1; i < beNumToAdd; ++i) {
+            //UtFrameUtils.addMockBackend(backendId++);
+            String host = String.format("127.0.0.%s", i + 1);
+            UtFrameUtils.addMockBackend(backendId++, host, 9060);
+        }
+
         Set<String> dbSet = replayDumpInfo.getCreateTableStmtMap().keySet().stream().map(key -> key.split("\\.")[0])
                 .collect(Collectors.toSet());
         dbSet.forEach(db -> {
@@ -703,28 +723,53 @@ public class UtFrameUtils {
             }
         });
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateTableStmtMap().entrySet()) {
-            String dbName = entry.getKey().split("\\.")[0];
+            if (entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
+                continue;
+            }
+            String[] nameParts = entry.getKey().split("\\.");
+            String dbName = nameParts.length == 2 ? nameParts[0] : connectContext.getDatabase();
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
             }
+            String tableName = nameParts.length == 2 ? nameParts[1] : nameParts[0];
+            String dropTable = String.format("drop table if exists `%s`.`%s`;", dbName, tableName);
+            connectContext.executeSql(dropTable);
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withSingleReplicaTable(entry.getValue());
+            starRocksAssert.withTable(entry.getValue());
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
-            String dbName = entry.getKey().split("\\.")[0];
+            String normalizedViewName = entry.getKey();
+            String[] nameParts = normalizedViewName.split("\\.");
+            String dbName = nameParts.length == 2 ? nameParts[0] : connectContext.getDatabase();
             if (!starRocksAssert.databaseExist(dbName)) {
                 starRocksAssert.withDatabase(dbName);
             }
+            String viewName = nameParts.length == 2 ? nameParts[1] : nameParts[0];
             starRocksAssert.useDatabase(dbName);
-            String createView = "create view " + entry.getKey() + " as " + entry.getValue();
+            String dropView = String.format("drop view if exists `%s`.`%s`;", dbName, viewName);
+            connectContext.executeSql(dropView);
+            String createView = String.format("create view `%s`.`%s` as %s",
+                    dbName, viewName, replayDumpInfo.getCreateViewStmtMap().get(normalizedViewName));
             starRocksAssert.withView(createView);
         }
-        // mock be num
-        backendId = 10002;
-        for (int i = 1; i < replayDumpInfo.getBeNum(); ++i) {
-            UtFrameUtils.addMockBackend(backendId++);
+        // create materialized views
+        for (Map.Entry<String, String> entry : replayDumpInfo.getCreateTableStmtMap().entrySet()) {
+            if (!entry.getValue().contains("CREATE MATERIALIZED VIEW")) {
+                continue;
+            }
+            String[] nameParts = entry.getKey().split("\\.");
+            String dbName = nameParts.length == 2 ? nameParts[0] : connectContext.getDatabase();
+            if (!starRocksAssert.databaseExist(dbName)) {
+                starRocksAssert.withDatabase(dbName);
+            }
+            String mvName = nameParts.length == 2 ? nameParts[1] : nameParts[0];
+            String dropMv = String.format("drop materialized view if exists `%s`.`%s`;", dbName, mvName);
+            connectContext.executeSql(dropMv);
+            starRocksAssert.useDatabase(dbName);
+            starRocksAssert.withAsyncMvAndRefresh(entry.getValue());
         }
+
         // mock be core stat
         for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
             BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
@@ -768,36 +813,30 @@ public class UtFrameUtils {
         }
     }
 
-    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
-            throws Exception {
-        Map<String, String> optHints = null;
-        SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
-        if (statement.getQueryRelation() instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) statement.getQueryRelation();
-            optHints = selectRelation.getSelectList().getOptHints();
-        }
-
-        if (optHints != null) {
-            SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
-            for (String key : optHints.keySet()) {
-                VariableMgr.setSystemVariable(sessionVariable,
-                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-            }
-            connectContext.setSessionVariable(sessionVariable);
-        }
-
-        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-
+    public static LogicalPlan getQueryLogicalPlan(ConnectContext connectContext,
+                                                  ColumnRefFactory columnRefFactory,
+                                                  QueryStatement statement) {
         LogicalPlan logicalPlan;
         try (Timer t = Tracers.watchScope("Transformer")) {
             logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
                     .transform((statement).getQueryRelation());
 
         }
+        return logicalPlan;
+    }
 
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      ColumnRefFactory columnRefFactory,
+                                                      LogicalPlan logicalPlan,
+                                                      OptimizerConfig optimizerConfig) {
         OptExpression optimizedPlan;
         try (Timer t = Tracers.watchScope("Optimizer")) {
-            Optimizer optimizer = new Optimizer();
+            Optimizer optimizer = null;
+            if (optimizerConfig != null) {
+                optimizer = new Optimizer(optimizerConfig);
+            } else {
+                optimizer = new Optimizer();
+            }
             optimizedPlan = optimizer.optimize(
                     connectContext,
                     logicalPlan.getRoot(),
@@ -805,16 +844,38 @@ public class UtFrameUtils {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
         }
+        return optimizedPlan;
+    }
 
-        ExecPlan execPlan;
-        try (Timer t = Tracers.watchScope("Builder")) {
-            execPlan = PlanFragmentBuilder
-                    .createPhysicalPlan(optimizedPlan, connectContext,
-                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
-                            TResultSinkType.MYSQL_PROTOCAL, true);
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      ColumnRefFactory columnRefFactory,
+                                                      LogicalPlan logicalPlan) {
+        return getQueryOptExpression(connectContext, columnRefFactory, logicalPlan, null);
+    }
+
+    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
+            throws Exception {
+        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        try {
+            if (statement.isExistQueryScopeHint()) {
+                processQueryScopeHint(statement, connectContext);
+            }
+
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan = getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+            OptExpression optimizedPlan = getQueryOptExpression(connectContext, columnRefFactory, logicalPlan);
+
+            ExecPlan execPlan;
+            try (Timer t = Tracers.watchScope("Builder")) {
+                execPlan = PlanFragmentBuilder
+                        .createPhysicalPlan(optimizedPlan, connectContext,
+                                logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                                TResultSinkType.MYSQL_PROTOCAL, true);
+            }
+            return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
+        } finally {
+            clearQueryScopeHintContext(connectContext, oldSessionVariable);
         }
-
-        return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
@@ -924,6 +985,11 @@ public class UtFrameUtils {
 
     public static String getPlanThriftString(ConnectContext ctx, String queryStr) throws Exception {
         return UtFrameUtils.getThriftString(UtFrameUtils.getPlanAndFragment(ctx, queryStr).second.getFragments());
+    }
+
+    public static String getThriftDescTbl(ConnectContext ctx, String queryStr) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(ctx, queryStr);
+        return pair.second.getDescTbl().toThrift().toString();
     }
 
     // Lock all database before analyze
@@ -1065,7 +1131,7 @@ public class UtFrameUtils {
                 try (DataInputStream dis = new DataInputStream(
                         new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
                     je.readFields(dis);
-                    EditLog.loadJournal(GlobalStateMgr.getCurrentState(), je);
+                    GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), je);
                     // System.out.println("replayed journal type: " + je.getOpCode());
                 } catch (JournalInconsistentException e) {
                     System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());
@@ -1202,5 +1268,47 @@ public class UtFrameUtils {
                 }
             }
         };
+    }
+
+    private static void processQueryScopeHint(StatementBase parsedStmt, ConnectContext context) throws DdlException {
+        SessionVariable clonedSessionVariable = null;
+        Map<String, UserVariable> userVariablesFromHint = Maps.newHashMap();
+        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+            if (hint instanceof SetVarHint) {
+                if (clonedSessionVariable == null) {
+                    clonedSessionVariable = (SessionVariable) context.getSessionVariable().clone();
+                }
+                for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                    VariableMgr.setSystemVariable(clonedSessionVariable,
+                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                }
+            } else if (hint instanceof UserVariableHint) {
+                UserVariableHint userVariableHint = (UserVariableHint) hint;
+                for (Map.Entry<String, UserVariable> entry : userVariableHint.getUserVariables().entrySet()) {
+                    SetStmtAnalyzer.analyzeUserVariable(entry.getValue());
+                    if (entry.getValue().getEvaluatedExpression() == null) {
+                        entry.getValue().setEvaluatedExpression(new StringLiteral("MOCK_HINT_VALUE"));
+                    }
+                    userVariablesFromHint.put(entry.getKey(), entry.getValue());
+                }
+
+            }
+        }
+
+        if (clonedSessionVariable != null) {
+            context.setSessionVariable(clonedSessionVariable);
+        }
+        context.getUserVariables().putAll(userVariablesFromHint);
+    }
+
+    private static void clearQueryScopeHintContext(ConnectContext context, SessionVariable sessionVariableBackup) {
+        context.setSessionVariable(sessionVariableBackup);
+        Iterator<Map.Entry<String, UserVariable>> iterator = context.getUserVariables().entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, UserVariable> entry = iterator.next();
+            if (entry.getValue().isFromHint()) {
+                iterator.remove();
+            }
+        }
     }
 }

@@ -60,4 +60,4 @@ mysql> select from_binary(to_binary('STARROCKS', 'utf8'), 'utf8');
 ## References
 
 - [to_binary](to_binary.md)
-- [BINARY/VARBINARY](../../sql-statements/data-types/BINARY.md)
+- [BINARY/VARBINARY](../../data-types/string-type/BINARY.md)

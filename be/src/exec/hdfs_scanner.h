@@ -125,6 +125,7 @@ struct HdfsScanProfile {
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_align_io_bytes = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_timer = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;
@@ -141,6 +142,9 @@ struct HdfsScanProfile {
 struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
     const THdfsScanRange* scan_range = nullptr;
+
+    bool enable_split_tasks = false;
+    const pipeline::ScanSplitContext* split_context = nullptr;
 
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
@@ -164,7 +168,7 @@ struct HdfsScannerParams {
     // The file last modification time
     int64_t modification_time = 0;
 
-    TupleDescriptor* tuple_desc = nullptr;
+    const TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
@@ -195,6 +199,8 @@ struct HdfsScannerParams {
 
     const TIcebergSchema* iceberg_schema = nullptr;
 
+    const TIcebergSchema* iceberg_equal_delete_schema = nullptr;
+
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     bool use_datacache = false;
@@ -204,21 +210,22 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool use_file_metacache = false;
+    bool orc_use_column_names = false;
     MORParams mor_params;
 };
 
 struct HdfsScannerContext {
     struct ColumnInfo {
-        int col_idx;
-        TypeDescriptor col_type;
-        SlotId slot_id;
-        std::string col_name;
+        int idx_in_chunk;
         SlotDescriptor* slot_desc;
         bool decode_needed = true;
 
-        std::string formated_col_name(bool case_sensitive) {
-            return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+        std::string formatted_name(bool case_sensitive) const {
+            return case_sensitive ? name() : boost::algorithm::to_lower_copy(name());
         }
+        const std::string& name() const { return slot_desc->col_name(); }
+        const SlotId slot_id() const { return slot_desc->id(); }
+        const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -235,6 +242,9 @@ struct HdfsScannerContext {
 
     // scan range
     const THdfsScanRange* scan_range = nullptr;
+    bool enable_split_tasks = false;
+    const pipeline::ScanSplitContext* split_context = nullptr;
+    std::vector<pipeline::ScanSplitContextPtr>* split_tasks = nullptr;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -248,6 +258,8 @@ struct HdfsScannerContext {
     std::vector<std::string>* hive_column_names = nullptr;
 
     bool case_sensitive = false;
+
+    bool orc_use_column_names = false;
 
     bool can_use_any_column = false;
 
@@ -267,12 +279,18 @@ struct HdfsScannerContext {
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
     void update_materialized_columns(const std::unordered_set<std::string>& names);
+
     // "not existed columns" are materialized columns not found in file
     // this usually happens when use changes schema. for example
     // user create table with 3 fields A, B, C, and there is one file F1
     // but user change schema and add one field like D.
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
-    void update_not_existed_columns_of_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // If there is no partition column in the chunk，append partition column to chunk，
+    // otherwise update partition column in chunk
+    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
@@ -280,11 +298,6 @@ struct HdfsScannerContext {
 
     // other helper functions.
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
-
-    void append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-
-    // If there is no partition column in the chunk，append partition column to chunk，otherwise update partition column in chunk
-    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
 
@@ -314,6 +327,9 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+        split_tasks->swap(_split_tasks);
+    }
 
 protected:
     Status open_random_access_file();
@@ -341,6 +357,9 @@ protected:
     int64_t _total_running_time = 0;
 
     std::shared_ptr<DefaultMORProcessor> _mor_processor;
+
+    const pipeline::ScanSplitContext* _split_context = nullptr;
+    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
 };
 
 } // namespace starrocks

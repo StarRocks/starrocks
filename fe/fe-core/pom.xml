@@ -38,10 +38,10 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.7</jacoco.version>
-        <iceberg.version>1.4.2</iceberg.version>
+        <iceberg.version>1.5.0</iceberg.version>
         <awsv2.version>2.17.257</awsv2.version>
-        <paimon.version>0.6.0-incubating</paimon.version>
-        <staros.version>3.2-rc7</staros.version>
+        <paimon.version>0.7.0-incubating</paimon.version>
+        <staros.version>3.2-rc9</staros.version>
         <python>python</python>
     </properties>
 
@@ -108,10 +108,10 @@ under the License.
             <artifactId>commons-cli</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
+        <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
         <dependency>
-            <groupId>commons-net</groupId>
-            <artifactId>commons-net</artifactId>
+            <groupId>com.github.seancfoley</groupId>
+            <artifactId>ipaddress</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/commons-codec/commons-codec -->

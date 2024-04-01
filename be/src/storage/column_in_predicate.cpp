@@ -115,6 +115,19 @@ public:
         return Status::OK();
     }
 
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring indices;
+        for (auto value : _values) {
+            roaring::Roaring index;
+            RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &value, query_type, &index));
+            indices |= index;
+        }
+        *row_bitmap &= indices;
+        return Status::OK();
+    }
+
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override {
@@ -282,6 +295,20 @@ public:
                 return st;
             }
         }
+        return Status::OK();
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
+        roaring::Roaring indices;
+        for (const std::string& s : _zero_padded_strs) {
+            Slice padded_value(s);
+            roaring::Roaring index;
+            RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &index));
+            indices |= index;
+        }
+        *row_bitmap &= indices;
         return Status::OK();
     }
 

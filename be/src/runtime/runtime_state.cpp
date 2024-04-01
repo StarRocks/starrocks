@@ -46,6 +46,7 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/jit/jit_engine.h"
 #include "fs/fs_util.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
@@ -75,6 +76,7 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
+    _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
@@ -92,12 +94,14 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
+    _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _unreported_error_idx(0), _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+    _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
@@ -123,6 +127,7 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
 
 RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+    _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     _timezone = TimezoneUtils::default_time_zone;
     _timestamp_us = 0;
@@ -509,6 +514,11 @@ Status RuntimeState::reset_epoch() {
     _tablet_commit_infos.clear();
     _tablet_fail_infos.clear();
     return Status::OK();
+}
+
+bool RuntimeState::is_jit_enabled() const {
+    return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
+           _query_options.jit_level != 0;
 }
 
 } // end namespace starrocks

@@ -206,6 +206,13 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
+                // release shareBufferStream
+                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    if (shared_buffer_stream != nullptr) {
+                        shared_buffer_stream->release();
+                    }
+                }
                 break;
             }
         }
@@ -243,6 +250,13 @@ Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
+                // release shareBufferStream
+                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
+                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    if (shared_buffer_stream != nullptr) {
+                        shared_buffer_stream->release();
+                    }
+                }
                 break;
             }
             end_ord = _page->first_ordinal() + _page->num_rows();
@@ -381,7 +395,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
     bool support = false;
     for (const auto* pred : predicates) {
-        support = support | pred->support_bloom_filter();
+        support = support || pred->support_bloom_filter() || pred->support_ngram_bloom_filter();
     }
     RETURN_IF(!support, Status::OK());
 
@@ -391,6 +405,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
+    // filter data using bloom filter or ngram bloom filter
     RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
     return Status::OK();
 }

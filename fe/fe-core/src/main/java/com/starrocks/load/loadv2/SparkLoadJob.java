@@ -87,6 +87,7 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
@@ -235,7 +236,7 @@ public class SparkLoadJob extends BulkLoadJob {
         transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                        LoadJobSourceType.FRONTEND, id, timeoutSecond);
+                        LoadJobSourceType.FRONTEND, id, timeoutSecond, warehouseId);
     }
 
     @Override
@@ -421,6 +422,8 @@ public class SparkLoadJob extends BulkLoadJob {
             loadingStatus = etlStatus;
             progress = 0;
             unprotectedUpdateState(JobState.LOADING);
+            loadStartTimestamp = System.currentTimeMillis();
+            startLoad = true;
             LOG.info("update to {} state success. job id: {}", state, id);
         } catch (Exception e) {
             LOG.warn("update to {} state failed. job id: {}", state, id, e);
@@ -554,18 +557,17 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    long backendId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
-                                    // TODO: need to refactor after be split into cn + dn
-                                    ComputeNode backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
-                                            getBackendOrComputeNode(backendId);
+                                    WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                                    ComputeNode backend = warehouseManager
+                                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                                     if (backend == null) {
-                                        LOG.warn("replica {} not exists", backendId);
+                                        LOG.warn("replica {} not exists", ((LakeTablet) tablet).getShardId());
                                         continue;
                                     }
 
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
                                             tabletId, schemaHash, params, batchTask, tabletMetaStr,
-                                            backend, new Replica(tabletId, backendId, -1, NORMAL),
+                                            backend, new Replica(tabletId, backend.getId(), -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE, columnsDesc);
 
                                     if (tabletFinishedReplicas.contains(tabletId)) {

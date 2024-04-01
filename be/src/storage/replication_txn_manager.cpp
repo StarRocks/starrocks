@@ -153,8 +153,7 @@ Status ReplicationTxnManager::init(const std::vector<starrocks::DataDir*>& data_
     return Status::OK();
 }
 
-Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& request, std::string* src_snapshot_path,
-                                              bool* incremental_snapshot) {
+Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& request, TSnapshotInfo* src_snapshot_info) {
     if (StorageEngine::instance()->bg_worker_stopped()) {
         return Status::InternalError("Process is going to quit. The remote snapshot will stop");
     }
@@ -192,21 +191,23 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
               << ", snapshot version: " << request.src_visible_version
               << ", missed_versions=" << version_list_to_string(missed_versions);
 
-    TBackend src_backend;
     if (request.visible_version <= 1) { // Make full snapshot
-        *incremental_snapshot = false;
-        status = make_remote_snapshot(request, nullptr, nullptr, &src_backend, src_snapshot_path);
+        src_snapshot_info->incremental_snapshot = false;
+        status = make_remote_snapshot(request, nullptr, nullptr, &src_snapshot_info->backend,
+                                      &src_snapshot_info->snapshot_path);
     } else { // Try to make incremental snapshot first, if failed, make full snapshot
-        *incremental_snapshot = true;
-        status = make_remote_snapshot(request, &missed_versions, nullptr, &src_backend, src_snapshot_path);
+        src_snapshot_info->incremental_snapshot = true;
+        status = make_remote_snapshot(request, &missed_versions, nullptr, &src_snapshot_info->backend,
+                                      &src_snapshot_info->snapshot_path);
         if (!status.ok()) {
             LOG(INFO) << "Failed to make incremental snapshot: " << status << ", txn_id: " << request.transaction_id
                       << ", switch to fully snapshot. tablet_id: " << request.tablet_id
                       << ", src_tablet_id: " << request.src_tablet_id
                       << ", visible version: " << request.visible_version
                       << ", snapshot version: " << request.src_visible_version;
-            *incremental_snapshot = false;
-            status = make_remote_snapshot(request, nullptr, nullptr, &src_backend, src_snapshot_path);
+            src_snapshot_info->incremental_snapshot = false;
+            status = make_remote_snapshot(request, nullptr, nullptr, &src_snapshot_info->backend,
+                                          &src_snapshot_info->snapshot_path);
         }
     }
 
@@ -218,20 +219,26 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
         return status;
     }
 
-    LOG(INFO) << "Made snapshot from " << src_backend.host << ":" << src_backend.be_port << ":" << *src_snapshot_path
-              << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-              << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
-              << ", snapshot_version: " << request.src_visible_version << ", is_incremental: " << *incremental_snapshot;
+    src_snapshot_info->__isset.backend = true;
+    src_snapshot_info->__isset.snapshot_path = true;
+    src_snapshot_info->__isset.incremental_snapshot = true;
+
+    LOG(INFO) << "Made snapshot from " << src_snapshot_info->backend.host << ":" << src_snapshot_info->backend.be_port
+              << ":" << src_snapshot_info->snapshot_path << ", txn_id: " << request.transaction_id
+              << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+              << ", visible_version: " << request.visible_version
+              << ", snapshot_version: " << request.src_visible_version
+              << ", is_incremental: " << src_snapshot_info->incremental_snapshot;
 
     txn_meta_pb.set_txn_id(request.transaction_id);
     txn_meta_pb.set_txn_state(ReplicationTxnStatePB::TXN_SNAPSHOTED);
     txn_meta_pb.set_tablet_id(request.tablet_id);
     txn_meta_pb.set_visible_version(request.visible_version);
-    txn_meta_pb.set_src_backend_host(src_backend.host);
-    txn_meta_pb.set_src_backend_port(src_backend.be_port);
-    txn_meta_pb.set_src_snapshot_path(*src_snapshot_path);
+    txn_meta_pb.set_src_backend_host(src_snapshot_info->backend.host);
+    txn_meta_pb.set_src_backend_port(src_snapshot_info->backend.be_port);
+    txn_meta_pb.set_src_snapshot_path(src_snapshot_info->snapshot_path);
     txn_meta_pb.set_snapshot_version(request.src_visible_version);
-    txn_meta_pb.set_incremental_snapshot(*incremental_snapshot);
+    txn_meta_pb.set_incremental_snapshot(src_snapshot_info->incremental_snapshot);
 
     return save_tablet_txn_meta(tablet->data_dir(), request.transaction_id, request.partition_id, request.tablet_id,
                                 txn_meta_pb);
@@ -442,7 +449,7 @@ Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest&
 }
 
 Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
-                                                        const TRemoteSnapshotInfo& src_snapshot_info,
+                                                        const TSnapshotInfo& src_snapshot_info,
                                                         const std::string& tablet_snapshot_dir_path, Tablet* tablet) {
     // Check local path exist, if exist, remove it, then create the dir
     RETURN_IF_ERROR(ignore_not_found(fs::remove_all(tablet_snapshot_dir_path)));
@@ -482,10 +489,10 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             return status;
         }
 
-        CHECK(((src_snapshot_info.incremental_snapshot &&
-                snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
-               (!src_snapshot_info.incremental_snapshot &&
-                snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
+        DCHECK(((src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_INCREMENTAL) ||
+                (!src_snapshot_info.incremental_snapshot &&
+                 snapshot_meta.snapshot_type() == SnapshotTypePB::SNAPSHOT_TYPE_FULL)))
                 << ", incremental_snapshot: " << src_snapshot_info.incremental_snapshot
                 << ", snapshot_type: " << SnapshotTypePB_Name(snapshot_meta.snapshot_type());
 
@@ -656,9 +663,9 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
         }
     }
 
-    RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
-
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path));
+
+    RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
 
     return Status::OK();
 }
@@ -782,6 +789,7 @@ Status ReplicationTxnManager::publish_snapshot(Tablet* tablet, const string& sna
                             DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
 
                     if (dcgs.size() == 0) {
+                        ++idx;
                         continue;
                     }
 

@@ -37,8 +37,7 @@ Status PersistentIndexCompactionManager::init() {
                             .set_min_threads(1)
                             .set_max_threads(max_pk_index_compaction_thread_cnt)
                             .build(&_worker_thread_pool));
-    REGISTER_GAUGE_STARROCKS_METRIC(pk_index_compaction_queue_count,
-                                    [this]() { return _worker_thread_pool->num_queued_tasks(); });
+    REGISTER_THREAD_POOL_METRICS(pk_index_compaction, _worker_thread_pool);
 
     return Status::OK();
 }

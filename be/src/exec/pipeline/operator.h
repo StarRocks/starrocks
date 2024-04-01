@@ -156,14 +156,14 @@ public:
 
     std::string get_raw_name() const { return _name; }
 
-    const LocalRFWaitingSet& rf_waiting_set() const;
+    virtual const LocalRFWaitingSet& rf_waiting_set() const;
 
     RuntimeFilterHub* runtime_filter_hub();
 
     std::vector<ExprContext*>& runtime_in_filters();
 
-    RuntimeFilterProbeCollector* runtime_bloom_filters();
-    const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
+    virtual RuntimeFilterProbeCollector* runtime_bloom_filters();
+    virtual const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
 
     virtual int64_t global_rf_wait_timeout_ns() const;
 
@@ -326,6 +326,7 @@ private:
     // The MemTracker is owned by QueryContext, so that all the operators with the same plan_node_id can share
     // the same MemTracker.
     MemTracker* _mem_tracker = nullptr;
+    std::vector<ExprContext*> _runtime_in_filters;
 };
 
 class OperatorFactory {
@@ -372,6 +373,8 @@ public:
     RuntimeFilterHub* runtime_filter_hub() { return _runtime_filter_hub; }
 
     std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
+    // acquire local colocate runtime filter
+    std::vector<ExprContext*> get_colocate_runtime_in_filters(size_t driver_sequence);
     RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
         if (_runtime_filter_collector == nullptr) {
             return nullptr;
@@ -402,6 +405,8 @@ public:
 
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);
+    void _prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,
+                                  std::vector<ExprContext*>* runtime_in_filters);
 
     const int32_t _id;
     const std::string _name;

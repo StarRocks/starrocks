@@ -72,6 +72,14 @@ public:
         return ArrayJoin::process(context, columns);
     }
 
+    static StatusOr<ColumnPtr> array_concat_ws(FunctionContext* context, const Columns& columns) {
+        DCHECK_EQ(columns.size(), 2);
+        Columns new_columns(2);
+        new_columns[0] = columns[1];
+        new_columns[1] = columns[0];
+        return ArrayJoin::process(context, new_columns);
+    }
+
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_sum(FunctionContext* context, const Columns& columns) {
         return ArrayArithmetic::template array_sum<type>(context, columns);

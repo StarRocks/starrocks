@@ -268,14 +268,23 @@ struct TQueryOptions {
   112: optional bool enable_pipeline_level_shuffle;
   113: optional bool enable_hyperscan_vec;
 
-  114: optional bool enable_jit = false;
+  114: optional i32 jit_level = 1;
 
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
-  
+
   116: optional string sql_dialect;
 
   117: optional bool enable_spill_to_remote_storage;
   118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+
+  119: optional bool enable_result_sink_accumulate;
+  120: optional bool enable_connector_split_io_tasks = false;
+  121: optional i64 connector_max_split_size = 0;
+  122: optional bool enable_connector_sink_writer_scaling = true;
+
+  130: optional bool enable_wait_dependent_event = false;
+
+  131: optional bool orc_use_column_names = false;
 }
 
 

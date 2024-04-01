@@ -107,7 +107,16 @@ Status StarCacheWrapper::remove(const std::string& key) {
 }
 
 const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {
-    return _cache->metrics(level);
+    auto metrics = _cache->metrics(level);
+    // Now the EEXIST is treated as an failed status in starcache, which will cause the write_fail_count too large
+    // in many cases because we write cache with `overwrite=false` now. It makes users confused.
+    // As real writing failure rarely occursso currently, so we temporarily adjust it here.
+    // Once the starcache library is update, the following lines will be removed.
+    if (metrics.detail_l2) {
+        metrics.detail_l2->write_success_count += metrics.detail_l2->write_fail_count;
+        metrics.detail_l2->write_fail_count = 0;
+    }
+    return metrics;
 }
 
 void StarCacheWrapper::record_read_remote(size_t size, int64_t lateny_us) {

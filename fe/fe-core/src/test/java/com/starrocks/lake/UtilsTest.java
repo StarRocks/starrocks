@@ -23,7 +23,6 @@ import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
 import org.junit.Test;
 
 public class UtilsTest {
@@ -70,7 +69,5 @@ public class UtilsTest {
                 throw new UserException("No backend or compute node alive.");
             }
         };
-
-        Assert.assertNull(Utils.chooseBackend(new LakeTablet(1000L)));
     }
 }

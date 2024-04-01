@@ -42,11 +42,15 @@
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
+#include "service/backend_options.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/cpu_info.h"
@@ -183,6 +187,9 @@ void calculate_metrics(void* arg_this) {
                 auto datacache_metrics = block_cache->cache_metrics();
                 datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
             }
+#ifdef USE_STAROS
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+#endif
             datacache_mem_tracker->set(datacache_mem_bytes);
         }
 
@@ -192,13 +199,14 @@ void calculate_metrics(void* arg_this) {
                 "Current memory statistics: process({}), query_pool({}), load({}), "
                 "metadata({}), compaction({}), schema_change({}), column_pool({}), "
                 "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({}), "
-                "datacache({})",
+                "datacache({}), jit({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
                 mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
                 mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
-                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes);
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes,
+                mem_metrics->jit_cache_mem_bytes.value());
 
         nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
@@ -219,7 +227,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             LOG(WARNING) << "get disk devices failed, status=" << st.message();
             return;
         }
-        st = get_inet_interfaces(&network_interfaces);
+        st = get_inet_interfaces(&network_interfaces, BackendOptions::is_bind_ipv6());
         if (!st.ok()) {
             LOG(WARNING) << "get inet interfaces failed, status=" << st.message();
             return;

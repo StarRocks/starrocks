@@ -4,6 +4,31 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.5
 
+## 2.5.20
+
+发布日期：2024 年 3 月 22 日
+
+### 功能优化
+
+- 聚合表中 BITMAP 类型的列支持指定聚合类型为 `replace_if_not_null`。[#42104](https://github.com/StarRocks/starrocks/pull/42104)
+- JDK 9 及以上版本默认都使用 G1 GC。[#41374](https://github.com/StarRocks/starrocks/pull/41374)
+
+### 参数变更
+
+- BE 参数 `update_compaction_size_threshold` 默认值从 256 MB 调整为 64 MB，可以更快执行compaction。[#42776](https://github.com/StarRocks/starrocks/pull/42776)
+
+### 问题修复
+
+修复了如下问题：
+
+- 通过 StarRocks 外表同步数据时，第一次同步报错 "commit and publish txn failed"，重试后成功，但相同的数据会导入两份。原因是 commit 超时按照失败处理了，导致做了两次。[#25165](https://github.com/StarRocks/starrocks/pull/25165)
+- RPC 传输资源会因为 GC 问题导致临时不可用。[#41636](https://github.com/StarRocks/starrocks/pull/41636)
+- 2.5 版本上的 array_agg() 对于 NULL 在序列化时的处理和 2.3 版本不一致，导致升级过程中查询结果不正确。[#42639](https://github.com/StarRocks/starrocks/pull/42639)
+- Query 中的异步任务算子 Sink Operator 退出处理有问题，导致 BE crash。[#38662](https://github.com/StarRocks/starrocks/pull/38662)
+- 对聚合表新增 DELETE SQL 任务后，因访问 tablet 元数据有竞争冲突，导致 BE crash。[#42174](https://github.com/StarRocks/starrocks/pull/42174)
+- 调用 UDF 时内存统计（MemTracker）使用有 Use-After-Free 问题，导致 BE crash。[#41710](https://github.com/StarRocks/starrocks/pull/41710)
+- 2.5 版本 unnest() 函数查询时不能使用别名，之前版本是可以的。[#42138](https://github.com/StarRocks/starrocks/pull/42138)
+
 ## 2.5.19
 
 发布日期：2024 年 2 月 8 日
@@ -149,7 +174,7 @@ displayed_sidebar: "Chinese"
 - 向打开持久化索引的主键表中导入大量数据，有时会报错。 [#34566](https://github.com/StarRocks/starrocks/pull/34566)
 - 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。 [#34618](https://github.com/StarRocks/starrocks/pull/34618)
 - 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。 [#34627](https://github.com/StarRocks/starrocks/pull/34627)
-- Stream Load 导入作业在 **PREPARD** 状态下、同时有 Schema Change 在执行，会导致数据丢失。 [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Stream Load 导入作业在 **PREPARED** 状态下、同时有 Schema Change 在执行，会导致数据丢失。 [#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。 [#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - 集群执行导入任务或者查询时，可能会出现 FE 卡住的情况。 [#34569](https://github.com/StarRocks/starrocks/pull/34569)
 

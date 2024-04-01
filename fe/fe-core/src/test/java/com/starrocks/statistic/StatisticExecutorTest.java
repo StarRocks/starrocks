@@ -49,13 +49,13 @@ public class StatisticExecutorTest extends PlanTestBase {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
-        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 10003, null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), 1000, null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
 
         List<TStatisticData> stats = statisticExecutor.queryStatisticSync(
-                StatisticUtils.buildConnectContext(), null, 10003L, Lists.newArrayList("foo", "bar"));
+                StatisticUtils.buildConnectContext(), null, 1000L, Lists.newArrayList("foo", "bar"));
         Assert.assertEquals(0, stats.size());
     }
 }

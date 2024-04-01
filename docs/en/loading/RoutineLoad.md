@@ -60,9 +60,9 @@ Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1)
 
 3. **Multiple load tasks run concurrently to consume the messages from multiple Kafka topic partitions, and load the data into StarRocks**
 
-   1. **The FE schedules and submits load tasks**: the FE schedules the load tasks in the queue on a timely basis, and assigns them to selected Coordinator BE nodes. The interval between load tasks is defined by the configuration item `max_batch_interval`. The FE distributes the load tasks evenly to all BE nodes. See [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#example) for more information about `max_batch_interval`.
+   1. **The FE schedules and submits load tasks**: the FE schedules the load tasks in the queue on a timely basis, and assigns them to selected Coordinator BE nodes. The interval between load tasks is defined by the configuration item `max_batch_interval`. The FE distributes the load tasks evenly to all BE nodes. See [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#examples) for more information about `max_batch_interval`.
 
-   2. The Coordinator BE starts the load task, consumes messages in partitions, parses and filters the data. A load task lasts until the pre-defined amount of messages are consumed or the pre-defined time limit is reached. The message batch size and time limit are defined in the FE configurations `max_routine_load_batch_size` and `routine_load_task_consume_second`. For detailed information, see [Configuration](../administration/BE_configuration.md). The Coordinator BE then distributes the messages to the Executor BEs. The Executor BEs write the messages to disks.
+   2. The Coordinator BE starts the load task, consumes messages in partitions, parses and filters the data. A load task lasts until the pre-defined amount of messages are consumed or the pre-defined time limit is reached. The message batch size and time limit are defined in the FE configurations `max_routine_load_batch_size` and `routine_load_task_consume_second`. For detailed information, see [FE Configuration](../administration/management/FE_configuration.md). The Coordinator BE then distributes the messages to the Executor BEs. The Executor BEs write the messages to disks.
 
          > **NOTE**
          >
@@ -186,7 +186,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
   When there are many Kafka topic partitions and enough BE nodes, you can accelerate the loading by increasing the task concurrency.
 
-  To increase the actual load task concurrency, you can increase the desired load task concurrency `desired_concurrent_number` when you create a routine load job. You can also set the dynamic configuration item of FE `max_routine_load_task_concurrent_num` ( default maximum load task currency ) to a larger value. For more information about `max_routine_load_task_concurrent_num`, please see [FE configuration items](../administration/FE_configuration.md#fe-configuration-items).
+  To increase the actual load task concurrency, you can increase the desired load task concurrency `desired_concurrent_number` when you create a routine load job. You can also set the dynamic configuration item of FE `max_routine_load_task_concurrent_num` ( default maximum load task currency ) to a larger value. For more information about `max_routine_load_task_concurrent_num`, please see [FE configuration items](../administration/management/FE_configuration.md).
 
   The actual task concurrency is defined by the minimum value among the number of BE nodes that are alive, the number of the pre-specified Kafka topic partitions, and the values of `desired_concurrent_number` and `max_routine_load_task_concurrent_num`.
 
@@ -262,7 +262,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 - **Data mapping and transformation**
 
-  To specify the mapping and transformation relationship between the JSON-format data, and the StarRocks table, you need to specify the paramter `COLUMNS` and property`jsonpaths`. The order of fields specified in the `COLUMNS` parameter must match that of the JSON-format data, and the name of fields must match that of the StarRocks table. The property `jsonpaths` is used to extract the required fields from the JSON data. These fields are then named by the property `COLUMNS`.
+  To specify the mapping and transformation relationship between the JSON-format data, and the StarRocks table, you need to specify the parameter `COLUMNS` and property`jsonpaths`. The order of fields specified in the `COLUMNS` parameter must match that of the JSON-format data, and the name of fields must match that of the StarRocks table. The property `jsonpaths` is used to extract the required fields from the JSON data. These fields are then named by the property `COLUMNS`.
 
   Because the example needs to transform the payment time field to the DATE data type, and load the data into the `pay_dt` column in the StarRocks table, you need to use the from_unixtime function. The other fields are mapped to fields of the table `example_tbl2` directly.
 
@@ -371,7 +371,7 @@ FROM KAFKA
 
 - Data mapping and transformation
 
-  To specify the mapping and transformation relationship between the Avro-format data and the StarRocks table, you need to specify the paramter `COLUMNS` and property `jsonpaths`. The order of fields specified in the `COLUMNS` parameter must match that of the fields in the property `jsonpaths`, and the names of fields must match these of the StarRocks table. The property `jsonpaths` is used to extract the required fields from the Avro data. These fields are then named by the property `COLUMNS`.
+  To specify the mapping and transformation relationship between the Avro-format data and the StarRocks table, you need to specify the parameter `COLUMNS` and property `jsonpaths`. The order of fields specified in the `COLUMNS` parameter must match that of the fields in the property `jsonpaths`, and the names of fields must match these of the StarRocks table. The property `jsonpaths` is used to extract the required fields from the Avro data. These fields are then named by the property `COLUMNS`.
 
   For more information about data transformation, see [Transform data at loading](https://docs.starrocks.io/en-us/latest/loading/Etl_in_loading).
 

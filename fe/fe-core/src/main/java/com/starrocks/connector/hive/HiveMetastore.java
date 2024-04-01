@@ -231,6 +231,16 @@ public class HiveMetastore implements IHiveMetastore {
                 .map(FieldSchema::getName)
                 .collect(toImmutableList());
         List<ColumnStatisticsObj> statisticsObjs = client.getTableColumnStats(dbName, tblName, dataColumns);
+        if (statisticsObjs.isEmpty() && Config.enable_reuse_spark_column_statistics) {
+            // Try to use spark unpartitioned table column stats
+            try {
+                if (table.getParameters().keySet().stream().anyMatch(k -> k.startsWith("spark.sql.statistics.colStats."))) {
+                    statisticsObjs = HiveMetastoreApiConverter.getColStatsFromSparkParams(table);
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to get column stats from table [{}.{}]", dbName, tblName);
+            }
+        }
         Map<String, HiveColumnStats> columnStatistics =
                 HiveMetastoreApiConverter.toSinglePartitionColumnStats(statisticsObjs, totalRowNums);
         return new HivePartitionStats(commonStats, columnStatistics);

@@ -20,19 +20,19 @@ BOOLEAN array_contains_all(arr1, arr2)
 
 `arr`: 用来比较的两个数组。上述语法检查`arr2`是否为`arr1`的子集。
 
-`arr1`和`arr2`内元素的数据类型必须一致。关于 StarRocks 支持的数组元素数据类型，请参见[ARRAY](../../sql-statements/data-types/Array.md)。
+`arr1`和`arr2`内元素的数据类型必须一致。关于 StarRocks 支持的数组元素数据类型，请参见[ARRAY](../../data-types/semi_structured/Array.md)。
 
 ## 返回值说明
 
 返回 BOOLEAN 类型的值。
 
-如果`arr2`是`arr1`的子集，则返回`1`。否则，返回`0`。
+如果 `arr2` 是 `arr1` 的子集，则返回 `1`。否则，返回 `0`。
 
-如果`arr1`或`arr2`为NULL，则返回NULL。
+如果 `arr1` 或 `arr2`为 NULL，则返回 NULL。
 
 ## 使用说明
 
-- 如果数组元素包含`null`，系统会按照正常值处理。
+- 如果数组元素包含 `null`，系统会按照正常值处理。
 
 - 空数组默认为所有数组的子集。
 
@@ -40,7 +40,7 @@ BOOLEAN array_contains_all(arr1, arr2)
 
 ## 示例
 
-1. 创建表`t1`，并向表中插入数据。
+1. 创建表 `t1`，并向表中插入数据。
 
     ```SQL
     CREATE TABLE t1 (
@@ -76,7 +76,7 @@ BOOLEAN array_contains_all(arr1, arr2)
     +------+------------+----------+
     ```
 
-3. 检查`c2`的每行数据是否为`c1`的子集。
+3. 检查 `c2` 的每行数据是否为 `c1` 的子集。
 
     ```Plaintext
     SELECT c0, c1, c2, array_contains_all(c1, c2) FROM t1 ORDER BY c0;
@@ -94,12 +94,12 @@ BOOLEAN array_contains_all(arr1, arr2)
 
     在返回结果中：
 
-    `c0`为1时，`c2`为`c1`的子集，返回1；
+    `c0` 为 1 时，`c2` 为 `c1`的子集，返回 1；
 
-    `c0`为2时，`c2`不是`c1`的子集，返回0；
+    `c0` 为 2 时，`c2` 不是 `c1` 的子集，返回 0；
 
-    `c0`为3时，`c``1`为NULL，`c0`为4时，`c2`为NULL，故均返回NULL；
+    `c0` 为 3 时，`c1` 为 NULL，`c0` 为 4 时，`c2` 为 NULL，故均返回 NULL；
 
-    `c0`为5时，两个数组包含数组元素`null`，系统会按照正常值处理，返回`1`；
+    `c0` 为 5 时，两个数组包含数组元素 `null`，系统会按照正常值处理，返回 `1`；
 
-    `c0`为6时，`c2`为空数组，默认为所有数组的子集，返回`1`。
+    `c0` 为 6 时，`c2` 为空数组，默认为所有数组的子集，返回 `1`。

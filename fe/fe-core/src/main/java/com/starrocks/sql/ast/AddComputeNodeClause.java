@@ -28,4 +28,9 @@ public class AddComputeNodeClause extends ComputeNodeClause {
     public AddComputeNodeClause(List<String> hostPorts, NodePosition pos) {
         super(hostPorts, pos);
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddComputeNodeClause(this, context);
+    }
 }

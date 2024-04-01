@@ -1,17 +1,23 @@
 ---
 displayed_sidebar: "Chinese"
 toc_max_heading_level: 4
+keywords: ['Broker Load']
 ---
 
 # 从 GCS 导入
-
-import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks 支持通过以下方式从 GCS 导入数据：
 
-<LoadMethodIntro />
+- 使用 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
+- 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
+
+两种导入方式各有优势，具体将在下面分章节详细阐述。
+
+一般情况下，建议您使用 INSERT+`FILES()`，更为方便易用。
+
+但是，INSERT+`FILES()` 当前只支持 Parquet 和 ORC 文件格式。因此，如果您需要导入其他格式（如 CSV）的数据、或者需要[在导入过程中执行 DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)，可以使用 Broker Load。
 
 ## 准备工作
 
@@ -151,14 +157,6 @@ DESCRIBE user_behavior_inferred;
 +--------------+-----------+------+-------+---------+-------+
 ```
 
-将系统推断出来的表结构跟手动建表的表结构从以下几个方面进行对比：
-
-- 数据类型
-- 是否允许 `NULL` 值
-- 定义为键的字段
-
-在生产环境中，为更好地控制目标表的表结构、实现更高的查询性能，建议您手动创建表、指定表结构。
-
 您可以查询新建表中的数据，验证数据已成功导入。例如：
 
 ```SQL
@@ -193,7 +191,7 @@ SELECT * from user_behavior_inferred LIMIT 3;
 
 - 源文件中包含一个数据类型为 VARBINARY 的 `Timestamp` 列，因此建表语句中也应该定义这样一个数据类型为 VARBINARY 的 `Timestamp` 列。
 - 源文件中的数据中没有 `NULL` 值，因此建表语句中也不需要定义任何列为允许 `NULL` 值。
-- 根据查询到的数据类型，可以在建表语句中定义 `UserID` 列为排序键和分桶键。根据实际业务场景需要，您还可以定义其他列比如 `ItemID` 或者定义 `UserID` 与其他列的组合作为排序键。
+- 根据未来的查询类型，可以在建表语句中定义 `UserID` 列为排序键和分桶键。根据实际业务场景需要，您还可以定义其他列比如 `ItemID` 或者定义 `UserID` 与其他列的组合作为排序键。
 
 通过如下语句创建数据库、并切换至该数据库：
 
@@ -217,6 +215,37 @@ ENGINE = OLAP
 DUPLICATE KEY(UserID)
 DISTRIBUTED BY HASH(UserID);
 ```
+
+通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
+
+```sql
+DESCRIBE user_behavior_declared;
+```
+
+```plaintext
++--------------+----------------+------+-------+---------+-------+
+| Field        | Type           | Null | Key   | Default | Extra |
++--------------+----------------+------+-------+---------+-------+
+| UserID       | int            | NO   | true  | NULL    |       |
+| ItemID       | int            | NO   | false | NULL    |       |
+| CategoryID   | int            | NO   | false | NULL    |       |
+| BehaviorType | varchar(65533) | NO   | false | NULL    |       |
+| Timestamp    | varbinary      | NO   | false | NULL    |       |
++--------------+----------------+------+-------+---------+-------+
+5 rows in set (0.00 sec)
+```
+
+:::tip
+
+您可以从以下几个方面来对比手动建表的表结构与 `FILES()` 函数自动推断出来的表结构之间具体有哪些不同:
+
+- 数据类型
+- 是否允许 `NULL` 值
+- 定义为键的字段
+
+在生产环境中，为更好地控制目标表的表结构、实现更高的查询性能，建议您手动创建表、指定表结构。
+
+:::
 
 建表完成后，您可以通过 INSERT INTO SELECT FROM FILES() 向表内导入数据：
 
@@ -262,6 +291,8 @@ SELECT * from user_behavior_declared LIMIT 3;
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
+
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
 ```SQL
@@ -291,8 +322,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_f3fc2298-a553-11ee-
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
 
 > **NOTE**
 >
@@ -392,13 +421,13 @@ PROPERTIES
 
 #### 查看导入进度
 
-通过 `information_schema.loads` 视图查看导入作业的进度。该功能自 3.1 版本起支持。
+通过 StarRocks Information Schema 库中的 [`loads`](../reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
 
 ```SQL
 SELECT * FROM information_schema.loads;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 `information_schema.loads`。
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 

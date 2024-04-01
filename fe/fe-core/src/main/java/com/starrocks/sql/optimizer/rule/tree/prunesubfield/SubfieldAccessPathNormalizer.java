@@ -44,7 +44,7 @@ public class SubfieldAccessPathNormalizer {
     // todo: BE only support one-layer json path, supported more layer in future
     public static int JSON_FLATTEN_DEPTH = 1;
     // simple json patten, same as BE's JsonPathPiece, match: abc[1][2], group: (abc)([1][2])
-    private static final Pattern JSON_ARRAY_PATTEN = Pattern.compile("^([\\w#.]*)((?:\\[[\\d:*]+])*)");
+    private static final Pattern JSON_ARRAY_PATTEN = Pattern.compile("^([\\w#.]+)((?:\\[[\\d:*]+])*)");
 
     private final Deque<AccessPath> allAccessPaths = Lists.newLinkedList();
 
@@ -231,6 +231,9 @@ public class SubfieldAccessPathNormalizer {
                 }
                 // only extract name, don't needed index
                 String name = matcher.group(1);
+                if (StringUtils.isBlank(name)) {
+                    break;
+                }
                 result.add(name);
                 if (tokens[i].replaceFirst(name, "").contains("[")) {
                     // can't support flatten array index

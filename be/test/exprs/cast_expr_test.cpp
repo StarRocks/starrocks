@@ -312,17 +312,15 @@ static void numeric_cast_with_jit(RuntimeState* runtime_state, TExprNode& cast_e
     } else {
         cast_expr.is_nullable = false;
     }
-
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
-
     cast_expr.type = gen_type_desc(cast_expr.child_type);
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
 
     for (auto& d : data) {
         MockVectorizedExpr<FromType> col1(cast_expr, 1, d);
+        expr->_children.clear();
         expr->_children.push_back(&col1);
 
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-
         ExprsTestHelper::verify_result_with_jit(ptr, expr.get(), runtime_state);
     }
 }
@@ -1094,7 +1092,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed1) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
     // non-exist type bitmap.
     *((uint8_t*)(buf.c_str())) = (uint8_t)14;
@@ -1127,7 +1125,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
     bitmap_value.add(1);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     expr_node.type = gen_type_desc(expr_node.child_type);
@@ -1163,7 +1161,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingleFailed) {
     bitmap_value.add(1);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     size_t half_length = buf.size() / 2;
@@ -1200,7 +1198,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
     bitmap_value.add(2);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     expr_node.type = gen_type_desc(expr_node.child_type);
@@ -1238,7 +1236,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSetFailed) {
     bitmap_value.add(2);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     size_t half_length = buf.size() / 2;
@@ -1277,7 +1275,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
 
     expr_node.type = gen_type_desc(expr_node.child_type);
@@ -1318,7 +1316,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMapFailed) {
     BitmapValue bitmap_value(bits);
 
     std::string buf;
-    buf.resize(bitmap_value.getSizeInBytes());
+    buf.resize(bitmap_value.get_size_in_bytes());
     bitmap_value.write((char*)buf.c_str());
     size_t half_length = buf.size() / 2;
 
@@ -2336,14 +2334,28 @@ TEST_F(VectorizedCastExprTest, json_to_array_with_const_input) {
 }
 
 TEST_F(VectorizedCastExprTest, unsupported_test) {
+    TExprNode cast_expr;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.__set_opcode(TExprOpcode::CAST);
+    cast_expr.num_children = 1;
+
     // can't cast arry<array<int>> to array<bool> rather than crash
-    expr_node.child_type = to_thrift(LogicalType::TYPE_ARRAY);
-    expr_node.child_type_desc = gen_multi_array_type_desc(to_thrift(TYPE_INT), 2);
-    expr_node.type = gen_multi_array_type_desc(to_thrift(TYPE_BOOLEAN), 1);
-
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
-
+    cast_expr.type = gen_multi_array_type_desc(to_thrift(TYPE_BOOLEAN), 1);
+    cast_expr.__isset.child_type = false;
+    cast_expr.__set_child_type_desc(gen_multi_array_type_desc(to_thrift(TYPE_INT), 2));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(cast_expr));
     ASSERT_TRUE(expr == nullptr);
+
+    // can't cast array<int> to varchar
+    cast_expr.type = gen_type_desc(to_thrift(LogicalType::TYPE_VARCHAR));
+    cast_expr.__isset.child_type = false;
+    cast_expr.__set_child_type_desc(gen_multi_array_type_desc(to_thrift(TYPE_INT), 1));
+    std::unique_ptr<Expr> expr2(VectorizedCastExprFactory::from_thrift(cast_expr));
+    ASSERT_TRUE(expr2 == nullptr);
+
+    Expr* expr3 = nullptr;
+    ObjectPool pool;
+    ASSERT_FALSE(Expr::create_vectorized_expr(&pool, cast_expr, &expr3, &runtime_state).ok());
 }
 
 } // namespace starrocks

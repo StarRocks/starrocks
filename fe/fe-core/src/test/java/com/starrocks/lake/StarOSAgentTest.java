@@ -31,6 +31,7 @@ import com.staros.proto.ReplicaRole;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
@@ -214,7 +215,7 @@ public class StarOSAgentTest {
         starosAgent.addWorker(5, workerHost, 0);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
-        starosAgent.removeWorker(workerHost);
+        starosAgent.removeWorker(workerHost, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
         Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
     }
 
@@ -303,7 +304,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to get worker id from starMgr.",
-                () -> starosAgent.removeWorker("127.0.0.1:8090"));
+                () -> starosAgent.removeWorker("127.0.0.1:8090", StarOSAgent.DEFAULT_WORKER_GROUP_ID));
 
         new Expectations() {
             {
@@ -311,7 +312,7 @@ public class StarOSAgentTest {
                 minTimes = 0;
                 result = 10;
 
-                client.removeWorker("1", 10);
+                client.removeWorker("1", 10, 0);
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }
@@ -319,7 +320,7 @@ public class StarOSAgentTest {
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to remove worker.",
-                () -> starosAgent.removeWorker("127.0.0.1:8090"));
+                () -> starosAgent.removeWorker("127.0.0.1:8090", StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
 
     @Test
@@ -472,12 +473,13 @@ public class StarOSAgentTest {
     }
 
     private WorkerInfo newWorkerInfo(long workerId, String ipPort, int beHeartbeatPort, int bePort, int beHttpPort,
-                                     int beBrpcPort) {
+                                     int beBrpcPort, int tabletNum) {
         return WorkerInfo.newBuilder().setWorkerId(workerId).setIpPort(ipPort)
                 .putWorkerProperties("be_heartbeat_port", String.valueOf(beHeartbeatPort))
                 .putWorkerProperties("be_port", String.valueOf(bePort))
                 .putWorkerProperties("be_http_port", String.valueOf(beHttpPort))
                 .putWorkerProperties("be_brpc_port", String.valueOf(beBrpcPort))
+                .setTabletNum(tabletNum)
                 .build();
     }
 
@@ -487,15 +489,15 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", serviceId);
 
         long workerId0 = 10000L;
-        WorkerInfo worker0 = newWorkerInfo(workerId0, "127.0.0.1:8090", 9050, 9060, 8040, 8060);
+        WorkerInfo worker0 = newWorkerInfo(workerId0, "127.0.0.1:8090", 9050, 9060, 8040, 8060, 10);
         long workerId1 = 10001L;
-        WorkerInfo worker1 = newWorkerInfo(workerId1, "127.0.0.2:8091", 9051, 9061, 8041, 8061);
+        WorkerInfo worker1 = newWorkerInfo(workerId1, "127.0.0.2:8091", 9051, 9061, 8041, 8061, 10);
         long groupId0 = 10L;
         WorkerGroupDetailInfo group0 = WorkerGroupDetailInfo.newBuilder().setGroupId(groupId0).addWorkersInfo(worker0)
                 .addWorkersInfo(worker1).build();
 
         long workerId2 = 10002L;
-        WorkerInfo worker2 = newWorkerInfo(workerId2, "127.0.0.3:8092", 9052, 9062, 8042, 8062);
+        WorkerInfo worker2 = newWorkerInfo(workerId2, "127.0.0.3:8092", 9052, 9062, 8042, 8062, 10);
         long groupId1 = 11L;
         WorkerGroupDetailInfo group1 = WorkerGroupDetailInfo.newBuilder().setGroupId(groupId1).addWorkersInfo(worker2)
                 .build();
@@ -518,6 +520,50 @@ public class StarOSAgentTest {
 
         List<Long> nodes = starosAgent.getWorkersByWorkerGroup(groupId0);
         Assert.assertEquals(2, nodes.size());
+    }
+
+    @Test
+    public void testGetWorkerTabletNum() throws StarClientException {
+        String serviceId = "1";
+        String workerIpPort = "127.0.0.1:8093";
+        long workerId = 20000L;
+        int expectedTabletNum = 10086;
+        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
+        WorkerInfo worker = newWorkerInfo(workerId, workerIpPort, 9050, 9060, 8040, 8060, expectedTabletNum);
+
+        new Expectations() {
+            {
+                client.getWorkerInfo(serviceId, workerIpPort);
+                minTimes = 1;
+                result = worker;
+            }
+        };
+        long tabletNum = starosAgent.getWorkerTabletNum(workerIpPort);
+        Assert.assertEquals(expectedTabletNum, worker.getTabletNum());
+        Assert.assertEquals(expectedTabletNum, tabletNum);
+    }
+
+    @Test
+    public void testGetWorkerTabletNumExcepted() throws StarClientException {
+        String serviceId = "1";
+        String workerIpPort = "127.0.0.1:8093";
+        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
+
+        new Expectations() {
+            {
+                client.getWorkerInfo(serviceId, anyString);
+                result = new StarClientException(
+                        StarStatus.newBuilder().setStatusCode(StatusCode.INTERNAL).setErrorMsg("injected error")
+                                .build());
+                minTimes = 1;
+            }
+        };
+
+        ExceptionChecker.expectThrowsNoException(() -> {
+            // no exception at all, return 0 instead
+            long tabletNum = starosAgent.getWorkerTabletNum(workerIpPort);
+            Assert.assertEquals(0, tabletNum);
+        });
     }
 
     @Test
@@ -665,9 +711,9 @@ public class StarOSAgentTest {
             @Mock
             public List<WorkerGroupDetailInfo> listWorkerGroup(String serviceId, List<Long> groupIds, boolean include) {
                 long workerId0 = 10000L;
-                WorkerInfo worker0 = newWorkerInfo(workerId0, "127.0.0.1:8090", 9050, 9060, 8040, 8060);
+                WorkerInfo worker0 = newWorkerInfo(workerId0, "127.0.0.1:8090", 9050, 9060, 8040, 8060, 10);
                 long workerId1 = 10001L;
-                WorkerInfo worker1 = newWorkerInfo(workerId1, "127.0.0.2:8091", 9051, 9061, 8041, 8061);
+                WorkerInfo worker1 = newWorkerInfo(workerId1, "127.0.0.2:8091", 9051, 9061, 8041, 8061, 10);
                 WorkerGroupDetailInfo group = WorkerGroupDetailInfo.newBuilder().addWorkersInfo(worker0)
                         .addWorkersInfo(worker1).build();
                 return Lists.newArrayList(group);

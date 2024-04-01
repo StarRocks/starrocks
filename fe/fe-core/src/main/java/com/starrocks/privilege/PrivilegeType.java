@@ -23,10 +23,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class PrivilegeType {
-    private final int id;
-    private final String name;
+    protected final int id;
+    protected final String name;
 
-    private PrivilegeType(int id, String name) {
+    protected PrivilegeType(int id, String name) {
         this.id = id;
         this.name = name;
     }

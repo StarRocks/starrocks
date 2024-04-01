@@ -152,20 +152,28 @@ public class AlterJobMgr {
     private final SchemaChangeHandler schemaChangeHandler;
     private final MaterializedViewHandler materializedViewHandler;
     private final SystemHandler clusterHandler;
-    private CompactionHandler compactionHandler;
+    private final CompactionHandler compactionHandler;
 
-    public AlterJobMgr() {
-        schemaChangeHandler = new SchemaChangeHandler();
-        materializedViewHandler = new MaterializedViewHandler();
-        clusterHandler = new SystemHandler();
-        compactionHandler = new CompactionHandler();
+    public AlterJobMgr(SchemaChangeHandler schemaChangeHandler,
+                       MaterializedViewHandler materializedViewHandler,
+                       SystemHandler systemHandler,
+                       CompactionHandler compactionHandler) {
+        this.schemaChangeHandler = schemaChangeHandler;
+        this.materializedViewHandler = materializedViewHandler;
+        this.clusterHandler = systemHandler;
+        this.compactionHandler = compactionHandler;
     }
 
     public void start() {
         schemaChangeHandler.start();
         materializedViewHandler.start();
         clusterHandler.start();
-        compactionHandler = new CompactionHandler();
+    }
+
+    public void stop() {
+        schemaChangeHandler.setStop();
+        materializedViewHandler.setStop();
+        clusterHandler.setStop();
     }
 
     public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
@@ -346,7 +354,8 @@ public class AlterJobMgr {
             Column existed = existedColumns.get(i);
             Column created = newColumns.get(i);
             if (!existed.isSchemaCompatible(created)) {
-                String message = String.format("Column schema not compatible: (%s) and (%s)", existed, created);
+                String message = MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
+                        existed.toString(), created.toString());
                 materializedView.setInactiveAndReason(message);
                 throw new SemanticException(message);
             }
@@ -425,8 +434,7 @@ public class AlterJobMgr {
         Task currentTask = GlobalStateMgr.getCurrentState().getTaskManager().getTask(
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
-            currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
-                    materializedView.getViewDefineSql());
+            currentTask.setDefinition(materializedView.getTaskDefinition());
             currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }

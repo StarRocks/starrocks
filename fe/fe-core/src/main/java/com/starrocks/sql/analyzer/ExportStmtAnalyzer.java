@@ -57,7 +57,7 @@ public class ExportStmtAnalyzer {
     }
 
 
-    static class ExportAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class ExportAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);

@@ -39,7 +39,8 @@ public interface WorkerProvider {
          */
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
-                                               int numUsedComputeNodes);
+                                               int numUsedComputeNodes,
+                                               long warehouseId);
     }
 
     /**
@@ -77,6 +78,10 @@ public interface WorkerProvider {
     boolean isWorkerSelected(Long workerId);
 
     List<Long> getSelectedWorkerIds();
+
+    List<Long> getAllAvailableNodes();
+
+    void selectWorkerUnchecked(Long workerId);
 
     default boolean isPreferComputeNode() {
         return false;

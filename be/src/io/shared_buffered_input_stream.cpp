@@ -14,6 +14,8 @@
 
 #include "io/shared_buffered_input_stream.h"
 
+#include <gutil/strings/substitute.h>
+
 #include "common/config.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
@@ -36,6 +38,12 @@ void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t 
     }
 }
 
+std::string SharedBufferedInputStream::SharedBuffer::debug_string() const {
+    return strings::Substitute(
+            "SharedBuffer raw_offset=$0, raw_size=$1, offset=$2, size=$3, ref_count=$4, buffer_capacity=$5", raw_offset,
+            raw_size, offset, size, ref_count, buffer.capacity());
+}
+
 Status SharedBufferedInputStream::_sort_and_check_overlap(std::vector<IORange>& ranges) {
     // specify compare function is important. suppose we have zero range like [351,351],[351,356].
     // If we don't specify compare function, we may have [351,356],[351,351] which is bad order.
@@ -49,6 +57,8 @@ Status SharedBufferedInputStream::_sort_and_check_overlap(std::vector<IORange>& 
     // check io range is not overlapped.
     for (size_t i = 1; i < ranges.size(); i++) {
         if (ranges[i].offset < (ranges[i - 1].offset + ranges[i - 1].size)) {
+            LOG(WARNING) << "io ranges are overalpped" << ranges[i].offset << " "
+                         << ranges[i - 1].offset + ranges[i - 1].size;
             return Status::RuntimeError("io ranges are overalpped");
         }
     }
@@ -205,6 +215,11 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
         SCOPED_RAW_TIMER(&_shared_io_timer);
         _shared_io_count += 1;
         _shared_io_bytes += sb.size;
+        if (sb.size > sb.raw_size) {
+            // after called _deduplicate_shared_buffer(), sb.size may smaller than sb.raw_size
+            // we don't count this
+            _shared_align_io_bytes += sb.size - sb.raw_size;
+        }
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }

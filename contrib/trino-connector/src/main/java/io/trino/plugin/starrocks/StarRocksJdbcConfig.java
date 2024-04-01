@@ -14,33 +14,34 @@
 
 package io.trino.plugin.starrocks;
 
-import com.mysql.cj.conf.ConnectionUrlParser;
-import com.mysql.cj.exceptions.CJException;
-import com.mysql.jdbc.Driver;
 import io.airlift.configuration.Config;
 import io.airlift.configuration.ConfigDescription;
 import io.airlift.units.Duration;
 import io.trino.plugin.jdbc.BaseJdbcConfig;
-
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.validation.constraints.AssertTrue;
 import javax.validation.constraints.Min;
 
-import java.sql.SQLException;
-import java.util.concurrent.TimeUnit;
+import org.mariadb.jdbc.Driver;
 
 import static com.google.common.base.Strings.isNullOrEmpty;
-import static com.mysql.cj.conf.ConnectionUrlParser.parseConnectionString;
 
 public class StarRocksJdbcConfig
         extends BaseJdbcConfig
 {
+    public static final Pattern CONNECTION_STRING_PTRN = Pattern.compile("(?<scheme>[\\w\\+:%]+)\\s*"
+        + "(?://(?<authority>[^/?#]*))?\\s*"
+        + "(?:/(?!\\s*/)(?<path>[^?#]*))?"
+        + "(?:\\?(?!\\s*\\?)(?<query>[^#]*))?"
+        + "(?:\\s*#(?<fragment>.*))?");
     private boolean autoReconnect = true;
     private int maxReconnects = 3;
     private Duration connectionTimeout = new Duration(10, TimeUnit.SECONDS);
-
-    // Using `useInformationSchema=true` prevents race condition inside MySQL driver's java.sql.DatabaseMetaData.getColumns
-    // implementation, which throw SQL exception when a table disappears during listing.
-    // Using `useInformationSchema=false` may provide more diagnostic information (see https://github.com/trinodb/trino/issues/1597)
     private boolean driverUseInformationSchema = true;
 
     public boolean isAutoReconnect()
@@ -86,34 +87,48 @@ public class StarRocksJdbcConfig
     }
 
     @Config("starrocks.jdbc.use-information-schema")
-    @ConfigDescription("Value of useInformationSchema MySQL JDBC driver connection property")
+    @ConfigDescription("Value of useInformationSchema StarRocks JDBC driver connection property")
     public StarRocksJdbcConfig setDriverUseInformationSchema(boolean driverUseInformationSchema)
     {
         this.driverUseInformationSchema = driverUseInformationSchema;
         return this;
     }
 
-    @AssertTrue(message = "Invalid JDBC URL for MySQL connector")
+    @AssertTrue(message = "Invalid JDBC URL for MariaDB connector")
     public boolean isUrlValid()
     {
-        try {
-            Driver driver = new Driver();
-            return driver.acceptsURL(getConnectionUrl());
-        }
-        catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        Driver driver = new Driver();
+        return driver.acceptsURL(transConnectionUrl(getConnectionUrl()));
     }
 
-    @AssertTrue(message = "Database (catalog) must not be specified in JDBC URL for MySQL connector")
+    @AssertTrue(message = "Database (catalog) must not be specified in JDBC URL for StarRocks connector")
     public boolean isUrlWithoutDatabase()
     {
-        try {
-            ConnectionUrlParser parser = parseConnectionString(getConnectionUrl());
-            return isNullOrEmpty(parser.getPath());
-        }
-        catch (CJException ignore) {
+        Matcher matcher = CONNECTION_STRING_PTRN.matcher(transConnectionUrl(getConnectionUrl()));
+        if (!matcher.matches()) {
             return false;
         }
+        String path = matcher.group("path") == null ? null : decode(matcher.group("path")).trim();
+        return isNullOrEmpty(path);
+    }
+
+    private static String decode(String text) {
+        if (isNullOrEmpty(text)) {
+            return text;
+        }
+        try {
+            return URLDecoder.decode(text, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+            // Won't happen.
+        }
+        return "";
+    }
+
+    public static String transConnectionUrl(String connectionUrl) {
+        // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
+        if (connectionUrl.contains("mysql")) {
+            connectionUrl = connectionUrl.replace("mysql", "mariadb");
+        }
+        return connectionUrl;
     }
 }

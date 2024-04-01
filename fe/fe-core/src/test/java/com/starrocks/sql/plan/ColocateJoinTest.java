@@ -28,7 +28,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
-class ColocateJoinTest extends PlanTestBase {
+public class ColocateJoinTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -48,7 +48,6 @@ class ColocateJoinTest extends PlanTestBase {
                 "\"colocate_with\" = \"colocate_group_1\"" +
                 ");");
     }
-
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("colocateJoinOnceSqls")
     void testColocateJoinOnce(String sql) throws Exception {
@@ -231,5 +230,4 @@ class ColocateJoinTest extends PlanTestBase {
 
         return pairs.stream().map(e -> Arguments.of(e));
     }
-
 }

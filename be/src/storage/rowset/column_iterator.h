@@ -34,7 +34,9 @@
 
 #pragma once
 
+#include "column_reader.h"
 #include "common/status.h"
+#include "io/shared_buffered_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/range.h"
@@ -53,7 +55,9 @@ class ColumnReader;
 class RandomAccessFile;
 
 struct ColumnIteratorOptions {
-    RandomAccessFile* read_file = nullptr;
+    //RandomAccessFile* read_file = nullptr;
+    io::SeekableInputStream* read_file = nullptr;
+    bool is_io_coalesce = false;
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
@@ -99,6 +103,54 @@ public:
 
     [[nodiscard]] virtual Status next_batch(const SparseRange<>& range, Column* dst) {
         return Status::NotSupported("ColumnIterator Not Support batch read");
+    }
+
+    Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
+        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+            sharedBufferStream == nullptr) {
+            return Status::OK();
+        }
+
+        auto reader = get_column_reader();
+        if (reader == nullptr) {
+            // should't happen
+            LOG(INFO) << "column reader nullptr, filename: " << _opts.read_file->filename();
+            return Status::OK();
+        }
+
+        std::vector<io::SharedBufferedInputStream::IORange> result;
+        std::vector<std::pair<int, int>> page_index;
+        int prev_page_index = -1;
+        for (auto index = 0; index < range.size(); index++) {
+            auto row_start = range[index].begin();
+            auto row_end = range[index].end() - 1;
+            OrdinalPageIndexIterator iter_start;
+            OrdinalPageIndexIterator iter_end;
+            RETURN_IF_ERROR(reader->seek_at_or_before(row_start, &iter_start));
+            RETURN_IF_ERROR(reader->seek_at_or_before(row_end, &iter_end));
+
+            if (prev_page_index == iter_start.page_index()) {
+                // merge page index
+                page_index.back().second = iter_end.page_index();
+            } else {
+                page_index.emplace_back(std::make_pair(iter_start.page_index(), iter_end.page_index()));
+            }
+
+            prev_page_index = iter_end.page_index();
+        }
+
+        for (auto pair : page_index) {
+            OrdinalPageIndexIterator iter_start;
+            OrdinalPageIndexIterator iter_end;
+            RETURN_IF_ERROR(reader->seek_by_page_index(pair.first, &iter_start));
+            RETURN_IF_ERROR(reader->seek_by_page_index(pair.second, &iter_end));
+            auto offset = iter_start.page().offset;
+            auto size = iter_end.page().offset - offset + iter_end.page().size;
+            io::SharedBufferedInputStream::IORange io_range(offset, size);
+            result.emplace_back(io_range);
+        }
+
+        return dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file)->set_io_ranges(result);
     }
 
     virtual ordinal_t get_current_ordinal() const = 0;
@@ -197,6 +249,7 @@ public:
 
 protected:
     ColumnIteratorOptions _opts;
+    virtual ColumnReader* get_column_reader() { return nullptr; };
 };
 
 } // namespace starrocks

@@ -15,6 +15,7 @@
 #include "exec/pipeline/fragment_context.h"
 
 #include "exec/data_sink.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
@@ -31,38 +32,25 @@ FragmentContext::FragmentContext() : _data_sink(nullptr) {}
 FragmentContext::~FragmentContext() {
     _data_sink.reset();
     _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
-    clear_all_drivers();
-    close_all_pipelines();
+    close_all_execution_groups();
     if (_plan != nullptr) {
         _plan->close(_runtime_state.get());
     }
 }
 
-void FragmentContext::clear_all_drivers() {
-    for (auto& pipe : _pipelines) {
-        pipe->clear_drivers();
-    }
-}
-void FragmentContext::close_all_pipelines() {
-    for (auto& pipe : _pipelines) {
-        pipe->close(_runtime_state.get());
-    }
-}
-
 size_t FragmentContext::total_dop() const {
     size_t total = 0;
-    for (const auto& pipeline : _pipelines) {
-        total += pipeline->degree_of_parallelism();
+    for (const auto& group : _execution_groups) {
+        total += group->total_logical_dop();
     }
     return total;
 }
 
-size_t FragmentContext::num_drivers() const {
-    size_t total = 0;
-    for (const auto& pipeline : _pipelines) {
-        total += pipeline->drivers().size();
+void FragmentContext::close_all_execution_groups() {
+    for (auto& group : _execution_groups) {
+        group->close(_runtime_state.get());
     }
-    return total;
+    _execution_groups.clear();
 }
 
 void FragmentContext::move_tplan(TPlan& tplan) {
@@ -72,18 +60,18 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
     _data_sink = std::move(data_sink);
 }
 
-void FragmentContext::count_down_pipeline(size_t val) {
+void FragmentContext::count_down_execution_group(size_t val) {
     // Note that _pipelines may be destructed after fetch_add
     // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
-    size_t total_pipelines = _pipelines.size();
-    bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == total_pipelines;
-    if (!all_pipelines_finished) {
+    size_t total_execution_groups = _execution_groups.size();
+    bool all_groups_finished = _num_finished_execution_groups.fetch_add(val) + val == total_execution_groups;
+    if (!all_groups_finished) {
         return;
     }
 
+    // dump profile if necessary
     auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
-
     state->runtime_profile()->reverse_childs();
     if (config::pipeline_print_profile) {
         std::stringstream ss;
@@ -136,12 +124,11 @@ void FragmentContext::report_exec_state_if_necessary() {
         normalized_report_ns = last_report_ns + interval_ns;
     }
     if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
-        for (auto& pipeline : _pipelines) {
-            for (auto& driver : pipeline->drivers()) {
+        iterate_pipeline([](const Pipeline* pipeline) {
+            for (const auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();
             }
-        }
-
+        });
         state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
     }
 }
@@ -167,6 +154,21 @@ void FragmentContext::set_final_status(const Status& status) {
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }
     }
+}
+
+void FragmentContext::set_exec_groups(ExecutionGroups&& exec_groups) {
+    for (auto& group : exec_groups) {
+        if (!group->is_empty()) {
+            _execution_groups.emplace_back(std::move(group));
+        }
+    }
+}
+
+Status FragmentContext::prepare_all_pipelines() {
+    for (auto& group : _execution_groups) {
+        RETURN_IF_ERROR(group->prepare_pipelines(_runtime_state.get()));
+    }
+    return Status::OK();
 }
 
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
@@ -301,20 +303,66 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 
 Status FragmentContext::reset_epoch() {
     _num_finished_epoch_pipelines = 0;
-    for (const auto& pipeline : _pipelines) {
+    const std::function<Status(Pipeline*)> caller = [this](Pipeline* pipeline) {
         RETURN_IF_ERROR(_runtime_state->reset_epoch());
         RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
-    }
-    return Status::OK();
+        return Status::OK();
+    };
+    return iterate_pipeline(caller);
 }
 
 void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
-    bool all_pipelines_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == _pipelines.size();
-    if (!all_pipelines_finished) {
+    size_t total_execution_groups = _execution_groups.size();
+    bool all_groups_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == total_execution_groups;
+    if (!all_groups_finished) {
         return;
     }
 
     state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
+}
+
+void FragmentContext::init_jit_profile() {
+    if (runtime_state() && runtime_state()->is_jit_enabled() && runtime_state()->runtime_profile()) {
+        _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
+        _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
+    }
+}
+
+void FragmentContext::update_jit_profile(int64_t time_ns) {
+    if (_jit_counter != nullptr) {
+        COUNTER_UPDATE(_jit_counter, 1);
+    }
+
+    if (_jit_timer != nullptr) {
+        COUNTER_UPDATE(_jit_timer, time_ns);
+    }
+}
+void FragmentContext::iterate_pipeline(const std::function<void(Pipeline*)>& call) {
+    for (auto& group : _execution_groups) {
+        group->for_each_pipeline(call);
+    }
+}
+
+Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>& call) {
+    for (auto& group : _execution_groups) {
+        RETURN_IF_ERROR(group->for_each_pipeline(call));
+    }
+    return Status::OK();
+}
+
+Status FragmentContext::prepare_active_drivers() {
+    for (auto& group : _execution_groups) {
+        RETURN_IF_ERROR(group->prepare_drivers(_runtime_state.get()));
+    }
+    return Status::OK();
+}
+
+Status FragmentContext::submit_active_drivers(DriverExecutor* executor) {
+    for (auto& group : _execution_groups) {
+        group->attach_driver_executor(executor);
+        group->submit_active_drivers();
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline

@@ -32,6 +32,7 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -125,7 +126,7 @@ public class DefaultWorkerProviderTest {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                             true,
-                            numUsedComputeNodes);
+                            numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -182,6 +183,18 @@ public class DefaultWorkerProviderTest {
                 public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
                     return id2ComputeNode;
                 }
+
+                @Mock
+                public List<Long> getAllComputeNodeIds(long warehouseId) {
+                    return new ArrayList<>(id2ComputeNode.keySet());
+                }
+            };
+
+            new MockUp<SystemInfoService>() {
+                @Mock
+                public ComputeNode getBackendOrComputeNode(long nodeId) {
+                    return id2ComputeNode.get(nodeId);
+                }
             };
 
             DefaultWorkerProvider.Factory workerProviderFactory = new DefaultWorkerProvider.Factory();
@@ -194,7 +207,7 @@ public class DefaultWorkerProviderTest {
                 workerProvider =
                         workerProviderFactory.captureAvailableWorkers(
                                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false,
-                                numUsedComputeNodes);
+                                numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
                 for (long id = 0; id < 15; id++) {
                     ComputeNode worker = workerProvider.getWorkerById(id);

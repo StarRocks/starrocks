@@ -141,6 +141,7 @@ public:
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
+    MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
@@ -204,6 +205,9 @@ private:
     // The memory used for page cache
     std::shared_ptr<MemTracker> _page_cache_mem_tracker;
 
+    // The memory used for jit cache
+    std::shared_ptr<MemTracker> _jit_cache_mem_tracker;
+
     // The memory tracker for update manager
     std::shared_ptr<MemTracker> _update_mem_tracker;
 
@@ -266,6 +270,8 @@ public:
     ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
     workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
+    ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
+    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; };
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
@@ -345,6 +351,9 @@ private:
 
     PriorityThreadPool* _thread_pool = nullptr;
     ThreadPool* _streaming_load_thread_pool = nullptr;
+
+    ThreadPool* _load_segment_thread_pool = nullptr;
+    ThreadPool* _load_rowset_thread_pool = nullptr;
 
     workgroup::ScanExecutor* _scan_executor = nullptr;
     workgroup::ScanExecutor* _connector_scan_executor = nullptr;

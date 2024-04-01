@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.ImmutableMap;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -51,12 +52,16 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
@@ -110,6 +115,34 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void logSaveNextId(long nextId) {
 
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
             }
         };
 
@@ -231,7 +264,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPendingJobNoAliveBackend() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return null;
             }
         };
@@ -239,6 +272,19 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void writeEditLog(LakeTableSchemaChangeJob job) {
                 // nothing to do.
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+                return null;
             }
         };
 
@@ -257,7 +303,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableDroppedInPending() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -293,7 +339,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testCreateTabletFailed() {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -326,7 +372,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testCreateTabletSuccess() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -371,7 +417,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPreviousTxnNotFinished() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -424,7 +470,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testThrowAnalysisExceptiondWhileWaitingTxn() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -480,7 +526,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -547,7 +593,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTableDroppedBeforeRewriting() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -621,7 +667,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testAlterTabletFailed() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -686,7 +732,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testAlterTabletSuccess() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };
@@ -763,7 +809,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testPublishVersion() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
 
@@ -870,13 +916,13 @@ public class LakeTableSchemaChangeJobTest {
         // Make publish version success
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
 
             @Mock
             public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                       long commitTime) {
+                                       long commitTime, long warehouseId) {
                 // nothing to do
             }
         };
@@ -929,7 +975,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTransactionRaceCondition() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseNodeId(LakeTablet tablet) {
                 return 1L;
             }
         };

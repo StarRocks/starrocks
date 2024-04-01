@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
@@ -21,7 +20,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -167,7 +165,6 @@ public class ConcurrentDDLTest {
                         ShowTableStmt showTableStmt =
                                 (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
                                         "show tables from concurrent_test_db", connectContext);
-                        ShowExecutor showExecutor = new ShowExecutor(connectContext, showTableStmt);
                         starRocksAssert.dropDatabase("concurrent_test_db");
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {

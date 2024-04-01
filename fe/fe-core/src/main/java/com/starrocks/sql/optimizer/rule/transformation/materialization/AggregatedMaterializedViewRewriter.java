@@ -37,7 +37,6 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -90,6 +89,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             .add(FunctionSet.HLL_UNION)
             .add(FunctionSet.PERCENTILE_UNION)
             .add(FunctionSet.ARRAY_AGG_DISTINCT)
+            .add(FunctionSet.ARRAY_AGG)
             .build();
 
     public AggregatedMaterializedViewRewriter(MvRewriteContext mvRewriteContext) {
@@ -141,8 +141,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         // Cannot ROLLUP distinct
         if (isRollup) {
-            boolean mvHasDistinctAggFunc = 
-                    mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
+            boolean mvHasDistinctAggFunc =
+                    mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct()
+                            && !callOp.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG));
             boolean queryHasDistinctAggFunc = 
                     queryAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
             if (mvHasDistinctAggFunc && queryHasDistinctAggFunc) {
@@ -196,7 +197,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
             if (rewritten == null) {
-                logMVRewrite(mvRewriteContext, "Rewrite aggregate group-by/agg expr failed: {}", scalarOp.toString());
+                logMVRewrite(mvRewriteContext, "Rewrite projection with aggregate group-by/agg expr " +
+                        "failed: {}", scalarOp.toString());
                 return null;
             }
             newQueryProjection.put(entry.getKey(), rewritten);
@@ -241,11 +243,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         "cannot compensate aggregate having predicates: {}", queryAggregationOperator.getPredicate().toString());
                 return null;
             }
-            LogicalScanOperator scanOperator = mvOptExpr.getOp().cast();
-            Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
-            builder.withOperator(scanOperator);
+            Operator op = mvOptExpr.getOp().cast();
+            Operator.Builder builder = OperatorBuilderFactory.build(op);
+            builder.withOperator(op);
             // take care original scan predicates and new having exprs
-            builder.setPredicate(Utils.compoundAnd(rewrittenPred, scanOperator.getPredicate()));
+            builder.setPredicate(Utils.compoundAnd(rewrittenPred, op.getPredicate()));
             mvOptExpr = OptExpression.create(builder.build());
         }
 
@@ -408,7 +410,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         Map<ColumnRefOperator, CallOperator> newAggregations = rewriteAggregates(
                 queryAggregation, equationRewriter, rewriteContext.getOutputMapping(),
                 new ColumnRefSet(rewriteContext.getQueryColumnSet()), queryColumnRefToScalarMap,
-                newProjection, !newQueryGroupKeys.isEmpty());
+                newProjection, !newQueryGroupKeys.isEmpty(), rewriteContext);
         if (newAggregations == null) {
             logMVRewrite(mvRewriteContext, "Rewrite rollup aggregate failed: cannot rewrite aggregate functions");
             return null;
@@ -439,6 +441,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
+        // reset original partition predicates to prune partitions/tablets again
+        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         Preconditions.checkState(viewInput.getOp().getProjection() != null);
@@ -503,7 +507,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 unionExpr, newProjection);
         // Add extra union all predicates above union all operator.
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
-            addUnionAllExtraPredicate(result.getOp(), rewriteContext.getUnionRewriteQueryExtraPredicate());
+            addExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
         }
         deriveLogicalProperty(result);
 
@@ -630,7 +634,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                                                                    ColumnRefSet queryColumnSet,
                                                                    Map<ColumnRefOperator, ScalarOperator> aggregateMapping,
                                                                    Map<ColumnRefOperator, ScalarOperator> newProjection,
-                                                                   boolean hasGroupByKeys) {
+                                                                   boolean hasGroupByKeys,
+                                                                   RewriteContext context) {
         final Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
         equationRewriter.setOutputMapping(mapping);
 
@@ -646,8 +651,43 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 return null;
             }
             ColumnRefOperator oldColRef = (ColumnRefOperator) aggregateMapping.get(entry.getKey());
-            newAggregations.put(oldColRef, newAggregate);
-            newProjection.put(oldColRef, genRollupProject(aggCall, oldColRef, hasGroupByKeys));
+
+            if (!(newAggregate.isAggregate())) {
+                // If rewritten function is not an aggregation function, it could be like ScalarFunc(AggregateFunc(...))
+                // We need to decompose it into Projection function and Aggregation function
+                // E.g. count(distinct x) => array_length(array_unique_agg(x))
+                // The array_length is a ScalarFunction and array_unique_agg is AggregateFunction
+                // So it's decomposed into 1: array_length(slot_2), 2: array_unique_agg(x)
+                CallOperator realAggregate = null;
+                int foundIndex = -1;
+                for (int i = 0; i < newAggregate.getChildren().size(); i++) {
+                    if (newAggregate.getChild(i) instanceof CallOperator) {
+                        CallOperator call = (CallOperator) newAggregate.getChild(i);
+                        if (call.isAggregate()) {
+                            foundIndex = i;
+                            realAggregate = call;
+                            break;
+                        }
+                    }
+                }
+                Preconditions.checkState(foundIndex != -1,
+                        "no aggregate functions found: " + newAggregate.getChildren());
+
+                ColumnRefOperator innerAgg = context.getQueryRefFactory()
+                                .create(realAggregate, realAggregate.getType(), realAggregate.isNullable());
+                CallOperator copyProject = (CallOperator) newAggregate.clone();
+                copyProject.setChild(foundIndex, innerAgg);
+
+                ColumnRefOperator outerProject = context.getQueryRefFactory()
+                                .create(copyProject, copyProject.getType(), copyProject.isNullable());
+                newProjection.put(outerProject, copyProject);
+                newAggregations.put(innerAgg, realAggregate);
+                // replace original projection
+                aggregateMapping.put(entry.getKey(), copyProject);
+            } else {
+                newAggregations.put(oldColRef, newAggregate);
+                newProjection.put(oldColRef, genRollupProject(aggCall, oldColRef, hasGroupByKeys));
+            }
         }
 
         return newAggregations;

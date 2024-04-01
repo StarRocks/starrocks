@@ -32,7 +32,6 @@ import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -130,8 +129,14 @@ public class CompactionScheduler extends Daemon {
                 iterator.hasNext(); ) {
             Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
             PartitionIdentifier partition = entry.getKey();
-            CompactionJob job = entry.getValue();
 
+            // Make sure all running compactions' priority is reset
+            PartitionStatistics statistics = compactionManager.getStatistics(partition);
+            if (statistics != null && statistics.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT) {
+                statistics.resetPriority();
+            }
+
+            CompactionJob job = entry.getValue();
             if (!job.transactionHasCommitted()) {
                 String errorMsg = null;
 
@@ -160,7 +165,6 @@ public class CompactionScheduler extends Daemon {
                     continue;
                 }
             }
-
             if (job.transactionHasCommitted() && job.waitTransactionVisible(50, TimeUnit.MILLISECONDS)) {
                 iterator.remove();
                 job.finish();
@@ -353,12 +357,14 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utils.chooseBackend((LakeTablet) tablet);
-                if (beId == null) {
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeAssignedToTablet(
+                        Config.lake_compaction_warehouse, (LakeTablet) tablet);
+                if (computeNode == null) {
                     beToTablets.clear();
                     return beToTablets;
                 }
-                beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+
+                beToTablets.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
             }
         }
         return beToTablets;

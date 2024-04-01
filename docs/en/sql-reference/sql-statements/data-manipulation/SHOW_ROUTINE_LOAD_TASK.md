@@ -15,6 +15,7 @@ Shows the execution information of load tasks within a Routine Load job.
 - <RoutineLoadPrivNote />
 
 - For the relationship between a Routine Load job and the load tasks in it, see [Load data using Routine Load](../../../loading/RoutineLoad.md#basic-concepts)
+
 :::
 
 ## Syntax
@@ -49,7 +50,7 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD TASK WH
 | CreateTime           | The date and time when the load task was created.            |
 | LastScheduledTime    | The date and time when the load task was last scheduled.     |
 | ExecuteStartTime     | The date and time when the load task was executed.           |
-| Timeout              | The timeout period for the load task, controlled by the FE parameter [`routine_load_task_timeout_second`](../../../administration/FE_configuration.md#routine_load_task_timeout_second) and the `task_timeout_second` parameter in [job_properties](./CREATE_ROUTINE_LOAD.md#job_properties) for the Routine Load job. |
+| Timeout              | The timeout period for the load task, controlled by the FE parameter [`routine_load_task_timeout_second`](../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) and the `task_timeout_second` parameter in [job_properties](./CREATE_ROUTINE_LOAD.md#job_properties) for the Routine Load job. |
 | BeId                 | The ID of the BE that executes the load task.                    |
 | DataSourceProperties | The load task's progress (measured in the offset) of consuming messages in partitions of the topic. |
 | Message              | The information returned for the load task, including task error information. |

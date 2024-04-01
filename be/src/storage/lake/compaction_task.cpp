@@ -19,13 +19,14 @@
 
 namespace starrocks::lake {
 
-CompactionTask::CompactionTask(int64_t txn_id, VersionedTablet tablet,
-                               std::vector<std::shared_ptr<Rowset>> input_rowsets)
-        : _txn_id(txn_id),
+CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                               CompactionTaskContext* context)
+        : _txn_id(context->txn_id),
           _tablet(std::move(tablet)),
           _input_rowsets(std::move(input_rowsets)),
           _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
-                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())) {}
+                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())),
+          _context(context) {}
 
 } // namespace starrocks::lake

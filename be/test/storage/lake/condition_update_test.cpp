@@ -40,45 +40,15 @@ namespace starrocks::lake {
 class ConditionUpdateTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     ConditionUpdateTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_shared<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        _tablet_metadata->set_next_rowset_id(1);
+        _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
 
-        //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(next_id());
-        schema->set_num_short_key_columns(1);
-        schema->set_keys_type(PRIMARY_KEYS);
-        schema->set_num_rows_per_row_block(65535);
-        auto c0 = schema->add_column();
-        {
-            c0->set_unique_id(next_id());
-            c0->set_name("c0");
-            c0->set_type("INT");
-            c0->set_is_key(true);
-            c0->set_is_nullable(false);
-        }
-        auto c1 = schema->add_column();
-        {
-            c1->set_unique_id(next_id());
-            c1->set_name("c1");
-            c1->set_type("INT");
-            c1->set_is_key(false);
-            c1->set_is_nullable(false);
-            c1->set_aggregation("REPLACE");
-        }
         _referenced_column_ids.push_back(0);
         _referenced_column_ids.push_back(1);
-        _partial_tablet_schema = TabletSchema::create(*schema);
+        _partial_tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_partial_tablet_schema));
 
-        auto c2 = schema->add_column();
+        auto c2 = _tablet_metadata->mutable_schema()->add_column();
         {
             c2->set_unique_id(next_id());
             c2->set_name("c2");
@@ -88,7 +58,7 @@ public:
             c2->set_aggregation("REPLACE");
         }
 
-        _tablet_schema = TabletSchema::create(*schema);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
 
@@ -185,7 +155,7 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -219,7 +189,7 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_merge_condition("c1")
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -257,7 +227,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -285,7 +255,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_merge_condition("c1")
-                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_schema_id(_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(i == 0 ? chunk1 : chunk2, indexes.data(), indexes.size()));
@@ -325,7 +295,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_merge_condition("c1")
-                                               .set_index_id(_tablet_schema->id())
+                                               .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
     // finish condition merge in one memtable

@@ -86,7 +86,8 @@ enum CommitType {
 };
 
 struct IOStat {
-    uint32_t get_in_shard_cnt = 0;
+    uint32_t read_iops = 0;
+    uint32_t filtered_kv_cnt = 0;
     uint64_t get_in_shard_cost = 0;
     uint64_t read_io_bytes = 0;
     uint64_t l0_write_cost = 0;
@@ -97,10 +98,11 @@ struct IOStat {
 
     std::string print_str() {
         return fmt::format(
-                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
+                "IOStat read_iops: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
+                "l0_write_cost: {} "
                 "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
-                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
-                compaction_cost, reload_meta_cost);
+                read_iops, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
+                flush_or_wal_cost, compaction_cost, reload_meta_cost);
     }
 };
 
@@ -436,7 +438,7 @@ public:
     uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
-            CHECK(res.ok()) << res.status(); // FIXME: no abort
+            DCHECK(res.ok()) << res.status(); // FIXME: no abort
             return *res;
         } else {
             return 0;
@@ -538,8 +540,8 @@ private:
                                         std::map<size_t, IndexPage>& pages) const;
 
     Status _get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
-                                 KeysInfo* found_keys_info,
-                                 std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page) const;
+                                 KeysInfo* found_keys_info, std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
+                                 IOStat* stat) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                          IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
@@ -720,7 +722,7 @@ public:
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase
     // |n|: size of key/value array
@@ -759,13 +761,11 @@ public:
     // just for unit test
     bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
 
-    Status major_compaction(Tablet* tablet);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex);
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
-    double get_write_amp_score() const;
-
-    static double major_compaction_score(size_t l1_count, size_t l2_count);
+    static double major_compaction_score(const PersistentIndexMetaPB& index_meta);
 
     // not thread safe, just for unit test
     size_t kv_num_in_immutable_index() {
@@ -782,7 +782,6 @@ public:
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();
-    Status delete_pindex_files();
 
     static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
                                    const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
@@ -854,8 +853,6 @@ private:
 
     bool _enable_minor_compaction();
 
-    void _calc_write_amp_score();
-
     size_t _get_tmp_l1_count();
 
     bool _l0_is_full(int64_t l1_l2_size = 0);
@@ -910,8 +907,6 @@ private:
     // std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
     // set if major compaction is running
     std::atomic<bool> _major_compaction_running{false};
-    // write amplification score, 0.0 means this index doesn't need major compaction
-    std::atomic<double> _write_amp_score{0.0};
     // Latest major compaction time. In second.
     int64_t _latest_compaction_time = 0;
 };
