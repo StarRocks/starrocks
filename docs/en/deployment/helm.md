@@ -94,6 +94,38 @@ displayed_sidebar: "English"
     helm uninstall starrocks
     ```
 
-- Search Helm Chart maintained by StarRocks on Artifact Hub
+## More information
 
-  See  [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks).
+- The address of the GitHub repository: [starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator).
+
+- The docs in the GitHub repository provide more information to help you solve issues, for example:
+
+  - If you need to manage objects like the StarRocks cluster via the Kubernetes API, see [API reference](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md).
+
+  - If you need to mount persistent volumes to FE and BE pods to store FE metadata and logs, as well as BE data and logs, see [Mount Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart).
+
+    :::danger
+
+    If you don't mount persistent volumes, the StarRocks Operator will use emptyDir to store FE metadata and logs, as well as BE data and logs. When containers restart, data will be lost.
+
+    :::
+
+  - If you need to set the root user password:
+
+    - Manually set the root user's password after deploying the StarRocks cluster, see [Change root user password HOWTO](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md).
+
+    - Automatically set the root user's password when deploying the StarRocks cluster, see [Initialize root user password](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md).
+
+- How to resolve the following error that occurs after a CREATE TABLE statement is executed in a StarRocks shared-data cluster.
+
+  - **Error message**
+
+      ```plaintext
+      ERROR 1064 (HY000): Table replication num should be less than or equal to the number of available BE nodes. You can change this default by setting the replication_num table properties. Current alive backend is [10001]. , table=orders1, default_replication_num=3
+      ```
+
+  - **Solution**
+
+       This may be because only one BE exists in that StarRocks shared-data cluster, which supports only one replica. However, the default number of replicas is 3. You can modify the number of replicas to 1 in PROPERTIES, such as, PROPERTIES( "replication_num" = "1" ).
+
+- The address of Helm Chart maintained by StarRocks on Artifact Hub: [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks).

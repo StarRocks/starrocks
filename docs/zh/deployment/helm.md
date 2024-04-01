@@ -97,7 +97,7 @@ displayed_sidebar: "Chinese"
 
 ## 更多信息
 
-- Github 仓库的地址：[starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)
+- Github 仓库的地址：[starrocks-kubernetes-operator 和 kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)
 
 - Github 仓库中的指导文档包含更多信息，能够帮助您解决常见问题，例如：
 
@@ -117,7 +117,7 @@ displayed_sidebar: "Chinese"
 
     - 部署 StarRocks 集群时自动设置 root 用户的密码，参见[Initializing the Root User Password in StarRocks](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md)。
 
-- 执行建表语句后出现如下报错，该如何解决：
+- 部署 StarRocks 存算一体集群，并且执行建表语句后，出现如下报错，该如何解决：
 
   - **报错信息**
 
@@ -127,6 +127,6 @@ displayed_sidebar: "Chinese"
 
   - **解决措施**
 
-      因为您部署的 StarRocks 集群中只有一个 BE，仅支持副本数量为 1，但是默认的副本数量为 3。您可以在 PROPERTIES 中修改副本数为 1 ，即 PROPERTIES( "replication_num" = "1" ) 。
+      可能是因为 StarRocks 存算一体集群中只有一个 BE，仅支持副本数量为 1，但是默认的副本数量为 3。您可以在 PROPERTIES 中修改副本数为 1，即 PROPERTIES( "replication_num" = "1" ) 。
   
 - Artifict Hub 上 StarRocks 维护的 Helm Chart 地址：[kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。
