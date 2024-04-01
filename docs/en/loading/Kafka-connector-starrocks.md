@@ -221,7 +221,7 @@ The data is successfully loaded when the above result is returned.
 ### topics.regex
 
 **Required**:<br/>
-**Default value**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in `topics.regex` or `topics` (above), but not both. <br/>
+**Default value**: Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in  `topics.regex`or `topics` (above), but not both. <br/>
 **Description**:
 
 ### starrocks.topic2table.map
