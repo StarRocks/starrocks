@@ -14,12 +14,15 @@
 
 #pragma once
 
-#include <exec/pipeline/scan/olap_scan_operator.h>
+#include <unordered_map>
 
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/spill_process_channel.h"
 
@@ -34,15 +37,31 @@ public:
             : _fragment_context(fragment_context),
               _degree_of_parallelism(degree_of_parallelism),
               _data_sink_dop(sink_dop),
-              _is_stream_pipeline(is_stream_pipeline) {}
-
-    void add_pipeline(const OpFactories& operators) {
-        _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators));
-        bool enable_wait_event = _fragment_context->runtime_state()->enable_wait_dependent_event();
-        if (enable_wait_event && !_dependent_pipelines.empty()) {
-            subscribe_pipeline_event(_pipelines.back().get(), _dependent_pipelines.back()->pipeline_event());
-        }
+              _is_stream_pipeline(is_stream_pipeline),
+              _enable_group_execution(fragment_context->enable_group_execution()) {
+        // init the default execution group
+        _execution_groups.emplace_back(ExecutionGroupBuilder::create_normal_exec_group());
+        _normal_exec_group = _execution_groups.back().get();
+        _current_execution_group = _execution_groups.back().get();
     }
+
+    void init_colocate_groups(std::unordered_map<int32_t, ExecutionGroupPtr>&& colocate_groups);
+    ExecutionGroupRawPtr find_exec_group_by_plan_node_id(int32_t plan_node_id);
+    void set_current_execution_group(ExecutionGroupRawPtr exec_group) { _current_execution_group = exec_group; }
+    ExecutionGroupRawPtr current_execution_group() { return _current_execution_group; }
+
+    void add_pipeline(const OpFactories& operators, ExecutionGroupRawPtr execution_group) {
+        // TODO: refactor Pipelines to PipelineRawPtrs
+        _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators, execution_group));
+        execution_group->add_pipeline(_pipelines.back());
+        _subscribe_pipeline_event(_pipelines.back().get());
+    }
+
+    void add_pipeline(const OpFactories& operators) { add_pipeline(operators, _current_execution_group); }
+
+    void add_independent_pipeline(const OpFactories& operators) { add_pipeline(operators, _normal_exec_group); }
+
+    bool is_colocate_group() const { return _current_execution_group->type() == ExecutionGroupType::COLOCATE; }
 
     OpFactories maybe_interpolate_local_broadcast_exchange(RuntimeState* state, int32_t plan_node_id,
                                                            OpFactories& pred_operators, int num_receivers);
@@ -92,6 +111,9 @@ public:
     void interpolate_spill_process(size_t plan_node_id, const SpillProcessChannelFactoryPtr& channel_factory,
                                    size_t dop);
 
+    OpFactories interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators);
+    OpFactories maybe_interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators);
+
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.
     // Append a LocalExchangeSinkOperator to the tail of each pipeline.
@@ -111,7 +133,6 @@ public:
 
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
 
-    const Pipelines& get_pipelines() const { return _pipelines; }
     const Pipeline* last_pipeline() const {
         DCHECK(!_pipelines.empty());
         return _pipelines[_pipelines.size() - 1].get();
@@ -119,6 +140,7 @@ public:
 
     RuntimeState* runtime_state() { return _fragment_context->runtime_state(); }
     FragmentContext* fragment_context() { return _fragment_context; }
+    bool enable_group_execution() const { return _enable_group_execution; }
 
     size_t dop_of_source_operator(int source_node_id);
     MorselQueueFactory* morsel_queue_factory_of_source_operator(int source_node_id);
@@ -144,9 +166,11 @@ public:
     void push_dependent_pipeline(const Pipeline* pipeline);
     void pop_dependent_pipeline();
 
-    void subscribe_pipeline_event(Pipeline* pipeline, Event* event);
+    ExecutionGroups execution_groups() { return std::move(_execution_groups); }
 
 private:
+    void _subscribe_pipeline_event(Pipeline* pipeline);
+
     OpFactories _maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
                                                               OpFactories& pred_operators, int num_receivers,
                                                               bool force,
@@ -161,6 +185,10 @@ private:
 
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
+    ExecutionGroups _execution_groups;
+    std::unordered_map<int32_t, ExecutionGroupPtr> _group_id_to_colocate_groups;
+    ExecutionGroupRawPtr _normal_exec_group = nullptr;
+    ExecutionGroupRawPtr _current_execution_group = nullptr;
 
     std::list<const Pipeline*> _dependent_pipelines;
 
@@ -171,16 +199,17 @@ private:
     const size_t _data_sink_dop;
 
     const bool _is_stream_pipeline;
+    const bool _enable_group_execution;
 };
 
 class PipelineBuilder {
 public:
     explicit PipelineBuilder(PipelineBuilderContext& context) : _context(context) {}
 
+    // Build pipeline from exec node tree
     OpFactories decompose_exec_node_to_pipeline(const FragmentContext& fragment, ExecNode* exec_node);
 
-    // Build pipeline from exec node tree
-    Pipelines build();
+    ExecutionGroups build();
 
 private:
     PipelineBuilderContext& _context;
