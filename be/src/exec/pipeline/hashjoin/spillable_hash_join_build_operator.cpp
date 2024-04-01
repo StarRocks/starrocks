@@ -123,24 +123,35 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
 
 Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* state) {
     // publish empty runtime filters
-
     // Building RuntimeBloomFilter need to know the initial hash table size and all join keys datas.
     // It usually involves re-reading all the data that has been spilled
     // which cannot be streamed process in the spill scenario when build phase is finished
     // (unless FE can give an estimate of the hash table size), so we currently empty all the hash tables first
     // we could build global runtime filter for this case later.
-    auto merged = _partial_rf_merger->set_always_true();
-    // for spillable operator, this interface never returns error status because we skip building rf here
-    DCHECK(merged.ok());
 
-    if (merged.value()) {
-        RuntimeInFilterList in_filters;
+    bool is_colocate_runtime_filter = runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
+    if (is_colocate_runtime_filter) {
+        // init local colocate in/bloom filters
+        RuntimeInFilterList in_filter_lists;
         RuntimeBloomFilterList bloom_filters;
-        // publish empty runtime bloom-filters
-        state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
-        // move runtime filters into RuntimeFilterHub.
-        runtime_filter_hub()->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(
-                                                                   std::move(in_filters), std::move(bloom_filters)));
+        runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
+                                            std::make_unique<RuntimeFilterCollector>(in_filter_lists));
+        state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
+    } else {
+        auto merged = _partial_rf_merger->set_always_true();
+        // for spillable operator, this interface never returns error status because we skip building rf here
+        DCHECK(merged.ok());
+
+        if (merged.value()) {
+            RuntimeInFilterList in_filters;
+            RuntimeBloomFilterList bloom_filters;
+            // publish empty runtime bloom-filters
+            state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
+            // move runtime filters into RuntimeFilterHub.
+            runtime_filter_hub()->set_collector(
+                    _plan_node_id,
+                    std::make_unique<RuntimeFilterCollector>(std::move(in_filters), std::move(bloom_filters)));
+        }
     }
     return Status::OK();
 }

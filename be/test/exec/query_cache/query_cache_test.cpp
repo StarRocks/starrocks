@@ -22,6 +22,8 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/query_cache/cache_manager.h"
@@ -235,7 +237,7 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     Tasks tasks;
     tasks.resize(dop);
     for (auto i = 0; i < dop; ++i) {
-        pipeline::Pipeline pipeline(0, opFactories);
+        pipeline::Pipeline pipeline(0, opFactories, nullptr);
         auto upstream_operators = pipeline.create_operators(dop, i);
         auto downstream_operator = reduce_source->create(dop, i);
         tasks[i].upstream = std::move(upstream_operators);
