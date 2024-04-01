@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
@@ -40,10 +41,9 @@ import static org.apache.iceberg.CatalogProperties.WAREHOUSE_LOCATION;
 
 public class IcebergJDBCCatalogTest {
 
-    private static final String MOCKED_ICEBERG_CATALOG_NAME = "icebergDB";
     private static final String MOCKED_URI = "jdbc:sqlite:file::memory:?icebergDB";
 
-    private Configuration configuration = new Configuration();
+    private final Configuration configuration = new Configuration();
 
     private File dir;
 
@@ -56,11 +56,15 @@ public class IcebergJDBCCatalogTest {
         properties.put(ICEBERG_CUSTOM_PROPERTIES_PREFIX + URI, MOCKED_URI);
         IcebergJDBCCatalog jdbcCatalog = new IcebergJDBCCatalog("icebergDB", configuration, properties);
 
+        // get type
+        Assertions.assertEquals(jdbcCatalog.getIcebergCatalogType(), IcebergCatalogType.JDBC_CATALOG);
+
         // create db
         jdbcCatalog.createDb("db1", null);
         jdbcCatalog.createDb("db2", null);
+        jdbcCatalog.createDb("db3", ImmutableMap.of("location", dir.getAbsolutePath() + "/db3"));
         List<String> dbs = jdbcCatalog.listAllDatabases();
-        Assertions.assertEquals(ImmutableList.of("db1", "db2"), dbs);
+        Assertions.assertEquals(ImmutableList.of("db1", "db2", "db3"), dbs);
 
         // create table
         List<Column> columns = Lists.newArrayList();
@@ -72,6 +76,9 @@ public class IcebergJDBCCatalogTest {
         jdbcCatalog.createTable("db1", "tbl2", schema, null, null, null);
         Assertions.assertTrue(createSuccess);
         Assertions.assertTrue(jdbcCatalog.tableExists("db1", "tbl1"));
+
+        // get table
+        Assertions.assertEquals(schema.toString(), jdbcCatalog.getTable("db1", "tbl1").schema().toString());
 
         // rename table
         jdbcCatalog.renameTable("db1", "tbl1", "copy1");
@@ -87,6 +94,8 @@ public class IcebergJDBCCatalogTest {
         jdbcCatalog.dropTable("db1", "copy1", false);
         jdbcCatalog.dropDb("db1");
         Assertions.assertThrows(NoSuchNamespaceException.class, () -> jdbcCatalog.getDB("db1"));
+
+        Assertions.assertEquals("JdbcCatalog{}", jdbcCatalog.toString());
     }
 
     @After
