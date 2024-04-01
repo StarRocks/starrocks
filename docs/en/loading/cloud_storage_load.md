@@ -39,7 +39,7 @@ Broker Load supports the following data file formats:
 
 ## How it works
 
-After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of available BEs and the size of the data file you want to load, and then assigns each portion of the query plan to an available BE. During the load, each involved BE pulls the data of the data file from your external storage system, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
+After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of available BEs or CNs and the size of the data file you want to load, and then assigns each portion of the query plan to an available BE or CN. During the load, each involved BE or CN pulls the data of the data file from your external storage system, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs or CNs finish their portions of the query plan, the FE determines whether the load job is successful.
 
 The following figure shows the workflow of a Broker Load job.
 
@@ -885,17 +885,11 @@ A Broker Load job can be split into one or more tasks that concurrently run. The
 
 - If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
 
-Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](../administration/management/FE_configuration.md):
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs or CNs of your StarRocks cluster. StarRocks splits each task based on the FE parameter [`min_bytes_per_broker_scanner`](../administration/management/FE_configuration.md) and the number of BE or CN nodes. You can use the following formula to calculate the number of instances in an individual task:
 
-- `min_bytes_per_broker_scanner`: the minimum amount of data processed by each instance. The default amount is 64 MB.
+**Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`, Number of BE/CN nodes)**
 
-- `load_parallel_instance_num`: the number of concurrent instances allowed in each load job on an individual BE. The default number is 1.
-  
-  You can use the following formula to calculate the number of instances in an individual task:
-
-  **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`,`load_parallel_instance_num` x Number of BEs)**
-
-In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BEs.
+In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BE or CN nodes.
 
 ## Troubleshooting
 
