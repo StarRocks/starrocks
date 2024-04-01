@@ -255,6 +255,25 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update delete_files_max_key_in_batch";
             }
         });
+        _config_callback.emplace("starlet_fslib_s3client_nonread_max_retries", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_max_retries", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_nonread_max_retries";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_nonread_retry_scale_factor", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_retry_scale_factor",
+                                                                      value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_nonread_retry_scale_factor";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_connect_timeout_ms", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
+            }
+        });
 #endif // USE_STAROS
     });
 
