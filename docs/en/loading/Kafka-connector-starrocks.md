@@ -91,14 +91,6 @@ CREATE TABLE test_tbl (id INT, city STRING);
     starrocks.database.name=example_db
     sink.properties.strip_outer_array=true
     ```
-<<<<<<< HEAD
-   
-    > **NOTICE**
-    >
-    > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
-
-=======
->>>>>>> 654fac627b ([Doc] add desc for the addfield transform (#43332))
 
 2. Configure and run the Kafka Connect.
 
