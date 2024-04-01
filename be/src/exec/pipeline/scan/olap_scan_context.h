@@ -97,7 +97,7 @@ public:
     bool is_prepare_finished() const { return _is_prepare_finished.load(std::memory_order_acquire); }
 
     Status parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
-                           RuntimeFilterProbeCollector* runtime_bloom_filters);
+                           RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence);
 
     OlapScanNode* scan_node() const { return _scan_node; }
     OlapScanConjunctsManager& conjuncts_manager() { return _conjuncts_manager; }

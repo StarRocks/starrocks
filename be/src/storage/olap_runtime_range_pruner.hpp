@@ -33,7 +33,8 @@ struct RuntimeColumnPredicateBuilder {
     StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(const ColumnIdToGlobalDictMap* global_dictmaps,
                                                                        PredicateParser* parser,
                                                                        const RuntimeFilterProbeDescriptor* desc,
-                                                                       const SlotDescriptor* slot) {
+                                                                       const SlotDescriptor* slot,
+                                                                       int32_t driver_sequence) {
         // keep consistent with ColumnRangeBuilder
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
                       lt_is_binary<ltype>) {
@@ -61,7 +62,7 @@ struct RuntimeColumnPredicateBuilder {
             RangeType& range = full_range;
             range.set_index_filter_only(true);
 
-            const JoinRuntimeFilter* rf = desc->runtime_filter();
+            const JoinRuntimeFilter* rf = desc->runtime_filter(driver_sequence);
 
             // applied global-dict optimized column
             if constexpr (ltype == TYPE_VARCHAR) {
@@ -176,7 +177,7 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
         // 1. runtime filter arrived
         // 2. runtime filter updated and read rows greater than rf_update_threhold
         // we will filter by index
-        if (auto rf = _unarrived_runtime_filters[i]->runtime_filter()) {
+        if (auto rf = _unarrived_runtime_filters[i]->runtime_filter(_driver_sequence)) {
             size_t rf_version = rf->rf_version();
             if (_arrived_runtime_filters_masks[i] == 0 ||
                 (rf_version > _rf_versions[i] && raw_read_rows - _raw_read_rows > rf_update_threhold)) {
@@ -197,13 +198,13 @@ inline Status OlapRuntimeScanRangePruner::_update(const ColumnIdToGlobalDictMap*
 
 inline auto OlapRuntimeScanRangePruner::_get_predicates(const ColumnIdToGlobalDictMap* global_dictmaps, size_t idx)
         -> StatusOr<PredicatesPtrs> {
-    auto rf = _unarrived_runtime_filters[idx]->runtime_filter();
+    auto rf = _unarrived_runtime_filters[idx]->runtime_filter(_driver_sequence);
     if (rf->has_null()) return PredicatesPtrs{};
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
-    return type_dispatch_predicate<StatusOr<PredicatesPtrs>>(slot_desc->type().type, false,
-                                                             detail::RuntimeColumnPredicateBuilder(), global_dictmaps,
-                                                             _parser, _unarrived_runtime_filters[idx], slot_desc);
+    return type_dispatch_predicate<StatusOr<PredicatesPtrs>>(
+            slot_desc->type().type, false, detail::RuntimeColumnPredicateBuilder(), global_dictmaps, _parser,
+            _unarrived_runtime_filters[idx], slot_desc, _driver_sequence);
 }
 
 inline auto OlapRuntimeScanRangePruner::_as_raw_predicates(
@@ -222,6 +223,7 @@ inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& 
             _slot_descs.emplace_back(params.slot_descs[i]);
             _arrived_runtime_filters_masks.emplace_back();
             _rf_versions.emplace_back();
+            _driver_sequence = params.driver_sequence;
         }
     }
 }

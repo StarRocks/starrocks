@@ -872,6 +872,9 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     scan_prepare_op->set_degree_of_parallelism(shared_morsel_queue ? 1 : dop);
     this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
 
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
+
     auto scan_prepare_pipeline = pipeline::OpFactories{
             std::move(scan_prepare_op),
             std::make_shared<pipeline::NoopSinkOperatorFactory>(context->next_operator_id(), id()),

@@ -571,6 +571,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         bool eq_null = _is_null_safes[expr_order];
         MutableJoinRuntimeFilterPtr filter = nullptr;
         auto multi_partitioned = rf_desc->layout().pipeline_level_multi_partitioned();
+        multi_partitioned |= rf_desc->num_colocate_partition() > 0;
         if (multi_partitioned) {
             LogicalType build_type = rf_desc->build_expr_type();
             filter = std::shared_ptr<JoinRuntimeFilter>(
