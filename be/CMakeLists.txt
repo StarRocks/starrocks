@@ -680,7 +680,7 @@ endif()
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     if (${USE_SSE4_2})
         # the compiler will define __SSE4_2__
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2 -mpclmul")
     endif()
     if (${USE_AVX2})
         # the compiler will define __AVX2__
