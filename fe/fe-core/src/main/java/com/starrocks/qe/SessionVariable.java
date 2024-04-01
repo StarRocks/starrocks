@@ -1887,7 +1887,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean cboDecimalCastStringStrict = true;
 
     @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
-    private String cboEqBaseType = SessionVariableConstants.VARCHAR;
+    private String cboEqBaseType = SessionVariableConstants.DECIMAL;
 
     @VariableMgr.VarAttr(name = ENABLE_RESULT_SINK_ACCUMULATE)
     private boolean enableResultSinkAccumulate = true;
