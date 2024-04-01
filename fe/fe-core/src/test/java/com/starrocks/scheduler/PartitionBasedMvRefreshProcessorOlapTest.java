@@ -616,8 +616,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
                     }
-                    OlapTable copied = new OlapTable();
-                    if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                    OlapTable copied = DeepCopy.copyWithGson(olapTable, OlapTable.class);
+                    if (copied == null) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
                     olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
@@ -670,8 +670,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
                     }
-                    OlapTable copied = new OlapTable();
-                    if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                    OlapTable copied = DeepCopy.copyWithGson(olapTable, OlapTable.class);
+                    if (copied == null) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
                     olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, olapTable));
@@ -736,8 +736,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
                     }
-                    OlapTable copied = new OlapTable();
-                    if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                    OlapTable copied = DeepCopy.copyWithGson(olapTable, OlapTable.class);
+                    if (copied == null) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
                     olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));
@@ -838,8 +838,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
                     }
-                    OlapTable copied = new OlapTable();
-                    if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                    OlapTable copied = DeepCopy.copyWithGson(olapTable, OlapTable.class);
+                    if (copied == null) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
                     olapTables.put(olapTable.getId(), new TableSnapshotInfo(baseTableInfo, copied));

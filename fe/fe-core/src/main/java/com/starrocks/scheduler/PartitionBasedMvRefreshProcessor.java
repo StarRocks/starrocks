@@ -100,6 +100,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.MvPartitionDiffResult;
 import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.QueryDebugOptions;
@@ -1843,10 +1844,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private DistributionDesc getDistributionDesc(MaterializedView materializedView) {
         DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
         if (distributionInfo instanceof HashDistributionInfo) {
-            List<String> distColumnNames = new ArrayList<>();
-            for (Column distributionColumn : ((HashDistributionInfo) distributionInfo).getDistributionColumns()) {
-                distColumnNames.add(distributionColumn.getName());
-            }
+            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
+                    materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
             return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
         } else {
             return new RandomDistributionDesc();

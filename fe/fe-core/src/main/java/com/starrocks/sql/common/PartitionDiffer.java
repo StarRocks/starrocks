@@ -68,13 +68,18 @@ public class PartitionDiffer {
     private int partitionTTLNumber;
     private PeriodDuration partitionTTL;
     private PartitionInfo partitionInfo;
+    private List<Column> partitionColumns;
 
-    public PartitionDiffer(Range<PartitionKey> rangeToInclude, int partitionTTLNumber, PeriodDuration partitionTTL,
-                           PartitionInfo partitionInfo) {
+    public PartitionDiffer(Range<PartitionKey> rangeToInclude,
+                           int partitionTTLNumber,
+                           PeriodDuration partitionTTL,
+                           PartitionInfo partitionInfo,
+                           List<Column> partitionColumns) {
         this.rangeToInclude = rangeToInclude;
         this.partitionTTLNumber = partitionTTLNumber;
         this.partitionInfo = partitionInfo;
         this.partitionTTL = partitionTTL;
+        this.partitionColumns = partitionColumns;
     }
 
     public PartitionDiffer() {
@@ -87,14 +92,14 @@ public class PartitionDiffer {
         int partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         PeriodDuration partitionTTL = mv.getTableProperty().getPartitionTTL();
         Range<PartitionKey> rangeToInclude = null;
-        Column partitionColumn =
-                ((RangePartitionInfo) partitionInfo).getPartitionColumns().get(0);
+        List<Column> partitionColumns = mv.getPartitionInfo().getPartitionColumns(mv.getIdToColumn());
+        Column partitionColumn = partitionColumns.get(0);
         String start = partitionRange.first;
         String end = partitionRange.second;
         if (start != null || end != null) {
             rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         }
-        return new PartitionDiffer(rangeToInclude, partitionTTLNumber, partitionTTL, partitionInfo);
+        return new PartitionDiffer(rangeToInclude, partitionTTLNumber, partitionTTL, partitionInfo, partitionColumns);
     }
 
     /**
@@ -125,7 +130,6 @@ public class PartitionDiffer {
         }
 
         if (partitionTTL != null && !partitionTTL.isZero() && partitionInfo instanceof RangePartitionInfo) {
-            List<Column> partitionColumns = partitionInfo.getPartitionColumns();
             Type partitionType = partitionColumns.get(0).getType();
             LocalDateTime ttlTime = LocalDateTime.now().minus(partitionTTL);
             PartitionKey ttlLowerBound;
@@ -148,7 +152,6 @@ public class PartitionDiffer {
                             .sorted(Comparator.reverseOrder())
                             .collect(Collectors.toList());
 
-            List<Column> partitionColumns = partitionInfo.getPartitionColumns();
             Type partitionType = partitionColumns.get(0).getType();
             Predicate<PartitionRange> isShadowKey = Predicates.alwaysFalse();
             Predicate<PartitionRange> isInFuture = Predicates.alwaysFalse();

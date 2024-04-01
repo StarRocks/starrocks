@@ -18,11 +18,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Writable;
+import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.GlobalStateMgr;
 
-public abstract class RecyclePartitionInfo implements Writable {
+public abstract class RecyclePartitionInfo extends JsonWriter {
     @SerializedName(value = "dbId")
     protected long dbId;
     @SerializedName(value = "tableId")

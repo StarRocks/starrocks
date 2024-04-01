@@ -46,6 +46,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -175,6 +176,10 @@ public class ShowExecutorTest {
         // mock index 2
         MaterializedIndex index2 = new MaterializedIndex();
 
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(column1.getColumnId(), column1);
+        idToColumn.put(column2.getColumnId(), column2);
+
         // mock partition
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
@@ -228,6 +233,10 @@ public class ShowExecutorTest {
                 table.getCopiedBfColumns();
                 minTimes = 0;
                 result = null;
+
+                table.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
             }
         };
 
@@ -302,6 +311,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new TableProperty(
                         Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
+
+                mv.getIdToColumn();
+                minTimes = 0;
+                result = idToColumn;
             }
         };
 

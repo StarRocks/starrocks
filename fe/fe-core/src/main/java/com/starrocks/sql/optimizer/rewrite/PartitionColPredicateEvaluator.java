@@ -70,10 +70,11 @@ public class PartitionColPredicateEvaluator {
 
     private final Column partitionColumn;
 
-    public PartitionColPredicateEvaluator(RangePartitionInfo rangePartitionInfo, List<Long> candidatePartitions) {
+    public PartitionColPredicateEvaluator(List<Column> partitionColumns,
+                                          RangePartitionInfo rangePartitionInfo, List<Long> candidatePartitions) {
         this.candidatePartitions = candidatePartitions;
         candidateNum = candidatePartitions.size();
-        partitionColumn = rangePartitionInfo.getPartitionColumns().get(0);
+        partitionColumn = partitionColumns.get(0);
         candidateRanges = Lists.newArrayList();
         for (long id : candidatePartitions) {
             candidateRanges.add(rangePartitionInfo.getIdToRange(false).get(id));

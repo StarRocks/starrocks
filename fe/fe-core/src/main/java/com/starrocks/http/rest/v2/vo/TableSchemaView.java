@@ -109,10 +109,10 @@ public class TableSchemaView {
                 .ifPresent(svo::setIndexMetas);
 
         Optional.ofNullable(table.getPartitionInfo())
-                .ifPresent(pi -> svo.setPartitionInfo(PartitionInfoView.createFrom(pi)));
+                .ifPresent(pi -> svo.setPartitionInfo(PartitionInfoView.createFrom(table, pi)));
 
         Optional.ofNullable(table.getDefaultDistributionInfo())
-                .ifPresent(di -> svo.setDefaultDistributionInfo(DistributionInfoView.createFrom(di)));
+                .ifPresent(di -> svo.setDefaultDistributionInfo(DistributionInfoView.createFrom(table, di)));
 
         svo.setColocateGroup(table.getColocateGroup());
 
