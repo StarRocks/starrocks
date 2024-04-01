@@ -98,7 +98,7 @@ displayed_sidebar: "English"
 
 - The address of the GitHub repository: [starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator).
 
-- The docs in the GitHub repository provide more information to help you solve issues, for example:
+- The docs in the GitHub repository provide more information, for example:
 
   - If you need to manage objects like the StarRocks cluster via the Kubernetes API, see [API reference](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md).
 

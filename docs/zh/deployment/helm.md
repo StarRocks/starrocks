@@ -99,7 +99,7 @@ displayed_sidebar: "Chinese"
 
 - Github 仓库的地址：[starrocks-kubernetes-operator 和 kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)
 
-- Github 仓库中的指导文档包含更多信息，能够帮助您解决常见问题，例如：
+- Github 仓库中的指导文档包含更多信息，例如：
 
   - 如果需要通过 Kubernetes API 管理对象，例如 StarRocks 集群，参见 [API refenrence](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md)。
 
