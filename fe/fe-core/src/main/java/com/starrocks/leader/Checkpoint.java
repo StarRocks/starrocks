@@ -101,7 +101,96 @@ public class Checkpoint extends LeaderDaemon {
             return;
         }
 
+<<<<<<< HEAD
         boolean success = false;
+=======
+        // Step 1: create image
+        boolean newImageCreated = false;
+        if (imageVersion < logVersion) {
+            newImageCreated = createImage(logVersion);
+        }
+        if (newImageCreated) {
+            // Push the image file to all other nodes
+            // NOTE: Do not get other nodes from HaProtocol, because the node may not be in bdbje replication group yet.
+            for (Frontend frontend : GlobalStateMgr.getServingState().getNodeMgr().getOtherFrontends()) {
+                nodesToPushImage.add(frontend.getNodeName());
+            }
+        }
+
+        // Step2: push image
+        int needToPushCnt = nodesToPushImage.size();
+        long newImageVersion = newImageCreated ? logVersion : imageVersion;
+        if (needToPushCnt > 0) {
+            pushImage(newImageVersion);
+        }
+
+        // Step3: Delete old journals
+        // conditions: 1. new image created and no others node to push, this means there is only one FE in the cluster,
+        //                delete the old journals immediately.
+        //             2. needToPushCnt > 0 means there are other nodes in the cluster,
+        //                we must make sure all the other nodes have got the new image and then delete old journals.
+        if ((newImageCreated && needToPushCnt == 0)
+                || (needToPushCnt > 0 && nodesToPushImage.size() == 0)) {
+            deleteOldJournals(newImageVersion);
+        }
+
+        // Step4: Delete old image files from local storage.
+        if (newImageCreated) {
+            MetaCleaner cleaner = new MetaCleaner(imageDir);
+            try {
+                cleaner.clean();
+            } catch (IOException e) {
+                LOG.error("Leader delete old image file fail.", e);
+            }
+        }
+    }
+
+    private void deleteOldJournals(long imageVersion) {
+        // To ensure that all nodes will not lose data,
+        // deleteVersion should be the minimum value of imageVersion and replayedJournalId.
+        long minReplayedJournalId = getMinReplayedJournalId();
+        long deleteVersion = Math.min(imageVersion, minReplayedJournalId);
+        journal.deleteJournals(deleteVersion + 1);
+        LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
+                deleteVersion, journal.getPrefix(), imageVersion, minReplayedJournalId);
+
+    }
+
+    private void pushImage(long imageVersion) {
+        Iterator<String> iterator = nodesToPushImage.iterator();
+        int needToPushCnt = nodesToPushImage.size();
+        int successPushedCnt = 0;
+        while (iterator.hasNext()) {
+            String nodeName = iterator.next();
+
+            Frontend frontend = GlobalStateMgr.getServingState().getNodeMgr().getFeByName(nodeName);
+            if (frontend == null) {
+                iterator.remove();
+                continue;
+            }
+
+            String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
+                    + "/put?version=" + imageVersion + "&port=" + Config.http_port + "&subdir=" + subDir
+                    + "&for_global_state=" + belongToGlobalStateMgr;
+            try {
+                MetaHelper.getRemoteFile(url, PUT_TIMEOUT_SECOND * 1000, new NullOutputStream());
+                successPushedCnt++;
+                iterator.remove();
+                LOG.info("push image successfully, url = {}", url);
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
+                }
+            } catch (IOException e) {
+                LOG.error("Exception when pushing image file. url = {}", url, e);
+            }
+        }
+
+        LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push succeeded {} nodes",
+                imageVersion, subDir, needToPushCnt, successPushedCnt);
+    }
+
+    private boolean createImage(long logVersion) {
+>>>>>>> 49765d445b ([BugFix] Fix metrics of meta_log_count wrong bug on share-data mode (#41996))
         if (belongToGlobalStateMgr) {
             success = replayAndGenerateGlobalStateMgrImage(checkpointVersion);
         } else {

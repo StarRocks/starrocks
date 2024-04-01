@@ -172,6 +172,7 @@ public class MetaService {
         private static final String VERSION = "version";
         private static final String PORT = "port";
         private static final String SUBDIR = "subdir";
+        private static final String FOR_GLOBAL_STATE = "for_global_state";
 
         public PutAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -256,7 +257,10 @@ public class MetaService {
                 return;
             }
 
-            GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            String forGlobalState = request.getSingleParameter(FOR_GLOBAL_STATE);
+            if (Strings.isNullOrEmpty(forGlobalState) || "true".equals(forGlobalState)) {
+                GlobalStateMgr.getCurrentState().setImageJournalId(version);
+            }
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(realDir);
