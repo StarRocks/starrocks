@@ -28,7 +28,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class RoutineLoadJobMeta {
+public class RoutineLoadJobMetaTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
