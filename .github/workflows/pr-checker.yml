@@ -51,8 +51,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.number }}
           REPO: ${{ github.repository }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          ORI_PR=$(echo "${{ github.event.pull_request.title }}" | grep -oP '\(backport #\K\d+' | tail -n 1)
+          ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
             gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author} || true
@@ -82,7 +83,7 @@ jobs:
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
           ori_body=$(cat body.txt)
           
-          if [[ "${{ github.head_ref }}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
+          if [[ "${GITHUB_HEAD_REF}" == "mergify/bp/"* && "${BACKPORT_SOURCE_PR}" != "" ]]; then
             gh pr view ${BACKPORT_SOURCE_PR} -R ${REPO} --json body -q .body > source_body.txt
             sed -ie '/Bugfix cherry-pick branch check/,$d' source_body.txt
             cat body.txt source_body.txt > tmp_body.txt
@@ -96,9 +97,10 @@ jobs:
 
       - name: check backport pr's title
         if: github.base_ref != 'main' && contains(toJson(github.event.pull_request.body), '[x] This is a backport pr')
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          PR_TITLE=$(echo "${{ github.event.pull_request.title }}")
-          count=$(echo $PR_TITLE | grep -E '\(backport #[0-9]+)$' | wc -l)
+          count=$(echo "${PR_TITLE}" | grep -E '\(backport #[0-9]+)$' | wc -l)
           if [[ $count -le 0 ]]; then
             echo "::error::Backport PR title is not valid. It should end with '(backport #[0-9]+)'"
             exit 1
