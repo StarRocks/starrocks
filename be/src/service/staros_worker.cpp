@@ -19,7 +19,6 @@
 #include <starlet.h>
 #include <worker.h>
 
-#include "absl/strings/str_format.h"
 #include "common/config.h"
 #include "common/gflags_utils.h"
 #include "common/logging.h"
@@ -28,7 +27,6 @@
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
-#include "gutil/strings/fastmem.h"
 #include "util/await.h"
 #include "util/debug_util.h"
 #include "util/lru_cache.h"
@@ -56,6 +54,9 @@ DECLARE_int32(fslib_s3client_max_items);
 DECLARE_int32(fslib_s3client_max_connections);
 // s3client max instances per cache item, allow using multiple client instances per cache
 DECLARE_int32(fslib_s3client_max_instance_per_item);
+DECLARE_int32(fslib_s3client_nonread_max_retries);
+DECLARE_int32(fslib_s3client_nonread_retry_scale_factor);
+DECLARE_int32(fslib_s3client_connect_timeout_ms);
 // threadpool size for buffer prefetch task
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
@@ -442,6 +443,9 @@ void init_staros_worker() {
     FLAGS_fslib_s3client_max_items = config::starlet_s3_client_max_cache_capacity;
     FLAGS_fslib_s3client_max_instance_per_item = config::starlet_s3_client_num_instances_per_cache;
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+    FLAGS_fslib_s3client_nonread_max_retries = config::starlet_fslib_s3client_nonread_max_retries;
+    FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
+    FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
