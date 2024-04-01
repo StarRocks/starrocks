@@ -14,6 +14,9 @@
 
 package com.starrocks.lake;
 
+import com.staros.client.StarClientException;
+import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.starrocks.common.UserException;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,17 +45,15 @@ public class UtilsTest {
             }
         };
 
-        new MockUp<LakeTablet>() {
-            @Mock
-            public long getPrimaryComputeNodeId(long clusterId) throws UserException {
-                throw new UserException("Failed to get primary backend");
-            }
-        };
-
         new MockUp<StarOSAgentEpack>() {
             @Mock
             public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
                 throw new UserException("No backend or compute node alive.");
+            }
+
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                throw new StarClientException(StatusCode.GRPC, "Failed to get shard info");
             }
         };
     }
