@@ -288,7 +288,7 @@ TEST_F(OrcFileWriterTest, TestWriteFloat) {
 
     // read chunk
     ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
@@ -328,7 +328,7 @@ TEST_F(OrcFileWriterTest, TestWriteDouble) {
 
     // read chunk
     ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
     // verify correctness
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
