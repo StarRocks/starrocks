@@ -164,6 +164,5 @@ public class TemporaryTableMgr {
         if (tablesMap != null) {
             tablesMap.clear();
         }
-        System.gc();
     }
 }
