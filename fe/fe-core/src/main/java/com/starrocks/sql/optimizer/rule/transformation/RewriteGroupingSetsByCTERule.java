@@ -189,7 +189,9 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         context.getCteContext().addForceCTE(cteId);
 
         LogicalCTEAnchorOperator cteAnchor = new LogicalCTEAnchorOperator(cteId);
-        return Lists.newArrayList(OptExpression.create(cteAnchor, cteProduce, rightTree));
+        OptExpression result = OptExpression.create(cteAnchor, cteProduce, rightTree);
+
+        return Lists.newArrayList(result);
     }
 
     private LogicalCTEConsumeOperator buildCteConsume(OptExpression cteProduce, ColumnRefSet requiredColumns,

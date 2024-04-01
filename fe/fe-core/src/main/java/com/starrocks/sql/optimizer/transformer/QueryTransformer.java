@@ -63,13 +63,15 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator.findOrCreateColumnRefForExpr;
 
-class QueryTransformer {
+public class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
     private final boolean inlineView;
     private final Map<Operator, ParseNode> optToAstMap;
+    public static final String GROUPING_ID = "GROUPING_ID";
+    public static final String GROUPING = "GROUPING";
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
                             CTETransformerContext cteContext, boolean inlineView,
@@ -485,7 +487,7 @@ class QueryTransformer {
             }
 
             //Build grouping_id(all grouping columns)
-            ColumnRefOperator grouping = columnRefFactory.create("GROUPING_ID", Type.BIGINT, false);
+            ColumnRefOperator grouping = columnRefFactory.create(GROUPING_ID, Type.BIGINT, false);
             List<Long> groupingID = new ArrayList<>();
             for (BitSet bitSet : groupingIdsBitSets) {
                 long gid = Utils.convertBitSetToLong(bitSet, groupByColumnRefs.size());
@@ -506,7 +508,7 @@ class QueryTransformer {
 
             //Build grouping function in select item
             for (Expr groupingFunction : groupingFunctionCallExprs) {
-                grouping = columnRefFactory.create("GROUPING", Type.BIGINT, false);
+                grouping = columnRefFactory.create(GROUPING, Type.BIGINT, false);
 
                 ArrayList<BitSet> tempGroupingIdsBitSets = new ArrayList<>();
                 for (int i = 0; i < repeatColumnRefList.size(); ++i) {
