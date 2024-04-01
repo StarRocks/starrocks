@@ -2057,7 +2057,7 @@ public class Config extends ConfigBase {
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
      * e.g 495501,495503
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     /**
