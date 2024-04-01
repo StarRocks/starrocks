@@ -46,6 +46,7 @@ public class ShowPipeStmt extends ShowStmt {
                     .addColumn(new Column("LOAD_STATUS", ScalarType.createVarchar(512)))
                     .addColumn(new Column("LAST_ERROR", ScalarType.createVarchar(1024)))
                     .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
+                    .addColumn(new Column("PROPERTIES", ScalarType.createVarcharType(1024)))
                     .build();
 
     private String dbName;
@@ -78,6 +79,7 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(pipe.getLoadStatus().toJson());
         row.add(pipe.getLastErrorInfo().toJson());
         row.add(DateUtils.formatTimestampInSeconds(pipe.getCreatedTime()));
+        row.add(pipe.getPropertiesJson());
     }
 
     public static int findSlotIndex(String name) {
