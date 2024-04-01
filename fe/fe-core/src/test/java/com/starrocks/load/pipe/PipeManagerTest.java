@@ -952,6 +952,8 @@ public class PipeManagerTest {
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         createPipe("create pipe p_auto_ingest properties('auto_ingest'='false') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        createPipe("create pipe p_failed_tasks_threshold properties('failed_tasks_threshold'='100') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
     }
 
     @Test
