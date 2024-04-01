@@ -11,9 +11,9 @@ This topic describes some system limits and configurations that you need to cons
 
 StarRocks provides parameters for you to limit the memory usage for each load job, thereby reducing memory consumption, especially in high concurrency scenarios. However, do not specify an excessively low memory usage limit. If the memory usage limit is excessively low, data may be frequently flushed from memory to disk because the memory usage for load jobs reaches the specified limit. We recommend that you specify a proper memory usage limit based on your business scenario.
 
-The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
+The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md), and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md). Note that a load job usually runs on multiple BEs or CNs. Therefore, the parameters limit the memory usage of each load job on each involved BE or CN rather than the total memory usage of the load job on all involved BEs or CNs.
 
-StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE. For more information, see the "[System configurations](#system-configurations)" section below.
+StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE or CN. For more information, see the "[System configurations](#system-configurations)" section below.
 
 ## System configurations
 
@@ -45,15 +45,15 @@ You can configure the following parameters in the configuration file **fe.conf**
   
   This parameter specifies the retention period of the history records for load jobs that have finished and are in the **FINISHED** or **CANCELLED** state. The default retention period spans 3 days. This parameter is valid for both synchronous load jobs and asynchronous load jobs.
 
-### BE configurations
+### BE/CN configurations
 
-You can configure the following parameters in the configuration file **be.conf** of each BE:
+You can configure the following parameters in the configuration file **be.conf** of each BE or CN:
 
 - `write_buffer_size`
   
-  This parameter specifies the maximum memory block size. The default size is 100 MB. The loaded data is first written to a memory block on the BE. When the amount of data that is loaded reaches the maximum memory block size that you specify, the data is flushed to disk. You must specify a proper maximum memory block size based on your business scenario.
+  This parameter specifies the maximum memory block size. The default size is 100 MB. The loaded data is first written to a memory block on the BE or CN. When the amount of data that is loaded reaches the maximum memory block size that you specify, the data is flushed to disk. You must specify a proper maximum memory block size based on your business scenario.
 
-  - If the maximum memory block size is exceedingly small, a large number of small files may be generated on the BE. In this case, query performance degrades. You can increase the maximum memory block size to reduce the number of files generated.
+  - If the maximum memory block size is exceedingly small, a large number of small files may be generated on the BE or CN. In this case, query performance degrades. You can increase the maximum memory block size to reduce the number of files generated.
   - If the maximum memory block size is exceedingly large, remote procedure calls (RPCs) may time out. In this case, you can adjust the value of this parameter based on your business needs.
 
 - `streaming_load_rpc_max_alive_time_sec`
@@ -62,12 +62,12 @@ You can configure the following parameters in the configuration file **be.conf**
 
 - `load_process_max_memory_limit_bytes` and `load_process_max_memory_limit_percent`
   
-  These parameters specify the maximum amount of memory that can be consumed for all load jobs on each individual BE. StarRocks identifies the smaller memory consumption among the values of the two parameters as the final memory consumption that is allowed.
+  These parameters specify the maximum amount of memory that can be consumed for all load jobs on each individual BE or CN. StarRocks identifies the smaller memory consumption among the values of the two parameters as the final memory consumption that is allowed.
 
   - `load_process_max_memory_limit_bytes`: specifies the maximum memory size. The default maximum memory size is 100 GB.
   - `load_process_max_memory_limit_percent`: specifies the maximum memory usage. The default value is 30%. This parameter differs from the `mem_limit` parameter. The `mem_limit` parameter specifies the total maximum memory usage of your StarRocks cluster, and the default value is 90% x 90%.
 
-    If the memory capacity of the machine on which the BE resides is M, the maximum amount of memory that can be consumed for load jobs is calculated as follows: `M x 90% x 90% x 30%`.
+    If the memory capacity of the machine on which the BE or CN resides is M, the maximum amount of memory that can be consumed for load jobs is calculated as follows: `M x 90% x 90% x 30%`.
 
 ### System variable configurations
 

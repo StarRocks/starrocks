@@ -11,9 +11,9 @@ toc_max_heading_level: 4
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
-不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)、[Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
+不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)、[Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md)。需要注意的是，一个导入作业通常都会分布在多个 BE（或 CN）上执行，这些内存参数限制的是一个导入作业在单个 BE（或 CN）上的内存使用，而不是在整个集群上的内存使用总和。
 
-您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考下面的“[系统配置](#系统配置)”章节。
+您还可以通过设置一些参数来限制在单个 BE（或 CN）上运行的所有导入作业的总的内存使用上限。可参考下面的“[系统配置](#系统配置)”章节。
 
 ## 系统配置
 
@@ -45,13 +45,13 @@ toc_max_heading_level: 4
 
   已经完成、且处于 **FINISHED** 或 **CANCELLED** 状态的导入作业记录在 StarRocks 系统的保留时长，默认值为 3 天。该参数配置适用于所有模式的导入作业。
 
-### BE 配置
+### BE（或 CN）配置
 
-您可以通过修改每个 BE 的配置文件 **be.conf** 来设置如下参数：
+您可以通过修改每个 BE（或 CN）的配置文件 **be.conf** 来设置如下参数：
 
 - `write_buffer_size`
 
-  BE 上内存块的大小阈值，默认阈值为 100 MB。导入的数据在 BE 上会先写入一个内存块，当内存块的大小达到这个阈值以后才会写回磁盘。如果阈值过小，可能会导致 BE 上存在大量的小文件，影响查询的性能，这时候可以适当提高这个阈值来减少文件数量。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候可以适当地调整该参数的取值。
+  BE（或 CN）上内存块的大小阈值，默认阈值为 100 MB。导入的数据在 BE（或 CN）上会先写入一个内存块，当内存块的大小达到这个阈值以后才会写回磁盘。如果阈值过小，可能会导致 BE（或 CN）上存在大量的小文件，影响查询的性能，这时候可以适当提高这个阈值来减少文件数量。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候可以适当地调整该参数的取值。
 
 - `streaming_load_rpc_max_alive_time_sec`
 
@@ -59,12 +59,12 @@ toc_max_heading_level: 4
 
 - `load_process_max_memory_limit_bytes` 和 `load_process_max_memory_limit_percent`
 
-  用于导入的最大内存使用量和最大内存使用百分比，用来限制单个 BE 上所有导入作业的内存总和的使用上限。StarRocks 系统会在两个参数中取较小者，作为最终的使用上限。
+  用于导入的最大内存使用量和最大内存使用百分比，用来限制单个 BE（或 CN）上所有导入作业的内存总和的使用上限。StarRocks 系统会在两个参数中取较小者，作为最终的使用上限。
 
-  - `load_process_max_memory_limit_bytes`：指定 BE 上最大内存使用量，默认为 100 GB。
-  - `load_process_max_memory_limit_percent`：指定 BE 上最大内存使用百分比，默认为 30%。该参数与 `mem_limit` 参数不同。`mem_limit` 参数指定的是 BE 进程内存上限，默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 90% x 90%。
+  - `load_process_max_memory_limit_bytes`：指定 BE（或 CN）上最大内存使用量，默认为 100 GB。
+  - `load_process_max_memory_limit_percent`：指定 BE（或 CN）上最大内存使用百分比，默认为 30%。该参数与 `mem_limit` 参数不同。`mem_limit` 参数指定的是 BE（或 CN）进程内存上限，默认硬上限为 BE（或 CN）所在机器内存的 90%，软上限为 BE（或 CN）所在机器内存的 90% x 90%。
 
-    假设 BE 所在机器物理内存大小为 M，则用于导入的内存上限为：`M x 90% x 90% x 30%`。
+    假设 BE（或 CN）所在机器物理内存大小为 M，则用于导入的内存上限为：`M x 90% x 90% x 30%`。
 
 ### 会话变量
 
