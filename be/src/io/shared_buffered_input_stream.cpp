@@ -214,8 +214,8 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
         _shared_io_count += 1;
         _shared_io_bytes += sb.size;
         if (sb.size > sb.raw_size) {
-            // after called _deduplicate_shared_buffer(), sb.size may smaller than sb.raw_size
-            // we don't count this
+            // after called _deduplicate_shared_buffer(), sb.size maybe is larger than sb.raw_size
+            // we will count how many extra bytes we read because of alignment.
             _shared_align_io_bytes += sb.size - sb.raw_size;
         }
         sb.buffer.reserve(sb.size);
