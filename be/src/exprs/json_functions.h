@@ -220,14 +220,6 @@ private:
     DEFINE_VECTORIZED_FN(_flat_json_keys_with_path);
     DEFINE_VECTORIZED_FN(_full_json_keys_with_path);
 
-    /**
-     * Parse string column as json column
-     * @param: 
-     * @paramType: 
-     * @return: JsonColumn
-     */
-    DEFINE_VECTORIZED_FN(_string_json);
-
     template <LogicalType RresultType>
     DEFINE_VECTORIZED_FN(_get_json_value);
 

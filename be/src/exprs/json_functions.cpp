@@ -358,7 +358,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_string(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> JsonFunctions::_string_json(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> _string_json(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(columns[0]->size());
 
@@ -516,54 +516,6 @@ Status JsonFunctions::native_json_path_close(FunctionContext* context, FunctionC
     return Status::OK();
 }
 
-// Convert the JSON Slice to a LogicalType through ColumnBuilder
-template <LogicalType ResultType>
-static Status _convert_json_slice(const vpack::Slice& slice, ColumnBuilder<ResultType>& result) {
-    try {
-        if (slice.isNone()) {
-            result.append_null();
-        } else if constexpr (ResultType == TYPE_JSON) {
-            JsonValue value(slice);
-            result.append(std::move(value));
-        } else if (slice.isNull()) {
-            result.append_null();
-        } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
-            if (LIKELY(slice.isType(vpack::ValueType::String))) {
-                vpack::ValueLength len;
-                const char* str = slice.getStringUnchecked(len);
-                result.append(Slice(str, len));
-            } else {
-                vpack::Options options = vpack::Options::Defaults;
-                options.singleLinePrettyPrint = true;
-                std::string str = slice.toJson(&options);
-
-                result.append(Slice(str));
-            }
-        } else if constexpr (ResultType == TYPE_BOOLEAN) {
-            if (slice.isBoolean()) {
-                result.append(slice.getBool());
-            } else if (slice.isString()) {
-                vpack::ValueLength len;
-                const char* str = slice.getStringUnchecked(len);
-                StringParser::ParseResult parseResult;
-                bool b = StringParser::string_to_bool(str, len, &parseResult);
-                parseResult == StringParser::PARSE_SUCCESS ? result.append(b) : result.append_null();
-            } else {
-                result.append(slice.getNumber<double>() != 0);
-            }
-        } else if constexpr (ResultType == TYPE_INT || ResultType == TYPE_BIGINT) {
-            slice.isBool() ? result.append(slice.getBool()) : result.append(slice.getNumber<int64_t>());
-        } else if constexpr (ResultType == TYPE_DOUBLE) {
-            slice.isBool() ? result.append(slice.getBool()) : result.append(slice.getNumber<double>());
-        } else {
-            return Status::InvalidArgument("unsupported json type");
-        }
-    } catch (const vpack::Exception& e) {
-        return Status::InvalidArgument("failed to convert json to primitive");
-    }
-    return Status::OK();
-}
-
 template <LogicalType ResultType>
 StatusOr<ColumnPtr> JsonFunctions::_json_query_impl(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -691,7 +643,6 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             JsonValue* json_value = json_viewer.value(row);
             builder.clear();
             vpack::Slice slice = JsonPath::extract(json_value, state->real_path, &builder);
-            // Status st = _convert_json_slice<ResultType>(slice, result);
             Status st = cast_vpjson_to<ResultType, false>(slice, result);
             if (!st.ok()) {
                 result.append_null();
