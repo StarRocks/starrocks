@@ -22,6 +22,22 @@
 
 namespace starrocks {
 
+// _CL_LDECREF first to dec __cl_refcount, make sure
+// that dir->close can be delete itself if refCount
+// is zero.
+#define CLOSE_DIR(x)    \
+    if (x != nullptr) { \
+        _CL_LDECREF(x)  \
+        x->close();     \
+    }
+#define FINALLY_CLOSE_DIR(x)                                                                        \
+    try {                                                                                           \
+        CLOSE_DIR(x)                                                                                \
+    } catch (CLuceneError & e) {                                                                    \
+        LOG(WARNING) << "CLuceneError occured, error msg: " << e.what();                            \
+        return Status::InternalError(fmt::format("CLuceneError occured, error msg: {}", e.what())); \
+    }
+
 #define CLOSE_INPUT(x)  \
     if (x != nullptr) { \
         x->close();     \

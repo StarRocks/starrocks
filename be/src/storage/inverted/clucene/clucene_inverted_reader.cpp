@@ -22,6 +22,7 @@
 #include "match_operator.h"
 #include "storage/inverted/index_descriptor.hpp"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 #include "util/faststring.h"
 
 namespace starrocks {
@@ -64,6 +65,9 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     std::unique_ptr<MatchOperator> match_operator;
 
     auto* directory = lucene::store::FSDirectory::getDirectory(_index_path.c_str());
+    // defer must define before IndexSearcher. Because the destory order is matter.
+    // Make sure IndexSearcher destory first and decrement __cl_refcount first.
+    DeferOp defer([&]() { CLOSE_DIR(directory) });
     lucene::search::IndexSearcher index_searcher(directory);
 
     switch (query_type) {
@@ -100,8 +104,6 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     default:
         return Status::InvalidArgument("Unknown query type");
     }
-
-    _CLDECDELETE(directory)
 
     roaring::Roaring result;
     try {
@@ -142,13 +144,13 @@ Status FullTextCLuceneInvertedReader::query_null(OlapReaderStatistics* stats, co
 
         bit_map->swap(*null_bitmap);
 
-        CLOSE_INPUT(dir)
+        CLOSE_DIR(dir)
     } catch (CLuceneError& e) {
         if (null_bitmap_in) {
             FINALLY_CLOSE_INPUT(null_bitmap_in)
         }
         if (dir) {
-            FINALLY_CLOSE_INPUT(dir)
+            FINALLY_CLOSE_DIR(dir)
         }
         LOG(WARNING) << "Inverted index read null bitmap error occurred: " << e.what();
         return Status::NotFound(fmt::format("Inverted index read null bitmap error occurred: ", e.what()));
