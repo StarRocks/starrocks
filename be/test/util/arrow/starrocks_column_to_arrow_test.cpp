@@ -603,9 +603,11 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
-    std::vector<std::string> field_names{"id", "name"};
-    auto struct_type_desc =
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
+    TypeDescriptor struct_type_desc(TYPE_STRUCT);
+    struct_type_desc.field_names.emplace_back("id");
+    struct_type_desc.field_names.emplace_back("name");
+    struct_type_desc.children.emplace_back(TYPE_INT);
+    struct_type_desc.children.emplace_back(TYPE_CHAR);
     auto column = ColumnHelper::create_column(struct_type_desc, false, false, 0, false);
 
     // {1, "test1"}
@@ -638,9 +640,11 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
-    std::vector<std::string> field_names{"id", "name"};
-    auto struct_type_desc =
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
+    TypeDescriptor struct_type_desc(TYPE_STRUCT);
+    struct_type_desc.field_names.emplace_back("id");
+    struct_type_desc.field_names.emplace_back("name");
+    struct_type_desc.children.emplace_back(TYPE_INT);
+    struct_type_desc.children.emplace_back(TYPE_CHAR);
     auto column = ColumnHelper::create_column(struct_type_desc, true, false, 0, false);
 
     // {1, "test1"}
@@ -768,8 +772,11 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
 TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
     // ARRAY<STRUCT<INT,MAP<INT,CHAR>>>>
     auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
-    std::vector<std::string> field_names{"id", "map"};
-    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), map_type_desc});
+    TypeDescriptor struct_type_desc(TYPE_STRUCT);
+    struct_type_desc.field_names.emplace_back("id");
+    struct_type_desc.field_names.emplace_back("map");
+    struct_type_desc.children.emplace_back(TYPE_INT);
+    struct_type_desc.children.emplace_back(map_type_desc);
     auto array_type_desc = TypeDescriptor::create_array_type(struct_type_desc);
     auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
     // [{"id": 1, "map": {11:"test11"},{111:"test111"}}, null]
