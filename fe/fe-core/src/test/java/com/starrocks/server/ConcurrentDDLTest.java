@@ -150,13 +150,9 @@ public class ConcurrentDDLTest {
             Thread controlThread = new Thread(() -> {
                 int times = 0;
                 Random random = new Random();
-<<<<<<< HEAD
                 ConnectContext ctx = UtFrameUtils.createDefaultCtx();
                 ctx.setThreadLocalInfo();
-                while (times < 10) {
-=======
                 while (times < 5) {
->>>>>>> 5b42b0eaa4 ([UT] Fix testConcurrentlyDropDbAndCreateTable running too slow (#43470))
                     try {
                         System.out.println("creating table and db time: " + times);
                         starRocksAssert.withDatabase("concurrent_test_db");
