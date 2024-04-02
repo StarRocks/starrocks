@@ -37,10 +37,14 @@
 
 namespace starrocks::parquet {
 
-struct SplitContext : public pipeline::ScanSplitContext {
-    size_t split_start = 0;
-    size_t split_end = 0;
+struct SplitContext : public HdfsSplitContext {
     FileMetaDataPtr file_metadata;
+
+    HdfsSplitContextPtr clone() override {
+        auto ctx = std::make_unique<SplitContext>();
+        ctx->file_metadata = file_metadata;
+        return ctx;
+    }
 };
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size, int64_t file_mtime,
@@ -87,8 +91,9 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 #endif
     RETURN_IF_ERROR(_get_footer());
 
-    _build_split_tasks();
-    if (_scanner_ctx->split_tasks != nullptr && _scanner_ctx->split_tasks->size() > 0) {
+    RETURN_IF_ERROR(_build_split_tasks());
+    if (_scanner_ctx->split_tasks.size() > 0) {
+        _scanner_ctx->has_split_tasks = true;
         _is_file_filtered = true;
         return Status::OK();
     }
@@ -212,14 +217,12 @@ Status FileReader::_get_footer() {
     return Status::OK();
 }
 
-void FileReader::_build_split_tasks() {
+Status FileReader::_build_split_tasks() {
     // dont do split in following cases:
     // 1. this feature is not enabled
     // 2. we have already do split before (that's why `split_context` is nullptr)
-    // 3. in unit test case (that's why `split_tasks` is nullptr)
-    if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr ||
-        _scanner_ctx->split_tasks == nullptr) {
-        return;
+    if (!_scanner_ctx->enable_split_tasks || _scanner_ctx->split_context != nullptr) {
+        return Status::OK();
     }
 
     size_t row_group_size = _file_metadata->t_metadata().row_groups.size();
@@ -227,21 +230,29 @@ void FileReader::_build_split_tasks() {
         const tparquet::RowGroup& row_group = _file_metadata->t_metadata().row_groups[i];
         bool selected = _select_row_group(row_group);
         if (!selected) continue;
+        StatusOr<bool> st = _filter_group(row_group);
+        if (!st.ok()) return st.status();
+        if (st.value()) {
+            DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
+            continue;
+        }
         int64_t start_offset = _get_row_group_start_offset(row_group);
         int64_t end_offset = _get_row_group_end_offset(row_group);
         auto split_ctx = std::make_unique<SplitContext>();
         split_ctx->split_start = start_offset;
         split_ctx->split_end = end_offset;
         split_ctx->file_metadata = _file_metadata;
-        _scanner_ctx->split_tasks->emplace_back(std::move(split_ctx));
+        _scanner_ctx->split_tasks.emplace_back(std::move(split_ctx));
     }
+    _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->split_tasks->size() <= 1) {
-        _scanner_ctx->split_tasks->clear();
+    if (_scanner_ctx->split_tasks.size() <= 1) {
+        _scanner_ctx->split_tasks.clear();
     }
 
     VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
-                  << ", size = " << _scanner_ctx->split_tasks->size();
+                  << ", split_tasks.size = " << _scanner_ctx->split_tasks.size();
+    return Status::OK();
 }
 
 StatusOr<uint32_t> FileReader::_get_footer_read_size() const {
@@ -554,13 +565,6 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     const auto* scan_range = _scanner_ctx->scan_range;
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
-
-    if (_scanner_ctx->split_context != nullptr) {
-        auto split_context = down_cast<const SplitContext*>(_scanner_ctx->split_context);
-        scan_start = split_context->split_start;
-        scan_end = split_context->split_end;
-    }
-
     if (row_group_start >= scan_start && row_group_start < scan_end) {
         return true;
     }
