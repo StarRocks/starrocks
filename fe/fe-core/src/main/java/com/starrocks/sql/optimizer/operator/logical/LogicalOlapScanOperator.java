@@ -22,8 +22,6 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -37,7 +35,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.ValueProperty;
 import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.List;
 import java.util.Map;
