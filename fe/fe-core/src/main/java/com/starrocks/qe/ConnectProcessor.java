@@ -75,6 +75,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
@@ -822,11 +823,20 @@ public class ConnectProcessor {
             // set session variables first
             if (request.isSetModified_variables_sql()) {
                 LOG.info("Set session variables first: {}", request.modified_variables_sql);
-                new StmtExecutor(ctx, new OriginStatement(request.modified_variables_sql, 0), true).execute();
+
+                StatementBase statement = SqlParser.parseSingleStatement(request.modified_variables_sql,
+                        ctx.getSessionVariable().getSqlMode());
+                executor = new StmtExecutor(ctx, statement);
+                executor.setProxy();
+                executor.execute();
             }
             // 0 for compatibility.
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
-            executor = new StmtExecutor(ctx, new OriginStatement(request.getSql(), idx), true);
+
+            List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
+            StatementBase statement = stmts.get(idx);
+            executor = new StmtExecutor(ctx, statement);
+            executor.setProxy();
             executor.execute();
         } catch (IOException e) {
             // Client failed.
