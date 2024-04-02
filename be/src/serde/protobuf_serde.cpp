@@ -104,9 +104,8 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
 
     int padding_size = 0; // as streamvbyte may read up to 16 extra bytes from the input.
     if (context == nullptr) {
-        for (const auto& column : chunk.columns()) {
-            buff = ColumnArraySerde::serialize(*column, buff);
-            if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
+        for (auto i = 0; i < chunk.columns().size(); ++i) {
+            buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff);
         }
     } else {
         for (auto i = 0; i < chunk.columns().size(); ++i) {

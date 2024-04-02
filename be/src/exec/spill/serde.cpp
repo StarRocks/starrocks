@@ -14,6 +14,8 @@
 
 #include "exec/spill/serde.h"
 
+#include <cstring>
+
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
 #include "gen_cpp/types.pb.h"
@@ -21,16 +23,18 @@
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "serde/encode_context.h"
+#include "util/raw_container.h"
 
 namespace starrocks::spill {
 
 class ColumnarSerde : public Serde {
 public:
-    ColumnarSerde(Spiller* parent, ChunkBuilder chunk_builder, std::shared_ptr<serde::EncodeContext> encode_context)
-            : Serde(parent), _chunk_builder(std::move(chunk_builder)), _encode_context(std::move(encode_context)) {}
+    ColumnarSerde(Spiller* parent, ChunkBuilder chunk_builder)
+            : Serde(parent), _chunk_builder(std::move(chunk_builder)) {}
     ~ColumnarSerde() override = default;
 
     Status prepare() override {
+        RACE_DETECT(detect_prepare, var1);
         if (_encode_context == nullptr) {
             auto column_number = _parent->chunk_builder().column_number();
             auto encode_level = _parent->options().encode_level;
@@ -39,10 +43,19 @@ public:
         return Status::OK();
     }
 
-    Status serialize_to_block(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) override;
     StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, BlockReader* reader) override;
+    Status serialize(RuntimeState* state, SerdeContext& ctx, const ChunkPtr& chunk,
+                     const SpillOutputDataStreamPtr& output, bool aligned) override;
 
 private:
+    // data format
+    // header|encode levels|attachment...
+    // header:
+    // i32 sequence_id|i64 attachment size
+    static constexpr int32_t SEQUENCE_OFFSET = 0;
+    static constexpr int32_t ATTACHMENT_SIZE_OFFSET = SEQUENCE_OFFSET + sizeof(int32_t);
+    static constexpr int32_t HEADER_SIZE = ATTACHMENT_SIZE_OFFSET + sizeof(int64_t);
+
     size_t _max_serialized_size(const ChunkPtr& chunk) const;
 
     inline const std::vector<uint32_t>& _get_encode_levels() {
@@ -66,6 +79,7 @@ private:
     // here a std::shared_mutex is used to ensure concurrency safety.
     std::shared_mutex _mutex;
     std::shared_ptr<serde::EncodeContext> _encode_context;
+    DECLARE_RACE_DETECTOR(detect_prepare)
 };
 
 size_t ColumnarSerde::_max_serialized_size(const ChunkPtr& chunk) const {
@@ -84,46 +98,42 @@ size_t ColumnarSerde::_max_serialized_size(const ChunkPtr& chunk) const {
     return total_size;
 }
 
-Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) {
-    DCHECK(block != nullptr) << "block should not be null";
-    const auto& columns = chunk->columns();
-    size_t max_serialized_size = _max_serialized_size(chunk);
-    auto& serialize_buffer = ctx.aligned_buffer;
-    // DIRECT write require ALIGN TO page size
-    const size_t PAGE_SIZE = 4096;
-    serialize_buffer.resize(
-            ALIGN_UP(max_serialized_size + columns.size() * sizeof(uint32_t) + sizeof(size_t), PAGE_SIZE));
-
-    uint8_t* buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
-
-    size_t meta_len = 0;
-
-    if (_encode_context == nullptr) {
+Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const ChunkPtr& chunk,
+                                const SpillOutputDataStreamPtr& output, bool aligned) {
+    raw::RawString& serialize_buffer = ctx.serialize_buffer;
+    {
         SCOPED_TIMER(_parent->metrics().serialize_timer);
-        meta_len = sizeof(size_t);
-        uint8_t* head = buf = buf + meta_len;
-        for (const auto& column : columns) {
-            buf = serde::ColumnArraySerde::serialize(*column, buf);
-            if (UNLIKELY(buf == nullptr)) {
-                return Status::InternalError("unsupported column occurs in spill serialize phase");
+        size_t ALIGNED_SIZE = 1;
+        if (aligned) {
+            ALIGNED_SIZE = AlignedBuffer::PAGE_SIZE;
+        }
+        ctx.serialize_buffer.clear();
+        const auto& columns = chunk->columns();
+        // header|attachment...
+        // i32 sequence_id|i64 chunk size|encode level|attachment(column data)...
+        char header_buffer[HEADER_SIZE];
+        UNALIGNED_STORE32(header_buffer + SEQUENCE_OFFSET, output->next_sequence_id());
+
+        size_t encode_level_sizes = columns.size() * sizeof(int32_t);
+        size_t max_serialized_size = _max_serialized_size(chunk);
+        ctx.serialize_buffer.resize(ALIGN_UP(HEADER_SIZE + encode_level_sizes + max_serialized_size, ALIGNED_SIZE));
+        uint8_t* buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
+        const uint8_t* head = buf;
+
+        // acquire encode level
+        auto encode_levels = _get_encode_levels();
+        {
+            buf = buf + HEADER_SIZE;
+            for (auto encode_level : encode_levels) {
+                UNALIGNED_STORE32(buf, encode_level);
+                buf += sizeof(uint32_t);
             }
         }
-        size_t content_length = buf - head;
-        auto align_size = ALIGN_UP(content_length + meta_len, PAGE_SIZE);
-        serialize_buffer.resize(align_size);
-        // only 8 bytes for serialized size if encoding is disable
-        UNALIGNED_STORE64(serialize_buffer.data(), align_size - meta_len);
-    } else {
-        SCOPED_TIMER(_parent->metrics().serialize_timer);
-        // 8 bytes for encoded size, 4 bytes for each column's encode level
-        // @TODO(silverbullet233): encode levels can be further encoded to save space if necessary.
-        meta_len = sizeof(size_t) + columns.size() * sizeof(uint32_t);
-        uint8_t* head = buf = buf + meta_len;
 
-        auto encode_levels = _get_encode_levels();
         // used to record raw_bytes and encoded_bytes for each column
         std::vector<std::pair<uint64_t, uint64_t>> column_stats;
         column_stats.reserve(columns.size());
+        // serialize to io buffer
         int padding_size = 0;
         for (size_t i = 0; i < columns.size(); i++) {
             uint8_t* begin = buf;
@@ -131,95 +141,76 @@ Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chun
             if (UNLIKELY(buf == nullptr)) {
                 return Status::InternalError("unsupported column occurs in spill serialize phase");
             }
-            // raw_bytes and encoded_bytes
             column_stats.emplace_back(columns[i]->byte_size(), buf - begin);
             if (serde::EncodeContext::enable_encode_integer(encode_levels[i])) {
                 padding_size = serde::EncodeContext::STREAMVBYTE_PADDING_SIZE;
             }
         }
         _update_encode_stats(column_stats);
+        // total serialized size
         size_t content_length = buf - head;
-        auto align_size = ALIGN_UP(content_length + meta_len + padding_size, PAGE_SIZE);
+        auto align_size = ALIGN_UP(content_length + padding_size, ALIGNED_SIZE);
         serialize_buffer.resize(align_size);
-
-        // fill encoded size
-        auto* tmp_buf = serialize_buffer.data();
-        UNALIGNED_STORE64(tmp_buf, serialize_buffer.size() - meta_len);
-        tmp_buf += sizeof(size_t);
-        // fill encode level
-        for (auto encode_level : encode_levels) {
-            UNALIGNED_STORE32(tmp_buf, encode_level);
-            tmp_buf += sizeof(uint32_t);
-        }
+        UNALIGNED_STORE64(header_buffer + ATTACHMENT_SIZE_OFFSET, align_size - HEADER_SIZE);
+        memcpy(serialize_buffer.data(), header_buffer, HEADER_SIZE);
     }
-
-    std::vector<Slice> data;
-    data.emplace_back(Slice(serialize_buffer.data(), serialize_buffer.size()));
-    RETURN_IF_ERROR(block->append(data));
-    _parent->metrics().total_spill_bytes->fetch_add(meta_len + serialize_buffer.size());
-    TRACE_SPILL_LOG << "serialize chunk to block: " << block->debug_string()
-                    << ", original size: " << chunk->bytes_usage() << ", encoded size: " << serialize_buffer.size();
+    size_t written_bytes = serialize_buffer.size();
+    RETURN_IF_ERROR(output->append(state, {Slice(serialize_buffer.data(), written_bytes)}, written_bytes));
     return Status::OK();
 }
 
 StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockReader* reader) {
-    size_t encoded_size;
+    char header_buffer[HEADER_SIZE];
     bool is_read_from_remote = reader->block()->is_remote();
-    auto read_io_timer =
-            is_read_from_remote ? _parent->metrics().remote_read_io_timer : _parent->metrics().local_read_io_timer;
-    auto read_io_count =
-            is_read_from_remote ? _parent->metrics().remote_read_io_count : _parent->metrics().local_read_io_count;
+    auto read_io_timer = GET_METRICS(is_read_from_remote, _parent->metrics(), read_io_timer);
+    auto read_io_count = GET_METRICS(is_read_from_remote, _parent->metrics(), read_io_count);
+
     {
         SCOPED_TIMER(read_io_timer);
         COUNTER_UPDATE(read_io_count, 1);
-        // @TODO(silverbullet233): if we can store each chunk's encoded size in memory, we can avoid this IO
-        RETURN_IF_ERROR(reader->read_fully(&encoded_size, sizeof(size_t)));
+        RETURN_IF_ERROR(reader->read_fully(header_buffer, HEADER_SIZE));
     }
-    size_t read_bytes = sizeof(size_t) + encoded_size;
+
+    int32_t sequence_id = UNALIGNED_LOAD32(header_buffer + SEQUENCE_OFFSET);
+    int32_t attachment_size = UNALIGNED_LOAD32(header_buffer + ATTACHMENT_SIZE_OFFSET);
+    int32_t next_sequence_id = reader->next_sequence_id();
+    if (sequence_id != next_sequence_id) {
+        return Status::InternalError(fmt::format("sequence id mismatch {} vs {}", sequence_id, next_sequence_id));
+    }
+
     auto chunk = _chunk_builder();
     auto& columns = chunk->columns();
 
-    size_t total_size = encoded_size;
-    if (_encode_context != nullptr) {
-        total_size += columns.size() * sizeof(uint32_t);
-    }
     auto& serialize_buffer = ctx.serialize_buffer;
-    serialize_buffer.resize(total_size);
+    serialize_buffer.resize(attachment_size);
 
     auto buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
     {
         SCOPED_TIMER(read_io_timer);
         COUNTER_UPDATE(read_io_count, 1);
-        RETURN_IF_ERROR(reader->read_fully(buf, total_size));
+        auto st = reader->read_fully(buf, attachment_size);
+        RETURN_IF(st.is_end_of_file(), Status::InternalError("not found enough data in block"));
+        RETURN_IF_ERROR(st);
     }
 
-    [[maybe_unused]] const uint32_t* encode_levels = nullptr;
+    const uint32_t* encode_levels = nullptr;
     const uint8_t* read_cursor = buf;
-    if (_encode_context != nullptr) {
-        encode_levels = reinterpret_cast<uint32_t*>(serialize_buffer.data());
-        read_cursor += columns.size() * sizeof(uint32_t);
+    encode_levels = reinterpret_cast<uint32_t*>(serialize_buffer.data());
+
+    read_cursor += columns.size() * sizeof(uint32_t);
+    SCOPED_TIMER(_parent->metrics().deserialize_timer);
+    for (size_t i = 0; i < columns.size(); i++) {
+        read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]);
     }
 
-    if (_encode_context == nullptr) {
-        SCOPED_TIMER(_parent->metrics().deserialize_timer);
-        for (auto& column : columns) {
-            read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get());
-        }
-    } else {
-        SCOPED_TIMER(_parent->metrics().deserialize_timer);
-        for (size_t i = 0; i < columns.size(); i++) {
-            read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]);
-        }
-    }
-    auto restore_bytes =
-            is_read_from_remote ? _parent->metrics().remote_restore_bytes : _parent->metrics().local_restore_bytes;
-    COUNTER_UPDATE(restore_bytes, read_bytes);
-    TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string() << ", encoded size: " << encoded_size
-                    << ", original size: " << chunk->bytes_usage();
+    auto restore_bytes = GET_METRICS(is_read_from_remote, _parent->metrics(), restore_bytes);
+    COUNTER_UPDATE(restore_bytes, attachment_size);
+    TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()
+                    << ", encoded size: " << attachment_size << ", original size: " << chunk->bytes_usage();
     return chunk;
 }
 
 StatusOr<SerdePtr> Serde::create_serde(Spiller* parent) {
-    return std::make_shared<ColumnarSerde>(parent, parent->chunk_builder(), nullptr);
+    return std::make_shared<ColumnarSerde>(parent, parent->chunk_builder());
 }
 } // namespace starrocks::spill

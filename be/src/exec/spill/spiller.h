@@ -40,6 +40,7 @@
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
 
+#define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
 namespace starrocks::spill {
 
 // some metrics for spill
