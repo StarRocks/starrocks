@@ -723,10 +723,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
 
-<<<<<<< HEAD
-    COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
-=======
->>>>>>> 22285e31e8 ([Enhancement] merge tiny stripes / RowGroups when do splitting (#43103))
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
