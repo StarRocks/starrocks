@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
@@ -80,7 +81,6 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -146,12 +146,18 @@ import java.util.Map;
 
 public class DDLStmtExecutor {
 
+    private final StmtExecutorVisitor stmtExecutorVisitor;
+
+    public DDLStmtExecutor(StmtExecutorVisitor stmtExecutorVisitor) {
+        this.stmtExecutorVisitor = stmtExecutorVisitor;
+    }
+
     /**
      * Execute various ddl statement
      */
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
         try {
-            return stmt.accept(StmtExecutorVisitor.getInstance(), context);
+            return GlobalStateMgr.getCurrentState().getDdlStmtExecutor().stmtExecutorVisitor.visit(stmt, context);
         } catch (RuntimeException re) {
             if (re.getCause() instanceof DdlException) {
                 throw (DdlException) re.getCause();
@@ -165,14 +171,15 @@ public class DDLStmtExecutor {
         }
     }
 
-    static class StmtExecutorVisitor extends AstVisitor<ShowResultSet, ConnectContext> {
-
+    public static class StmtExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
-
         private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();
 
         public static StmtExecutorVisitor getInstance() {
             return INSTANCE;
+        }
+
+        protected StmtExecutorVisitor() {
         }
 
         @Override
@@ -264,7 +271,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().createTable(stmt.getCreateTableStmt());
+                context.getGlobalStateMgr().getMetadataMgr().createTableLike(stmt);
             });
             return null;
         }
@@ -384,7 +391,6 @@ public class DDLStmtExecutor {
             });
             return null;
         }
-
 
         @Override
         public ShowResultSet visitCancelCompactionStatement(CancelCompactionStmt stmt, ConnectContext context) {
@@ -526,17 +532,6 @@ public class DDLStmtExecutor {
                         stmt.getPropertyPairList());
 
             });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
-                                                                     ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationMgr().createSecurityIntegration(
-                        stmt.getName(), stmt.getPropertyMap());
-            });
-
             return null;
         }
 
@@ -741,6 +736,13 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLocalMetastore().checkTablets(stmt);
             });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(()
+                    -> context.getGlobalStateMgr().getLocalMetastore().setPartitionVersion(stmt));
             return null;
         }
 

@@ -60,6 +60,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
 #include "util/misc.h"
+#include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -75,7 +76,7 @@ std::string to_load_error_http_path(const std::string& file_name) {
         return "";
     }
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_load_error_log?"
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
@@ -223,7 +224,7 @@ void FragmentExecState::callback(const Status& status, RuntimeProfile* profile, 
 
 std::string FragmentExecState::to_http_path(const std::string& file_name) {
     std::stringstream url;
-    url << "http://" << BackendOptions::get_localhost() << ":" << config::be_http_port << "/api/_download_load?"
+    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_download_load?"
         << "token=" << _exec_env->token() << "&file=" << file_name;
     return url.str();
 }
@@ -808,6 +809,16 @@ void FragmentMgr::debug(std::stringstream& ss) {
  */
 Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
                                                 std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id) {
+    // check chunk size first
+    if (UNLIKELY(!params.__isset.batch_size)) {
+        return Status::InvalidArgument("batch_size is not set");
+    }
+    auto batch_size = params.batch_size;
+    if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+        return Status::InvalidArgument(
+                fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                            MAX_CHUNK_SIZE, batch_size));
+    }
     const std::string& opaqued_query_plan = params.opaqued_query_plan;
     std::string query_plan_info;
     // base64 decode query plan

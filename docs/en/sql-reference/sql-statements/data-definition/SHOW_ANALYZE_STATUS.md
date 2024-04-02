@@ -18,7 +18,7 @@ This statement is supported from v2.4.
 SHOW ANALYZE STATUS [WHERE]
 ```
 
-You can use `LILE or WHERE` to filter the information to return.
+You can use `LIKE` or `WHERE` to filter the information to return.
 
 This statement returns the following columns.
 

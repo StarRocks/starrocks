@@ -95,7 +95,7 @@ E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materializ
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
 -- result:
-E: (1064, 'Unexpected exception: New name conflicts with rollup index name: mv1')
+E: (1064, 'New name conflicts with rollup index name: mv1')
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
@@ -135,7 +135,7 @@ false	base-table swapped: mv1
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
 -- result:
-false	base mv is not active: mv_on_mv_1
+false	base-mv inactive: mv_on_mv_1
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:

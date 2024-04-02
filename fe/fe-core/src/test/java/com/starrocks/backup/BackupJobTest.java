@@ -341,6 +341,11 @@ public class BackupJobTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(BackupJobState.FINISHED, job.getState());
+
+        try {
+            // test get backup info
+            job.getInfo();
+        } catch (Exception ignore) { }
     }
 
     @Test

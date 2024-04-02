@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -93,5 +94,18 @@ public class CompactionMgrTest {
 
         compactionMgr.removePartition(partition2);
         Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
+    }
+
+    @Test
+    public void testTriggerManualCompaction() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+
+        PartitionStatistics statistics = compactionManager.triggerManualCompaction(partition);
+        Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, statistics.getPriority());
+
+        Collection<PartitionStatistics> allStatistics = compactionManager.getAllStatistics();
+        Assert.assertEquals(1, allStatistics.size());
+        Assert.assertTrue(allStatistics.contains(statistics));
     }
 }

@@ -46,6 +46,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -255,7 +256,7 @@ public final class SqlToScalarOperatorTranslator {
         }
     }
 
-    private static class Visitor extends AstVisitor<ScalarOperator, Context> {
+    private static class Visitor implements AstVisitor<ScalarOperator, Context> {
         private ExpressionMapping expressionMapping;
         private final ColumnRefFactory columnRefFactory;
         private final List<ColumnRefOperator> correlation;
@@ -288,8 +289,7 @@ public final class SqlToScalarOperatorTranslator {
                 return expressionMapping.get(expr);
             }
 
-            return super.visit(node, context);
-
+            return node.accept(this, context);
         }
 
         @Override
@@ -674,6 +674,9 @@ public final class SqlToScalarOperatorTranslator {
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
+            if (FunctionSet.nonDeterministicFunctions.contains(node.getFnName().getFunction())) {
+                callOperator.setId(columnRefFactory.getNextUniqueId());
+            }
             return callOperator;
         }
 
@@ -743,11 +746,12 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitVariableExpr(VariableExpr node, Context context) {
-            if (node.isNull()) {
-                return ConstantOperator.createNull(node.getType());
-            } else {
-                return new ConstantOperator(node.getValue(), node.getType());
-            }
+            return new ConstantOperator(node.getValue(), node.getType());
+        }
+
+        @Override
+        public ScalarOperator visitUserVariableExpr(UserVariableExpr node, Context context) {
+            return visit(node.getValue(), context);
         }
 
         @Override
@@ -841,7 +845,7 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn(), node.getType());
         }
 
         @Override

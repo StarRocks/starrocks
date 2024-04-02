@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 5
 ---
 
 # BROKER LOAD
@@ -61,7 +62,7 @@ INTO TABLE <table_name>
 [COLUMNS TERMINATED BY "<column_separator>"]
 [ROWS TERMINATED BY "<row_separator>"]
 [FORMAT AS "CSV | Parquet | ORC"]
-[(fomat_type_options)]
+[(format_type_options)]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -203,14 +204,6 @@ INTO TABLE <table_name>
 
 In v2.3 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword.
 
-> **NOTE**
->
-> In v2.4 and earlier, StarRocks depends on brokers to set up connections between your StarRocks cluster and your external storage system when it runs a Broker Load job. This is called "broker-based loading." A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your external storage system, and can use its own computing resources to pre-process and load the data of these data files.
->
-> From v2.5 onwards, StarRocks removes the dependency on brokers and implements "broker-free loading."
->
-> You can use the [SHOW BROKER](../Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../../../deployment/deploy_broker.md).
-
 ### StorageCredentialParams
 
 The authentication information used by StarRocks to access your storage system.
@@ -255,30 +248,19 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     | kerberos_keytab                 | The save path of the Kerberos keytab file. |
     | kerberos_keytab_content         | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
-    If you have configured multiple Kerberos users, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the brokers to read the **krb5.conf** file. Example:
-
-    ```Plain
-    export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
-    ```
-
-    > **NOTE**
-    >
-    > - In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If the broker group consists of multiple brokers, you must modify the **start_broker.sh** file on each broker node and then restart the broker nodes to make the modifications take effect.
-    > - You can use the [SHOW BROKER](../Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
-
 - HA configuration
 
   You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following scenarios:
 
   - If you load data from a single HDFS cluster that has one Kerberos user configured, both load-based loading and load-free loading are supported.
   
-    - To perform load-based loading, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
+    - To perform load-based loading, make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
   
     - To perform load-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
   
-  - If you load data from a single HDFS cluster that has multiple Kerberos users configured, only broker-based loading is supported. Make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
+  - If you load data from a single HDFS cluster that has multiple Kerberos users configured, only broker-based loading is supported. Make sure that at least one independent broker group is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
 
-  - If you load data from multiple HDFS clusters (regardless of whether one or multiple Kerberos users are configured), only broker-based loading is supported. Make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed for each of these HDFS clusters, and take one of the following actions to enable the brokers to read information about the HDFS cluster nodes:
+  - If you load data from multiple HDFS clusters (regardless of whether one or multiple Kerberos users are configured), only broker-based loading is supported. Make sure that at least one independent broker group is deployed for each of these HDFS clusters, and take one of the following actions to enable the brokers to read information about the HDFS cluster nodes:
 
     - Place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves each HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the nodes in that HDFS cluster.
 
@@ -619,11 +601,11 @@ The following parameters are supported:
 
 - `timezone`
 
-  Specifies the time zone of the load job. Default value: `Asia/Shanghai`. The time zone setting affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. For more information, see [Configure a time zone](../../../administration/timezone.md). The time zone specified in the `timezone` parameter is a session-level time zone.
+  Specifies the time zone of the load job. Default value: `Asia/Shanghai`. The time zone setting affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. For more information, see [Configure a time zone](../../../administration/management/timezone.md). The time zone specified in the `timezone` parameter is a session-level time zone.
 
 - `priority`
 
-  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/FE_configuration.md#fe-configuration-items) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs will be waiting to be scheduled based on their priorities.
+  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/management/FE_configuration.md) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs will be waiting to be scheduled based on their priorities.
 
   You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER_LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
@@ -639,7 +621,35 @@ The following parameters are supported:
   >
   > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates.
 
+StarRocks supports loading JSON data from v3.2.3 onwards. The parameters are as follows:
+
+- jsonpaths
+
+  The names of the keys that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is in JSON format. See [Configure column mapping for JSON data loading](#configure-column-mapping-for-json-data-loading).
+
+- strip_outer_array
+
+  Specifies whether to strip the outermost array structure. Valid values: `true` and `false`. Default value: `false`.
+  
+  In real-world business scenarios, the JSON data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON data file into one array and loads the array as a single data record. For example, the JSON data is `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`. If you set this parameter to `true`,  `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed into separate data records that are loaded into separate StarRocks table rows.
+
+- json_root
+
+  The root element of the JSON data that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. For more information, see the "[Load JSON data using matched mode with root element specified](#load-json-data-using-matched-mode-with-root-element-specified)" section of this topic.
+
+<!-- - ignore_json_size
+
+  Specifies whether to check the size of the JSON body in the HTTP request.
+  
+  > **NOTE**
+  >
+  > By default, the size of the JSON body in an HTTP request cannot exceed 100 MB. If the JSON body exceeds 100 MB in size, an error "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." is reported. To prevent this error, you can add `"ignore_json_size:true"` in the HTTP request header to instruct StarRocks not to check the JSON body size.
+-->
+When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
+
 ## Column mapping
+
+### Configure column mapping for CSV data loading
 
 If the columns of the data file can be mapped one on one in sequence to the columns of the StarRocks table, you do not need to configure the column mapping between the data file and the StarRocks table.
 
@@ -660,13 +670,40 @@ If the columns of the data file cannot be mapped one on one in sequence to the c
 
 For detailed examples, see [Configure column mapping](#configure-column-mapping).
 
+### Configure column mapping for JSON data loading
+
+If the keys of the JSON document have the same names as the columns of the StarRocks table, you can load the JSON-formatted data by using the simple mode. In simple mode, you do not need to specify the `jsonpaths` parameter. This mode requires that the JSON-formatted data must be an object as indicated by curly brackets `{}`, such as `{"category": 1, "author": 2, "price": "3"}`. In this example, `category`, `author`, and `price` are key names, and these keys can be mapped one on one by name to the columns `category`, `author`, and `price` of the StarRocks table.
+
+If the keys of the JSON document have different names than the columns of the StarRocks table, you can load the JSON-formatted data by using the matched mode. In matched mode, you need to use the `jsonpaths` and `COLUMNS` parameters to specify the column mapping between the JSON document and the StarRocks table:
+
+- In the `jsonpaths` parameter, specify the JSON keys in the sequence as how they are arranged in the JSON document.
+- In the `COLUMNS` parameter, specify the mapping between the JSON keys and the StarRocks table columns:
+  - The column names specified in the `COLUMNS` parameter are mapped one on one in sequence to the JSON keys.
+  - The column names specified in the `COLUMNS` parameter are mapped one on one by name to the StarRocks table columns.
+
+For examples about loading JSON-formatted data by using the matched mode, see [Load JSON data using matched mode](#load-json-data-using-matched-mode).
+
 ## Related configuration items
 
-The [FE configuration item](../../../administration/FE_configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
+The [FE configuration item](../../../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
 
 In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs will be queued and scheduled based on their submission time.
 
 Since StarRocks v2.5, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter described above. You can use [ALTER LOAD](../data-manipulation/ALTER_LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.
+
+## Job splitting and concurrent running
+
+A Broker Load job can be split into one or more tasks that concurrently run. The tasks within a load job are run within a single transaction. They must all succeed or fail. StarRocks splits each load job based on how you declare `data_desc` in the `LOAD` statement:
+
+- If you declare multiple `data_desc` parameters, each of which specifies a distinct table, a task is generated to load the data of each table.
+
+- If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
+
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs or CNs of your StarRocks cluster. StarRocks splits each task based on the FE parameter [`min_bytes_per_broker_scanner`](../../../administration/management/FE_configuration.md) and the number of BE or CN nodes. You can use the following formula to calculate the number of instances in an individual task:
+
+**Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`, Number of BE/CN nodes)**
+
+In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BE or CN nodes.
 
 ## Examples
 
@@ -937,7 +974,7 @@ LOAD LABEL test_db.label10
 >
 > - The `hll_empty` function is used to fill the specified default value into `col3` of `table10`.
 
-For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md) and [hll_empty](../../sql-functions/aggregate-functions/hll_empty.md).
+For usage of the functions `hll_hash` and `hll_empty`, see [hll_hash](../../sql-functions/scalar-functions/hll_hash.md) and [hll_empty](../../sql-functions/scalar-functions/hll_empty.md).
 
 #### Extract partition field values from file path
 
@@ -1107,3 +1144,143 @@ WITH BROKER
 > - By default, when you load ORC data, StarRocks determines the data file format based on whether the filename contains the extension **.orc**. If the filename does not contain the extension **.orc**, you must use `FORMAT AS` to specify the data file format as `ORC`.
 >
 > - In StarRocks v2.3 and earlier, if the data file contains ARRAY-type columns, you must make sure that the columns of the ORC data file have the same names as their mapping columns in the StarRocks table and the columns cannot be specified in the SET clause.
+
+### Load JSON data
+
+This section describes the parameter settings that you need to take note of when you load JSON data.
+
+Your StarRocks database `test_db` contains a table named `tbl1`, whose schema is as follows:
+
+```SQL
+`category` varchar(512) NULL COMMENT "",
+`author` varchar(512) NULL COMMENT "",
+`title` varchar(512) NULL COMMENT "",
+`price` double NULL COMMENT ""
+```
+
+#### Load JSON data using simple mode
+
+Suppose that your data file `example1.json` consists of the following data:
+
+```JSON
+{"category":"C++","author":"avc","title":"C++ primer","price":895}
+```
+
+To load all data from `example1.json` into `tbl1`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label15
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
+```
+
+> **NOTE**
+>
+> In the preceding example, the parameters `columns` and `jsonpaths` are not specified. Therefore, the keys in `example1.json` are mapped by name onto the columns of `tbl1`.
+
+#### Load JSON data using matched mode
+
+StarRocks performs the following steps to match and process JSON data:
+
+1. (Optional) Strips the outermost array structure as instructed by the `strip_outer_array` parameter setting.
+
+   > **NOTE**
+   >
+   > This step is performed only when the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. You need to set `strip_outer_array` to `true`.
+
+2. (Optional) Matches the root element of the JSON data as instructed by the `json_root` parameter setting.
+
+   > **NOTE**
+   >
+   > This step is performed only when the JSON data has a root element. You need to specify the root element by using the `json_root` parameter.
+
+3. Extracts the specified JSON data as instructed by the `jsonpaths` parameter setting.
+
+##### Load JSON data using matched mode without root element specified
+
+Suppose that your data file `example2.json` consists of the following data:
+
+```JSON
+[
+    {"category":"xuxb111","author":"1avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb222","author":"2avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb333","author":"3avc","title":"SayingsoftheCentury","price":895}
+]
+```
+
+To load only `category`, `author`, and `price` from `example2.json`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label16
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
+
+> **NOTE**
+>
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The key **title** that you do not want to load is ignored during loading.
+
+##### Load JSON data using matched mode with root element specified
+
+Suppose your data file `example3.json` consists of the following data:
+
+```JSON
+{
+    "id": 10001,
+    "RECORDS":[
+        {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
+        {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
+        {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
+    ],
+    "comments": ["3 records", "there will be 3 rows"]
+}
+```
+
+To load only `category`, `author`, and `price` from `example3.json`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label17
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example3.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "json_root"="$.RECORDS",
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
+
+> **NOTE**
+>
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The keys `title` and `timestamp` that you do not want to load are ignored during loading. Additionally, the `json_root` parameter is used to specify the root element, which is an array, of the JSON data.

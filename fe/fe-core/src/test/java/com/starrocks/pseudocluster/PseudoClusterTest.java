@@ -20,10 +20,17 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.UserException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
@@ -37,7 +44,9 @@ import org.junit.Test;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 
 public class PseudoClusterTest {
     @BeforeClass
@@ -85,15 +94,10 @@ public class PseudoClusterTest {
             } catch (Exception e) {
                 Assert.assertTrue(e.getMessage().contains("column_with_row storage type must have some non-key columns"));
             }
-            try {
-                stmt.execute("create table test2 ( pk bigint NOT NULL, v array<int> NOT NULL) " +
-                        "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
-                        "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
-                        "\"storage_type\" = \"column_with_row\")");
-                Assert.fail("should throw exception");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("column_with_row storage type does not support complex type"));
-            }
+            stmt.execute("create table test2 ( pk bigint NOT NULL, v1 array<int> NOT NULL, v2 bitmap NOT NULL) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
+                    "\"storage_type\" = \"column_with_row\")");
             stmt.execute("create table test3 ( pk bigint NOT NULL, v int NOT NULL) " +
                     "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
                     "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
@@ -124,8 +128,9 @@ public class PseudoClusterTest {
             try {
                 stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
                 Assert.fail("expected exception was not occured.");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
+            } catch (SQLException e) {
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
 
             // client prepared stmt
@@ -159,8 +164,9 @@ public class PseudoClusterTest {
             try {
                 stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
                 Assert.fail("expected exception was not occured.");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
+            } catch (SQLException e) {
+                Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
+                Assert.assertTrue(e.toString(), e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
             }
 
             // client prepared stmt
@@ -227,19 +233,24 @@ public class PseudoClusterTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
+            public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
                 return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
             @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
                 return pathInfo;
             }
         };
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException, DdlException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
 
@@ -248,6 +259,67 @@ public class PseudoClusterTest {
                 return fsInfo.getFsKey();
             }
         };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions, long warehouseId)
+                    throws DdlException {
+                return;
+            }
+        };
+
+        /*
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+
+        new MockUp<Cluster>() {
+            @Mock
+            public List<Long> getComputeNodeIds() {
+                return Lists.newArrayList(1L);
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+        };
+
+        new MockUp<ComputeNode>() {
+            @Mock
+            public boolean isAlive() {
+                return true;
+            }
+        };
+
+         */
 
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();

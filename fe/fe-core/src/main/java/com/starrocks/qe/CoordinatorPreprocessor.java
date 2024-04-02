@@ -40,7 +40,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
@@ -87,26 +86,27 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider =
-                workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                        sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(), jobSpec.getWarehouseId());
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
     }
 
     @VisibleForTesting
-    CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes) {
+    CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes, ConnectContext context) {
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
-        this.connectContext = StatisticUtils.buildConnectContext();
+        this.connectContext = context;
         this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider =
-                workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                        sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                jobSpec.getWarehouseId());
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -193,9 +193,10 @@ public class CoordinatorPreprocessor {
      */
     private void resetExec() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        workerProvider =
-                workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                        sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                jobSpec.getWarehouseId());
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }

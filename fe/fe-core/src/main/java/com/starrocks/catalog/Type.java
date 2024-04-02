@@ -122,7 +122,7 @@ public abstract class Type implements Cloneable {
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
-    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.OLAP_MAX_VARCHAR_LENGTH);
+    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
     public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
     public static final ScalarType HLL = ScalarType.createHllType();
     public static final ScalarType CHAR = ScalarType.createCharType(-1);
@@ -571,6 +571,12 @@ public abstract class Type implements Cloneable {
      */
     protected abstract String toSql(int depth);
 
+    public final String toTypeString() {
+        return toTypeString(0);
+    }
+
+    protected abstract String toTypeString(int depth);
+    
     /**
      * Same as toSql() but adds newlines and spaces for better readability of nested types.
      */

@@ -4,6 +4,65 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+## 2.5.20
+
+Release date: March 22, 2024
+
+### Improvements
+
+- `replace_if_not_null` supports BITMAP columns in an Aggregate table. Users can specify `replace_if_not_null` as the aggregate function for BITMAP columns in an Aggregate table. [#42104](https://github.com/StarRocks/starrocks/pull/42104)
+- G1 Garbage Collector is used for JDK 9 and later by default. [#41374](https://github.com/StarRocks/starrocks/pull/41374)
+
+### Parameter Changes
+
+- The default value of the BE parameter `update_compaction_size_threshold` is changed from 256 MB to 64 MB to accelerate compaction. [#42776](https://github.com/StarRocks/starrocks/pull/42776)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Synchronizing data using StarRocks external tables encounters the error "commit and publish txn failed". The synchronization succeeds after a retry but the same copy of data is loaded twice.  [#25165](https://github.com/StarRocks/starrocks/pull/25165)
+- RPC transmit resources are temporarily unavailable due to GC issues. [#41636](https://github.com/StarRocks/starrocks/pull/41636)
+- array_agg() in v2.5 processes NULLs in a different way than it does in v2.3. As a result, the query result is incorrect after an upgrade from v2.3 to v2.5. [#42639](https://github.com/StarRocks/starrocks/pull/42639)
+- The Sink Operator in a query unexpectedly exits, which causes BEs to crash. [#38662](https://github.com/StarRocks/starrocks/pull/38662)
+- Executing the DELETE command on an Aggregate table results in a race for accessing tablet metadata, which causes BEs to crash. [#42174](https://github.com/StarRocks/starrocks/pull/42174)
+- The MemTracker encounters the Use-After-Free issue during UDF calling, which causes BEs to crash. [#41710](https://github.com/StarRocks/starrocks/pull/41710)
+- The unnest() function does not support aliases. [#42138](https://github.com/StarRocks/starrocks/pull/42138)
+
+## 2.5.19
+
+Release date: February 8, 2024
+
+### New features
+
+- Added a pattern-matching function: [regexp_extract_all](https://docs.starrocks.io/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/).
+- Added Bitmap value processing functions: serialize, deserialize, and serializeToString. [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
+
+### Improvements
+
+- Supports automatic activation of inactive materialized views when refreshing these materialized views. [#38521](https://github.com/StarRocks/starrocks/pull/38521)
+- Optimized BE log printing to prevent too many irrelevant logs. [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
+- Supports using [Hive UDFs](https://docs.starrocks.io/docs/integrations/hive_bitmap_udf/) to process and load Bitmap data into StarRocks and export Bitmap data from StarRocks to Hive. [#40165](https://github.com/StarRocks/starrocks/pull/40165) [#40168](https://github.com/StarRocks/starrocks/pull/40168)
+- Added date formats `yyyy-MM-ddTHH:mm` and `yyyy-MM-dd HH:mm` to support TIMESTAMP partition fields in Apache Iceberg tables. [#39986](https://github.com/StarRocks/starrocks/pull/39986)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Running a Spark Load job that has no PROPERTIES specified causes null pointer exceptions (NPEs). [#38765](https://github.com/StarRocks/starrocks/pull/38765)
+- INSERT INTO SELECT occasionally encounters the error "timeout by txn manager". [#36688](https://github.com/StarRocks/starrocks/pull/36688)
+- The memory consumption of PageCache exceeds the threshold specified by the BE dynamic parameter `storage_page_cache_limit` in certain circumstances. [#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- After a table is dropped and then re-created with the same table name, refreshing asynchronous materialized views created on that table fails. [#38008](https://github.com/StarRocks/starrocks/pull/38008) [#38982](https://github.com/StarRocks/starrocks/pull/38982)
+- Writing data to S3 buckets using SELECT INTO occasionally encounters the error "The tablet write operation update metadata take a long time". [#38443](https://github.com/StarRocks/starrocks/pull/38443)
+- Some operations during data loading may encounter "reached timeout". [#36746](https://github.com/StarRocks/starrocks/pull/36746)
+- The DECIMAL type returned by SHOW CREATE TABLE is inconsistent with that specified in CREATE TABLE. [#39297](https://github.com/StarRocks/starrocks/pull/39297)
+- If partition columns in external tables contain null values, queries against those tables will cause BEs to crash. [#38888](https://github.com/StarRocks/starrocks/pull/38888)
+- When deleting data from a Duplicate Key table, if the condition in the WHERE clause of the DELETE statement has a leading space, the deleted data can still be queried using SELECT. [#39797](https://github.com/StarRocks/starrocks/pull/39797)
+- Loading `array<string>` data from ORC files into StarRocks (`array<json>`) may cause BEs to crash. [#39233](https://github.com/StarRocks/starrocks/pull/39233)
+- Querying Hive catalogs may be stuck and even expire. [#39863](https://github.com/StarRocks/starrocks/pull/39863)
+- Partitions cannot be dynamically created if hour-level partitions are specified in the PARTITION BY clause. [#40256](https://github.com/StarRocks/starrocks/pull/40256)
+- The error message "failed to call frontend service" is returned during loading from Apache Flink. [#40710](https://github.com/StarRocks/starrocks/pull/40710)
+
 ## 2.5.18
 
 Release date: Jan 10, 2024
@@ -113,7 +172,7 @@ Release date: November 29, 2023
 - Errors may be thrown if large amounts of data are loaded into a Primary Key table with persistent index enabled. [#34566](https://github.com/StarRocks/starrocks/pull/34566)
 - After StarRocks is upgraded from v2.4 or earlier to a later version, compaction scores may rise unexpectedly. [#34618](https://github.com/StarRocks/starrocks/pull/34618)
 - If `INFORMATION_SCHEMA` is queried by using the database driver MariaDB ODBC, the `CATALOG_NAME` column returned in the `schemata` view holds only `null` values. [#34627](https://github.com/StarRocks/starrocks/pull/34627)
-- If schema changes are being executed while a Stream Load job is in the **PREPARD** state, a portion of the source data to be loaded by the job is lost. [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- If schema changes are being executed while a Stream Load job is in the **PREPARED** state, a portion of the source data to be loaded by the job is lost. [#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - Including two or more slashes (`/`) at the end of the HDFS storage path causes the backup and restore of the data from HDFS to fail. [#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - Running a loading task or a query may cause the FEs to hang. [#34569](https://github.com/StarRocks/starrocks/pull/34569)
 
@@ -147,7 +206,7 @@ Fixed the following issues:
 - Long-time, frequent data loading into a Primary Key table with persistent index enabled may cause BEs to crash. [#33220](https://github.com/StarRocks/starrocks/pull/33220)
 - The query result is incorrect when Query Cache is enabled. [#32778](https://github.com/StarRocks/starrocks/pull/32778)
 - Specifying a nullable Sort Key when creating a Primary Key table causes compaction to fail. [#29225](https://github.com/StarRocks/starrocks/pull/29225)
-- The error "StarRocks planner use long time 10000 ms in logical phase" occassionally occurs for complex Join queries. [#34177](https://github.com/StarRocks/starrocks/pull/34177)
+- The error "StarRocks planner use long time 10000 ms in logical phase" occasionally occurs for complex Join queries. [#34177](https://github.com/StarRocks/starrocks/pull/34177)
 
 ## 2.5.13
 

@@ -401,6 +401,7 @@ struct TMaterializedViewStatus {
     25: optional string inactive_reason
 
     26: optional string extra_message
+    27: optional string query_rewrite_status
 }
 
 struct TListPipesParams {
@@ -716,6 +717,8 @@ struct TReportExecStatusParams {
   25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 
   27: optional string rejected_record_path
+
+  28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
 }
 
 struct TAuditStatistics {
@@ -837,6 +840,7 @@ struct TLoadTxnBeginRequest {
     // The real value of timeout should be i32. i64 ensures the compatibility of interface.
     10: optional i64 timeout
     11: optional Types.TUniqueId request_id
+    101: optional string warehouse   // begin from 101, in case of conflict with other's change
 }
 
 struct TLoadTxnBeginResult {
@@ -902,6 +906,8 @@ struct TStreamLoadPutRequest {
     // only valid when file type is CSV
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
+
+    101: optional string warehouse   // begin from 101, in case of conflict with other's change
 }
 
 struct TStreamLoadPutResult {
@@ -1616,6 +1622,22 @@ struct TFeLocksRes {
     1: optional list<TFeLocksItem> items
 }
 
+struct TFeMemoryItem {
+    1: optional string module_name
+    2: optional string class_name
+    3: optional i64 current_consumption
+    4: optional i64 peak_consumption
+    5: optional string counter_info
+}
+
+struct TFeMemoryReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TFeMemoryRes {
+    1: optional list<TFeMemoryItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1785,6 +1807,9 @@ service FrontendService {
 
     // sys.fe_locks
     TFeLocksRes listFeLocks(1: TFeLocksReq request)
+
+    // sys.fe_memory_usage
+    TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)

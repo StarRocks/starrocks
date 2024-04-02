@@ -95,5 +95,4 @@ public class EsUtilTest {
         EsRestClient.EsIndex[] esIndices = getFromJSONArray(jsonArray, EsRestClient.EsIndex[].class);
         System.out.println(JSONObject.valueToString(esIndices));
     }
-
 }

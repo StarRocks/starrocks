@@ -1,0 +1,160 @@
+-- name: test_group_execution_join
+set enable_group_execution = true;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `small_table` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+create table empty_t like t0;
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+insert into t0 values (null,null,null,null);
+-- result:
+-- !result
+insert into t1 SELECT * FROM t0;
+-- result:
+-- !result
+insert into small_table SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100));
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+40961
+-- !result
+select count(*) from t1;
+-- result:
+40961
+-- !result
+select count(*) from empty_t;
+-- result:
+0
+-- !result
+select count(*) from small_table;
+-- result:
+100
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 > 100;
+-- result:
+40860	20530.5	40860	40860	40860
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 > 100;
+-- result:
+40860	20530.5	40860	40860	40860
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 1024;
+-- result:
+1023	512.0	1023	1023	1023
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 1024;
+-- result:
+1023	512.0	1023	1023	1023
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 1024;
+-- result:
+1023	512.0	1023	1023	1023
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [broadcast] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+-- result:
+100	50.5	100	100	100
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+-- result:
+100	50.5	100	100	100
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [broadcast] empty_t s on l.c0 = s.c0 and l.c1 = s.c1;
+-- result:
+0	None	0	0	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 < 0;
+-- result:
+0	None	0	0	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 < 0;
+-- result:
+0	None	0	0	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 < 0;
+-- result:
+0	None	0	0	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l full outer join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where l.c3 < 0;
+-- result:
+0	None	0	0	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 0;
+-- result:
+0	None	0	0	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 0;
+-- result:
+0	None	0	0	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 0;
+-- result:
+0	None	0	0	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l full outer join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1 where r.c3 < 0;
+-- result:
+0	None	0	0	0
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 join [bucket] small_table s on l.c0 = s.c0 and l.c1 = s.c1;
+-- result:
+100	50.5	100	100	100
+-- !result

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['session','variable']
 ---
 
 # 系统变量
@@ -151,6 +152,10 @@ SELECT /*+ SET_VAR
 
 注意：在版本 v3.1.5 至 v3.1.7 以及 v3.2.0 至 v3.2.2 中，我们引入了 `big_query_profile_second_threshold` 参数，用于设定大型查询的阈值。而在 v3.1.8、v3.2.3 及后续版本中，此参数被 `big_query_profile_threshold` 替代，以便提供更加灵活的配置选项。
 
+### catalog（3.2.4 及以后）
+
+用于指定当前会话所在的 Catalog。
+
 ### cbo_decimal_cast_string_strict （2.5.14 及以后）
 
 用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。取值为 `true` 时，使用 v2.5.x及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。
@@ -161,7 +166,13 @@ SELECT /*+ SET_VAR
 
 ### cbo_eq_base_type （2.5.14 及以后）
 
-用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认 `VARCHAR`，可选 `DECIMAL`。
+用来指定 DECIMAL 类型和 STRING 类型的数据比较时的强制类型，默认按照 `VARCHAR` 类型进行比较，可选 `DECIMAL`（按数值进行比较）。
+
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* 含义：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
+* 默认值：64
+* 引入版本：v3.1.9, v3.2.5
 
 ### character_set_database（global）
 
@@ -170,6 +181,12 @@ StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）
 ### connector_io_tasks_per_scan_operator（2.5 及以后）
 
 外表查询时每个 Scan 算子能同时下发的 I/O 任务的最大数量。取值为整数，默认值 16。目前外表查询时会使用自适应算法来调整并发 I/O 任务的数量，通过 `enable_connector_adaptive_io_tasks` 开关来控制，默认打开。
+
+### connector_sink_compression_codec（3.2.3 及以后）
+
+用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。
+
+有效值：`gzip`、`brotli`、`zstd` 和 `lz4`。
 
 ### count_distinct_column_buckets（2.5 及以后）
 
@@ -195,6 +212,14 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于兼容 MySQL 客户端，无实际作用。
 
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+解决升级中的兼容问题，用户不可见。
+
+默认值：`true`。
+-->
+
 ### enable_connector_adaptive_io_tasks（2.5 及以后）
 
 外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。
@@ -209,9 +234,13 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 ### enable_group_level_query_queue （3.1.4 及以后）
 
-是否开启资源组粒度的[查询队列](../administration/query_queues.md)。
+是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
 
 默认值：false，表示不开启。
+
+### enable_iceberg_metadata_cache（3.2.1 及以后）
+
+是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
 
 ### enable_insert_strict
 
@@ -427,11 +456,11 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 ### max_pushdown_conditions_per_column
 
-该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### max_scan_key_num
 
-该变量的具体含义请参阅 [BE 配置项](../administration/BE_configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
+该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### nested_mv_rewrite_max_level
 
@@ -522,7 +551,7 @@ GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行�
 
 ### query_mem_limit
 
-用于设置每个 BE 节点上查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
+用于设置每个 BE 节点上单个查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
 
 ### query_queue_concurrency_limit (global)
 
@@ -663,6 +692,17 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
 
+### trace_log_mode
+
+- 含义：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
+  - `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
+  - `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
+
+  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
+
+- 默认值：`command`
+- 引入版本：v3.2.0
+
 ### transaction_read_only
 
 * 含义：用于兼容 MySQL 5.8 以上客户端，无实际作用。别名 `tx_read_only`。该变量用于指定事务访问模式。取值 `ON` 表示只读。取值 `OFF` 表示可读可写。
@@ -697,4 +737,6 @@ MySQL 服务器的版本。
 
 ### wait_timeout
 
-用于设置空闲连接的连接时长，单位为秒。当一个空闲连接在该时长内与 StarRocks 没有任何交互，则 StarRocks 会主动断开这个链接。默认为 8 小时。
+用于设置客户端与 StarRocks 数据库交互时的最大空闲时长。如果一个空闲连接在该时长内与 StarRocks 数据库没有任何交互，StarRocks 会主动断开这个连接。
+
+单位：秒。默认值：28800（即 8 小时）。

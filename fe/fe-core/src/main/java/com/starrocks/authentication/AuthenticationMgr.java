@@ -34,6 +34,7 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -171,11 +172,31 @@ public class AuthenticationMgr {
         }
     }
 
+    /**
+     * Get max connection number of the user, if the user is ephemeral, i.e. the user is saved in SR,
+     * but some external system, like LDAP, return default max connection number
+     * @param currUserIdentity user identity of current connection
+     * @return max connection number of the user
+     */
+    public long getMaxConn(UserIdentity currUserIdentity) {
+        if (currUserIdentity.isEphemeral()) {
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+        } else {
+            String userName = currUserIdentity.getUser();
+            return getMaxConn(userName);
+        }
+    }
+
+    /**
+     * Get max connection number based on plain username, the user should be an internal user,
+     * if the user doesn't exist in SR, it will throw an exception.
+     * @param userName plain username saved in SR
+     * @return max connection number of the user
+     */
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            // TODO(yiming): find a better way to specify max connections for external user, like ldap, kerberos etc.
-            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+            throw new SemanticException("Unknown user: " + userName);
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
@@ -380,59 +401,6 @@ public class AuthenticationMgr {
         } finally {
             writeUnlock();
         }
-    }
-
-    public void createSecurityIntegration(String name, Map<String, String> propertyMap) throws DdlException {
-        createSecurityIntegration(name, propertyMap, false);
-
-    }
-
-    public void createSecurityIntegration(String name, Map<String, String> propertyMap, boolean isReplay) throws DdlException {
-        SecurityIntegration securityIntegration;
-        try {
-            securityIntegration =
-                    SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        } catch (DdlException e) {
-            throw new DdlException("failed to create security integration, error: " + e.getMessage(), e);
-        }
-        nameToSecurityIntegrationMap.put(name, securityIntegration);
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateSecurityIntegration(name, propertyMap);
-        LOG.info("finished to create security integration '{}'", securityIntegration.toString());
-    }
-
-    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
-                                         boolean isReplay) throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public SecurityIntegration getSecurityIntegration(String name) {
-        return nameToSecurityIntegrationMap.get(name);
-    }
-
-    public Set<SecurityIntegration> getAllSecurityIntegrations() {
-        return new HashSet<>(nameToSecurityIntegrationMap.values());
-    }
-
-    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws DdlException {
-        // using concurrent hash map and COW, we don't need lock protection here
-        SecurityIntegration securityIntegration =
-                SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        nameToSecurityIntegrationMap.put(name, securityIntegration);
-    }
-
-    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
-            throws DdlException {
-        throw new DdlException("unsupported operation");
-    }
-
-    public void replayDropSecurityIntegration(String name)
-            throws DdlException {
-        throw new DdlException("unsupported operation");
     }
 
     public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {

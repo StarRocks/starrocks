@@ -14,10 +14,15 @@
 
 #include "exec/pipeline/chunk_accumulate_operator.h"
 
-#include "column/chunk.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+Status ChunkAccumulateOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
+    _acc.set_max_size(state->chunk_size());
+    return Status::OK();
+}
 
 Status ChunkAccumulateOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     _acc.push(chunk);

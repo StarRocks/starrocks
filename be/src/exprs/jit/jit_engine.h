@@ -14,35 +14,62 @@
 
 #pragma once
 
+#include <llvm/ExecutionEngine/JITSymbol.h>
+#include <llvm/ExecutionEngine/ObjectCache.h>
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
-#include "llvm/ExecutionEngine/JITSymbol.h"
-#include "llvm/ExecutionEngine/Orc/LLJIT.h"
-#include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "util/lru_cache.h"
 
 namespace starrocks {
 
-/**
- * JITEngine is a wrapper of LLVM JIT engine, based on ORCv2.
- */
+// cache the compiled code, and register to the LRU cache
+class JitObjectCache : public llvm::ObjectCache {
+public:
+    explicit JitObjectCache(const std::string& expr_name, Cache* cache);
+
+    ~JitObjectCache() override = default;
+
+    void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj) override;
+
+    std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override;
+
+    Status register_func(JITScalarFunction func);
+
+    const std::string& get_func_name() const { return _cache_key; };
+
+    void set_cache(std::shared_ptr<llvm::MemoryBuffer> obj_code, JITScalarFunction func) {
+        _obj_code = std::move(obj_code);
+        _func = func;
+    }
+    JITScalarFunction get_func() const { return _func; }
+
+    size_t get_code_size() const { return _obj_code == nullptr ? 0 : _obj_code->getBufferSize(); }
+
+private:
+    const std::string _cache_key;
+    JITScalarFunction _func = nullptr;
+    Cache* _lru_cache = nullptr;
+    std::shared_ptr<llvm::MemoryBuffer> _obj_code = nullptr;
+};
+
+// JITEngine is a wrapper of LLVM JIT engine, based on ORCv2.
 class JITEngine {
 public:
     JITEngine() = default;
 
-    ~JITEngine() = default;
+    ~JITEngine();
 
     JITEngine(const JITEngine&) = delete;
 
@@ -55,82 +82,61 @@ public:
 
     Status init();
 
-    /**
-     * @brief Returns whether the JIT engine is initialized.
-     */
     inline bool initialized() const { return _initialized; }
 
-    /**
-     * @brief Returns whether the JIT engine is supported.
-     */
     inline bool support_jit() { return _support_jit; }
 
-    /**
-     * @brief Compile the expr into LLVM IR and return the function pointer.
-     * TODO(Yueyang): Add a cache to speed up the compilation.
-     */
-    static StatusOr<JITScalarFunction> compile_scalar_function(ExprContext* context, Expr* expr);
+    // Compile the expr into LLVM IR and register the compiled function into LRU cache.
+    static Status compile_scalar_function(ExprContext* context, JitObjectCache* obj, Expr* expr,
+                                          const std::vector<Expr*>& uncompilable_exprs);
 
-    /**
-     * @brief Remove the function and its related resources(resource tracker and module) from the JIT engine.
-     * TODO(Yueyang): Add a cache to speed up the removal.
-     */
-    static Status remove_function(const std::string& expr_name);
+    bool lookup_function(JitObjectCache* const obj);
+
+    Cache* get_func_cache() const { return _func_cache; }
+
+    static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
+                                              const std::vector<Expr*>& uncompilable_exprs, JitObjectCache* obj);
+
+    size_t get_cache_mem_usage() const {
+        DCHECK(_func_cache != nullptr);
+        return _func_cache->get_memory_usage();
+    }
+
+    static std::string dump_module_ir(const llvm::Module& module);
 
 private:
-    static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr);
-    /**
-     * @brief Sets up an LLVM module by specifying its data layout and target triple.
-     * The data layout guides the compiler on how to arrange data.
-     * The target triple informs which code architecture the module should generate for.
-     */
-    void setup_module(llvm::Module* module) const;
+    // make an engine instance for each time of JIT
+    class Engine {
+    public:
+        ~Engine() = default;
 
-    /**
-     * @brief Optimize the module, including:
-     * 1. remove unused functions
-     * 2. remove unused global variables
-     * 3. remove unused instructions
-     */
-    void optimize_module(llvm::Module* module);
+        Engine(const Engine&) = delete;
 
-    /**
-     * @brief Compile the module and return the function pointer.
-     */
-    JITScalarFunction compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                                     const std::string& expr_name);
+        Engine& operator=(const Engine&) = delete;
 
-    /**
-     * @brief Remove the function and its related resources(resource tracker and module) from the JIT engine.
-     */
-    Status remove_module(const std::string& expr_name);
+        llvm::Module* module() const;
 
-    /**
-     * @brief Print the LLVM IR of the module in readable format.
-     */
-    static void print_module(const llvm::Module& module);
+        static StatusOr<std::unique_ptr<Engine>> create(std::reference_wrapper<JitObjectCache> object_cache);
 
-    inline JITScalarFunction lookup_function(const std::string& expr_name, bool must_exist);
+        Status optimize_and_finalize_module();
 
-    JITScalarFunction lookup_function_with_lock(const std::string& expr_name, bool must_exist);
+        StatusOr<JITScalarFunction> get_compiled_func(const std::string& function);
 
-    std::mutex _mutex;
+    private:
+        Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine);
+
+        std::unique_ptr<llvm::LLVMContext> _context;
+        std::unique_ptr<llvm::orc::LLJIT> _lljit;
+        std::unique_ptr<llvm::IRBuilder<>> _ir_builder;
+        std::unique_ptr<llvm::Module> _module;
+
+        bool _module_finalized = false;
+        std::unique_ptr<llvm::TargetMachine> _target_machine;
+    };
 
     bool _initialized = false;
     bool _support_jit = false;
-
-    std::unique_ptr<llvm::TargetMachine> _target_machine;
-    std::unique_ptr<const llvm::DataLayout> _data_layout;
-
-    llvm::PassManagerBuilder _pass_manager_builder;
-    llvm::legacy::PassManager _pass_manager;
-
-    std::unique_ptr<llvm::orc::LLJIT> _jit;
-
-    // TODO(Yueyang): Check whether we need to use a better data structure to store the resource tracker.
-    // because in OLAP scenarios, this might not be the performance bottleneck.
-    std::unordered_map<std::string, llvm::orc::ResourceTrackerSP> _resource_tracker_map;
-    std::unordered_map<std::string, std::atomic_int> _resource_ref_count_map;
+    Cache* _func_cache;
 };
 
 } // namespace starrocks

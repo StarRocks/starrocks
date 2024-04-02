@@ -17,6 +17,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DescriptorTable;
@@ -47,8 +48,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -61,12 +65,17 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -102,6 +111,32 @@ public class OlapTableSinkTest {
         v2.setIsMaterialized(true);
 
         return tuple;
+    }
+
+    @Before
+    public void before() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
     }
 
     @Test
@@ -203,7 +238,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) throws Exception {
+                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -260,7 +295,7 @@ public class OlapTableSinkTest {
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getNodeMgr().getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
@@ -272,7 +307,7 @@ public class OlapTableSinkTest {
         tPartition.setId(partitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), partitionParam, false);
+                table, partitionParam, false);
         System.out.println(param);
 
         // Check
@@ -287,7 +322,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testReplicatedStorageWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-            @Mocked SystemInfoService systemInfoService) throws Exception {
+                                                     @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -347,7 +382,7 @@ public class OlapTableSinkTest {
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getNodeMgr().getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
@@ -359,7 +394,7 @@ public class OlapTableSinkTest {
         tPartition.setId(partitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), partitionParam, true);
+                table, partitionParam, true);
         System.out.println(param);
 
         // Check

@@ -48,6 +48,7 @@ public class IcebergConnector implements Connector {
     @Deprecated
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+    public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
@@ -110,8 +111,13 @@ public class IcebergConnector implements Connector {
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
-            boolean enableMetadataCache = Boolean.parseBoolean(
-                    properties.getOrDefault("enable_iceberg_metadata_cache", "true"));
+            boolean enableMetadataCache;
+            if (properties.containsKey("enable_iceberg_metadata_cache")) {
+                enableMetadataCache = Boolean.parseBoolean(properties.get("enable_iceberg_metadata_cache"));
+            } else {
+                enableMetadataCache = getNativeCatalogType() == IcebergCatalogType.GLUE_CATALOG;
+            }
+
             if (enableMetadataCache && !isResourceMappingCatalog(catalogName)) {
                 long ttl = Long.parseLong(properties.getOrDefault("iceberg_meta_cache_ttl_sec", "1800"));
                 nativeCatalog = new CachingIcebergCatalog(nativeCatalog, ttl, buildBackgroundJobPlanningExecutor());

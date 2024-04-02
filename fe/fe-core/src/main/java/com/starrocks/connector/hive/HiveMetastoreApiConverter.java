@@ -26,6 +26,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ColumnTypeConverter;
@@ -42,11 +43,21 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.avro.Schema;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
+import org.apache.hadoop.hive.metastore.api.Date;
+import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.Decimal;
+import org.apache.hadoop.hive.metastore.api.DecimalColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.DoubleColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
@@ -55,12 +66,15 @@ import org.apache.hudi.common.util.Option;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigDecimal;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -109,6 +123,13 @@ public class HiveMetastoreApiConverter {
         return sd.getLocation();
     }
 
+    public static String toComment(Map<String, String> tableParams) {
+        if (tableParams != null && tableParams.containsKey("comment")) {
+            return tableParams.getOrDefault("comment", "");
+        }
+        return "";
+    }
+
     public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
@@ -144,6 +165,7 @@ public class HiveMetastoreApiConverter {
                         .map(FieldSchema::getName)
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
+                .setComment(toComment(table.getParameters()))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setProperties(toHiveProperties(table,
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name())))
@@ -290,7 +312,8 @@ public class HiveMetastoreApiConverter {
                 .setResourceName(toResourceName(catalogName, "hudi"))
                 .setHiveDbName(table.getDbName())
                 .setHiveTableName(table.getTableName())
-                .setFullSchema(toFullSchemasForHudiTable(hudiSchema))
+                .setFullSchema(toFullSchemasForHudiTable(table, hudiSchema))
+                .setComment(toComment(table.getParameters()))
                 .setPartitionColNames(partitionColumnNames)
                 .setDataColNames(toDataColumnNamesForHudiTable(hudiSchema, partitionColumnNames))
                 .setHudiProperties(toHudiProperties(table, metaClient, hudiSchema))
@@ -414,10 +437,12 @@ public class HiveMetastoreApiConverter {
         return fullSchema;
     }
 
-    public static List<Column> toFullSchemasForHudiTable(Schema hudiSchema) {
+    public static List<Column> toFullSchemasForHudiTable(Table table, Schema hudiSchema) {
         List<Schema.Field> allHudiColumns = hudiSchema.getFields();
+        List<FieldSchema> allFieldSchemas = getAllFieldSchemas(table);
         List<Column> fullSchema = Lists.newArrayList();
-        for (Schema.Field fieldSchema : allHudiColumns) {
+        for (int i = 0; i < allHudiColumns.size(); i++) {
+            Schema.Field fieldSchema = allHudiColumns.get(i);
             Type type;
             try {
                 type = fromHudiType(fieldSchema.schema());
@@ -425,7 +450,7 @@ public class HiveMetastoreApiConverter {
                 LOG.error("Failed to convert hudi type {}", fieldSchema.schema().getType().getName(), e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(fieldSchema.name(), type, true);
+            Column column = new Column(fieldSchema.name(), type, true, allFieldSchemas.get(i).getComment());
             fullSchema.add(column);
         }
         return fullSchema;
@@ -562,7 +587,13 @@ public class HiveMetastoreApiConverter {
 
     public static HiveCommonStats toHiveCommonStats(Map<String, String> params) {
         long numRows = getLongParam(ROW_COUNT, params);
+        if (numRows == -1 && Config.enable_reuse_spark_column_statistics) {
+            numRows = getLongParam("spark.sql.statistics.numRows", params);
+        }
         long totalSize = getLongParam(TOTAL_SIZE, params);
+        if (totalSize == -1 && Config.enable_reuse_spark_column_statistics) {
+            totalSize = getLongParam("spark.sql.statistics.totalSize", params);
+        }
         return new HiveCommonStats(numRows, totalSize);
     }
 
@@ -642,6 +673,116 @@ public class HiveMetastoreApiConverter {
             // ignore
         }
         return -1;
+    }
+
+    public static List<ColumnStatisticsObj> getColStatsFromSparkParams(org.apache.hadoop.hive.metastore.api.Table table) {
+        return table.getSd().getCols().stream()
+                .map(fieldSchema -> convertSparkColumnStatistics(fieldSchema, table.getParameters()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Refer to https://github.com/apache/hive/blob/rel/release-3.1.3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L77
+     */
+    public static ColumnStatisticsObj convertSparkColumnStatistics(FieldSchema fieldSchema, Map<String, String> parameters) {
+
+        String columnName = fieldSchema.getName();
+        String columnType = fieldSchema.getType().toLowerCase();
+        String colStatsPrefix = "spark.sql.statistics.colStats." + columnName + ".";
+        if (parameters.keySet().stream().noneMatch(k -> k.startsWith(colStatsPrefix))) {
+            // return early if no stats for this column
+            return null;
+        }
+        long distinctCount = Long.parseLong(parameters.get(colStatsPrefix + "distinctCount"));
+        long nullsCount = Long.parseLong(parameters.get(colStatsPrefix + "nullCount"));
+        ColumnStatisticsObj colStatsObj = new ColumnStatisticsObj();
+        colStatsObj.setColName(columnName);
+        colStatsObj.setColType(columnType);
+        ColumnStatisticsData colStatsData = new ColumnStatisticsData();
+        switch (columnType) {
+            case "long":
+            case "tinyint":
+            case "smallint":
+            case "int":
+            case "bigint":
+            case "timestamp":
+                LongColumnStatsData longColStats = new LongColumnStatsData();
+                longColStats.setNumNulls(nullsCount);
+                longColStats.setLowValue(Long.parseLong(parameters.get(colStatsPrefix + "min")));
+                longColStats.setHighValue(Long.parseLong(parameters.get(colStatsPrefix + "max")));
+                longColStats.setNumDVs(distinctCount);
+                colStatsData.setLongStats(longColStats);
+                break;
+            case "double":
+            case "float":
+                DoubleColumnStatsData doubleColStats = new DoubleColumnStatsData();
+                doubleColStats.setNumNulls(nullsCount);
+                doubleColStats.setLowValue(Double.parseDouble(parameters.get(colStatsPrefix + "min")));
+                doubleColStats.setHighValue(Double.parseDouble(parameters.get(colStatsPrefix + "max")));
+                doubleColStats.setNumDVs(distinctCount);
+                colStatsData.setDoubleStats(doubleColStats);
+                break;
+            case "string":
+            case "char":
+            case "varchar":
+                StringColumnStatsData stringColStats = new StringColumnStatsData();
+                stringColStats.setNumNulls(nullsCount);
+                stringColStats.setAvgColLen(Double.parseDouble(parameters.get(colStatsPrefix + "avgLen")));
+                stringColStats.setMaxColLen(Long.parseLong(parameters.get(colStatsPrefix + "maxLen")));
+                stringColStats.setNumDVs(distinctCount);
+                colStatsData.setStringStats(stringColStats);
+                break;
+            case "boolean":
+                BooleanColumnStatsData booleanColStats = new BooleanColumnStatsData();
+                booleanColStats.setNumNulls(nullsCount);
+                colStatsData.setBooleanStats(booleanColStats);
+                break;
+            case "decimal":
+                DecimalColumnStatsData decimalColStats = new DecimalColumnStatsData();
+                decimalColStats.setNumNulls(nullsCount);
+                BigDecimal lowVal = new BigDecimal(parameters.get(colStatsPrefix + "min"));
+                decimalColStats.setLowValue(getHiveDecimal(ByteBuffer.wrap(lowVal.unscaledValue().toByteArray()),
+                        (short) lowVal.scale()));
+                BigDecimal highVal = new BigDecimal(parameters.get(colStatsPrefix + "max"));
+                decimalColStats.setHighValue(getHiveDecimal(ByteBuffer.wrap(highVal.unscaledValue().toByteArray()),
+                        (short) highVal.scale()));
+                decimalColStats.setNumDVs(distinctCount);
+                colStatsData.setDecimalStats(decimalColStats);
+                break;
+            case "date":
+                DateColumnStatsData dateColStats = new DateColumnStatsData();
+                dateColStats.setNumNulls(nullsCount);
+                dateColStats.setLowValue(readDateValue(parameters.get(colStatsPrefix + "min")));
+                dateColStats.setHighValue(readDateValue(parameters.get(colStatsPrefix + "max")));
+                dateColStats.setNumDVs(distinctCount);
+                colStatsData.setDateStats(dateColStats);
+                break;
+            default:
+                LOG.warn("Unsupported column statistics type: {}", columnType);
+                return null;
+        }
+        colStatsObj.setStatsData(colStatsData);
+        return colStatsObj;
+    }
+
+    private static Decimal getHiveDecimal(ByteBuffer unscaled, short scale) {
+        return new Decimal(scale, unscaled);
+    }
+
+    /**
+     * Refer to https://github.com/apache/hive/blob/rel/release-3.1.3/ql/src/java/org/apache/hadoop/hive/ql/exec/ColumnStatsUpdateTask.java#L318
+     */
+    private static Date readDateValue(String dateStr) {
+        // try either yyyy-mm-dd, or integer representing days since epoch
+        try {
+            DateWritableV2 writableVal = new DateWritableV2(org.apache.hadoop.hive.common.type.Date.valueOf(dateStr));
+            return new Date(writableVal.getDays());
+        } catch (IllegalArgumentException err) {
+            // Fallback to integer parsing
+            LOG.debug("Reading date value as days since epoch: {}", dateStr);
+            return new Date(Long.parseLong(dateStr));
+        }
     }
 
 }

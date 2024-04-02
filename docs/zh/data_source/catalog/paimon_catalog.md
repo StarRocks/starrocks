@@ -10,7 +10,7 @@ Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要
 
 此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
 
-为保证正常访问 Paimon 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Paimon 内的数据，StarRocks 集群必须能够访问 Paimon 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：如 AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 

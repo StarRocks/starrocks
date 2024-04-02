@@ -711,12 +711,12 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         TMasterResult result;
         status = report_task(request, &result);
 
-        LOG(INFO) << "start to report tablets, report version: " << report_version;
-
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
             LOG(WARNING) << "Fail to report olap table state to " << master_address.hostname << ":"
                          << master_address.port << ", err=" << status;
+        } else {
+            LOG(INFO) << "Report tablets successfully, report version: " << report_version;
         }
 
         // wait for notifying until timeout

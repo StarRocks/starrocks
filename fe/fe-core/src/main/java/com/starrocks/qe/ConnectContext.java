@@ -38,7 +38,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -75,6 +74,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -138,8 +139,6 @@ public class ConnectContext {
     protected MysqlCapability capability;
     // Indicate if this client is killed.
     protected volatile boolean isKilled;
-    // catalog
-    protected volatile String currentCatalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // Db
     protected String currentDb = "";
     // warehouse
@@ -216,6 +215,7 @@ public class ConnectContext {
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
+    protected volatile boolean isForward = false;
 
     protected SSLContext sslContext;
 
@@ -400,11 +400,15 @@ public class ConnectContext {
 
     public SetStmt getModifiedSessionVariables() {
         List<SetListItem> sessionVariables = new ArrayList<>();
-        if (!modifiedSessionVariables.isEmpty()) {
+        if (MapUtils.isNotEmpty(modifiedSessionVariables)) {
             sessionVariables.addAll(modifiedSessionVariables.values());
         }
-        if (!userVariables.isEmpty()) {
-            sessionVariables.addAll(userVariables.values());
+        if (MapUtils.isNotEmpty(userVariables)) {
+            for (UserVariable userVariable : userVariables.values()) {
+                if (!userVariable.isFromHint()) {
+                    sessionVariables.add(userVariable);
+                }
+            }
         }
 
         if (sessionVariables.isEmpty()) {
@@ -418,7 +422,10 @@ public class ConnectContext {
         return sessionVariable;
     }
 
-    public UserVariable getUserVariables(String variable) {
+    public Map<String, UserVariable> getUserVariables() {
+        return userVariables;
+    }
+    public UserVariable getUserVariable(String variable) {
         return userVariables.get(variable);
     }
 
@@ -664,26 +671,37 @@ public class ConnectContext {
     }
 
     public String getCurrentCatalog() {
-        return currentCatalog;
+        return this.sessionVariable.getCatalog();
     }
 
     public void setCurrentCatalog(String currentCatalog) {
-        this.currentCatalog = currentCatalog;
+        this.sessionVariable.setCatalog(currentCatalog);
     }
 
-    public String getCurrentWarehouse() {
-        if (currentWarehouse != null) {
-            return currentWarehouse;
+    public long getCurrentWarehouseId() {
+        String warehouseName = this.sessionVariable.getWarehouseName();
+        if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+            return WarehouseManager.DEFAULT_WAREHOUSE_ID;
         }
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new SemanticException("Warehouse " + warehouseName + " not exist");
+        }
+        return warehouse.getId();
+    }
+
+    public String getCurrentWarehouseName() {
+        return this.sessionVariable.getWarehouseName();
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
-        this.currentWarehouse = currentWarehouse;
+        this.sessionVariable.setWarehouseName(currentWarehouse);
     }
 
-    public void setCurrentWarehouseId(long id) {
-        // not implemented in this codebase
+    public void setCurrentWarehouseId(long warehouseId) {
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
+        this.sessionVariable.setWarehouseName(warehouse.getName());
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -830,6 +848,14 @@ public class ConnectContext {
 
     public boolean isPending() {
         return isPending;
+    }
+
+    public void setIsForward(boolean forward) {
+        isForward = forward;
+    }
+
+    public boolean isForward() {
+        return isForward;
     }
 
     public boolean supportSSL() {
@@ -1008,7 +1034,13 @@ public class ConnectContext {
                 }
             }
             row.add(stmt);
-            row.add(Boolean.toString(isPending));
+            if (isForward) {
+                // if query is forward to leader, we can't know its accurate status in query queue,
+                // so isPending should not be displayed
+                row.add("");
+            } else {
+                row.add(Boolean.toString(isPending));
+            }
             return row;
         }
     }

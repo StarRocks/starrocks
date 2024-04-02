@@ -10,8 +10,7 @@ DUPLICATE KEY(id)
 PARTITION BY (dt,province)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -44,8 +43,7 @@ DUPLICATE KEY(id)
 PARTITION BY (id)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -67,8 +65,7 @@ DUPLICATE KEY(dt)
 PARTITION BY (dt)
 DISTRIBUTED BY HASH(`dt`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -90,8 +87,7 @@ DUPLICATE KEY(dt)
 PARTITION BY (dt)
 DISTRIBUTED BY HASH(`dt`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -114,8 +110,7 @@ DUPLICATE KEY(id)
 PARTITION BY (dt)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -124,7 +119,7 @@ ALTER TABLE list_auto_single ADD PARTITION psingle VALUES IN ("2023-04-01");
 -- !result
 ALTER TABLE list_auto_single ADD PARTITION pmul VALUES IN ("2022-04-01", "2022-04-02");
 -- result:
-E: (1064, 'Unexpected exception: Automatically partitioned tables does not support multiple values in the same partition')
+E: (1064, 'Automatically partitioned tables does not support multiple values in the same partition')
 -- !result
 CREATE TABLE list_normal_single (
     id bigint  ,
@@ -137,8 +132,7 @@ DUPLICATE KEY(id)
 PARTITION BY LIST (dt)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result

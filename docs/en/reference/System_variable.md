@@ -125,7 +125,7 @@ SELECT /*+ SET_VAR
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
 
-### activate_all_roles_on_login (global）
+### activate_all_roles_on_login (global)
 
 Whether to enable all roles (including default roles and granted roles) for a StarRocks user when the user connects to the StarRocks cluster. This variable is supported since v3.0.
 
@@ -143,6 +143,10 @@ Used for MySQL client compatibility. No practical usage.
 ### autocommit
 
 Used for MySQL client compatibility. No practical usage.
+
+### catalog (3.2.4 and later)
+
+Used to specify the catalog to which the session belongs.
 
 ### batch_size
 
@@ -164,9 +168,15 @@ Whether to enable low cardinality optimization. After this feature is enabled, t
 
 ### cbo_eq_base_type (2.5.14 and later)
 
-Specifies the data type used for data comparison between DECIMAL-type data and STRING-type data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
+Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
 
-### character_set_database (global）
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* Description: Specifies the maximum number of candidate materialized views allowed during query planning.
+* Default: 64
+* Introduced in: v3.1.9, v3.2.5
+
+### character_set_database (global)
 
 The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
 
@@ -175,6 +185,12 @@ The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
 The maximum number of concurrent I/O tasks that can be issued by a scan operator during external table queries. The value is an integer. Default value: 16.
 
 Currently, StarRocks can adaptively adjust the number of concurrent I/O tasks when querying external tables. This feature is controlled by the variable `enable_connector_adaptive_io_tasks`, which is enabled by default.
+
+### connector_sink_compression_codec (3.2.3 and later)
+
+Specifies the compression algorithm used for writing data into Hive tables or Iceberg tables, or exporting data with Files().
+
+Valid values: `gzip`, `brotli`, `zstd`, and `lz4`.
 
 ### count_distinct_column_buckets (2.5 and later)
 
@@ -196,11 +212,19 @@ Used to control whether the Colocation Join is enabled. The default value is `fa
 
 ### disable_streaming_preaggregations
 
-Used to enable the streaming pre-aggregations. The default value is `false`, meaning  it is enabled.
+Used to enable the streaming pre-aggregations. The default value is `false`, meaning it is enabled.
 
 ### div_precision_increment
 
 Used for MySQL client compatibility. No practical usage.
+
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+This variable is introduced to solve compatibility issues.
+
+Default value: `true`.
+-->
 
 ### enable_connector_adaptive_io_tasks (2.5 and later)
 
@@ -218,9 +242,13 @@ You can also enable bucketization for the COUNT DISTINCT column by adding the `s
 
 ### enable_group_level_query_queue (3.1.4 and later)
 
-Whether to enable resource group-level [query queue](../administration/query_queues.md).
+Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 
 Default value: false, which means this feature is disabled.
+
+### enable_iceberg_metadata_cache (3.2.1 and later)
+
+Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 
 ### enable_insert_strict
 
@@ -274,7 +302,7 @@ Boolean value to enable query queues for SELECT queries. Default: `false`.
 
 Boolean value to enable query queues for statistics queries.
 
-### enable_query_tablet_affinity（2.5 and later）
+### enable_query_tablet_affinity (2.5 and later)
 
 Boolean value to control whether to direct multiple queries against the same tablet to a fixed replica.
 
@@ -535,7 +563,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_mem_limit
 
-Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enbaled.
+Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled.
 
 When the `Memory Exceed Limit` error happens, you could try to increase this variable.
 
@@ -676,6 +704,17 @@ Used to display the time zone of the current system. Cannot be changed.
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
 
+### trace_log_mode
+
+* Description: Used to control where to output the logs of query trace profiles. Valid values:
+  * `command`: Return query trace profile logs as the **Explain String** after executing TRACE LOGS.
+  * `file`: Return query trace profile logs in the FE log file **fe.log** with the class name being `FileLogTracer`.
+
+  For more information on query trace profile, see [Query Trace Profile](../developers/trace-tools/query_trace_profile.md).
+
+* Default: `command`
+* Introduced in: v3.2.0
+
 ### transaction_read_only
 
 * Description: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
@@ -711,4 +750,6 @@ The StarRocks version. Cannot be changed.
 
 ### wait_timeout
 
-Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
+The number of seconds the server waits for activity on a noninteractive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
+
+Unit: seconds. Default value: 28800 (8 hours).

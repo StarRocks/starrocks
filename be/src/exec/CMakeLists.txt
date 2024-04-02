@@ -81,7 +81,6 @@ set(EXEC_FILES
     except_node.cpp
     file_scanner.cpp
     orc_scanner.cpp
-    orc_writer.cpp
     jni_scanner.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
@@ -154,6 +153,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_datacache_metrics_scanner.cpp
     schema_scanner/sys_object_dependencies.cpp
     schema_scanner/sys_fe_locks.cpp
+    schema_scanner/sys_fe_memory_usage.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -198,7 +198,9 @@ set(EXEC_FILES
     pipeline/scan/schema_chunk_source.cpp
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
+    pipeline/sink/connector_sink_operator.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
+    pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
@@ -268,6 +270,9 @@ set(EXEC_FILES
     pipeline/pipeline.cpp
     pipeline/spill_process_operator.cpp
     pipeline/spill_process_channel.cpp
+    pipeline/group_execution/execution_group.cpp
+    pipeline/group_execution/execution_group_builder.cpp
+    pipeline/group_execution/group_operator.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp

@@ -141,4 +141,10 @@ public class AnalyzeBackupRestoreTest {
         analyzeFail("SHOW RESTORE FROM `a:test1`;");
     }
 
+    @Test
+    public void testCancelRestore() {
+        analyzeFail("CANCEL BACKUP;");
+        analyzeFail("CANCEL RESTORE;");
+    }
+
 }

@@ -97,6 +97,8 @@ private:
 
     bool _end_with(const std::string& str, const std::string& match);
 
+    bool _is_index_files(const std::string& str);
+
     void _assemble_file_name(const std::string& snapshot_path, const std::string& tablet_path, int64_t tablet_id,
                              int64_t start_version, int64_t end_version, int64_t vesion_hash, int32_t seg_num,
                              const std::string& suffix, std::string* snapshot_file, std::string* tablet_file);

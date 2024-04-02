@@ -130,7 +130,8 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.PAIMON,
                     Table.TableType.ODPS,
                     Table.TableType.DELTALAKE,
-                    Table.TableType.VIEW);
+                    Table.TableType.VIEW,
+                    Table.TableType.HIVE_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
@@ -223,7 +224,7 @@ public class MaterializedViewAnalyzer {
                 .collect(Collectors.toList());
     }
 
-    static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class MaterializedViewAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
             DAY,

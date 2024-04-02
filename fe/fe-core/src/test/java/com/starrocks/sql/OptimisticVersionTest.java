@@ -19,7 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.QueryLocker;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -84,9 +84,9 @@ class OptimisticVersionTest extends PlanTestBase {
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(starRocksAssert.getCtx(), insertStmt);
 
         // normal planner
-        QueryLocker locker = new QueryLocker(starRocksAssert.getCtx(), insertStmt);
+        PlannerMetaLocker locker = new PlannerMetaLocker(starRocksAssert.getCtx(), insertStmt);
         StatementPlanner.lock(locker);
-        new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx());
+        new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx());
         StatementPlanner.unLock(locker);
 
         // retry but failed
@@ -99,7 +99,7 @@ class OptimisticVersionTest extends PlanTestBase {
         try {
             StatementPlanner.lock(locker);
             assertThrows(StarRocksPlannerException.class, () ->
-                    new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx()));
+                    new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx()));
         } finally {
             StatementPlanner.unLock(locker);
         }
@@ -119,7 +119,7 @@ class OptimisticVersionTest extends PlanTestBase {
         };
         try {
             StatementPlanner.lock(locker);
-            new InsertPlanner(dbs, true).plan(insertStmt, starRocksAssert.getCtx());
+            new InsertPlanner(locker, true).plan(insertStmt, starRocksAssert.getCtx());
         } finally {
             StatementPlanner.unLock(locker);
         }

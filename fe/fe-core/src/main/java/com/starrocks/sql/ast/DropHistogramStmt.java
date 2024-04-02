@@ -25,6 +25,8 @@ public class DropHistogramStmt extends StatementBase {
     private final TableName tbl;
     private final List<String> columnNames;
 
+    private boolean isExternal = false;
+
     public DropHistogramStmt(TableName tbl, List<String> columnNames) {
         this(tbl, columnNames, NodePosition.ZERO);
     }
@@ -51,5 +53,13 @@ public class DropHistogramStmt extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    public boolean isExternal() {
+        return isExternal;
+    }
+
+    public void setExternal(boolean isExternal) {
+        this.isExternal = isExternal;
     }
 }

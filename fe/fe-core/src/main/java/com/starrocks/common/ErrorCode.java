@@ -47,9 +47,7 @@ public enum ErrorCode {
             "Access denied for user '%s' (using password: %s)"),
     ERR_NO_DB_ERROR(1046, new byte[] {'3', 'D', '0', '0', '0'}, "No database selected"),
     ERR_UNKNOWN_COM_ERROR(1047, new byte[] {'0', '8', 'S', '0', '1'}, "Unknown command"),
-    ERR_BAD_DB_ERROR(1049, new byte[] {'4', '2', '0', '0', '0'}, "Unknown database '%s'"),
     ERR_TABLE_EXISTS_ERROR(1050, new byte[] {'4', '2', 'S', '0', '1'}, "Table '%s' already exists"),
-    ERR_BAD_TABLE_ERROR(1051, new byte[] {'4', '2', 'S', '0', '2'}, "Unknown table '%s'"),
     ERR_NON_UNIQ_ERROR(1052, new byte[] {'2', '3', '0', '0', '0'}, "Column '%s' in is ambiguous"),
     ERR_ILLEGAL_COLUMN_REFERENCE_ERROR(1053, new byte[] {'2', '3', '0', '0', '1'},
             "Illegal column/field reference '%s' of semi-/anti-join"),
@@ -58,15 +56,12 @@ public enum ErrorCode {
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
     ERR_NONUNIQ_TABLE(1066, new byte[] {'4', '2', '0', '0', '0'}, "Not unique table/alias: '%s'"),
-    ERR_NO_CATALOG_ERROR(1090, new byte[] {'4', '2', '0', '0', '0'}, "No catalog selected"),
     ERR_NO_SUCH_THREAD(1094, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown thread id: %d"),
-    ERR_KILL_DENIED_ERROR(1095, new byte[] {'H', 'Y', '0', '0', '0'}, "You are not owner of thread %d"),
     ERR_NO_TABLES_USED(1096, new byte[] {'H', 'Y', '0', '0', '0'}, "No tables used"),
     ERR_WRONG_DB_NAME(1102, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect database name '%s'"),
     ERR_WRONG_TABLE_NAME(1104, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect table name '%s'"),
     ERR_UNKNOWN_ERROR(1105, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown error"),
     ERR_FIELD_SPECIFIED_TWICE(1110, new byte[] {'4', '2', '0', '0', '0'}, "Column '%s' specified twice"),
-    ERR_INVALID_GROUP_FUNC_USE(1111, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid use of group function"),
     ERR_TABLE_MUST_HAVE_COLUMNS(1113, new byte[] {'4', '2', '0', '0', '0'}, "A table must have at least 1 column"),
     ERR_UNKNOWN_CHARACTER_SET(1115, new byte[] {'4', '2', '0', '0', '0'}, "Unknown character set: '%s'"),
     ERR_IP_NOT_ALLOWED(1130, new byte[] {'4', '2', '0', '0', '0'},
@@ -91,6 +86,8 @@ public enum ErrorCode {
     ERR_NOT_SUPPORTED_AUTH_MODE(1251, new byte[] {'0', '8', '0', '0', '4'},
             "Client does not support authentication protocol requested by server; consider upgrading MySQL client"),
     ERR_UNKNOWN_STORAGE_ENGINE(1286, new byte[] {'4', '2', '0', '0', '0'}, "Unknown storage engine '%s'"),
+    ERR_UNSUPPORTED_PS(1295, "HY000".getBytes(),
+            "This command is not supported in the prepared statement protocol yet"),
     ERR_UNKNOWN_TIME_ZONE(1298, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown or incorrect time zone: '%s'"),
     ERR_WRONG_OBJECT(1347, new byte[] {'H', 'Y', '0', '0', '0'}, "'%s'.'%s' is not '%s'"),
     ERR_VIEW_WRONG_LIST(1353, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -115,10 +112,8 @@ public enum ErrorCode {
     ERR_EMPTY_PARTITION_IN_TABLE(1748, new byte[] {'H', 'Y', '0', '0', '0'},
             "data cannot be inserted into table with empty partition. " +
                     "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. "),
-    ERR_NO_SUCH_PARTITION(1749, new byte[] {'H', 'Y', '0', '0', '0'}, "partition '%s' doesn't exist"),
 
     // Following is StarRocks's error code, which start from 5000
-    ERR_NOT_OLAP_TABLE(5000, new byte[] {'H', 'Y', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
     ERR_WRONG_PROC_PATH(5001, new byte[] {'H', 'Y', '0', '0', '0'}, "Proc path '%s' doesn't exist"),
     ERR_COL_NOT_MENTIONED(5002, new byte[] {'H', 'Y', '0', '0', '0'},
             "'%s' must be explicitly mentioned in column permutation"),
@@ -144,11 +139,6 @@ public enum ErrorCode {
     ERR_PARTITION_HAS_LOADING_JOBS(5016, new byte[] {'H', 'Y', '0', '0', '0'}, "Partition has loading jobs: '%s'"),
     ERR_NOT_KEY_COLUMN(5017, new byte[] {'H', 'Y', '0', '0', '0'}, "Column is not a key column: '%s'"),
     ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid value format: '%s'"),
-    ERR_REPLICA_NOT_CATCH_UP_WITH_VERSION(5019, new byte[] {'H', 'Y', '0', '0', '0'},
-            "Replica does not catch up with version: '%s':'%s'"),
-    ERR_BACKEND_OFFLINE(5021, new byte[] {'H', 'Y', '0', '0', '0'}, "Backend is offline: '%s'"),
-    ERR_BAD_PARTS_IN_UNPARTITION_TABLE(5022, new byte[] {'H', 'Y', '0', '0', '0'},
-            "Number of partitions in unpartitioned table is not 1"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
             "No operation in alter statement"),
     ERR_QUERY_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -157,59 +147,10 @@ public enum ErrorCode {
     ERR_UNSUPPORTED_TYPE_IN_CTAS(5026, new byte[] {'H', 'Y', '0', '0', '0'},
             "Unsupported type '%s' in create table as select statement"),
     ERR_MISSING_PARAM(5027, new byte[] {'H', 'Y', '0', '0', '0'}, "Missing param: %s "),
-    ERR_CLUSTER_NO_EXISTS(5028, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown cluster '%s'"),
-    ERR_CLUSTER_NO_AUTHORITY(5030, new byte[] {'H', 'Y', '0', '0', '0'},
-            "User '%s' has no permissions '%s' cluster"),
-    ERR_CLUSTER_NO_PARAMETER(5031, new byte[] {'H', 'Y', '0', '0', '0'}, "No parameter or parameter is incorrect"),
-    ERR_CLUSTER_NO_INSTANCE_NUM(5032, new byte[] {'H', 'Y', '0', '0', '0'}, "No assign property instance_num"),
-    ERR_CLUSTER_HAS_EXIST(5034, new byte[] {'H', 'Y', '0', '0', '0'}, "Cluster '%s' has exist"),
-    ERR_CLUSTER_INSTANCE_NUM_WRONG(5035, new byte[] {'H', 'Y', '0', '0', '0'}, "Property instance_num is wrong"),
-    ERR_CLUSTER_BE_NOT_ENOUGH(5036, new byte[] {'H', 'Y', '0', '0', '0'}, "BE is not enough"),
-    ERR_CLUSTER_DELETE_DB_EXIST(5037, new byte[] {'H', 'Y', '0', '0', '0'},
-            "All databases in cluster must be dropped before dropping cluster"),
-    ERR_CLUSTER_DELETE_BE_ID_ERROR(5038, new byte[] {'H', 'Y', '0', '0', '0'}, "There is no BE's id in the System"),
-    ERR_CLUSTER_UNKNOWN_ERROR(5040, new byte[] {'4', '2', '0', '0', '0'}, "Unknown cluster '%s'"),
-    ERR_CLUSTER_NAME_NULL(5041, new byte[] {'4', '2', '0', '0', '0'}, "No cluster name"),
-    ERR_CLUSTER_NO_PERMISSIONS(5042, new byte[] {'4', '2', '0', '0', '0'}, "No permissions"),
-    ERR_CLUSTER_CREATE_INSTANCE_NUM_ERROR(5043, new byte[] {'4', '2', '0', '0', '0'},
-            "Instance num can't be less than or equal 0"),
-    ERR_CLUSTER_SRC_CLUSTER_NOT_EXIST(5046, new byte[] {'4', '2', '0', '0', '0'}, "Src cluster '%s' does not exist"),
-    ERR_CLUSTER_DEST_CLUSTER_NOT_EXIST(5047, new byte[] {'4', '2', '0', '0', '0'},
-            "Dest cluster '%s' does not exist"),
-    ERR_CLUSTER_SRC_DB_NOT_EXIST(5048, new byte[] {'4', '2', '0', '0', '0'}, "Src db '%s' no exist"),
-    ERR_CLUSTER_DES_DB_NO_EXIT(5049, new byte[] {'4', '2', '0', '0', '0'}, "Dest db '%s' no exist"),
-    ERR_CLUSTER_NO_SELECT_CLUSTER(5050, new byte[] {'4', '2', '0', '0', '0'}, "Please enter cluster"),
-    ERR_CLUSTER_MIGRATION_NO_LINK(5051, new byte[] {'4', '2', '0', '0', '0'}, "Db %s must be linked to %s at first"),
-    ERR_CLUSTER_BACKEND_ERROR(5052, new byte[] {'4', '2', '0', '0', '0'},
-            "Cluster has internal error, wrong backend info"),
-    ERR_CLUSTER_MIGRATION_NO_EXIT(5053, new byte[] {'4', '2', '0', '0', '0'},
-            "There isn't migration from '%s' to '%s'"),
-    ERR_CLUSTER_DB_STATE_LINK_OR_MIGRATE(5054, new byte[] {'4', '2', '0', '0', '0'},
-            "Db %s is linked or being migrated"),
-    ERR_CLUSTER_MIGRATE_SAME_CLUSTER(5055, new byte[] {'4', '2', '0', '0', '0'},
-            "Migrate or link can't be in same cluster"),
-    ERR_CLUSTER_DELETE_DB_ERR(5056, new byte[] {'4', '2', '0', '0', '0'},
-            "Can't delete db '%s', linked or migrating"),
-    ERR_CLUSTER_RENAME_DB_ERR(5056, new byte[] {'4', '2', '0', '0', '0'},
-            "Can't rename db '%s', linked or migrating"),
-    ERR_CLUSTER_MIGRATE_BE_NOT_ENOUGH(5056, new byte[] {'4', '2', '0', '0', '0'},
-            "BE in the cluster '%s' is not enough"),
-    ERR_CLUSTER_ALTER_BE_NO_CHANGE(5056, new byte[] {'4', '2', '0', '0', '0'},
-            "There is %d instance already"),
-    ERR_CLUSTER_ALTER_BE_IN_DECOMMISSION(5059, new byte[] {'4', '2', '0', '0', '0'},
-            "Cluster '%s' has backends in decommission"),
-    ERR_WRONG_CLUSTER_NAME(5062, new byte[] {'4', '2', '0', '0', '0'},
-            "Incorrect cluster name '%s'(name 'default_cluster' is a reserved name)"),
     ERR_WRONG_NAME_FORMAT(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Incorrect %s name '%s'"),
     ERR_COMMON_ERROR(5064, new byte[] {'4', '2', '0', '0', '0'},
             "%s"),
-    ERR_COLOCATE_FEATURE_DISABLED(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate feature is disabled by Admin"),
-    ERR_COLOCATE_TABLE_NOT_EXIST(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate table '%s' does not exist"),
-    ERR_COLOCATE_TABLE_MUST_BE_OLAP_TABLE(5063, new byte[] {'4', '2', '0', '0', '0'},
-            "Colocate table '%s' must be OLAP table"),
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_REPLICATION_NUM(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate tables must have same replication num: %s, with group %s," +
                     " partition info %s"),
@@ -224,7 +165,6 @@ public enum ErrorCode {
                     " current col: %s, should be: %s, current info %s"),
     ERR_COLOCATE_NOT_COLOCATE_TABLE(5064, new byte[] {'4', '2', '0', '0', '0'},
             "Table %s is not a colocated table"),
-    ERR_INVALID_OPERATION(5065, new byte[] {'4', '2', '0', '0', '0'}, "Operation %s is invalid"),
     ERROR_DYNAMIC_PARTITION_TIME_UNIT(5065, new byte[] {'4', '2', '0', '0', '0'},
             "Unsupported time unit %s. Expect DAY/WEEK/MONTH/YEAR."),
     ERROR_DYNAMIC_PARTITION_START_ZERO(5066, new byte[] {'4', '2', '0', '0', '0'},
@@ -309,8 +249,7 @@ public enum ErrorCode {
             "Access denied; This sql is in blacklist, please contact your admin"),
     ERR_ACCESS_DENIED(5203, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
-                    "Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. " +
-                    "Current role(s): %s. Inactivated role(s): %s."),
+                    ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
 
@@ -318,6 +257,7 @@ public enum ErrorCode {
      * 5300 - 5399: Lock and Transaction
      */
     ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to acquire lock: %s"),
+    ERR_BEGIN_TXN_FAILED(5301, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to begin transaction: %s"),
 
     /**
      * 5400 - 5499: Internal error
@@ -330,8 +270,31 @@ public enum ErrorCode {
      * 5500 - 5599: DDL operation failure
      */
     ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5500, new byte[] {'4', '2', '0', '0', '0'},
-            "table '%s' has location property and cannot be colocated")
+            "table '%s' has location property and cannot be colocated"),
+    ERR_BAD_DB_ERROR(5501, new byte[] {'3', 'F', '0', '0', '0'}, "Unknown database '%s'"),
+    ERR_BAD_TABLE_ERROR(5502, new byte[] {'4', '2', '6', '0', '2'}, "Unknown table '%s'"),
+    ERR_NOT_OLAP_TABLE(5503, new byte[] {'4', '2', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
+    ERR_MULTI_SUB_PARTITION(5504, new byte[] {'4', '2', '0', '0', '0'},
+            "Partition '%s' has sub partitions, should specify the partition id"),
+    ERR_NO_SUCH_PARTITION(5505, new byte[] {'4', '2', '0', '0', '0'}, "Partition '%s' doesn't exist"),
+
+    /**
+     * 10000 - 10099: warehouse
+     */
+    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' not exist."),
+    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' already exists."),
+    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' has been suspended."),
+    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' is not available."),
+    ERR_NO_NODES_IN_WAREHOUSE(10005, new byte[] {'4', '2', '0', '0', '0'},
+            "No alive backend or compute node in warehouse '%s'."),
+    ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+
+    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
+            "unsupported statement in shared_nothing mode")
     ;
+
+    public static final String ERR_ACCESS_DENIED_HINT_MSG_FORMAT = "Please ask the admin to grant permission(s) or" +
+            " try activating existing roles using <set [default] role>. Current role(s): %s. Inactivated role(s): %s.";
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

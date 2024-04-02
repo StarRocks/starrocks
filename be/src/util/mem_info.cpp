@@ -139,7 +139,9 @@ void MemInfo::set_memlimit_if_container() {
         // cgroup v2
         // Read from /sys/fs/cgroup/memory/memory.max
         std::string memory_max;
-        if (!FileUtil::read_whole_content("/sys/fs/cgroup/memory.max", memory_max)) {
+        if (!FileUtil::read_whole_content("/sys/fs/cgroup/memory.max", memory_max) &&
+            !FileUtil::read_whole_content("/sys/fs/cgroup/kubepods/memory.max", memory_max)) {
+            LOG(WARNING) << "Fail to get mem info from cgroup2fs";
             return;
         }
         _s_physical_mem = StringParser::string_to_int<int64_t>(memory_max.data(), memory_max.size(), &result);

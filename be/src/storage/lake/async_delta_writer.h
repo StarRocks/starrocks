@@ -169,8 +169,8 @@ public:
         return *this;
     }
 
-    AsyncDeltaWriterBuilder& set_index_id(int64_t index_id) {
-        _index_id = index_id;
+    AsyncDeltaWriterBuilder& set_schema_id(int64_t schema_id) {
+        _schema_id = schema_id;
         return *this;
     }
 
@@ -181,7 +181,7 @@ private:
     int64_t _txn_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
-    int64_t _index_id{0};
+    int64_t _schema_id{0};
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     int64_t _immutable_tablet_size{0};

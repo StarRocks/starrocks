@@ -14,6 +14,8 @@
 
 package com.starrocks.common;
 
+import com.starrocks.common.io.ParamsKey;
+
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
@@ -33,17 +35,6 @@ public class InvertedIndexParams {
                 .forEach(k -> properties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
     }
 
-    public interface ParamsKey {
-
-        String defaultValue();
-
-        default boolean needDefault() {
-            return false;
-        }
-
-        // auto implemented by Enum.name()
-        String name();
-    }
 
     public enum InvertedIndexImpType {
         CLUCENE

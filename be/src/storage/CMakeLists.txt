@@ -40,6 +40,7 @@ add_library(Storage STATIC
     local_tablet_reader.cpp
     publish_version_manager.cpp
     olap_common.cpp
+    olap_define.cpp
     olap_server.cpp
     options.cpp
     page_cache.cpp
@@ -184,11 +185,13 @@ add_library(Storage STATIC
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/compaction_task_context.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/primary_key_compaction_policy.cpp
     lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
@@ -207,6 +210,20 @@ add_library(Storage STATIC
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+    sstable/block_builder.cpp
+    sstable/block.cpp
+    sstable/coding.cpp
+    sstable/comparator.cpp
+    sstable/filter_block.cpp
+    sstable/format.cpp
+    sstable/persistent_index_sstable.cpp
+    sstable/table_builder.cpp
+    sstable/table.cpp
+    sstable/two_level_iterator.cpp
+    sstable/filter_policy.cpp
+    sstable/iterator.cpp
+    sstable/options.cpp
+    sstable/merger.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -223,4 +240,16 @@ add_library(Storage STATIC
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
     primary_key_dump.cpp
-    dictionary_cache_manager.cpp)
+    dictionary_cache_manager.cpp
+    inverted/index_descriptor.hpp
+    inverted/inverted_index_iterator.cpp
+    inverted/inverted_index_iterator.cpp
+    inverted/inverted_index_option.cpp
+    inverted/inverted_index_common.hpp
+    inverted/inverted_plugin_factory.cpp
+    inverted/clucene/clucene_plugin.cpp
+    inverted/clucene/clucene_roaring_hit_collector.hpp
+    inverted/clucene/clucene_inverted_writer.cpp
+    inverted/clucene/clucene_inverted_reader.cpp
+    inverted/clucene/clucene_inverted_util.hpp
+    inverted/clucene/match_operator.cpp)

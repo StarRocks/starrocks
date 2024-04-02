@@ -54,8 +54,8 @@ import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.service.FeServer;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.service.FrontendThriftServer;
 import com.starrocks.staros.StarMgrServer;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -107,15 +107,16 @@ public class StarRocksFE {
             // init config
             new Config().init(starRocksDir + "/conf/fe.conf");
 
+            // check command line options
+            // NOTE: do it before init log4jConfig to avoid unnecessary stdout messages
+            checkCommandLineOptions(cmdLineOpts);
+
             Log4jConfig.initLogging();
 
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
             // Need to put if before `GlobalStateMgr.getCurrentState().waitForReady()`, because it may access aws service
             setAWSHttpClient();
-
-            // check command line options
-            checkCommandLineOptions(cmdLineOpts);
 
             // check meta dir
             MetaHelper.checkMetaDir();
@@ -160,15 +161,15 @@ public class StarRocksFE {
 
             // init and start:
             // 1. QeService for MySQL Server
-            // 2. FeServer for Thrift Server
+            // 2. FrontendThriftServer for Thrift Server
             // 3. HttpServer for HTTP Server
             QeService qeService = new QeService(Config.query_port, Config.mysql_service_nio_enabled,
                     ExecuteEnv.getInstance().getScheduler());
-            FeServer feServer = new FeServer(Config.rpc_port);
+            FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);
             httpServer.setup();
 
-            feServer.start();
+            frontendThriftServer.start();
             httpServer.start();
             qeService.start();
 
@@ -333,6 +334,7 @@ public class StarRocksFE {
             System.out.println("Commit hash: " + Version.STARROCKS_COMMIT_HASH);
             System.out.println("Build type: " + Version.STARROCKS_BUILD_TYPE);
             System.out.println("Build time: " + Version.STARROCKS_BUILD_TIME);
+            System.out.println("Build distributor id: " + Version.STARROCKS_BUILD_DISTRO_ID);
             System.out.println("Build user: " + Version.STARROCKS_BUILD_USER + "@" + Version.STARROCKS_BUILD_HOST);
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);

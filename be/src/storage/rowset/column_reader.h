@@ -47,6 +47,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
+#include "storage/inverted/inverted_index_iterator.h"
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
@@ -77,6 +78,7 @@ class ParsedPage;
 class ZoneMapIndexPB;
 class ZoneMapPB;
 class Segment;
+struct NgramBloomFilterReaderOptions;
 
 // There will be concurrent users to read the same column. So
 // we should do our best to reduce resource usage through share
@@ -111,6 +113,7 @@ public:
     // Seek to the first entry in the column.
     Status seek_to_first(OrdinalPageIndexIterator* iter);
     Status seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterator* iter);
+    Status seek_by_page_index(int page_index, OrdinalPageIndexIterator* iter);
 
     // read a page from file into a page handle
     Status read_page(const ColumnIteratorOptions& iter_opts, const PagePointer& pp, PageHandle* handle,
@@ -152,7 +155,12 @@ public:
 
     Status load_ordinal_index(const IndexReadOptions& opts);
 
+    Status new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedIndexIterator** iterator,
+                                       const SegmentReadOptions& opts);
+
     uint32_t num_rows() const { return _segment->num_rows(); }
+
+    void print_debug_info() { _ordinal_index->print_debug_info(); }
 
     size_t mem_usage() const;
 
@@ -182,12 +190,20 @@ private:
     Status _zone_map_filter(const std::vector<const ColumnPredicate*>& predicates, const ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
 
+    Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
+
+    NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
+
+    bool _inverted_index_loaded() const { return invoked(_inverted_index_load_once); }
+
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
+    LogicalType _column_child_type = TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
+    uint32 _column_unique_id = std::numeric_limits<uint32_t>::max();
 
     // initialized in init(), used for create PageDecoder
     const EncodingInfo* _encoding_info = nullptr;
@@ -202,6 +218,7 @@ private:
     std::unique_ptr<OrdinalIndexReader> _ordinal_index;
     std::unique_ptr<BitmapIndexReader> _bitmap_index;
     std::unique_ptr<BloomFilterIndexReader> _bloom_filter_index;
+    std::unique_ptr<InvertedReader> _inverted_index;
 
     std::unique_ptr<ZoneMapPB> _segment_zone_map;
 
@@ -219,6 +236,9 @@ private:
 
     // only for json flat column
     std::string _name;
+
+    // only used for inverted index load
+    OnceFlag _inverted_index_load_once;
 };
 
 } // namespace starrocks

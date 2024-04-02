@@ -109,6 +109,7 @@ public:
     ////////////////// serialization  //////////////////////
     size_t serialize(uint8_t* dst) const;
     uint64_t serialize_size() const;
+    uint64_t mem_usage() const { return serialize_size(); }
 
     ////////////////// RAW accessor ////////////////////////////
     Slice get_slice() const;
@@ -125,6 +126,7 @@ public:
     StatusOr<JsonValue> get_obj(const std::string& key) const;
     bool is_null() const;
     bool is_none() const;
+    bool is_null_or_none() const;
 
     ////////////////// util  //////////////////////
     StatusOr<std::string> to_string() const;

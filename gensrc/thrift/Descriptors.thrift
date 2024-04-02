@@ -167,6 +167,7 @@ enum TSchemaTableType {
     SYS_FE_LOCKS,
     SCH_BE_DATACACHE_METRICS,
     SCH_PARTITIONS_META,
+    SYS_FE_MEMORY_USAGE,
 }
 
 enum THdfsCompression {
@@ -181,7 +182,8 @@ enum THdfsCompression {
 
 enum TIndexType {
   BITMAP,
-  GIN
+  GIN,
+  NGRAMBF
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -451,6 +453,8 @@ struct TTableFunctionTable {
 
     // Write single file
     6: optional bool write_single_file
+
+    7: optional i64 target_max_file_size
 }
 
 struct TIcebergSchema {
@@ -499,6 +503,9 @@ struct TIcebergTable {
 
     // if serialize partition info throws exception, then use unserialized partitions
     6: optional map<i64, THdfsPartition> partitions
+
+    // Iceberg equality delete schema, used to support schema evolution
+    7: optional TIcebergSchema iceberg_equal_delete_schema
 }
 
 struct THudiTable {

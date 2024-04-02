@@ -54,6 +54,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static org.apache.iceberg.types.Types.NestedField.required;
 
 public class MockIcebergMetadata implements ConnectorMetadata {
@@ -149,7 +150,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         MockIcebergTable mockIcebergTable = new MockIcebergTable(1, MOCKED_UNPARTITIONED_TABLE_NAME0,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
                 MOCKED_UNPARTITIONED_TABLE_NAME0, schemas, baseTable, null,
-                tableIdentifier);
+                tableIdentifier, "");
 
         Map<String, ColumnStatistic> columnStatisticMap;
         List<String> colNames = schemas.stream().map(Column::getName).collect(Collectors.toList());
@@ -389,7 +390,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         String tableIdentifier = Joiner.on(":").join(tblName, UUID.randomUUID());
         return new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
                 null, MOCKED_PARTITIONED_DB_NAME, tblName, schemas, baseTable, null,
-                tableIdentifier);
+                tableIdentifier, "");
     }
 
     public static MockIcebergTable getPartitionTransformIcebergTable(String tblName, List<Column> schemas)
@@ -400,7 +401,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         String tableIdentifier = Joiner.on(":").join(tblName, UUID.randomUUID());
         return new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
                 null, MOCKED_PARTITIONED_TRANSFORMS_DB_NAME, tblName, schemas, baseTable, null,
-                tableIdentifier);
+                tableIdentifier, "");
+    }
+
+    @Override
+    public com.starrocks.catalog.Table.TableType getTableType() {
+        return ICEBERG;
     }
 
     @Override

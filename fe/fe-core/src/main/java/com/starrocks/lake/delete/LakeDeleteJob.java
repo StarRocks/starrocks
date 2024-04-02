@@ -69,9 +69,12 @@ public class LakeDeleteJob extends DeleteJob {
 
     private Map<Long, List<Long>> beToTablets;
 
-    public LakeDeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo) {
+    private final long warehouseId;
+
+    public LakeDeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo, long warehouseId) {
         super(id, transactionId, label, deleteInfo);
         beToTablets = Maps.newHashMap();
+        this.warehouseId = warehouseId;
     }
 
     @Override
@@ -83,7 +86,7 @@ public class LakeDeleteJob extends DeleteJob {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE);
+            beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, warehouseId);
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it

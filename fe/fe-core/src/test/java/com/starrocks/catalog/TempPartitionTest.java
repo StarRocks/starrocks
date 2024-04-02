@@ -50,7 +50,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
-import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -103,8 +102,7 @@ public class TempPartitionTest {
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
-        ShowResultSet showResultSet = executor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showStmt, ctx);
         List<List<String>> rows = showResultSet.getResultRows();
         Assert.assertEquals(expected, rows.size());
         return rows;
@@ -130,8 +128,7 @@ public class TempPartitionTest {
             throws Exception {
         String showStr = "show tablet from " + tbl + (isTemp ? " temporary" : "") + " partition (" + partitions + ");";
         ShowTabletStmt showStmt = (ShowTabletStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
-        ShowResultSet showResultSet = executor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showStmt, ctx);
         List<List<String>> rows = showResultSet.getResultRows();
         if (expected != -1) {
             Assert.assertEquals(expected, rows.size());
@@ -153,8 +150,7 @@ public class TempPartitionTest {
         partNameToTabletId.clear();
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
-        ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
-        ShowResultSet showResultSet = executor.execute();
+        ShowResultSet showResultSet = ShowExecutor.execute(showStmt, ctx);
         List<List<String>> rows = showResultSet.getResultRows();
         Map<Long, String> partIdToName = Maps.newHashMap();
         for (List<String> row : rows) {
@@ -499,6 +495,8 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", true, 1);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
+        GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+
         checkTabletExists(tempPartitionTabletIds2.values(), true);
         checkTabletExists(Lists.newArrayList(originPartitionTabletIds2.get("p3")), true);
         checkTabletExists(Lists.newArrayList(originPartitionTabletIds2.get("p1"), originPartitionTabletIds2.get("p2")),
@@ -565,7 +563,8 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
 
-        stmtStr = "alter table db2.tbl2 add temporary partition tp1 values less than('10') distributed by hash(k2) buckets 1"; // name conflict
+        stmtStr =
+                "alter table db2.tbl2 add temporary partition tp1 values less than('10') distributed by hash(k2) buckets 1"; // name conflict
         alterTableWithNewAnalyzer(stmtStr, true);
         stmtStr = "alter table db2.tbl2 rename partition p3 tp3;";
         alterTableWithNewAnalyzer(stmtStr, false);

@@ -82,6 +82,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return normal.getTableType();
+    }
+
+    @Override
     public List<String> listDbNames() {
         return ImmutableList.<String>builder()
                 .addAll(this.normal.listDbNames())

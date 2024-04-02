@@ -30,6 +30,7 @@ public:
             : Operator(factory, id, "chunk_accumulate", plan_node_id, true, driver_sequence) {}
 
     ~ChunkAccumulateOperator() override = default;
+    Status prepare(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;

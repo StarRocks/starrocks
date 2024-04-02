@@ -127,7 +127,7 @@ ALTER TABLE <table1> SWAP WITH <table2>;
 ALTER VIEW <view_name> AS <query>;
 
 -- 原子替换物化视图（替换两个物化视图的名字，并不修改其中数据）。
-ALTER MATERIALIZED VIWE <mv1> SWAP WITH <mv2>;
+ALTER MATERIALIZED VIEW <mv1> SWAP WITH <mv2>;
 
 -- 重新启用物化视图。
 ALTER MATERIALIZED VIEW <mv_name> ACTIVE;
@@ -144,8 +144,9 @@ Schema Change 遵循以下原则：
 
 由于 Inactive 状态的物化视图其数据一致性无法保证，您可以使用以下方法修复：
 
-- **手动修复**：您可以通过执行 ALTER MATERIALIZED VIEW `<mv_name>` ACTIVE 手动修复 Inactive 状态的物化视图。此语句将根据物化视图原始 SQL 定义尝试重建。需要注意的是，重建时需保证在底层 Schema Change 之后， SQL 定义仍然有效，否则操作将失败。
-- **自动修复**：StarRocks 将尝试自动激活 Inactive 状态的物化视图，但时效性无法保证。
+- **手动修复**：您可以通过执行 `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` 手动修复 Inactive 状态的物化视图。此语句将根据物化视图原始 SQL 定义尝试重建。需要注意的是，重建时需保证在底层 Schema Change 之后， SQL 定义仍然有效，否则操作将失败。
+- **刷新时修复**：StarRocks 将会在刷新物化视图时会尝试自动执行以上的修复命令，重建物化视图再刷新。
+- **自动修复**： StarRocks 将会尝试自动修复 Inactive 的物化视图，您可以通过 `ADMIN SET FRONTEND CONFIG('enable_mv_automatic_active_check'='false')` 关闭此功能。此功能自 3.1.4 和 3.2.0 版本开始支持。
 
 ## 分区建模
 

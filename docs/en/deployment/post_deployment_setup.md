@@ -32,8 +32,8 @@ StarRocks automatically assigns an empty password to the `root` user when the cl
 
 > **NOTE**
 >
-> - Keep the password properly after resetting it. If you forgot the password, see [Reset lost root password](../administration/User_privilege.md#reset-lost-root-password) for detailed instructions.
-> - After completing the post-deployment setup, you can create new users and roles to manage the privileges within your team. See [Manage user privileges](../administration/User_privilege.md) for detailed instructions.
+> - Keep the password properly after resetting it. If you forgot the password, see [Reset lost root password](../administration/user_privs/User_privilege.md#reset-lost-root-password) for detailed instructions.
+> - After completing the post-deployment setup, you can create new users and roles to manage the privileges within your team. See [Manage user privileges](../administration/user_privs/User_privilege.md) for detailed instructions.
 
 ## Set necessary system variables
 

@@ -71,6 +71,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
@@ -86,6 +87,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -99,6 +101,7 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -893,6 +896,19 @@ public class RestoreJob extends AbstractJob {
                 MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByIndexId(restoredIdx.getId());
                 TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), physicalPartition.getId(),
                         restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
+                TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+                        .setId(indexMeta.getSchemaId())
+                        .setKeysType(indexMeta.getKeysType())
+                        .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                        .setSchemaHash(indexMeta.getSchemaHash())
+                        .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                        .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                        .setStorageType(indexMeta.getStorageType())
+                        .addColumns(indexMeta.getSchema())
+                        .setBloomFilterColumnNames(bfColumns)
+                        .setBloomFilterFpp(bfFpp)
+                        .setIndexes(localTbl.getCopiedIndexes())
+                        .build().toTabletSchema();
                 for (Tablet restoreTablet : restoredIdx.getTablets()) {
                     GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                     for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
@@ -901,21 +917,22 @@ public class RestoreJob extends AbstractJob {
                         LOG.info("tablet {} physical partition {} index {} replica {}",
                                 restoreTablet.getId(), physicalPartition.getId(), restoredIdx.getId(),
                                 restoreReplica.getId());
-                        CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getBackendId(), dbId,
-                                localTbl.getId(), physicalPartition.getId(), restoredIdx.getId(),
-                                restoreTablet.getId(), indexMeta.getShortKeyColumnCount(),
-                                indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(), restoreReplica.getVersion(),
-                                indexMeta.getKeysType(), indexMeta.getStorageType(),
-                                TStorageMedium.HDD /* all restored replicas will be saved to HDD */,
-                                indexMeta.getSchema(), bfColumns, bfFpp, null,
-                                localTbl.getCopiedIndexes(),
-                                localTbl.isInMemory(),
-                                localTbl.enablePersistentIndex(),
-                                localTbl.primaryIndexCacheExpireSec(),
-                                localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
-                                localTbl.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                                indexMeta.getSortKeyUniqueIds());
-                        task.setInRestoreMode(true);
+                        CreateReplicaTask task = CreateReplicaTask.newBuilder()
+                                .setNodeId(restoreReplica.getBackendId())
+                                .setDbId(dbId)
+                                .setTableId(localTbl.getId())
+                                .setPartitionId(physicalPartition.getId())
+                                .setIndexId(restoredIdx.getId())
+                                .setTabletId(restoreTablet.getId())
+                                .setVersion(restoreReplica.getVersion())
+                                .setStorageMedium(TStorageMedium.HDD) /* all restored replicas will be saved to HDD */
+                                .setEnablePersistentIndex(localTbl.enablePersistentIndex())
+                                .setPrimaryIndexCacheExpireSec(localTbl.primaryIndexCacheExpireSec())
+                                .setTabletType(localTbl.getPartitionInfo().getTabletType(restorePart.getId()))
+                                .setCompressionType(localTbl.getCompressionType())
+                                .setInRestoreMode(true)
+                                .setTabletSchema(tabletSchema)
+                                .build();
                         batchTask.addTask(task);
                     }
                 }
@@ -1515,12 +1532,16 @@ public class RestoreJob extends AbstractJob {
         info.add(TimeUtils.longToTimeString(snapshotFinishedTime));
         info.add(TimeUtils.longToTimeString(downloadFinishedTime));
         info.add(TimeUtils.longToTimeString(finishedTime));
-        info.add(Joiner.on(", ").join(unfinishedSignatureToId.entrySet()));
-        info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
-                e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
-                Collectors.toList())));
-        info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
-                + "]").collect(Collectors.toList())));
+        try {
+            info.add(Joiner.on(", ").join(unfinishedSignatureToId.entrySet()));
+            info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
+                    e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
+                    Collectors.toList())));
+            info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
+                    + "]").collect(Collectors.toList())));
+        } catch (Exception e) {
+            throw new SemanticException("meta data may has been updated during this period, please try again");
+        }
         info.add(status.toString());
         info.add(String.valueOf(timeoutMs / 1000));
         return info;

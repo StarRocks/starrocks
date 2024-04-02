@@ -248,6 +248,7 @@ public:
     // NOTE: The dir must be empty.
     virtual Status delete_dir(const std::string& dirname) = 0;
 
+    // TODO: Rename this method, because this method can also delete a normal file.
     // Deletes the contents of 'dirname' (if it is a directory) and the contents of all its subdirectories,
     // recursively, then deletes 'dirname' itself. Symlinks are not followed (symlink is removed, not its target).
     virtual Status delete_dir_recursive(const std::string& dirname) = 0;
@@ -345,9 +346,9 @@ public:
 
     std::shared_ptr<io::SeekableInputStream> stream() { return _stream; }
 
-    const std::string& filename() const { return _name; }
+    const std::string& filename() const override { return _name; }
 
-    bool is_cache_hit() const { return _is_cache_hit; }
+    bool is_cache_hit() const override { return _is_cache_hit; }
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;

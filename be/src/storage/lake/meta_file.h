@@ -36,7 +36,7 @@ enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
 
 class MetaFileBuilder {
 public:
-    explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
+    explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // handle txn log
@@ -82,7 +82,7 @@ bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 
 // TODO(yixin): cache rowset_rssid_to_path
-void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
+void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite* op_write,
                           std::unordered_map<uint32_t, FileInfo>& rssid_to_path);
 
 } // namespace lake

@@ -4,12 +4,12 @@ displayed_sidebar: "Chinese"
 
 # 函数列表
 
-StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时使用。除了常见的函数分类，StarRocks 也支持 ARRAY、JSON、MAP、STRUCT 等半结构化函数，支持 [Lambda 高阶函数](Lambda_expression.md)。如果以上函数都不符合您的需求，您还可以自行编写 [Java UDF](JAVA_UDF.md) 来满足业务需求。
+StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时使用。除了常见的函数分类，StarRocks 也支持 ARRAY、JSON、MAP、STRUCT 等半结构化函数，支持 [Lambda 高阶函数](Lambda_expression.md)。如果以上函数都不符合您的需求，您还可以自行编写 [Java UDF](JAVA_UDF.md) 来满足业务需求。StarRocks 还提供 [Hive Bitmap UDF](../../integrations/hive_bitmap_udf.md) 功能，您可以在 Hive 里计算生成 Bitmap 后，再导入 StarRocks；将 StarRocks 里生成的 Bitmap，导出到 Hive，方便其它系统使用。
 
 您可以按照以下分类来查找目标函数。
 
 - [函数列表](#函数列表)
-  - [日期函数](#日期函数)
+  - [时间日期函数](#时间日期函数)
   - [字符串函数](#字符串函数)
   - [聚合函数](#聚合函数)
   - [数学函数](#数学函数)
@@ -30,7 +30,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
   - [地理位置函数](#地理位置函数)
   - [Hash 函数](#hash-函数)
 
-## 日期函数
+## 时间日期函数
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
@@ -68,6 +68,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [makedate](./date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
 | [microseconds_add](./date-time-functions/microseconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为微秒。  |
 | [microseconds_sub](./date-time-functions/microseconds_sub.md)| 从一个日期时间中减去指定的时间间隔，单位为微秒。  |
+| [milliseconds_diff](./date-time-functions/milliseconds_diff.md)| 计算开始时间和结束时间相差多少毫秒。  |
 | [minute](./date-time-functions/minute.md)| 获得日期中的分钟的信息，返回值范围为 0~59。  |
 | [minutes_add](./date-time-functions/minutes_add.md)| 给指定的日期时间或日期增加指定的分钟数。|
 | [minutes_diff](./date-time-functions/minutes_diff.md)| 计算开始时间和结束时间相差多少分钟。  |
@@ -169,7 +170,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 |  [any_value](./aggregate-functions/any_value.md)| 在包含 GROUP BY 的聚合查询中，该函数用于从每个聚合分组中**随机**选择一行返回。 |
 |  [approx_count_distinct](./aggregate-functions/approx_count_distinct.md)| 返回类似于 COUNT(DISTINCT col) 结果的近似值。 |
-|  [array_agg](./array-functions/array_agg.md) | 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。  |
+|  [approx_top_k](./aggregate-functions/approx_top_k.md)| 返回表达式 `expr` 中最常出现的 `k` 个项目以及每个项目出现的近似次数。 |
+|  [array_agg](./array-functions/array_agg.md) | 将一列中的值（包括空值 null）串联成一个数组（多行转一行）。  |
 |  [avg](./aggregate-functions/avg.md)| 用于返回选中字段的平均值。 |
 |  [bitmap](./aggregate-functions/bitmap.md)| 通过 bitmap 函数实现聚合。 |
 |  [bitmap_agg](./bitmap-functions/bitmap_agg.md)| 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。 |
@@ -181,8 +183,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [group_concat](./string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](./aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
 |  [grouping_id](./aggregate-functions/grouping_id.md)| 用于区分相同分组标准的分组统计结果。 |
-|  [hll_empty](./aggregate-functions/hll_empty.md)| 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。 |
-|  [hll_hash](./aggregate-functions/hll_hash.md)| 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。 |
 |  [hll_raw_agg](./aggregate-functions/hll_raw_agg.md)| 用于聚合 HLL 类型的字段，返回 HLL 类型。 |
 |  [hll_union](./aggregate-functions/hll_union.md)| 返回一组 HLL 值的并集。 |
 |  [hll_union_agg](./aggregate-functions/hll_union_agg.md)| 将多个 HLL 类型数据合并成一个 HLL。 |
@@ -259,12 +259,13 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 |  [all_match](./array-functions/all_match.md)| 判断数组中的所有元素是否都匹配谓词中指定的条件。 |
 |  [any_match](./array-functions/any_match.md)| 判断数组中是否有元素匹配谓词中指定的条件。 |
-|  [array_agg](./array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。 |
+|  [array_agg](./array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组（多行转一行）。 |
 |  [array_append](./array-functions/array_append.md)| 在数组末尾添加一个新的元素。 |
-|  [array_avg](./array-functions/array_avg.md)| 求取一个ARRAY中的所有数据的平均数。 |
+|  [array_avg](./array-functions/array_avg.md)| 求取一个 ARRAY 中的所有数据的平均数。 |
 |  [array_concat](./array-functions/array_concat.md)| 将多个数组拼接成一个数组。 |
 |  [array_contains](./array-functions/array_contains.md)| 检查数组中是否包含某个元素，是的话返回 1，否则返回 0。 |
-|  [array_contains_all](./array-functions/array_contains_all.md)| 检查数组 arr1 是否包含数组 arr2 中的所有元素。 |
+|  [array_contains_all](./array-functions/array_contains_all.md)| 检查数组 `arr1` 是否包含数组 `arr2` 中的所有元素。 |
+|  [array_contains_seq](./array-functions/array_contains_seq.md) | 检查数组 `arr2` 的所有元素是否以完全相同的顺序出现在数组 `arr1` 中 |
 |  [array_cum_sum](./array-functions/array_cum_sum.md)| 对数组中的元素进行向前累加。 |
 |  [array_difference](./array-functions/array_difference.md)| 对于数值型数组，返回相邻两个元素的差(从后者中减去前者)构成的数组。 |
 |  [array_distinct](./array-functions/array_distinct.md)| 数组元素去重。 |
@@ -439,7 +440,10 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
+|  [percentile_approx](./aggregate-functions/percentile_approx.md)| 返回第 p 个百分位点的近似值。 |
 |  [percentile_approx_raw](./percentile-functions/percentile_approx_raw.md)| 计算给定参数 x 的百分位数。 |
+|  [percentile_cont](./aggregate-functions/percentile_cont.md)| 计算精确百分位数。 |
+|  [percentile_disc](./aggregate-functions/percentile_disc.md)| 计算百分位数。 |
 |  [percentile_empty](./percentile-functions/percentile_empty.md)| 构造一个 percentile 类型的数值，主要用于 INSERT 或 Stream Load 导入时填充默认值。 |
 |  [percentile_hash](./percentile-functions/percentile_hash.md)| 将 double 类型数值构造成 percentile 类型数值。 |
 |  [percentile_union](./percentile-functions/percentile_union.md)| 用于对分组结果进行聚合。 |
@@ -449,6 +453,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 | [hll_cardinality](./scalar-functions/hll_cardinality.md) |  用于计算 HLL 类型值的基数。  |
+| [hll_empty](./scalar-functions/hll_empty.md)| 生成空 HLL 列，用于 INSERT 或导入数据时补充默认值。 |
+| [hll_hash](./scalar-functions/hll_hash.md)| 将一个数值转换为 HLL 类型。通常用于导入中，将源数据中的数值映射到 StarRocks 表中的 HLL 列类型。 |
 
 ## 工具函数
 

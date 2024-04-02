@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -104,6 +105,18 @@ public class HiveViewTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "0:HdfsScanNode\n" +
                 "     TABLE: customer");
+    }
+
+    @Test
+    public void testQueryHiveViewCaseInsensitive() throws Exception {
+        String sql = "select * from hive0.tpch.customer_case_insensitive_view where c_custkey = 1";
+        String sqlPlan = getFragmentPlan(sql);
+        assertContains(sqlPlan, "TABLE: customer");
+
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Column '`t0`.`v1`' cannot be resolved");
+        sql = "select * from hive0.tpch.customer_case_insensitive_view v1 join test.t0 T0 on v1.c_custkey = t0.v1";
+        getFragmentPlan(sql);
     }
 
     @Test

@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Displays all the privileges that have been granted to a user or role.
 
-For more information about roles and privileges, see [Overview of privileges](../../../administration/privilege_overview.md).
+For more information about roles and privileges, see [Overview of privileges](../../../administration/user_privs/privilege_overview.md).
 
 :::tip
 All roles and users can view the privileges granted to them or the roles assigned to them. Only users with the `user_admin` role can view the privileges of a specified user or role.
@@ -63,7 +63,7 @@ mysql> SHOW GRANTS FOR 'user_g'@'%';
 |UserIdentity |Catalog      |Grants                                                                                         |
 +-------------+-------------------------------------------------------------------------------------------------------------+
 |'user_g'@'%' |NULL         |GRANT role_g, public to `user_g`@`%`;                                                          | 
-|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON `user_a`@`%`, `user_b`@`%`TO `user_g`@`%`;                                |    
+|'user_g'@'%' |NULL         |GRANT IMPERSONATE ON USER `user_a`@`%` TO USER `user_g`@`%`;                                |    
 |'user_g'@'%' |default      |GRANT CREATE_DATABASE ON CATALOG default_catalog TO USER `user_g`@`%`;                         | 
 |'user_g'@'%' |default      |GRANT ALTER, DROP, CREATE_TABLE ON DATABASE db1 TO USER `user_g`@`%`;                          | 
 |'user_g'@'%' |default      |GRANT CREATE_VIEW ON DATABASE db1 TO USER `user_g`@`%` WITH GRANT OPTION;                      | 

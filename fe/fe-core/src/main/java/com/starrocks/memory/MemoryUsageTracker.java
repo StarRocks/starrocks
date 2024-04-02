@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.QeProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,7 +40,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
     public static final Map<String, Map<String, MemoryTrackable>> REFERENCE =
             new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
 
-    private static final Map<String, MemoryStat> MEMORY_USAGE = Maps.newConcurrentMap();
+    public static final Map<String, Map<String, MemoryStat>> MEMORY_USAGE = Maps.newConcurrentMap();
 
     private boolean initialize;
     public MemoryUsageTracker() {
@@ -52,15 +53,20 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("Load", currentState.getLoadMgr());
         registerMemoryTracker("Load", currentState.getRoutineLoadMgr());
         registerMemoryTracker("Load", currentState.getStreamLoadMgr());
+        registerMemoryTracker("Load", currentState.getInsertOverwriteJobMgr());
 
+        registerMemoryTracker("Compaction", currentState.getCompactionMgr());
         registerMemoryTracker("Export", currentState.getExportMgr());
         registerMemoryTracker("Delete", currentState.getDeleteMgr());
         registerMemoryTracker("Transaction", currentState.getGlobalTransactionMgr());
         registerMemoryTracker("Backup", currentState.getBackupHandler());
         registerMemoryTracker("Task", currentState.getTaskManager());
         registerMemoryTracker("Task", currentState.getTaskManager().getTaskRunManager());
-        registerMemoryTracker("Tablet", currentState.getTabletInvertedIndex());
+        registerMemoryTracker("TabletInvertedIndex", currentState.getTabletInvertedIndex());
+
+        registerMemoryTracker("Query", new QueryTracker());
         registerMemoryTracker("Profile", ProfileManager.getInstance());
+        registerMemoryTracker("Agent", new AgentTaskTracker());
         registerMemoryTracker("LocalCatalog", new InternalCatalogMemoryTracker());
 
         QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
@@ -89,9 +95,6 @@ public class MemoryUsageTracker extends FrontendDaemon {
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : REFERENCE.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
-            MemoryStat memoryStat = new MemoryStat();
-            long estimateSize = 0L;
-            long estimateCount = 0L;
             for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
                 String className = statEntry.getKey();
                 MemoryTrackable tracker = statEntry.getValue();
@@ -99,27 +102,30 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 long currentEstimateSize = tracker.estimateSize();
                 Map<String, Long> counterMap = tracker.estimateCount();
                 endTime = System.currentTimeMillis();
-                estimateSize += currentEstimateSize;
 
                 StringBuilder sb  = new StringBuilder();
                 for (Map.Entry<String, Long> subEntry : counterMap.entrySet()) {
                     sb.append(subEntry.getKey()).append(" with ").append(subEntry.getValue())
                             .append(" object(s). ");
                 }
+                MemoryStat memoryStat = new MemoryStat();
+                MEMORY_USAGE.computeIfAbsent(moduleName, k -> new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER));
+                memoryStat.setCurrentConsumption(currentEstimateSize);
+                Map<String, MemoryStat> usageMap = MEMORY_USAGE.get(moduleName);
+                MemoryStat oldMemoryStat = usageMap.get(className);
+                if (oldMemoryStat != null) {
+                    memoryStat.setPeakConsumption(Math.max(oldMemoryStat.getPeakConsumption(), currentEstimateSize));
+                } else {
+                    memoryStat.setPeakConsumption(currentEstimateSize);
+                }
+                memoryStat.setCounterInfo(GsonUtils.GSON.toJson(counterMap));
+                memoryStat.setCounterMap(counterMap);
+                usageMap.put(className, memoryStat);
 
                 LOG.info("({}ms) Module {} - {} estimated {} of memory. Contains {}",
                         endTime - startTime, moduleName, className,
                         new ByteSizeValue(currentEstimateSize), sb.toString());
             }
-            memoryStat.setCurrentConsumption(estimateSize);
-            memoryStat.setObjectCount(estimateCount);
-            MemoryStat oldMemoryStat = MEMORY_USAGE.get(moduleName);
-            if (oldMemoryStat != null) {
-                memoryStat.setPeakConsumption(Math.max(oldMemoryStat.getPeakConsumption(), estimateSize));
-            } else {
-                memoryStat.setPeakConsumption(estimateSize);
-            }
-            MEMORY_USAGE.put(moduleName, memoryStat);
         }
     }
 

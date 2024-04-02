@@ -20,7 +20,7 @@ The Prefix index is a sparse index, and its size is at least 1024 times smaller 
 
 ## Usage notes
 
-For a Duplicate Key table, sort key columns are specified in `DUPLICATE KEY`. For an Aggregate table or a Unique Key table, sort key columns are coupled with constrainted columns, and are specified in `AGGREGATE KEY` or `UNIQUE KEY`. From v3.0 onwards, a Primary Key table decouples sort key columns and primary key columns, providing more flexible capabilities. The sort key columns are specified in `ORDER BY`, and primary key columns are specified in `PRIMARY KEY`.
+For a Duplicate Key table, sort key columns are specified in `DUPLICATE KEY`. For an Aggregate table or a Unique Key table, sort key columns are coupled with constrained columns, and are specified in `AGGREGATE KEY` or `UNIQUE KEY`. From v3.0 onwards, a Primary Key table decouples sort key columns and primary key columns, providing more flexible capabilities. The sort key columns are specified in `ORDER BY`, and primary key columns are specified in `PRIMARY KEY`.
 
 The following example uses a Unique Key table to illustrate how to specify sort key columns at table creation and how they comprise a Prefix index.
 
@@ -83,12 +83,12 @@ Except for Primary Key tables, currently the sort key for other types of tables 
 - It is recommended to prioritize columns to form the sort key in the order below:
   1. **Select columns that are frequently used in query filter conditions as sort key columns.** If the number of the sort key columns is more than one, arrange them in descending order of their frequencies in query filter conditions. This way, if the query filter conditions include the prefix of the Prefix index, the query performance can be significantly improved. And if the filter conditions include the entire prefix of the Prefix index, the query can fully leverage the Prefix index. Of course, as long as the filter conditions include the prefix, though not the entire prefix, the Prefix index can still optimize the query. However, the effect of the Prefix index will be weakened if the length of the prefix included in the filter conditions is too short. Still, take the [Unique Key table](https://chat.openai.com/c/0c47f67a-8103-4ec6-a280-71495f037334#Usage-Guidelines) whose sort key is `(uid,name)` as an example. If the query filter conditions include the entire prefix, such as `select sum(credits) from user_access where uid = 123 and name = 'Jane Smith';`, the query can fully utilize the Prefix index to improve performance. If the query conditions only include part of the prefix, such as `select sum(credits) from user_access where uid = 123;`, the query can also benefit from the Prefix index to improve performance. However, if the query conditions do not include the prefix, for example, `select sum(credits) from user_access where name = 'Jane Smith';`, the query can not use the Prefix index to accelerate.
   - If multiple sort key columns have similar frequencies as query filter conditions, you can measure the cardinality of these columns.
-  - If the cardinality of the column is high, it can filter more data during the query. If the cardinality is too low, such as for Boolean-type columns, its filtering effect is not ideal. 
+  - If the cardinality of the column is high, it can filter more data during the query. If the cardinality is too low, such as for Boolean-type columns, its filtering effect is not ideal.
+
     :::tip
-    
     However, considering the query characteristics in actual business scenarios, usually, slightly lower cardinality columns are more frequently used as query conditions than high cardinality columns. This is because queries whose filtering is frequently based on high cardinality columns, or even in some extreme scenarios, based on columns with UNIQUE constraints are more like point queries in OLTP databases rather than complex analytical queries in OLAP databases.
-    
     :::
+
   - Also, consider storage compression factors. If the difference in query performance between the order of a low-cardinality column and a high-cardinality one is not readily apparent, placing the low-cardinality column before the high-cardinality one will result in a much higher storage compression rate for the sorted low cardinality column. Therefore, it is recommended to place the low cardinality column in front.
 
 ### Considerations for defining sort key columns at table creation
@@ -105,4 +105,4 @@ The Prefix indexes can not be modified directly after table creation (except for
 
 ## How to verify whether the Prefix index accelerates queries
 
-After executing a query, you can check whether the Prefix index takes effect and view its filtering effect from detailed metrics, such as `ShortKeyFilterRows`, in the scan node in the [Query Profile](../../administration/query_profile.md).
+After executing a query, you can check whether the Prefix index takes effect and view its filtering effect from detailed metrics, such as `ShortKeyFilterRows`, in the scan node in the [Query Profile](../../administration/query_profile_overview.md).

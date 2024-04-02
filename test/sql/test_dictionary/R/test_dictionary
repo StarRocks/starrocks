@@ -8,7 +8,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -42,7 +41,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -104,7 +102,7 @@ DROP DICTIONARY test_dictionary_basic_operation;
 -- !result
 DROP TABLE test_dictionary_basic_operation;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_dictionary_basic_operation'.")
+E: (5502, "Getting analyzing error. Detail message: Unknown table 'test_dictionary_basic_operation'.")
 -- !result
 -- name: test_dictionary_type_combination
 CREATE TABLE `t_type_combination` (
@@ -122,7 +120,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -473,7 +470,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -631,7 +627,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -678,32 +673,32 @@ E: (1064, 'Getting analyzing error. Detail message: empty key list for dictionar
 CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionary_warm_up" = "abc", "dictionary_memory_limit" = "1024", "dictionary_refresh_interval" = "3600");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_warm_up failed, given parameter: abc')
+E: (1064, 'parse dictionary_warm_up failed, given parameter: abc')
 -- !result
 CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionary_warm_up" = "TRUE", "dictionary_memory_limit" = "abc", "dictionary_refresh_interval" = "3600");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: abc')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: abc')
 -- !result
 CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionary_warm_up" = "TRUE", "dictionary_memory_limit" = "1024", "dictionary_refresh_interval" = "abc");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_refresh_interval failed, given parameter: abc')
+E: (1064, 'parse dictionary_refresh_interval failed, given parameter: abc')
 -- !result
 CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("abc" = "bcd", "dictionary_memory_limit" = "1024", "dictionary_refresh_interval" = "abc");
 -- result:
-E: (1064, 'Unexpected exception: unknown property for dictionary: abc')
+E: (1064, 'unknown property for dictionary: abc')
 -- !result
 CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionary_warm_up" = "abc", "abc" = "bcd", "dictionary_refresh_interval" = "3600");
 -- result:
-E: (1064, 'Unexpected exception: unknown property for dictionary: abc')
+E: (1064, 'unknown property for dictionary: abc')
 -- !result
 CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionary_warm_up" = "abc", "dictionary_memory_limit" = "1024", "abc" = "bcd");
 -- result:
-E: (1064, 'Unexpected exception: unknown property for dictionary: abc')
+E: (1064, 'unknown property for dictionary: abc')
 -- !result
 CREATE DICTIONARY test_dictionary_error_2 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dicTionary_warM_up" = "tRue", "dictionaRy_memory_liMit" = "1024", "dictiOnary_reFResh_inTerval" = "3600");
@@ -855,57 +850,57 @@ DROP DICTIONARY test_dictionary_error_3;
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "KB");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: KB')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: KB')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "MB");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: MB')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: MB')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "GB");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: GB')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: GB')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "B");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: B')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: B')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "G");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: G')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: G')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "m");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: m')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: m')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "K");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: K')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: K')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "asdK");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: asdK')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: asdK')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "GBKB");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: GBKB')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: GBKB')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "123GBKB");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: 123GBKB')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: 123GBKB')
 -- !result
 CREATE DICTIONARY test_dictionary_error_3 USING t_dictionary_error (id1 KEY, id2 VALUE)
 PROPERTIES("dictionaRy_memory_liMit" = "");
 -- result:
-E: (1064, 'Unexpected exception: parse dictionary_memory_limit failed, given parameter: ')
+E: (1064, 'parse dictionary_memory_limit failed, given parameter: ')
 -- !result
 DROP TABLE t_dictionary_error;
 -- result:
@@ -920,7 +915,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -936,7 +930,6 @@ PRIMARY KEY(`id4`)
 DISTRIBUTED BY HASH(`id4`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1035,7 +1028,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1050,7 +1042,6 @@ PRIMARY KEY(`id3`)
 DISTRIBUTED BY HASH(`id3`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1096,7 +1087,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1119,7 +1109,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1146,7 +1135,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"

@@ -56,7 +56,7 @@ import java.util.Map;
 import java.util.zip.Adler32;
 
 public class MysqlTable extends Table {
-    private static final Logger LOG = LogManager.getLogger(OlapTable.class);
+    private static final Logger LOG = LogManager.getLogger(MysqlTable.class);
 
     private static final String ODBC_CATALOG_RESOURCE = "odbc_catalog_resource";
     private static final String MYSQL_HOST = "host";

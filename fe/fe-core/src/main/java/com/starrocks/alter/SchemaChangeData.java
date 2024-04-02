@@ -42,6 +42,7 @@ class SchemaChangeData {
     private final Map<Long, Short> newIndexShortKeyCount;
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
+    private final long warehouseId;
 
     static Builder newBuilder() {
         return new Builder();
@@ -104,6 +105,10 @@ class SchemaChangeData {
         return sortKeyUniqueIds;
     }
 
+    long getWarehouseId() {
+        return warehouseId;
+    }
+
     private SchemaChangeData(Builder builder) {
         this.database = Objects.requireNonNull(builder.database, "database is null");
         this.table = Objects.requireNonNull(builder.table, "table is null");
@@ -117,6 +122,7 @@ class SchemaChangeData {
         this.newIndexShortKeyCount = Objects.requireNonNull(builder.newIndexShortKeyCount, "newIndexShortKeyCount is null");
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
+        this.warehouseId = builder.warehouseId;
     }
 
     static class Builder {
@@ -132,6 +138,7 @@ class SchemaChangeData {
         private Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
+        private long warehouseId;
 
         private Builder() {
         }
@@ -185,6 +192,11 @@ class SchemaChangeData {
 
         Builder withSortKeyUniqueIds(@Nullable List<Integer> sortKeyUniqueIds) {
             this.sortKeyUniqueIds = sortKeyUniqueIds;
+            return this;
+        }
+
+        Builder withWarehouse(long warehouseId) {
+            this.warehouseId = warehouseId;
             return this;
         }
 

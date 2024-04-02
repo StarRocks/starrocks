@@ -23,7 +23,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -84,7 +83,6 @@ Status ORCScanner::open() {
     _orc_reader = std::make_unique<OrcChunkReader>(_state->chunk_size(), _orc_slot_descriptors);
     _orc_reader->set_broker_load_mode(_strict_mode);
     RETURN_IF_ERROR(_orc_reader->set_timezone(_state->timezone()));
-    _orc_reader->drop_nanoseconds_in_datetime();
     _orc_reader->set_runtime_state(_state);
     _orc_reader->set_case_sensitive(_case_sensitive);
     RETURN_IF_ERROR(_open_next_orc_reader());
@@ -193,20 +191,36 @@ Status ORCScanner::_open_next_orc_reader() {
         }
         std::shared_ptr<RandomAccessFile> file;
         const TBrokerRangeDesc& range_desc = _scan_range.ranges[_next_range];
-        Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
-                                              CompressionTypePB::NO_COMPRESSION, &file);
-        if (!st.ok()) {
-            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
-            return st;
-        }
-        const std::string& file_name = file->filename();
+        RETURN_IF_ERROR(create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
+                                                  CompressionTypePB::NO_COMPRESSION, &file));
+
+        const std::string file_name = file->filename();
+        std::shared_ptr<io::SeekableInputStream> input_stream = file->stream();
         ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
+
+        auto shared_buffered_input_stream =
+                std::make_shared<io::SharedBufferedInputStream>(input_stream, file_name, file_size);
+        const io::SharedBufferedInputStream::CoalesceOptions options = {
+                .max_dist_size = config::io_coalesce_read_max_distance_size,
+                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+        shared_buffered_input_stream->set_coalesce_options(options);
+
+        // If file size smaller than orc_loading_buffer_size, we will load the whole file in one IO request
+        if (file_size < config::orc_loading_buffer_size) {
+            std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+            io_ranges.emplace_back(0, file_size);
+            RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
+        }
+
+        file = std::make_shared<RandomAccessFile>(shared_buffered_input_stream, file_name);
+        file->set_size(file_size);
+
         auto inStream = std::make_unique<ORCFileStream>(file, file_size, _counter);
         _next_range++;
         _last_file_size = file_size;
         _orc_reader->set_read_chunk_size(_max_chunk_size);
         _orc_reader->set_current_file_name(file_name);
-        st = _orc_reader->init(std::move(inStream));
+        auto st = _orc_reader->init(std::move(inStream));
         if (st.is_end_of_file()) {
             LOG(WARNING) << "Failed to init orc reader. filename: " << file_name << ", status: " << st.to_string();
             continue;

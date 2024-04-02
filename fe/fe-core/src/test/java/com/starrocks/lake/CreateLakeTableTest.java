@@ -15,6 +15,7 @@
 package com.starrocks.lake;
 
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -126,6 +127,10 @@ public class CreateLakeTableTest {
         Assert.assertEquals(defaultTableFullPath, Objects.requireNonNull(table.getDefaultFilePathInfo()).getFullPath());
         Assert.assertEquals(defaultTableFullPath + "/100",
                 Objects.requireNonNull(table.getPartitionFilePathInfo(100)).getFullPath());
+        Assert.assertEquals(2, table.getMaxColUniqueId());
+        Assert.assertEquals(0, table.getColumn("key1").getUniqueId());
+        Assert.assertEquals(1, table.getColumn("key2").getUniqueId());
+        Assert.assertEquals(2, table.getColumn("v").getUniqueId());
     }
 
     @Test
@@ -227,10 +232,38 @@ public class CreateLakeTableTest {
             String sql = "show create table lake_test.table_with_persistent_index";
             ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
-            ShowResultSet resultSet = executor.execute();
+            ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
 
             Assert.assertFalse(resultSet.getResultRows().isEmpty());
+        }
+
+        UtFrameUtils.addMockComputeNode(50001);
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Cannot create cloud native table with local persistent index",
+                () -> createTable(
+                "create table lake_test.table_with_persistent_index2\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_persistent_index' = 'true');"));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.table_in_be_and_cn\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "table_in_be_and_cn");
+            // check table persistentIndex
+            boolean enablePersistentIndex = lakeTable.enablePersistentIndex();
+            Assert.assertFalse(enablePersistentIndex);
+
+            String sql = "show create table lake_test.table_in_be_and_cn";
+            ShowCreateTableStmt showCreateTableStmt =
+                    (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+
+            Assert.assertNotEquals(0, resultSet.getResultRows().size());
         }
     }
 
@@ -319,10 +352,31 @@ public class CreateLakeTableTest {
             String sql = "show create table lake_test.table_with_cloud_native_persistent_index";
             ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
-            ShowResultSet resultSet = executor.execute();
+            ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
 
             Assert.assertNotEquals(0, resultSet.getResultRows().size());
         }
+    }
+
+    @Test
+    public void testRestoreColumnUniqueId() throws Exception {
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.test_unique_id\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
+        LakeTable lakeTable = getLakeTable("lake_test", "test_unique_id");
+        // Clear unique id first
+        lakeTable.setMaxColUniqueId(0);
+        for (Column column : lakeTable.getColumns()) {
+            column.setUniqueId(0);
+        }
+        lakeTable.gsonPostProcess();
+        Assert.assertEquals(3, lakeTable.getMaxColUniqueId());
+        Assert.assertEquals(0, lakeTable.getColumn("c0").getUniqueId());
+        Assert.assertEquals(1, lakeTable.getColumn("c1").getUniqueId());
+        Assert.assertEquals(2, lakeTable.getColumn("c2").getUniqueId());
+        Assert.assertEquals(3, lakeTable.getColumn("c3").getUniqueId());
     }
 }

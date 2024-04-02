@@ -25,8 +25,10 @@ import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -43,20 +45,22 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
@@ -270,6 +274,27 @@ public class MetadataMgr {
         }
     }
 
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (tableExists(catalogName, dbName, tableName)) {
+                if (stmt.isSetIfNotExists()) {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+            }
+            connectorMetadata.get().createTableLike(stmt);
+        } else {
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
+    }
+
     public void alterTable(AlterTableStmt stmt) throws UserException {
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -340,6 +365,24 @@ public class MetadataMgr {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
     }
+        
+    /**
+     * getTableLocally avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
+     * In this case, only basic information of namespace and table type (derived from the type of its connector) is returned.
+     * For default/internal catalog, this method is equivalent to {@link MetadataMgr#getTable(String, String, String)}.
+     * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
+     */
+    public BasicTable getBasicTable(String catalogName, String dbName, String tblName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return getTable(catalogName, dbName, tblName);
+        }
+
+        // for external catalog, do not reach external metadata service
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        return connectorMetadata.map(
+                        metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
+                .orElse(null);
+    }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -406,10 +449,23 @@ public class MetadataMgr {
         List<ConnectorTableColumnStats> columnStatisticList =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
 
+        Map<String, Histogram> histogramStatistics =
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
+
         Statistics.Builder statistics = Statistics.builder();
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnRefOperator columnRef = requiredColumnRefs.get(i);
-            ConnectorTableColumnStats connectorTableColumnStats = columnStatisticList.get(i);
+            ConnectorTableColumnStats connectorTableColumnStats;
+            if (histogramStatistics.containsKey(columnRef.getName())) {
+                // add histogram to column statistic
+                Histogram histogram = histogramStatistics.get(columnRef.getName());
+                connectorTableColumnStats = new ConnectorTableColumnStats(
+                        ColumnStatistic.buildFrom(columnStatisticList.get(i).getColumnStatistic()).
+                                setHistogram(histogram).build(),
+                        columnStatisticList.get(i).getRowCount());
+            } else {
+                connectorTableColumnStats = columnStatisticList.get(i);
+            }
             if (connectorTableColumnStats != null) {
                 statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
                 if (!connectorTableColumnStats.isUnknown()) {
@@ -430,7 +486,7 @@ public class MetadataMgr {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
         Statistics statistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::hasNonStats)) {
             session.setObtainedFromInternalStatistics(false);
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
             return connectorMetadata.map(metadata -> metadata.getTableStatistics(

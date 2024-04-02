@@ -25,6 +25,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
@@ -85,8 +86,14 @@ public class MetaScanNode extends ScanNode {
 
                 // random shuffle List && only collect one copy
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
-                tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                        visibleVersion, -1, schemaHash);
+                if (RunMode.isSharedDataMode()) {
+                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                            visibleVersion, -1, schemaHash, warehouseId);
+                } else {
+                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                            visibleVersion, -1, schemaHash);
+                }
+
                 if (allQueryableReplicas.isEmpty()) {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);

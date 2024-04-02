@@ -25,18 +25,6 @@
 
 namespace starrocks {
 
-const std::string DEFAULT_FIELD_DELIM = "\001";
-const std::string DEFAULT_COLLECTION_DELIM = "\002";
-const std::string DEFAULT_MAPKEY_DELIM = "\003";
-// LF = Line Feed = '\n'
-const std::string LINE_DELIM_LF = "\n";
-// Most hive TextFile using LF as line delimiter
-const std::string DEFAULT_LINE_DELIM = LINE_DELIM_LF;
-// CR = Carriage Return = '\r'
-const std::string LINE_DELIM_CR = "\r";
-// TODO(SmithCruise) CR + LF, but we don't support it yet, because our code only support single char as line delimiter
-const std::string LINE_DELIM_CR_LF = "\r\n";
-
 static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
     ssize_t end = filename.size() - 1;
     while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
@@ -258,7 +246,6 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         }
     }
     RETURN_IF_ERROR(open_random_access_file());
-    RETURN_IF_ERROR(_setup_io_ranges());
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
@@ -271,6 +258,10 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         _converters.emplace_back(std::move(converter));
     }
     return Status::OK();
+}
+
+void HdfsTextScanner::do_update_counter(HdfsScanProfile* profile) {
+    profile->runtime_profile->add_info_string("TextCompression", CompressionTypePB_Name(_compression_type));
 }
 
 void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
@@ -368,24 +359,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
     }
 
-    // TODO Try to reuse HdfsScannerContext::append_partition_column_to_chunk() function
-    // Start to append partition column
-    for (size_t p = 0; p < _scanner_ctx.partition_columns.size(); ++p) {
-        size_t chunk_index = _scanner_params.partition_index_in_chunk[p];
-        Column* column = _column_raw_ptrs[chunk_index];
-        ColumnPtr partition_value = _scanner_ctx.partition_values[p];
-        DCHECK(partition_value->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value);
-        const ColumnPtr& data_column = const_column->data_column();
-
-        if (data_column->is_nullable()) {
-            column->append_default(1);
-        } else {
-            column->append(*data_column, 0, 1);
-        }
-
-        column->assign(rows_read, 0);
-    }
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     // Check chunk's row number for each column
     chunk->get()->check_or_die();
@@ -436,19 +410,6 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
             CSVReader::Record dummy;
             RETURN_IF_ERROR(reader->next_record(&dummy));
         }
-    }
-    return Status::OK();
-}
-
-Status HdfsTextScanner::_setup_io_ranges() const {
-    if (_shared_buffered_input_stream != nullptr) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges{};
-        for (int64_t offset = 0; offset < _scanner_params.file_size;) {
-            const int64_t remain_length = std::min(config::text_io_range_size, _scanner_params.file_size - offset);
-            ranges.emplace_back(offset, remain_length);
-            offset += remain_length;
-        }
-        RETURN_IF_ERROR(_shared_buffered_input_stream->set_io_ranges(ranges));
     }
     return Status::OK();
 }

@@ -38,6 +38,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TFileFormatType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -78,6 +79,7 @@ public class LoadTest {
             {
                 analyzer.getDescTbl();
                 result = descTable;
+                minTimes = 0;
             }
         };
 
@@ -250,5 +252,22 @@ public class LoadTest {
         Assert.assertEquals(2, slotDescByName.size());
         Assert.assertFalse(slotDescByName.containsKey(c1Name));
         Assert.assertTrue(slotDescByName.containsKey(c1NameInSource));
+    }
+
+    @Test
+    public void testGetFormatType() {
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("parquet", "hdfs://127.0.0.1:9000/some_file"));
+        Assert.assertEquals(TFileFormatType.FORMAT_ORC, Load.getFormatType("orc", "hdfs://127.0.0.1:9000/some_file"));
+        Assert.assertEquals(TFileFormatType.FORMAT_JSON, Load.getFormatType("json", "hdfs://127.0.0.1:9000/some_file"));
+
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.parq"));
+        Assert.assertEquals(TFileFormatType.FORMAT_PARQUET, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.parquet"));
+        Assert.assertEquals(TFileFormatType.FORMAT_ORC, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.orc"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_GZ, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.gz"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_BZ2, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.bz2"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_LZ4_FRAME, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.lz4"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.deflate"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.zst"));
+        Assert.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file"));
     }
 }

@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -51,7 +52,7 @@ public class AdminStmtAnalyzer {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
-    static class AdminStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    static class AdminStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statementBase, ConnectContext session) {
             visit(statementBase, session);
         }
@@ -226,6 +227,12 @@ public class AdminStmtAnalyzer {
             } else {
                 statement.setType(checkType);
             }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, ConnectContext context) {
+            statement.getTableName().normalization(context);
             return null;
         }
 

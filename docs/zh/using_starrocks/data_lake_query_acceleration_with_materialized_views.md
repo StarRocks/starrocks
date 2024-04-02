@@ -109,11 +109,23 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
 
-| **配置名称**                                                 | **默认值**                      | **说明**                                                     |
-| ------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 `true`，v2.5 为 `false` | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
-| background_refresh_metadata_interval_millis                  | 600000（10 分钟）               | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。         |
-| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）                | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 |
+### 配置名称                                           
+
+####  enable_background_refresh_connector_metadata                 
+
+**Default**:  v3.0 为 `true`，v2.5 为 `false` <br/>
+**Description**:  是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 <br/>
+
+####  background_refresh_metadata_interval_millis                  
+
+**Default**:  600000（10 分钟）               <br/>
+**Description**:  接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。         <br/>
+
+####  background_refresh_metadata_time_secs_since_last_access_secs 
+
+**Default**:  86400（24 小时）                <br/>
+**Description**:  Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 <br/>
+
 
 对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改，当前只支持 Iceberg V1 表。
 
@@ -138,7 +150,7 @@ where empid < 5;
 
 ## 最佳实践
 
-在实际业务场景中，您可以通过分析 Audit Log 或[大查询日志](../administration/monitor_manage_big_queries.md)来识别执行较慢、资源消耗较高的查询。您还可以使用 [Query Profile](../administration/query_profile.md) 来精确定位查询缓慢的特定阶段。以下各小节提供了如何通过物化视图提高数据湖查询性能的说明和示例。
+在实际业务场景中，您可以通过分析 Audit Log 或[大查询日志](../administration/management/monitor_manage_big_queries.md)来识别执行较慢、资源消耗较高的查询。您还可以使用 [Query Profile](../administration/query_profile_overview.md) 来精确定位查询缓慢的特定阶段。以下各小节提供了如何通过物化视图提高数据湖查询性能的说明和示例。
 
 ### 案例一：加速数据湖中的 Join 计算
 

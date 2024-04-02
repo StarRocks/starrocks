@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-显示输入查询语句的逻辑或物理执行计划。
+显示输入查询语句的逻辑或物理执行计划。关于如何分析查询计划，请参考 [分析 Query Plan](../../../administration/Query_planning.md#分析-query-plan)。
 
 :::tip
 

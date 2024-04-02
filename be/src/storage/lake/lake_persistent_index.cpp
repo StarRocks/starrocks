@@ -29,24 +29,25 @@ LakePersistentIndex::~LakePersistentIndex() {
 Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     KeyIndexesInfo not_founds;
     size_t num_found;
-    return _memtable->get(n, keys, values, &not_founds, &num_found);
+    // Assuming we always want the latest value now
+    return _memtable->get(n, keys, values, &not_founds, &num_found, -1);
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                    IOStat* stat) {
     KeyIndexesInfo not_founds;
     size_t num_found;
-    return _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found);
+    return _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number());
 }
 
-Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
-    return _memtable->insert(n, keys, values);
+Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
+    return _memtable->insert(n, keys, values, version);
 }
 
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
     KeyIndexesInfo not_founds;
     size_t num_found;
-    return _memtable->erase(n, keys, old_values, &not_founds, &num_found);
+    return _memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number());
 }
 
 Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
@@ -63,7 +64,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
-    RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes));
+    RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _version.major_number()));
     return Status::OK();
 }
 

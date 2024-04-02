@@ -58,6 +58,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
+    private static final long UNINITIALIZED_SCHEMA_ID = -1;
 
     @SerializedName(value = "indexId")
     private long indexId;
@@ -68,7 +69,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "sortKeyUniqueIds")
     public List<Integer> sortKeyUniqueIds;
     @SerializedName(value = "schemaVersion")
-    private int schemaVersion = -1;
+    private int schemaVersion = 0;
     @SerializedName(value = "schemaHash")
     private int schemaHash;
     @SerializedName(value = "schemaId")
@@ -89,10 +90,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private boolean isColocateMVIndex = false;
 
     private Expr whereClause;
-    private Set<Long> updateSchemaBackendId = new HashSet<>();
+    private Set<Long> updateSchemaBackendId;
 
+    // Default constructor will be invoked by the gson library
     private MaterializedIndexMeta() {
-
+        schemaId = UNINITIALIZED_SCHEMA_ID;
     }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
@@ -100,7 +102,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
                                  OriginStatement defineStmt, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
         this.indexId = indexId;
         Preconditions.checkState(schema != null);
-        Preconditions.checkState(schema.size() != 0);
+        Preconditions.checkState(!schema.isEmpty());
         this.schema = schema;
         this.schemaVersion = schemaVersion;
         this.schemaHash = schemaHash;
@@ -238,15 +240,20 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     }
 
     public boolean hasUpdateSchemaTask(Long backendId) {
-        return updateSchemaBackendId.contains(backendId);
+        return updateSchemaBackendId != null && updateSchemaBackendId.contains(backendId);
     }
 
     public void addUpdateSchemaBackend(Long backendId) {
+        if (updateSchemaBackendId == null) {
+            updateSchemaBackendId = new HashSet<>();
+        }
         updateSchemaBackendId.add(backendId);
     }
 
     public void removeUpdateSchemaBackend(Long backendId) {
-        updateSchemaBackendId.remove(backendId);
+        if (updateSchemaBackendId != null) {
+            updateSchemaBackendId.remove(backendId);
+        }
     }
 
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
@@ -291,6 +298,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         indexMeta.viewDefineSql = this.viewDefineSql;
         indexMeta.isColocateMVIndex = this.isColocateMVIndex;
         indexMeta.whereClause = this.whereClause;
+        indexMeta.schemaId = this.schemaId;
         return indexMeta;
     }
 
@@ -304,6 +312,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             return false;
         }
         if (indexMeta.schema.size() != this.schema.size() || !indexMeta.schema.containsAll(this.schema)) {
+            return false;
+        }
+        if (indexMeta.schemaId != this.schemaId) {
             return false;
         }
         if (indexMeta.schemaVersion != this.schemaVersion) {
@@ -344,6 +355,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        if (schemaId == UNINITIALIZED_SCHEMA_ID) {
+            schemaId = indexId;
+        }
         // analyze define stmt
         if (defineStmt == null) {
             return;

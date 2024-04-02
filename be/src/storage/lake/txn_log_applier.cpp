@@ -31,13 +31,8 @@
 
 namespace starrocks::lake {
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
-    template <class T>
-    using ParallelSet =
-            phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_hash<T>, phmap::priv::hash_default_eq<T>,
-                                          phmap::priv::Allocator<T>, 4, std::mutex, true>;
-
 public:
-    PrimaryKeyTxnLogApplier(Tablet tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
+    PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet),
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
@@ -46,22 +41,9 @@ public:
         _metadata->set_version(_new_version);
     }
 
-    ~PrimaryKeyTxnLogApplier() override {
-        handle_failure();
-        if (_inited) {
-            _s_schema_change_set.erase(_tablet.id());
-        }
-    }
+    ~PrimaryKeyTxnLogApplier() override { handle_failure(); }
 
-    Status init() override {
-        auto [iter, ok] = _s_schema_change_set.insert(_tablet.id());
-        if (ok) {
-            _inited = true;
-            return check_meta_version();
-        } else {
-            return Status::ResourceBusy("primary key does not support concurrent log applying");
-        }
-    }
+    Status init() override { return check_meta_version(); }
 
     Status check_meta_version() {
         // check tablet meta
@@ -224,6 +206,8 @@ private:
                 if (_metadata->enable_persistent_index() != alter_meta.enable_persistent_index()) {
                     _metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
 
+                    _tablet.update_mgr()->set_enable_persistent_index(_tablet.id(),
+                                                                      alter_meta.enable_persistent_index());
                     // Try remove index from index cache
                     // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
                     // because the primary index is available in cache
@@ -255,7 +239,7 @@ private:
         }
 
         if (op_replication.txn_meta().incremental_snapshot()) {
-            CHECK(_new_version - _base_version == op_replication.op_writes_size())
+            DCHECK(_new_version - _base_version == op_replication.op_writes_size())
                     << ", base_version: " << _base_version << ", new_version: " << _new_version
                     << ", op_write_size: " << op_replication.op_writes_size();
             for (const auto& op_write : op_replication.op_writes()) {
@@ -303,8 +287,6 @@ private:
         return Status::OK();
     }
 
-    static inline ParallelSet<int64_t> _s_schema_change_set;
-
     Tablet _tablet;
     MutableTabletMetadataPtr _metadata;
     int64_t _base_version{0};
@@ -312,7 +294,6 @@ private:
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
     DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
-    bool _inited{false};
     std::unique_ptr<std::lock_guard<std::mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;
@@ -320,7 +301,7 @@ private:
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
-    NonPrimaryKeyTxnLogApplier(Tablet tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
+    NonPrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet), _metadata(std::move(metadata)), _new_version(new_version) {}
 
     Status apply(const TxnLogPB& log) override {
@@ -508,7 +489,7 @@ private:
     int64_t _new_version;
 };
 
-std::unique_ptr<TxnLogApplier> new_txn_log_applier(Tablet tablet, MutableTabletMetadataPtr metadata,
+std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version) {
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
         return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version);

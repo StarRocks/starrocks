@@ -112,7 +112,6 @@ public enum AggregateType {
 
         // all types except bitmap, hll, percentile and complex types.
         EnumSet<PrimitiveType> excObject = EnumSet.allOf(PrimitiveType.class);
-        excObject.remove(PrimitiveType.BITMAP);
         excObject.remove(PrimitiveType.HLL);
         excObject.remove(PrimitiveType.PERCENTILE);
         excObject.remove(PrimitiveType.INVALID_TYPE);
@@ -165,7 +164,11 @@ public enum AggregateType {
                 (this.isReplaceFamily() && type.isComplexType());
     }
 
-    public static Type extendedPrecision(Type type) {
+    public static Type extendedPrecision(Type type, boolean legacyCompatible) {
+        if (legacyCompatible) {
+            return type;
+        }
+
         if (type.isDecimalV3()) {
             return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, ((ScalarType) type).getScalarScale());
         }

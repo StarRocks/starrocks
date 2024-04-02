@@ -43,9 +43,6 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
@@ -59,6 +56,7 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -69,6 +67,7 @@ import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -88,7 +87,6 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -147,7 +145,8 @@ public class FileScanNode extends LoadScanNode {
     private List<List<TBrokerFileStatus>> fileStatusesList;
     // file num
     private int filesAdded;
-    
+    private long totalBytes = 0;
+
     private List<ComputeNode> nodes;
     private int nextBe = 0;
 
@@ -160,8 +159,10 @@ public class FileScanNode extends LoadScanNode {
     private boolean useVectorizedLoad;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+    private boolean flexibleColumnMapping = false;
 
     private boolean nullExprInAutoIncrement;
+
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
         public TBrokerScanRangeParams params;
@@ -174,13 +175,14 @@ public class FileScanNode extends LoadScanNode {
     private List<ParamCreateContext> paramCreateContexts;
 
     public FileScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, long warehouseId) {
         super(id, desc, planNodeName);
         this.fileStatusesList = fileStatusesList;
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
         this.nullExprInAutoIncrement = true;
+        this.warehouseId = warehouseId;
     }
 
     @Override
@@ -222,7 +224,7 @@ public class FileScanNode extends LoadScanNode {
             // csv/json/parquet load is controlled by Config::enable_vectorized_file_load
             // if Config::enable_vectorized_file_load is set true,
             // vectorized load will been enabled
-            TFileFormatType format = formatType(context.fileGroup.getFileFormat(), "");
+            TFileFormatType format = Load.getFormatType(context.fileGroup.getFileFormat(), "");
             initParams(context);
             paramCreateContexts.add(context);
         }
@@ -257,6 +259,10 @@ public class FileScanNode extends LoadScanNode {
         this.parallelInstanceNum = parallelInstanceNum;
     }
 
+    public void setFlexibleColumnMapping(boolean enable) {
+        this.flexibleColumnMapping = enable;
+    }
+
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
         this.useVectorizedLoad = useVectorizedLoad;
     }
@@ -283,7 +289,7 @@ public class FileScanNode extends LoadScanNode {
                 throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
             }
             THdfsProperties hdfsProperties = new THdfsProperties();
-            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties); 
+            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties);
             params.setHdfs_properties(hdfsProperties);
         }
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
@@ -311,6 +317,7 @@ public class FileScanNode extends LoadScanNode {
         params.setEnclose(fileGroup.getEnclose());
         params.setEscape(fileGroup.getEscape());
         params.setJson_file_size_limit(Config.json_file_size_limit);
+        params.setFlexible_column_mapping(flexibleColumnMapping);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -499,7 +506,6 @@ public class FileScanNode extends LoadScanNode {
             throw new UserException("No source file in this table(" + targetTable.getName() + ").");
         }
 
-        long totalBytes = 0;
         for (List<TBrokerFileStatus> fileStatuses : fileStatusesList) {
             Collections.sort(fileStatuses, T_BROKER_FILE_STATUS_COMPARATOR);
             for (TBrokerFileStatus fileStatus : fileStatuses) {
@@ -522,8 +528,8 @@ public class FileScanNode extends LoadScanNode {
 
         // TODO: need to refactor after be split into cn + dn
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
-            for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            for (long cnId : computeNodeIds) {
                 ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
                 if (cn != null && cn.isAvailable()) {
                     nodes.add(cn);
@@ -543,38 +549,6 @@ public class FileScanNode extends LoadScanNode {
         Collections.shuffle(nodes, random);
     }
 
-    private TFileFormatType formatType(String fileFormat, String path) {
-        if (fileFormat != null) {
-            if (fileFormat.toLowerCase().equals("parquet")) {
-                return TFileFormatType.FORMAT_PARQUET;
-            } else if (fileFormat.toLowerCase().equals("orc")) {
-                return TFileFormatType.FORMAT_ORC;
-            } else if (fileFormat.toLowerCase().equals("json")) {
-                return TFileFormatType.FORMAT_JSON;
-            }
-            // Attention: The compression type of csv format is from the suffix of filename.
-        }
-
-        String lowerCasePath = path.toLowerCase();
-        if (lowerCasePath.endsWith(".parquet") || lowerCasePath.endsWith(".parq")) {
-            return TFileFormatType.FORMAT_PARQUET;
-        } else if (lowerCasePath.endsWith(".orc")) {
-            return TFileFormatType.FORMAT_ORC;
-        } else if (lowerCasePath.endsWith(".gz")) {
-            return TFileFormatType.FORMAT_CSV_GZ;
-        } else if (lowerCasePath.endsWith(".bz2")) {
-            return TFileFormatType.FORMAT_CSV_BZ2;
-        } else if (lowerCasePath.endsWith(".lz4")) {
-            return TFileFormatType.FORMAT_CSV_LZ4_FRAME;
-        } else if (lowerCasePath.endsWith(".deflate")) {
-            return TFileFormatType.FORMAT_CSV_DEFLATE;
-        } else if (lowerCasePath.endsWith(".zst")) {
-            return TFileFormatType.FORMAT_CSV_ZSTD;
-        } else {
-            return TFileFormatType.FORMAT_CSV_PLAIN;
-        }
-    }
-
     // If fileFormat is not null, we use fileFormat instead of check file's suffix
     private void processFileGroup(
             ParamCreateContext context,
@@ -592,7 +566,7 @@ public class FileScanNode extends LoadScanNode {
         long curFileOffset = 0;
         for (int i = 0; i < fileStatuses.size(); ) {
             TBrokerFileStatus fileStatus = fileStatuses.get(i);
-            TFileFormatType formatType = formatType(context.fileGroup.getFileFormat(), fileStatus.path);
+            TFileFormatType formatType = Load.getFormatType(context.fileGroup.getFileFormat(), fileStatus.path);
             List<String> columnsFromPath = HdfsUtil.parseColumnsFromPath(fileStatus.path,
                     context.fileGroup.getColumnsFromPath());
             int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size();
@@ -787,5 +761,12 @@ public class FileScanNode extends LoadScanNode {
         return true;
     }
 
+    public long getFileTotalSize() {
+        return totalBytes;
+    }
+
+    public int getFileNum() {
+        return filesAdded;
+    }
 
 }

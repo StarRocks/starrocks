@@ -101,7 +101,7 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_PERCENTILE:
     case TYPE_JSON:
     case TYPE_VARBINARY:
-        return string_length + sizeof(OLAP_STRING_MAX_LENGTH);
+        return string_length + sizeof(get_olap_string_max_length());
     case TYPE_ARRAY:
         return string_length;
     }
@@ -712,7 +712,7 @@ std::string TabletColumn::debug_string() const {
        << ",default_value=" << (has_default_value() ? default_value() : "N/A")
        << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")
        << ",frac=" << (has_scale() ? std::to_string(_scale) : "N/A") << ",length=" << _length
-       << ",index_length=" << _index_length << ",is_bf_column=" << is_bf_column()
+       << ",index_length=" << static_cast<int>(_index_length) << ",is_bf_column=" << is_bf_column()
        << ",has_bitmap_index=" << has_bitmap_index() << ")";
     return ss.str();
 }
@@ -730,9 +730,10 @@ std::string TabletSchema::debug_string() const {
         }
         ss << _cols[i].debug_string();
     }
-    ss << "],keys_type=" << _keys_type << ",num_columns=" << num_columns() << ",num_key_columns=" << _num_key_columns
-       << ",num_short_key_columns=" << _num_short_key_columns << ",num_rows_per_row_block=" << _num_rows_per_row_block
-       << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
+    ss << "],keys_type=" << static_cast<int32_t>(_keys_type) << ",num_columns=" << num_columns()
+       << ",num_key_columns=" << _num_key_columns << ",num_short_key_columns=" << _num_short_key_columns
+       << ",num_rows_per_row_block=" << _num_rows_per_row_block << ",next_column_unique_id=" << _next_column_unique_id
+       << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
     return ss.str();
 }
 

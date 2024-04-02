@@ -574,6 +574,8 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
     _bi_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
+    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, "SegmentInit");
+    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilter", "SegmentInit");
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
@@ -869,6 +871,9 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                                                       this, scan_ctx_factory);
     scan_prepare_op->set_degree_of_parallelism(shared_morsel_queue ? 1 : dop);
     this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
+
+    auto exec_group = context->find_exec_group_by_plan_node_id(_id);
+    context->set_current_execution_group(exec_group);
 
     auto scan_prepare_pipeline = pipeline::OpFactories{
             std::move(scan_prepare_op),

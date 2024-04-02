@@ -273,7 +273,7 @@ WITH LABEL insert_load_wikipedia_ow_1
 SELECT * FROM source_wiki_edit;
 ```
 
-- 以下示例以 `insert_load_wikipedia_2` 为 Label 将源表中的数据覆盖写入至目标表的 `p06` 和 `p12` 分区中。如果不指定目标分区，数据将会覆盖写入入全表；如果指定目标分区，数据只会覆盖写入指定的分区。
+- 以下示例以 `insert_load_wikipedia_2` 为 Label 将源表中的数据覆盖写入至目标表的 `p06` 和 `p12` 分区中。如果不指定目标分区，数据将会覆盖写入全表；如果指定目标分区，数据只会覆盖写入指定的分区。
 
 ```SQL
 INSERT OVERWRITE insert_wiki_edit PARTITION(p06, p12)

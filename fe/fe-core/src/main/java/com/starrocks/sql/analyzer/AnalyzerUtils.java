@@ -281,7 +281,7 @@ public class AnalyzerUtils {
         return null;
     }
 
-    private static class DBCollector extends AstVisitor<Void, Void> {
+    private static class DBCollector implements AstVisitor<Void, Void> {
         private final Map<String, Database> dbs;
         private final ConnectContext session;
 
@@ -339,7 +339,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
             if (node.hasWithClause()) {
-                node.getRelations().forEach(this::visit);
+                node.getCteRelations().forEach(this::visit);
             }
             node.getRelations().forEach(this::visit);
             return null;
@@ -1140,12 +1140,12 @@ public class AnalyzerUtils {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.CHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                int len = ScalarType.OLAP_MAX_VARCHAR_LENGTH;
+                int len = ScalarType.getOlapMaxVarcharLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
                     if (scalarType.getLength() > 0) {
                         // Catalog's varchar length may larger than olap's max varchar length
-                        len = Integer.min(scalarType.getLength(), ScalarType.OLAP_MAX_VARCHAR_LENGTH);
+                        len = Integer.min(scalarType.getLength(), ScalarType.getOlapMaxVarcharLength());
                     }
                 }
                 newType = ScalarType.createVarcharType(len);

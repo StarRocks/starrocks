@@ -20,12 +20,10 @@ t1	CREATE TABLE `t1` (
 DUPLICATE KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 INSERT INTO t1 VALUES(1, 2, 3);
@@ -40,7 +38,7 @@ ALTER TABLE t1 RENAME COLUMN k1 TO k2;
 -- !result
 ALTER TABLE t1 RENAME COLUMN v1 TO v2;
 -- result:
-E: (1064, "Unexpected exception: Getting analyzing error. Detail message: Duplicate column name 'v2'.")
+E: (1060, "Unexpected exception: Getting analyzing error. Detail message: Duplicate column name 'v2'.")
 -- !result
 select * from t1;
 -- result:
@@ -60,12 +58,10 @@ t1	CREATE TABLE `t1` (
 DUPLICATE KEY(`k2`)
 DISTRIBUTED BY HASH(`k2`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 insert into t1(k2, v1, v2) values(4, 5, 6);
@@ -116,12 +112,10 @@ PARTITION p20210102 VALUES [("2021-01-02"), ("2021-01-03")),
 PARTITION p20210103 VALUES [("2021-01-03"), ("2021-01-04")))
 DISTRIBUTED BY HASH(`site_id`)
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 insert into site_access values('2021-01-01',1,1,'1',1);
@@ -157,8 +151,7 @@ DUPLICATE KEY(id)
 PARTITION BY (dt,province)
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false"
+"replication_num" = "1"
 );
 -- result:
 -- !result
@@ -246,12 +239,10 @@ DUPLICATE KEY(`dt`, `site_id`, `city_code`, `user_name`)
 PARTITION BY date_trunc('day', `dt`)
 DISTRIBUTED BY HASH(`dt`, `site_id`) BUCKETS 32 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"compression" = "LZ4",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 CREATE TABLE `bill_detail` (
@@ -267,7 +258,6 @@ PARTITION p4 VALUES [('15000000'), ('20000000'))
 DISTRIBUTED BY HASH(`bill_code`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT"
 );
 -- result:
@@ -299,12 +289,11 @@ PARTITION p4 VALUES [("15000000"), ("20000000")),
 PARTITION p6 VALUES [("20000000"), ("3021712368984")))
 DISTRIBUTED BY HASH(`bill`) BUCKETS 3 
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
+"compression" = "LZ4",
 "enable_persistent_index" = "true",
-"replicated_storage" = "true",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"replicated_storage" = "true",
+"replication_num" = "1"
 );
 -- !result
 select * from bill_detail where bill = "JT2921712368984";

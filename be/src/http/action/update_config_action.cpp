@@ -158,6 +158,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         });
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_use_star_cache", [&]() { update_staros_starcache(); });
+        _config_callback.emplace("starlet_star_cache_mem_size_percent", [&]() { update_staros_starcache(); });
+        _config_callback.emplace("starlet_star_cache_mem_size_bytes", [&]() { update_staros_starcache(); });
 #endif
         _config_callback.emplace("transaction_apply_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
@@ -273,6 +275,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
                         .empty()) {
                 LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
+            }
+        });
+        _config_callback.emplace("starlet_delete_files_max_key_in_batch", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("delete_files_max_key_in_batch", value).empty()) {
+                LOG(WARNING) << "Failed to update delete_files_max_key_in_batch";
             }
         });
 #endif // USE_STAROS

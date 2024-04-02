@@ -4,6 +4,65 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.5
 
+## 2.5.20
+
+发布日期：2024 年 3 月 22 日
+
+### 功能优化
+
+- 聚合表中 BITMAP 类型的列支持指定聚合类型为 `replace_if_not_null`。[#42104](https://github.com/StarRocks/starrocks/pull/42104)
+- JDK 9 及以上版本默认都使用 G1 GC。[#41374](https://github.com/StarRocks/starrocks/pull/41374)
+
+### 参数变更
+
+- BE 参数 `update_compaction_size_threshold` 默认值从 256 MB 调整为 64 MB，可以更快执行compaction。[#42776](https://github.com/StarRocks/starrocks/pull/42776)
+
+### 问题修复
+
+修复了如下问题：
+
+- 通过 StarRocks 外表同步数据时，第一次同步报错 "commit and publish txn failed"，重试后成功，但相同的数据会导入两份。原因是 commit 超时按照失败处理了，导致做了两次。[#25165](https://github.com/StarRocks/starrocks/pull/25165)
+- RPC 传输资源会因为 GC 问题导致临时不可用。[#41636](https://github.com/StarRocks/starrocks/pull/41636)
+- 2.5 版本上的 array_agg() 对于 NULL 在序列化时的处理和 2.3 版本不一致，导致升级过程中查询结果不正确。[#42639](https://github.com/StarRocks/starrocks/pull/42639)
+- Query 中的异步任务算子 Sink Operator 退出处理有问题，导致 BE crash。[#38662](https://github.com/StarRocks/starrocks/pull/38662)
+- 对聚合表新增 DELETE SQL 任务后，因访问 tablet 元数据有竞争冲突，导致 BE crash。[#42174](https://github.com/StarRocks/starrocks/pull/42174)
+- 调用 UDF 时内存统计（MemTracker）使用有 Use-After-Free 问题，导致 BE crash。[#41710](https://github.com/StarRocks/starrocks/pull/41710)
+- 2.5 版本 unnest() 函数查询时不能使用别名，之前版本是可以的。[#42138](https://github.com/StarRocks/starrocks/pull/42138)
+
+## 2.5.19
+
+发布日期：2024 年 2 月 8 日
+
+### 新增特性
+
+- 新增模糊/正则匹配函数：[regexp_extract_all](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/)。
+- 新增 Bitmap 取值的处理函数：serialize、deserialize、serializeToString。 [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
+
+### 功能优化
+
+- 在刷新物化视图时，尝试自动激活失效的物化视图。 [#38521](https://github.com/StarRocks/starrocks/pull/38521)
+- 优化 BE 的日志打印，避免日志过多。 [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
+- 可以使用 [Hive UDF](https://docs.starrocks.io/zh/docs/integrations/hive_bitmap_udf/) 导入/导出/处理 StarRocks 中的 Bitmap 数据。 [#40165](https://github.com/StarRocks/starrocks/pull/40165) [#40168](https://github.com/StarRocks/starrocks/pull/40168)
+- 对于分区字段为 TIMESTAMP 类型的 Iceberg 表，新增 `yyyy-MM-ddTHH:mm` 和 `yyyy-MM-dd HH:mm` 两种数据格式的支持。 [#39986](https://github.com/StarRocks/starrocks/pull/39986)
+
+### 问题修复
+
+修复了如下问题：
+
+- Spark Load 创建导入任务时，不指定 PROPERTIES 会导致空指针异常 (NPE)。 [#38765](https://github.com/StarRocks/starrocks/pull/38765)
+- INSERT INTO SELECT 偶尔会超时报错 "timeout by txn manager"。 [#36688](https://github.com/StarRocks/starrocks/pull/36688)
+- PageCache 内存占用在有些情况下会超过 BE 动态参数 `storage_page_cache_limit` 设定的阈值。 [#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- 当基表删除重建后，异步物化视图刷新失败。 [#38008](https://github.com/StarRocks/starrocks/pull/38008) [#38982](https://github.com/StarRocks/starrocks/pull/38982)
+- SELECT INTO S3 偶尔会报错 "The tablet write operation update metadata take a long time"。 [#38443](https://github.com/StarRocks/starrocks/pull/38443)
+- 导入过程中某些操作会出现报错 "reached timeout"。 [#36746](https://github.com/StarRocks/starrocks/pull/36746)
+- DECIMAL 类型数据在 SHOW CREATE TABLE 中展示的和创建时不一致。 [#39297](https://github.com/StarRocks/starrocks/pull/39297)
+- 如果外表的分区列有取值是 null，查询时会导致 BE Crash。 [#38888](https://github.com/StarRocks/starrocks/pull/38888)
+- 从明细表删除数据时，如果 DELETE 语句的 WHERE 条件中有空格，数据删除后还能查到。 [#39797](https://github.com/StarRocks/starrocks/pull/39797)
+- 导入 ORC 文件中 `array<string>` 到 StarRocks 时转为 `array<json>`，可能引起 BE crash。 [#39233](https://github.com/StarRocks/starrocks/pull/39233)
+- 查询 Hive Catalog 某些情况下会出现卡住直到超时。 [#39863](https://github.com/StarRocks/starrocks/pull/39863)
+- 动态分区日期类型为小时的时候会创建失败。 [#40256](https://github.com/StarRocks/starrocks/pull/40256)
+- Flink 导入报错 "failed to call frontend service"。 [#40710](https://github.com/StarRocks/starrocks/pull/40710)
+
 ## 2.5.18
 
 发布日期：2024 年 1 月 10 日
@@ -115,7 +174,7 @@ displayed_sidebar: "Chinese"
 - 向打开持久化索引的主键表中导入大量数据，有时会报错。 [#34566](https://github.com/StarRocks/starrocks/pull/34566)
 - 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。 [#34618](https://github.com/StarRocks/starrocks/pull/34618)
 - 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。 [#34627](https://github.com/StarRocks/starrocks/pull/34627)
-- Stream Load 导入作业在 **PREPARD** 状态下、同时有 Schema Change 在执行，会导致数据丢失。 [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Stream Load 导入作业在 **PREPARED** 状态下、同时有 Schema Change 在执行，会导致数据丢失。 [#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。 [#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - 集群执行导入任务或者查询时，可能会出现 FE 卡住的情况。 [#34569](https://github.com/StarRocks/starrocks/pull/34569)
 

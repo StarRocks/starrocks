@@ -74,7 +74,8 @@ public:
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
                              const TabletSchemaCSPtr& tablet_schema, std::vector<uint32_t>& column_ids,
-                             bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                             bool with_default, bool include_op_write,
+                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
@@ -91,7 +92,7 @@ public:
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                      const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
+                                      const TabletMetadata& metadata, const Tablet& tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
@@ -103,6 +104,8 @@ public:
 
     // update primary index data version when meta file finalize success.
     void update_primary_index_data_version(const Tablet& tablet, int64_t version);
+
+    int64_t get_primary_index_data_version(int64_t tablet_id);
 
     void expire_cache();
 
@@ -141,6 +144,8 @@ public:
     // remove index entry if it isn't nullptr
     void remove_primary_index_cache(IndexEntry* index_entry);
 
+    void unload_and_remove_primary_index(int64_t tablet_id);
+
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
     void lock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).lock_shared(); }
@@ -152,6 +157,8 @@ public:
     void unlock_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock(); }
 
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
+
+    void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
 
 private:
     // print memory tracker state

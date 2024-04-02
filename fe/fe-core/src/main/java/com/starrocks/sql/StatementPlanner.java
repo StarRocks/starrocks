@@ -17,9 +17,13 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -34,19 +38,19 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.QueryLocker;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -59,6 +63,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
@@ -75,7 +80,6 @@ import com.starrocks.transaction.TransactionState;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
@@ -101,13 +105,11 @@ public class StatementPlanner {
             }
         }
 
-        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
         boolean needWholePhaseLock = true;
-
         // 1. For all queries, we need db lock when analyze phase
-        QueryLocker queryLocker = new QueryLocker(session, stmt);
+        PlannerMetaLocker plannerMetaLocker = new PlannerMetaLocker(session, stmt);
         try (var guard = session.bindScope()) {
-            lock(queryLocker);
+            lock(plannerMetaLocker);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
@@ -117,8 +119,6 @@ public class StatementPlanner {
                 OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
             }
 
-            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-
             // Note: we only could get the olap table after Analyzing phase
             boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
             if (stmt instanceof QueryStatement) {
@@ -126,11 +126,11 @@ public class StatementPlanner {
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
                 ExecPlan plan;
                 if (isLockFree(isOnlyOlapTableQueries, session)) {
-                    unLock(queryLocker);
+                    unLock(plannerMetaLocker);
                     needWholePhaseLock = false;
-                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker);
                 } else {
-                    plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
+                    plan = createQueryPlan(queryStmt, session, resultSinkType);
                 }
                 setOutfileSink(queryStmt, plan);
                 return plan;
@@ -140,7 +140,7 @@ public class StatementPlanner {
                 boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
                 boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
                         !session.getSessionVariable().isCboUseDBLock();
-                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
+                return new InsertPlanner(plannerMetaLocker, useOptimisticLock).plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -148,7 +148,7 @@ public class StatementPlanner {
             }
         } finally {
             if (needWholePhaseLock) {
-                unLock(queryLocker);
+                unLock(plannerMetaLocker);
             }
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
@@ -166,18 +166,30 @@ public class StatementPlanner {
                 && !session.getSessionVariable().isCboUseDBLock();
     }
 
-    private static ExecPlan createQueryPlan(Relation relation,
+    /**
+     * Create a map from opt expression to parse node for the optimizer to use which only used in text match rewrite for mv.
+     */
+    private static Map<Operator, ParseNode> makeOptToAstMap(SessionVariable sessionVariable) {
+        if (sessionVariable.isEnableMaterializedViewTextMatchRewrite()) {
+            return Maps.newHashMap();
+        }
+        return null;
+    }
+
+    private static ExecPlan createQueryPlan(StatementBase stmt,
                                             ConnectContext session,
                                             TResultSinkType resultSinkType) {
-        QueryRelation query = (QueryRelation) relation;
+        QueryStatement queryStmt = (QueryStatement) stmt;
+        QueryRelation query = (QueryRelation) queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
+        Map<Operator, ParseNode> optToAstMap = makeOptToAstMap(session.getSessionVariable());
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
             // get a logicalPlan without inlining views
-            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, optToAstMap);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
@@ -190,6 +202,8 @@ public class StatementPlanner {
             optimizedPlan = optimizer.optimize(
                     session,
                     root,
+                    optToAstMap,
+                    stmt,
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
@@ -210,7 +224,8 @@ public class StatementPlanner {
 
     public static ExecPlan createQueryPlanWithReTry(QueryStatement queryStmt,
                                                     ConnectContext session,
-                                                    TResultSinkType resultSinkType) {
+                                                    TResultSinkType resultSinkType,
+                                                    PlannerMetaLocker plannerMetaLocker) {
         QueryRelation query = queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
 
@@ -218,28 +233,44 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         boolean isSchemaValid = true;
 
-        // Because we don't hold db lock outer, if the olap table schema change, we need to regenerate the query plan
-        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
-        session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
         Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
-                reAnalyzeStmt(queryStmt, dbs, session);
+                reAnalyzeStmt(queryStmt, session, plannerMetaLocker);
                 colNames = queryStmt.getQueryRelation().getColumnOutputNames();
             }
 
             LogicalPlan logicalPlan;
+            Map<Operator, ParseNode> optToAstMap = makeOptToAstMap(session.getSessionVariable());
             try (Timer ignored = Tracers.watchScope("Transformer")) {
                 // get a logicalPlan without inlining views
-                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, optToAstMap);
                 logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 
             OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
 
+            boolean oldIsEnableLowCardinalityOptimize = session.getSessionVariable().isEnableLowCardinalityOptimize();
+            boolean oldIsUseLowCardinalityOptimizeV2 = session.getSessionVariable().isUseLowCardinalityOptimizeV2();
+            for (OlapTable tbl : olapTables) {
+                if (!session.getSessionVariable().isEnableLowCardinalityOptimize() &&
+                        !session.getSessionVariable().isUseLowCardinalityOptimizeV2()) {
+                    break;
+                }
+                for (Index index : tbl.getIndexes()) {
+                    if (index.getIndexType() == IndexDef.IndexType.GIN) {
+                        // Do not use global low cardinality optimization
+                        // for GIN column. Because the predicate rewrite
+                        // may not be completely equivalent in this case
+                        session.getSessionVariable().setEnableLowCardinalityOptimize(false);
+                        session.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+                        break;
+                    }
+                }
+            }
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
@@ -252,10 +283,14 @@ public class StatementPlanner {
                 optimizedPlan = optimizer.optimize(
                         session,
                         root,
+                        optToAstMap,
+                        queryStmt,
                         new PhysicalPropertySet(),
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
             }
+            session.getSessionVariable().setEnableLowCardinalityOptimize(oldIsEnableLowCardinalityOptimize);
+            session.getSessionVariable().setUseLowCardinalityOptimizeV2(oldIsUseLowCardinalityOptimizeV2);
 
             try (Timer ignored = Tracers.watchScope("ExecPlanBuild")) {
                 // 3. Build fragment exec plan
@@ -298,7 +333,7 @@ public class StatementPlanner {
 
     public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt) {
         Set<OlapTable> olapTables = Sets.newHashSet();
-        QueryLocker locker = new QueryLocker(session, queryStmt);
+        PlannerMetaLocker locker = new PlannerMetaLocker(session, queryStmt);
         try {
             // Need lock to avoid olap table metas ConcurrentModificationException
             lock(locker);
@@ -309,9 +344,7 @@ public class StatementPlanner {
         }
     }
 
-    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, Map<String, Database> dbs,
-                                               ConnectContext session) {
-        QueryLocker locker = new QueryLocker(session, queryStmt);
+    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, ConnectContext session, PlannerMetaLocker locker) {
         try {
             lock(locker);
             // analyze to obtain the latest table from metadata
@@ -326,12 +359,12 @@ public class StatementPlanner {
     }
 
     // Lock all database before analyze
-    public static void lock(QueryLocker locker) {
+    public static void lock(PlannerMetaLocker locker) {
         locker.lock();
     }
 
     // unLock all database after analyze
-    public static void unLock(QueryLocker locker) {
+    public static void unLock(PlannerMetaLocker locker) {
         locker.unlock();
     }
 

@@ -170,7 +170,10 @@ public class DatabaseTransactionMgr {
      */
     public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
                                  TransactionState.TxnCoordinator coordinator,
-                                 TransactionState.LoadJobSourceType sourceType, long listenerId, long timeoutSecond)
+                                 TransactionState.LoadJobSourceType sourceType,
+                                 long listenerId,
+                                 long timeoutSecond,
+                                 long warehouseId)
             throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
         Preconditions.checkNotNull(coordinator);
@@ -183,6 +186,7 @@ public class DatabaseTransactionMgr {
         TransactionState transactionState = new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
                 coordinator, listenerId, timeoutSecond * 1000);
         transactionState.setPrepareTime(System.currentTimeMillis());
+        transactionState.setWarehouseId(warehouseId);
 
         transactionState.writeLock();
         try {
@@ -332,6 +336,7 @@ public class DatabaseTransactionMgr {
 
                 // update transaction state version
                 transactionState.setTransactionStatus(TransactionStatus.PREPARED);
+                transactionState.setPreparedTime(System.currentTimeMillis());
 
                 for (TransactionStateListener listener : stateListeners) {
                     listener.preWriteCommitLog(transactionState);
@@ -766,6 +771,31 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // Check whether there is committed txns on partitionId.
+    public boolean hasCommittedTxnOnPartition(long tableId, long partitionId) {
+        readLock();
+        try {
+            for (TransactionState state : idToRunningTransactionState.values()) {
+                if (state.getTransactionStatus() != TransactionStatus.COMMITTED) {
+                    continue;
+                }
+
+                TableCommitInfo tableCommitInfo = state.getTableCommitInfo(tableId);
+                if (tableCommitInfo == null) {
+                    continue;
+                }
+
+                if (tableCommitInfo.getPartitionCommitInfo(partitionId) != null) {
+                    return true;
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+
+        return false;
+    }
+
     public List<TransactionState> getReadyToPublishTxnList() {
         readLock();
         try {
@@ -978,7 +1008,7 @@ public class DatabaseTransactionMgr {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         try {
-            transactionState.writeUnlock();
+            transactionState.writeLock();
             try {
                 boolean hasError = false;
                 for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
@@ -1206,7 +1236,7 @@ public class DatabaseTransactionMgr {
     // for add/update/delete TransactionState
     protected void unprotectUpsertTransactionState(TransactionState transactionState, boolean isReplay) {
         // if this is a replay operation, we should not log it
-        if (!isReplay && !Config.load_using_fine_granularity_lock_enabled) {
+        if (!isReplay && !Config.lock_manager_enable_loading_using_fine_granularity_lock) {
             doWriteTxnStateEditLog(transactionState);
         }
 
@@ -1240,7 +1270,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void persistTxnStateInTxnLevelLock(TransactionState transactionState) {
-        if (Config.load_using_fine_granularity_lock_enabled) {
+        if (Config.lock_manager_enable_loading_using_fine_granularity_lock) {
             doWriteTxnStateEditLog(transactionState);
         }
     }
@@ -1262,7 +1292,7 @@ public class DatabaseTransactionMgr {
 
     // The status of stateBach is VISIBLE or ABORTED
     public void unprotectSetTransactionStateBatch(TransactionStateBatch stateBatch, boolean isReplay) {
-        if (!isReplay && !Config.load_using_fine_granularity_lock_enabled) {
+        if (!isReplay && !Config.lock_manager_enable_loading_using_fine_granularity_lock) {
             long start = System.currentTimeMillis();
             editLog.logInsertTransactionStateBatch(stateBatch);
             LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
@@ -1792,7 +1822,7 @@ public class DatabaseTransactionMgr {
                 } finally {
                     writeUnlock();
                 }
-                if (Config.load_using_fine_granularity_lock_enabled) {
+                if (Config.lock_manager_enable_loading_using_fine_granularity_lock) {
                     long start = System.currentTimeMillis();
                     editLog.logInsertTransactionStateBatch(stateBatch);
                     LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
@@ -1818,7 +1848,7 @@ public class DatabaseTransactionMgr {
                     writeUnlock();
                     stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
                 }
-                if (Config.load_using_fine_granularity_lock_enabled) {
+                if (Config.lock_manager_enable_loading_using_fine_granularity_lock) {
                     long start = System.currentTimeMillis();
                     editLog.logInsertTransactionStateBatch(stateBatch);
                     LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
@@ -1899,33 +1929,10 @@ public class DatabaseTransactionMgr {
         } finally {
             readUnlock();
         }
-        if (transactionState == null) {
-            return TTransactionStatus.UNKNOWN;
-        }
-        TransactionStatus status = transactionState.getTransactionStatus();
-
-        switch (status.value()) {
-            //UNKNOWN
-            case 0:
-                return TTransactionStatus.UNKNOWN;
-            //PREPARE
-            case 1:
-                return TTransactionStatus.PREPARE;
-            //COMMITTED
-            case 2:
-                return TTransactionStatus.COMMITTED;
-            //VISIBLE
-            case 3:
-                return TTransactionStatus.VISIBLE;
-            //ABORTED
-            case 4:
-                return TTransactionStatus.ABORTED;
-            //PREPARED
-            case 5:
-                return TTransactionStatus.PREPARED;
-            default:
-                return TTransactionStatus.UNKNOWN;
-        }
+        return Optional.ofNullable(transactionState)
+                .map(TransactionState::getTransactionStatus)
+                .map(TransactionStatus::toThrift)
+                .orElse(TTransactionStatus.UNKNOWN);
     }
 
     private void checkDatabaseDataQuota() throws AnalysisException {
