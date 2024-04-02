@@ -1377,11 +1377,12 @@ public class PlanFragmentBuilder {
                 ScalarOperator operator1 = origPredicate.getChild(1);
                 if (operator0 instanceof CastOperator && operator0.getChild(0) instanceof ColumnRefOperator &&
                         operator1 instanceof ConstantOperator) {
-                    // select * from information_schema.load_tracking_logs where job_id = "123"
-                    // job_id is bigint type, and analyzer generates where predicate as [cast (job_id as varchar) = "123"],
-                    // so rewrite the predicate for compatibility.
+                    // select * from information_schema.load_tracking_logs where job_id = "123", job_id is bigint type.
+                    // analyzer generates where predicate as [cast (job_id as varchar) = "123"] when
+                    // session variable cbo_eq_base_type is varchar, so rewrite the predicate for compatibility.
                     ColumnRefOperator columnRefOperator = (ColumnRefOperator) operator0.getChild(0);
-                    if (columnRefOperator.getType().isNumericType() && operator1.getType().isStringType()) {
+                    if (columnRefOperator.getType().isNumericType() && operator0.getType().isStringType() &&
+                            operator1.getType().isStringType()) {
                         predicate.setChild(0, columnRefOperator);
                         try {
                             LiteralExpr literalExpr =

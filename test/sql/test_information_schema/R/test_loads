@@ -45,7 +45,7 @@ select tracking_log from information_schema.load_tracking_logs where job_id=${id
 Error: The row is out of partition ranges. Please add a new partition.. Row: [2022-01-14, 2]
 
 -- !result
-select tracking_log from information_schema.load_tracking_logs where job_id='${id}';
+select /*+ SET_VAR(cbo_eq_base_type = "varchar") */ tracking_log from information_schema.load_tracking_logs where job_id='${id}';
 -- result:
 Error: The row is out of partition ranges. Please add a new partition.. Row: [2022-01-14, 2]
 
