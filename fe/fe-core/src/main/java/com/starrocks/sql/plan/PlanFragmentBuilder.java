@@ -27,6 +27,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
@@ -1374,16 +1375,20 @@ public class PlanFragmentBuilder {
                 ScalarOperator predicate = origPredicate.clone();
                 ScalarOperator operator0 = origPredicate.getChild(0);
                 ScalarOperator operator1 = origPredicate.getChild(1);
-                if (operator0 instanceof CastOperator && operator1 instanceof ConstantOperator) {
+                if (operator0 instanceof CastOperator && operator0.getChild(0) instanceof ColumnRefOperator &&
+                        operator1 instanceof ConstantOperator) {
                     // select * from information_schema.load_tracking_logs where job_id = "123"
                     // job_id is bigint type, and analyzer generates where predicate as [cast (job_id as varchar) = "123"],
                     // so rewrite the predicate for compatibility.
-                    if (operator0.getChild(0).getType().isNumericType() && operator1.getType().isStringType()) {
-                        predicate.setChild(0, operator0.getChild(0));
+                    ColumnRefOperator columnRefOperator = (ColumnRefOperator) operator0.getChild(0);
+                    if (columnRefOperator.getType().isNumericType() && operator1.getType().isStringType()) {
+                        predicate.setChild(0, columnRefOperator);
                         try {
-                            predicate.setChild(1, ConstantOperator.createBigint(
-                                    Long.parseLong(((ConstantOperator) operator1).getVarchar())));
-                        } catch (NumberFormatException e) {
+                            LiteralExpr literalExpr =
+                                    LiteralExpr.create(((ConstantOperator) operator1).getVarchar(), columnRefOperator.getType());
+                            predicate.setChild(1,
+                                    ConstantOperator.createObject(literalExpr.getRealObjectValue(), columnRefOperator.getType()));
+                        } catch (AnalysisException e) {
                             throw new SemanticException(((ConstantOperator) operator1).getVarchar() + " is not a number");
                         }
                     } else {
