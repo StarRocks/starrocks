@@ -28,6 +28,7 @@
 
 namespace starrocks {
 
+using TabletAndScore = std::pair<int64_t, double>;
 class ThreadPool;
 
 class PersistentIndexCompactionManager {

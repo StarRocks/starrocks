@@ -5015,6 +5015,10 @@ void PersistentIndex::reset_cancel_major_compaction() {
     }
 }
 
+void PerisistentIndex::set_pk_index_write_amp_score(double score) {
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet()
+}
+
 Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     starrocks::Schema pkey_schema = loader->generate_pkey_schema();
     DataDir* data_dir = loader->data_dir();

@@ -984,38 +984,4 @@ Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data
     return Status::OK();
 }
 
-std::vector<TabletAndScore> UpdateManager::pick_tablets_to_do_pk_index_major_compaction() {
-    auto tablet_ids = _index_cache.get_keys();
-    std::vector<TabletAndScore> pick_tablets;
-    if (tablet_ids.empty()) {
-        return pick_tablets;
-    }
-    // 1. pick valid tablet, which score is larger than 0
-    for (auto& tablet_id : tablet_ids) {
-        auto index_entry = _index_cache.get(tablet_id);
-        DeferOp index_defer([&]() { _index_cache.release(index_entry); });
-        if (index_entry == nullptr) {
-            continue;
-        }
-        auto& index = index_entry->value();
-        double score = index.get_pk_index_write_amp_score();
-        TEST_SYNC_POINT_CALLBACK("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1", &score);
-        if (score <= 0) {
-            // score == 0 means this tablet's pk index doesn't need major compaction
-            continue;
-        }
-        pick_tablets.emplace_back(tablet_id, score);
-    }
-    // 2. sort tablet by score, by ascending order.
-    std::sort(pick_tablets.begin(), pick_tablets.end(), [](TabletAndScore& a, TabletAndScore& b) {
-        // We try to compact tablet with small write amplification score first,
-        // to improve the total write IO amplification
-        return a.second < b.second;
-    });
-    if (!pick_tablets.empty()) {
-        LOG(INFO) << fmt::format("found {} tablets to do pk index major compaction", pick_tablets.size());
-    }
-    return pick_tablets;
-}
-
 } // namespace starrocks::lake

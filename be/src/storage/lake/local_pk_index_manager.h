@@ -30,7 +30,6 @@ namespace lake {
 class UpdateManager;
 
 #ifdef USE_STAROS
-using TabletAndScore = std::pair<int64_t, double>;
 class LocalPkIndexManager : public PersistentIndexCompactionManager {
 public:
     LocalPkIndexManager() = default;
@@ -45,6 +44,8 @@ public:
     static Status clear_persistent_index(int64_t tablet_id);
 
     void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo) override;
+
+    std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
 
 private:
     static bool need_evict_tablet(const std::string& tablet_pk_path);

@@ -807,6 +807,8 @@ public:
 
     void test_calc_memory_usage() { return _calc_memory_usage(); }
 
+    virtual void set_set_pk_index_write_amp_score(double score);
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);

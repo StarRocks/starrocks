@@ -41,7 +41,6 @@ class MetaFileBuilder;
 class UpdateManager;
 struct AutoIncrementPartialUpdateState;
 using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
-using TabletAndScore = std::pair<int64_t, double>;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
@@ -186,8 +185,6 @@ public:
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 
     Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
-
-    std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
 
 private:
     // print memory tracker state
