@@ -73,6 +73,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -81,6 +82,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.QualifiedName;
@@ -148,6 +150,7 @@ public class ShowExecutorTest {
 
     private ConnectContext ctx;
     private GlobalStateMgr globalStateMgr;
+    private WarehouseManager warehouseManager = new WarehouseManagerEPack();
 
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
@@ -159,6 +162,8 @@ public class ShowExecutorTest {
     public void setUp() throws Exception {
         ctx = new ConnectContext(null);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
+
+        warehouseManager.initDefaultWarehouse();
 
         Column column1 = new Column("col1", Type.BIGINT);
         Column column2 = new Column("col2", Type.DOUBLE);
@@ -349,6 +354,10 @@ public class ShowExecutorTest {
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
                 result = metadataMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
 
                 metadataMgr.listDbNames("default_catalog");
                 minTimes = 0;

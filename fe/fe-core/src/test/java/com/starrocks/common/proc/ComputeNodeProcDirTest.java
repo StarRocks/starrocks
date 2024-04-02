@@ -15,10 +15,12 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -56,6 +58,9 @@ public class ComputeNodeProcDirTest {
         systemInfoService.addComputeNode(b1);
         systemInfoService.addComputeNode(b2);
 
+        WarehouseManager warehouseManager = new WarehouseManagerEPack();
+        warehouseManager.initDefaultWarehouse();
+
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -77,6 +82,10 @@ public class ComputeNodeProcDirTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOsAgent;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
             }
         };
 
