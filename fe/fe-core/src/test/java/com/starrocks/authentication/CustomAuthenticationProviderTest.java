@@ -65,10 +65,10 @@ public class CustomAuthenticationProviderTest {
                 mgr.getBestMatchedUserIdentity(user, host);
         Assert.assertNotNull(matchedUserIdentity);
 
+        AuthenticationProvider provider =
+                AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+        Assert.assertTrue(provider instanceof CustomAuthenticationProvider);
         try {
-            AuthenticationProvider provider =
-                    AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-            Assert.assertTrue(provider instanceof CustomAuthenticationProvider);
             provider.authenticate(user, host, password, randomString, matchedUserIdentity.getValue());
             Assert.fail();
         } catch (AuthenticationException e) {
