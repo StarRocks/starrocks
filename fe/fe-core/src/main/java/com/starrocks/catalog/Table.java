@@ -387,6 +387,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return false;
     }
 
+    public boolean isTemporaryTable() {
+        if (this instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) this;
+            return olapTable.getSessionId() != null;
+        }
+        return false;
+    }
+
     public List<Column> getFullSchema() {
         return fullSchema;
     }

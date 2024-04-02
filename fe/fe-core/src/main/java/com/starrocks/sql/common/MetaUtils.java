@@ -136,14 +136,39 @@ public class MetaUtils {
         return table;
     }
 
+    // get the Table in the session based on table name,
+    // if there are temporary tables and normal tables with the same name, the temporary table will be used first.
     public static Table getTable(ConnectContext session, TableName tableName) {
         if (Strings.isNullOrEmpty(tableName.getCatalog())) {
             tableName.setCatalog(session.getCurrentCatalog());
         }
-        Table table = session.getGlobalStateMgr().getMetadataMgr().getTable(tableName.getCatalog(),
-                tableName.getDb(), tableName.getTbl());
+        Database database = getDatabase(session, tableName);
+
+        Table table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
+                session.getSessionId(), tableName.getCatalog(), database.getId(), tableName.getTbl());
+        if (table != null) {
+            return table;
+        }
+        table = session.getGlobalStateMgr().getMetadataMgr().getTable(
+                tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.toString());
+        }
+        return table;
+    }
+
+    public static Table getTable(ConnectContext session, Database database, TableName tableName) {
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            tableName.setCatalog(session.getCurrentCatalog());
+        }
+        // for internal catalog, use temporary table first
+        Table table = null;
+        if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+            table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
+                    session.getSessionId(), tableName.getCatalog(), database.getId(), tableName.getTbl());
+        }
+        if (table == null) {
+            table = database.getTable(tableName.getTbl());
         }
         return table;
     }

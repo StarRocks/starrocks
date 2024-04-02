@@ -97,6 +97,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -764,6 +765,17 @@ public class ConnectProcessor {
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
         } else {
             ctx.setCurrentRoleIds(new HashSet<>());
+        }
+
+        if (request.isSetSession_id()) {
+            ctx.setSessionId(UUID.fromString(request.getSession_id()));
+        } else {
+            TMasterOpResult result = new TMasterOpResult();
+            ctx.getState().setError(
+                    "Missing current session id. You need to upgrade this Frontend to the same version as Leader Frontend.");
+            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
+            result.setPacket(getResultPacket());
+            return result;
         }
 
         if (request.isSetIsLastStmt()) {
