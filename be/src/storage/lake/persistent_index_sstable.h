@@ -17,7 +17,6 @@
 #include <string>
 
 #include "gen_cpp/lake_types.pb.h"
-#include "storage/lake/key_index.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/table.h"
@@ -27,38 +26,41 @@
 namespace starrocks {
 
 class WritableFile;
+class PersistentIndexSstablePB;
 
-namespace sstable {
-
-// <version, value>
-using IndexValueWithVer = std::pair<int64_t, int64_t>;
+namespace lake {
+using KeyIndex = size_t;
+using KeyIndexSet = std::set<KeyIndex>;
+// <version, IndexValue>
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class PersistentIndexSstable {
 public:
     PersistentIndexSstable() = default;
     ~PersistentIndexSstable() = default;
 
-    Status init(RandomAccessFile* rf, const int64_t filesz, Cache* cache);
+    Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache);
 
-    static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+    static Status build_sstable(const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz);
 
     // multi_get can get multi keys at onces
-    // |n| : key count that we want to get
     // |keys| : Address point to first element of key array.
-    // |key_indexes_info| : the index of key array that we actually want to get.
+    // |key_indexes| : the index of key array that we actually want to get.
     // |version| : when < 0, means we want the latest version.
     // |values| : result array of get, should have some count as keys.
-    // |found_keys_info| : the index of key array that we found, it should be the subset of key_indexes_info
-    Status multi_get(size_t n, const Slice* keys, const KeyIndexesInfo& key_indexes_info, int64_t version,
-                     IndexValue* values, KeyIndexesInfo* found_keys_info);
+    // |found_key_indexes| : the index of key array that we found, it should be the subset of key_indexes_info
+    Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
+                     KeyIndexSet* found_key_indexes) const;
 
-    Iterator* new_iterator(const ReadOptions& options) { return _sst->NewIterator(options); }
+    sstable::Iterator* new_iterator(const sstable::ReadOptions& options) { return _sst->NewIterator(options); }
 
 private:
-    std::unique_ptr<Table> _sst{nullptr};
-    std::unique_ptr<FilterPolicy> _filter_policy{nullptr};
+    std::unique_ptr<sstable::Table> _sst{nullptr};
+    std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
+    std::unique_ptr<RandomAccessFile> _rf{nullptr};
+    PersistentIndexSstablePB _sstable_pb;
 };
 
-} // namespace sstable
+} // namespace lake
 } // namespace starrocks

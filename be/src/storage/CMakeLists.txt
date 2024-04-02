@@ -216,7 +216,6 @@ add_library(Storage STATIC
     sstable/comparator.cpp
     sstable/filter_block.cpp
     sstable/format.cpp
-    sstable/persistent_index_sstable.cpp
     sstable/table_builder.cpp
     sstable/table.cpp
     sstable/two_level_iterator.cpp
@@ -239,6 +238,7 @@ add_library(Storage STATIC
     lake/lake_persistent_index.cpp
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
+    lake/persistent_index_sstable.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     inverted/index_descriptor.hpp

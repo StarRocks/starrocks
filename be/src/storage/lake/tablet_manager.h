@@ -137,6 +137,8 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
+    std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
+
     const LocationProvider* location_provider() const { return _location_provider; }
 
     UpdateManager* update_mgr();

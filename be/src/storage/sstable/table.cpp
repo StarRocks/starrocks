@@ -9,7 +9,6 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
-#include "storage/lake/key_index.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/sstable/block.h"
 #include "storage/sstable/comparator.h"
@@ -233,29 +232,29 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
                                const_cast<Table*>(this), options);
 }
 
-Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, const KeyIndexesInfo& key_indexes_info,
+template <class ForwardIt>
+Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt begin, ForwardIt end,
                        std::vector<std::string>* values) {
     Status s;
     Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-    const auto& key_index_infos = key_indexes_info.key_index_infos;
     std::unique_ptr<Iterator> current_block_itr_ptr;
 
     // return true if find k
-    auto search_in_block = [&](const Slice& k, const KeyIndexInfo& index_info) {
+    auto search_in_block = [&](const Slice& k, const size_t& index) {
         current_block_itr_ptr->Seek(k);
         if (current_block_itr_ptr->Valid() && k == current_block_itr_ptr->key()) {
-            (*values)[index_info] = current_block_itr_ptr->value().to_string();
+            (*values)[index].assign(current_block_itr_ptr->value().data, current_block_itr_ptr->value().size);
             return true;
         }
         s = current_block_itr_ptr->status();
         return false;
     };
 
-    for (size_t i = 0; i < key_index_infos.size(); ++i) {
-        auto& k = keys[key_index_infos[i]];
+    for (auto it = begin; it != end; ++it) {
+        auto& k = keys[*it];
         if (current_block_itr_ptr != nullptr && current_block_itr_ptr->Valid()) {
             // keep searching current block
-            if (search_in_block(k, key_index_infos[i])) {
+            if (search_in_block(k, *it)) {
                 TRACE_COUNTER_INCREMENT("continue_block_read", 1);
                 continue;
             } else {
@@ -276,7 +275,7 @@ Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, 
                 current_block_itr_ptr.reset(BlockReader(this, options, iiter->value()));
                 auto end_ts = butil::gettimeofday_us();
                 TRACE_COUNTER_INCREMENT("read_block", end_ts - start_ts);
-                (void)search_in_block(k, key_index_infos[i]);
+                (void)search_in_block(k, *it);
             }
         }
     }
@@ -286,5 +285,11 @@ Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, 
     delete iiter;
     return s;
 }
+
+// If new container wants to be supported in MultiGet, the initialization can be added here.
+template Status Table::MultiGet<std::set<size_t>::iterator>(const ReadOptions& options, const Slice* keys,
+                                                            std::set<size_t>::iterator begin,
+                                                            std::set<size_t>::iterator end,
+                                                            std::vector<std::string>* values);
 
 } // namespace starrocks::sstable

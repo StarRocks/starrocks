@@ -149,6 +149,10 @@ std::string Tablet::delvec_location(std::string_view delvec_name) const {
     return _mgr->delvec_location(_id, delvec_name);
 }
 
+std::string Tablet::sst_location(std::string_view sst_name) const {
+    return _mgr->sst_location(_id, sst_name);
+}
+
 std::string Tablet::root_location() const {
     return _mgr->tablet_root_location(_id);
 }
