@@ -70,7 +70,8 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_1,
     PERSISTENT_INDEX_VERSION_2,
     PERSISTENT_INDEX_VERSION_3,
-    PERSISTENT_INDEX_VERSION_4
+    PERSISTENT_INDEX_VERSION_4,
+    PERSISTENT_INDEX_VERSION_5
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -165,6 +166,7 @@ struct EditVersionWithMerge {
 };
 
 struct IndexPage;
+struct LargeIndexPage;
 struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
@@ -254,7 +256,8 @@ public:
                                                                  bool with_null) const = 0;
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
-                                            size_t npage_hint, size_t nbucket, bool with_null) const = 0;
+                                            size_t npage_hint, size_t page_size, size_t nbucket,
+                                            bool with_null) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
@@ -273,7 +276,8 @@ public:
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
-    static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage);
+    static std::tuple<size_t, size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage,
+                                                                        const size_t total_kv_num);
 
     static size_t estimate_nbucket(size_t key_size, size_t size, size_t nshard, size_t npage);
 };
@@ -532,12 +536,12 @@ private:
     Status _get_in_fixlen_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
                                         KeysInfo* found_keys_info,
                                         std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
-                                        std::map<size_t, IndexPage>& pages) const;
+                                        std::map<size_t, LargeIndexPage>& pages) const;
 
     Status _get_in_varlen_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
                                         KeysInfo* found_keys_info,
                                         std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
-                                        std::map<size_t, IndexPage>& pages) const;
+                                        std::map<size_t, LargeIndexPage>& pages) const;
 
     Status _get_in_shard_by_page(size_t shard_idx, size_t n, const Slice* keys, IndexValue* values,
                                  KeysInfo* found_keys_info, std::map<size_t, std::vector<KeyInfo>>& keys_info_by_page,
@@ -574,6 +578,7 @@ private:
         uint32_t nbucket;
         uint64_t data_size;
         uint64_t uncompressed_size;
+        uint64_t page_size;
     };
 
     std::vector<ShardInfo> _shards;
@@ -590,7 +595,8 @@ public:
     Status init(const string& idx_file_path, const EditVersion& version, bool sync_on_close);
 
     // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
-    Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
+    Status write_shard(size_t key_size, size_t npage_hint, size_t page_size, size_t nbucket,
+                       const std::vector<KVRef>& kvs);
 
     Status write_bf();
 
