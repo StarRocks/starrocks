@@ -579,7 +579,7 @@ public class AlterJobMgr {
                     if (!dropPartitionClause.isTempPartition()) {
                         DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                     }
-                    if (dropPartitionClause.getPartitionName()
+                    if (dropPartitionClause.getPartitionName() != null && dropPartitionClause.getPartitionName()
                             .startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                         throw new DdlException("Deletion of shadow partitions is not allowed");
                     }

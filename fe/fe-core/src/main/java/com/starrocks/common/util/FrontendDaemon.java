@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -56,7 +57,7 @@ public class FrontendDaemon extends Daemon {
     }
 
     @Override
-    protected void runOneCycle() {
+    protected void runOneCycle() throws AnalysisException {
         while (!GlobalStateMgr.getServingState().isReady()) {
             // here we use getServingState(), not getCurrentState() because we truly want the GlobalStateMgr instance,
             // not the Checkpoint globalStateMgr instance.
@@ -73,7 +74,7 @@ public class FrontendDaemon extends Daemon {
     }
 
     // override by derived classes
-    protected void runAfterCatalogReady() {
+    protected void runAfterCatalogReady() throws AnalysisException {
 
     }
 }

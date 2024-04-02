@@ -439,7 +439,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 clearDropPartitionFailedMsg(tableName);
-            } catch (DdlException e) {
+            } catch (DdlException | AnalysisException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
             } finally {
                 locker.unLockDatabase(db, LockType.WRITE);
@@ -459,7 +459,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         return false;
     }
 
-    private void executePartitionTimeToLive() {
+    private void executePartitionTimeToLive() throws AnalysisException {
         Iterator<Pair<Long, Long>> iterator = ttlPartitionInfo.iterator();
         while (iterator.hasNext()) {
             Pair<Long, Long> tableInfo = iterator.next();
@@ -689,12 +689,12 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     @VisibleForTesting
-    public void runOnceForTest() {
+    public void runOnceForTest() throws AnalysisException {
         runAfterCatalogReady();
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterCatalogReady() throws AnalysisException {
         if (!initialize) {
             // check Dynamic Partition tables only when FE start
             initDynamicPartitionTable();

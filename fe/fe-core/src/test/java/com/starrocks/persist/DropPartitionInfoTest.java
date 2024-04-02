@@ -42,6 +42,8 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DropPartitionInfoTest {
     @Test
@@ -50,8 +52,9 @@ public class DropPartitionInfoTest {
         File file = new File("./dropPartitionInfo");
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        DropPartitionInfo info1 = new DropPartitionInfo(1L, 2L, "test_partition", false, true);
+        List<String> partitionNames = new ArrayList<>();
+        partitionNames.add("test_partition");
+        DropPartitionInfo info1 = new DropPartitionInfo(1L, 2L, false, true, partitionNames);
         info1.write(dos);
 
         dos.flush();
@@ -64,18 +67,18 @@ public class DropPartitionInfoTest {
 
         Assert.assertEquals(Long.valueOf(1L), rInfo1.getDbId());
         Assert.assertEquals(Long.valueOf(2L), rInfo1.getTableId());
-        Assert.assertEquals("test_partition", rInfo1.getPartitionName());
+        Assert.assertEquals(partitionNames, rInfo1.getPartitionNames());
         Assert.assertFalse(rInfo1.isTempPartition());
         Assert.assertTrue(rInfo1.isForceDrop());
 
         Assert.assertTrue(rInfo1.equals(info1));
         Assert.assertFalse(rInfo1.equals(this));
-        Assert.assertFalse(info1.equals(new DropPartitionInfo(-1L, 2L, "test_partition", false, true)));
-        Assert.assertFalse(info1.equals(new DropPartitionInfo(1L, -2L, "test_partition", false, true)));
-        Assert.assertFalse(info1.equals(new DropPartitionInfo(1L, 2L, "test_partition1", false, true)));
-        Assert.assertFalse(info1.equals(new DropPartitionInfo(1L, 2L, "test_partition", true, true)));
-        Assert.assertFalse(info1.equals(new DropPartitionInfo(1L, 2L, "test_partition", false, false)));
-        Assert.assertTrue(info1.equals(new DropPartitionInfo(1L, 2L, "test_partition", false, true)));
+        Assert.assertFalse(info1.equals(new DropPartitionInfo(-1L, 2L, false, true, partitionNames)));
+        Assert.assertFalse(info1.equals(new DropPartitionInfo(1L, -2L, false, true, partitionNames)));
+        Assert.assertFalse(info1.equals(new DropPartitionInfo(1L, 2L, false, true, partitionNames)));
+        Assert.assertFalse(info1.equals(new DropPartitionInfo(1L, 2L, true, true, partitionNames)));
+        Assert.assertFalse(info1.equals(new DropPartitionInfo(1L, 2L, false, false, partitionNames)));
+        Assert.assertTrue(info1.equals(new DropPartitionInfo(1L, 2L, false, true, partitionNames)));
 
         // 3. delete files
         dis.close();

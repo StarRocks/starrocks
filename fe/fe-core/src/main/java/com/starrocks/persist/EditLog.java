@@ -292,10 +292,13 @@ public class EditLog {
                 }
                 case OperationType.OP_DROP_PARTITION: {
                     DropPartitionInfo info = (DropPartitionInfo) journal.getData();
+                    List<String> partitionNames = info.getPartitionNames();
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
-                            + " partitionName = " + info.getPartitionName());
-                    globalStateMgr.getLocalMetastore().replayDropPartition(info);
+                            + " partitionName = " + partitionNames);
+                    for (String partitionName : partitionNames) {
+                        globalStateMgr.getLocalMetastore().replayDropPartition(info, partitionName);
+                    }
                     break;
                 }
                 case OperationType.OP_MODIFY_PARTITION:

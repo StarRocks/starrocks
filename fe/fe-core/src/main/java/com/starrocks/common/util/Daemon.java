@@ -17,6 +17,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.meta.MetaContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -92,7 +93,7 @@ public class Daemon extends Thread {
     /**
      * implement in child
      */
-    protected void runOneCycle() {
+    protected void runOneCycle() throws AnalysisException {
 
     }
 
