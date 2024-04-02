@@ -524,7 +524,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select S_NAME from supplier_nullable where array_length(S_ADDRESS) = 2";
         String plan = getVerboseExplain(sql);
         assertNotContains(plan, "dict_col=");
-        assertContains(plan, "PredicateAccessPath: [/S_ADDRESS/OFFSET]");
+        assertContains(plan, "ColumnAccessPath: [/S_ADDRESS/OFFSET]");
     }
 
     @Test
