@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.NullLiteral;
@@ -194,6 +195,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (defaultValueDef != null) {
             if (defaultValueDef.expr instanceof StringLiteral) {
                 this.defaultValue = ((StringLiteral) defaultValueDef.expr).getValue();
+                if (type == Type.DATETIME || type == Type.DATE) {
+                    try {
+                        defaultValue = ((DateLiteral) (defaultValueDef.expr).uncheckedCastTo(type)).getStringValue();
+                    } catch (Exception e) {
+                        // Other scenarios are processed by the BE.
+                    }
+                }
             } else if (defaultValueDef.expr instanceof NullLiteral) {
                 // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;

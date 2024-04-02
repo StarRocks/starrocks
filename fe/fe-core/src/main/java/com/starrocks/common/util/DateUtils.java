@@ -20,6 +20,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -36,6 +37,7 @@ import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
 import java.time.temporal.WeekFields;
+import java.util.regex.Pattern;
 
 public class DateUtils {
     // These are marked as deprecated because they don't support year 0000 parsing
@@ -129,6 +131,23 @@ public class DateUtils {
         if (str == null || str.length() < 5) {
             throw new IllegalArgumentException("Invalid datetime string: " + str);
         }
+
+        // timezone
+        ZoneId sourceZoneId = null;
+        ZoneId targetzoneId = null;
+        str = str.trim();
+
+        if (Pattern.matches(".*[+-][0-9]{2}:[0-9]{2}", str)) {
+            try {
+                targetzoneId = ZoneId.of(ConnectContext.get().getSessionVariable().getTimeZone());
+                String timezone = str.substring(str.length() - 6);
+                sourceZoneId = ZoneId.of("UTC" + timezone);
+                str = str.substring(0, str.length() - 6).trim();
+            } catch (Exception e) {
+                throw new IllegalArgumentException("can not process time zone info:" + e.getMessage());
+            }
+        }
+
         if (str.contains(":")) {
             // datetime
             int isTwoDigit = str.split("-")[0].length() == 2 ? 1 : 0;
@@ -136,7 +155,11 @@ public class DateUtils {
             int withMs = str.contains(".") ? 1 : 0;
             int withSplitT = str.contains("T") ? 1 : 0;
             DateTimeFormatter formatter = DATETIME_FORMATTERS[isTwoDigit][withMs][withSplitT][withSec];
-            return parseStringWithDefaultHSM(str, formatter);
+            LocalDateTime localDateTime =  parseStringWithDefaultHSM(str, formatter);
+            if (sourceZoneId == null) {
+                return localDateTime;
+            }
+            return localDateTime.atZone(sourceZoneId).withZoneSameInstant(targetzoneId).toLocalDateTime();
         } else {
             // date
             DateTimeFormatter formatter;

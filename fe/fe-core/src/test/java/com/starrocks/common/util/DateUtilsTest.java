@@ -34,14 +34,41 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.system.Backend;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 public class DateUtilsTest {
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        Backend be = UtFrameUtils.addMockBackend(10002);
+        be.setIsDecommissioned(true);
+        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockBackend(10004);
+        Config.enable_strict_storage_medium_check = true;
+        Config.enable_auto_tablet_distribution = true;
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        // set time_zone
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setTimeZone("Asia/Shanghai");
+        ConnectContext.get().setSessionVariable(sessionVariable);
+    }
 
     @Test
     public void testParseDatTimeString() {
@@ -82,6 +109,115 @@ public class DateUtilsTest {
             }
 
         } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testParseDateTimeWithTimezone() {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        DateTimeFormatter dtfMs = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS");
+        try {
+            {
+                String datetime = "2020-01-01 00:00:00-00:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01 08:00:00", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01 00:00:00-01:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01 09:00:00", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01 00:00:00-08:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01 16:00:00", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01 00:00:00-12:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01 20:00:00", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01 00:00:00+00:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01 08:00:00", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01 00:00:00+01:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01 07:00:00", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01 00:00:00+08:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01 00:00:00", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01 00:00:00+12:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2019-12-31 20:00:00", localDateTime.format(dtf));
+            }
+            // with milliseconds
+            {
+                String datetime = "2020-01-01 00:00:00.123456+12:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2019-12-31 20:00:00.123456", localDateTime.format(dtfMs));
+            }
+            // with spaces
+            {
+                String datetime = "2020-01-01 00:00:00.123456    +12:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2019-12-31 20:00:00.123456", localDateTime.format(dtfMs));
+            }
+            {
+                String datetime = "2020-01-01 00:00:00.123456    +12:00    ";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2019-12-31 20:00:00.123456", localDateTime.format(dtfMs));
+            }
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testParseDateWithTimezone() {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        try {
+            {
+                String datetime = "2020-01-01-00:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01-12:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01+00:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01+12:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01", localDateTime.format(dtf));
+            }
+            // with spaces
+            {
+                String datetime = "2020-01-01    +12:00";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01", localDateTime.format(dtf));
+            }
+            {
+                String datetime = "2020-01-01    +12:00    ";
+                LocalDateTime localDateTime = DateUtils.parseStrictDateTime(datetime);
+                Assert.assertEquals("2020-01-01", localDateTime.format(dtf));
+            }
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
             Assert.fail();
         }
     }
