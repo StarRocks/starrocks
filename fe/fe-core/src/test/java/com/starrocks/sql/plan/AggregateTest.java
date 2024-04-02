@@ -20,6 +20,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -2830,5 +2831,23 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: sum(1: v1)\n" +
                 "  |  group by: 2: v2, 3: v3\n" +
                 "  |  having: 2: v2 + 2 + 5: sum > 0");
+    }
+
+    @Test(expected = StarRocksPlannerException.class)
+    public void testMetaScanLiteral() throws Exception {
+        String sql = "select count(*) from t0 [_META_]";
+        String plan = getFragmentPlan(sql);
+    }
+
+    @Test(expected = StarRocksPlannerException.class)
+    public void testMetaScanLiteral2() throws Exception {
+        String sql = "select count(1) from t0 [_META_]";
+        String plan = getFragmentPlan(sql);
+    }
+
+    @Test(expected = StarRocksPlannerException.class)
+    public void testMetaScanUnsupportFunction() throws Exception {
+        String sql = "select sum(v1) from t0 [_META_]";
+        String plan = getFragmentPlan(sql);
     }
 }

@@ -334,15 +334,19 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, 
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
     if constexpr (!is_max) {
         Datum min;
-        if (!segment_zone_map_pb->has_null()) {
+        if (segment_zone_map_pb->has_not_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
             column->append_datum(min);
+        } else {
+            column->append_default();
         }
     } else if constexpr (is_max) {
         Datum max;
         if (segment_zone_map_pb->has_not_null()) {
             RETURN_IF_ERROR(datum_from_string(type_info.get(), &max, segment_zone_map_pb->max(), nullptr));
             column->append_datum(max);
+        } else {
+            column->append_default();
         }
     }
     return Status::OK();
