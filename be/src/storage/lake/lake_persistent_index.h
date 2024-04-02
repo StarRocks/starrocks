@@ -18,13 +18,23 @@
 
 namespace starrocks {
 
+namespace sstable {
+class Iterator;
+class TableBuilder;
+} // namespace sstable
+
 namespace lake {
 
 using KeyIndex = size_t;
 using KeyIndexSet = std::set<KeyIndex>;
+class MetaFileBuilder;
 class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
+class TxnLogPB;
+class TxnLogPB_OpCompaction;
+
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 // LakePersistentIndex is not thread-safe.
 // Caller should take care of the multi-thread safety
@@ -75,7 +85,11 @@ public:
 
     Status minor_compact();
 
-    Status major_compact(int64_t min_retain_version);
+    Status major_compact(int64_t min_retain_version, std::shared_ptr<TxnLogPB>& txn_log);
+
+    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
+
+    void commit(MetaFileBuilder* builder);
 
 private:
     Status flush_memtable();
@@ -101,6 +115,13 @@ private:
                              int64_t version) const;
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
+
+    static void build_index_value_vers(const std::string& key, const std::list<IndexValueWithVer>& index_value_vers,
+                                       sstable::TableBuilder* builder);
+
+    std::unique_ptr<sstable::Iterator> prepare_merging_iterator();
+
+    Status merge_sstables(std::unique_ptr<sstable::Iterator> iter_ptr, sstable::TableBuilder* builder);
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;

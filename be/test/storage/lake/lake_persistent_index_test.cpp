@@ -190,4 +190,54 @@ TEST_F(LakePersistentIndexTest, test_replace) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+TEST_F(LakePersistentIndexTest, test_major_compaction) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int N = 10000;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    vector<size_t> idxes;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 2);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    vector<IndexValue> upsert_old_values(keys.size());
+    ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+
+    keys.clear();
+    values.clear();
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 3);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+    upsert_old_values.clear();
+    upsert_old_values.resize(keys.size());
+    ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+
+    vector<IndexValue> get_values(keys.size());
+    ASSERT_OK(index->get(N, key_slices.data(), get_values.data()));
+    for (int i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+
+    get_values.clear();
+    get_values.resize(keys.size());
+    auto txn_log = std::make_shared<TxnLogPB>();
+    ASSERT_OK(index->major_compact(0, txn_log));
+    index->apply_opcompaction(txn_log->op_compaction());
+    ASSERT_OK(index->get(N, key_slices.data(), get_values.data()));
+    for (int i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
 } // namespace starrocks::lake

@@ -3,12 +3,15 @@
 // (https://developers.google.com/open-source/licenses/bsd)
 #pragma once
 
+#include <set>
+
 #include "common/status.h"
 
 namespace starrocks {
 class Slice;
 class RandomAccessFile;
 namespace sstable {
+using KeyIndex = uint32_t;
 class Block;
 class BlockHandle;
 class Footer;

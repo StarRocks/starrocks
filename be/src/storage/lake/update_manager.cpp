@@ -18,6 +18,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
@@ -26,7 +27,6 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
-#include "storage/tablet_meta_manager.h"
 #include "testutil/sync_point.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"
@@ -96,27 +96,6 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         return Status::InternalError(msg);
     }
     return index_entry;
-}
-
-Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tablet) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
-    if (index_entry != nullptr) {
-        auto& index = index_entry->value();
-        if (index.enable_persistent_index()) {
-            // only take affect in local persistent index
-            PersistentIndexMetaPB index_meta;
-            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet->id());
-            RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
-            RETURN_IF_ERROR(index.commit(&index_meta));
-            RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
-            // Call `on_commited` here, which will remove old files is safe.
-            // Because if publish version fail after `on_commited`, index will be rebuild.
-            RETURN_IF_ERROR(index.on_commited());
-            TRACE("commit primary index");
-        }
-    }
-
-    return Status::OK();
 }
 
 void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
@@ -651,6 +630,8 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     builder->apply_opcompaction(op_compaction, max_rowset_id);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
+    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
     TRACE_COUNTER_INCREMENT("output_rows", total_rows);
@@ -859,6 +840,19 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
         index.set_enable_persistent_index(enable_persistent_index);
         _index_cache.release(index_entry);
     }
+}
+
+Status UpdateManager::execute_index_major_compaction(int64_t tablet_id, const TabletMetadata& metadata,
+                                                     std::shared_ptr<TxnLogPB>& txn_log) {
+    auto index_entry = _index_cache.get(tablet_id);
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    // release index entry but keep it in cache
+    DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        return index.major_compaction(metadata, txn_log);
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake
