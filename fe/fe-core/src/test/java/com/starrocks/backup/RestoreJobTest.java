@@ -150,6 +150,7 @@ public class RestoreJobTest {
         repoMgr = new MockRepositoryMgr();
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
         MetricRepo.init();
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     public void testResetPartitionForRestore() {

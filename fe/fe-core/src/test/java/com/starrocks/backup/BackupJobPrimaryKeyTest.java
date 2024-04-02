@@ -226,6 +226,7 @@ public class BackupJobPrimaryKeyTest {
         tableRefs.add(new TableRef(new TableName(testDbName, testTableName), null));
         job = new BackupJob("label_pk", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.setTestPrimaryKey();
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     @Test

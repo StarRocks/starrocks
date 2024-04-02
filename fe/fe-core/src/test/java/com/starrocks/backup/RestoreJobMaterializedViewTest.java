@@ -264,6 +264,7 @@ public class RestoreJobMaterializedViewTest {
                 backendId, version, KeysType.DUP_KEYS);
         mvRestoreContext = new MvRestoreContext();
         setUpMocker();
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     private BackupTableInfo mockBackupTableInfo(OlapTable olapTable) {

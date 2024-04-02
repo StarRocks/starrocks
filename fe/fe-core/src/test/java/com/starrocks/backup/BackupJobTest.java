@@ -217,6 +217,7 @@ public class BackupJobTest {
         List<TableRef> tableRefs = Lists.newArrayList();
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
         job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     @Test

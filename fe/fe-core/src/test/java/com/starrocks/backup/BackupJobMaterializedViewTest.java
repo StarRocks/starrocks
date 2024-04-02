@@ -215,6 +215,7 @@ public class BackupJobMaterializedViewTest {
                 result = true;
             }
         };
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     @Test
