@@ -296,45 +296,46 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testTransparentRewriteWithJoinMv() {
+    public void testTransparentRewriteWithJoinMv1() {
         withPartialJoinMv(() -> {
-            {
-                String[] sqls = {
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate='1998-01-01';",
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate='1998-01-01' and a.l_suppkey > 100;",
-                };
-                for (String query : sqls) {
-                    String plan = getFragmentPlan(query);
-                    PlanTestBase.assertNotContains(plan, ":UNION");
-                    PlanTestBase.assertContains(plan, "mv0");
-                }
+            String[] sqls = {
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate='1998-01-01';",
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate='1998-01-01' and a.l_suppkey > 100;",
+            };
+            for (String query : sqls) {
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertNotContains(plan, ":UNION");
+                PlanTestBase.assertContains(plan, "mv0");
             }
+        });
+    }
 
-            {
-                String[] sqls = {
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate >= '1998-01-01';",
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate != '1998-01-01' and a.l_suppkey > 100;",
-                        "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
-                                " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
-                                " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
-                                "WHERE a.l_shipdate <= '1998-01-05' and a.l_suppkey > 100;",
-                };
-                for (String query : sqls) {
-                    String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
-                }
+    @Test
+    public void testTransparentRewriteWithJoinMv2() {
+        withPartialJoinMv(() -> {
+            String[] sqls = {
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate >= '1998-01-01';",
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate != '1998-01-01' and a.l_suppkey > 100;",
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate <= '1998-01-05' and a.l_suppkey > 100;",
+            };
+            for (String query : sqls) {
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
             }
         });
     }
