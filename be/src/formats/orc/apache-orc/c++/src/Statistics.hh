@@ -572,7 +572,7 @@ public:
 
     void reset() override {
         _stats.reset();
-        // Do not compute sum of decimal column
+        // Note(letian-jiang): Do not compute the sum of decimal column since it is time-consuming and hard to exploit.
         // setSum(Decimal());
     }
 
