@@ -16,6 +16,7 @@
 package com.starrocks.lake.delete;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.IntLiteral;
@@ -70,12 +71,12 @@ import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -91,9 +92,9 @@ public class DeleteTest {
     private final long tableId = 2L;
     private final long partitionId = 3L;
     private final long indexId = 4L;
-    private final long tablet1Id = 10L;
-    private final long tablet2Id = 11L;
-    private final long backendId = 20L;
+    private static final long TABLET_1_ID = 10L;
+    private static final long TABLET_2_ID = 11L;
+    private static final long BACKEND_ID = 20L;
     private final String dbName = "db1";
     private final String tableName = "t1";
     private final String partitionName = "p1";
@@ -115,6 +116,14 @@ public class DeleteTest {
     private ConnectContext connectContext = new ConnectContext();
     private DeleteMgr deleteHandler;
 
+    @BeforeClass
+    public static void beforeClass() {
+        Map<Long, List<Long>> beToTablets = Maps.newHashMap();
+        beToTablets.put(BACKEND_ID, Lists.newArrayList(TABLET_1_ID, TABLET_2_ID));
+        MockedStatic<Utils> utilsMockedStatic = Mockito.mockStatic(Utils.class);
+        utilsMockedStatic.when(() -> Utils.groupTabletID(any(), any(), anyLong())).thenReturn(beToTablets);
+    }
+
     private Database createDb() {
         // Schema
         List<Column> columns = Lists.newArrayList();
@@ -125,8 +134,8 @@ public class DeleteTest {
         columns.add(new Column("v1", Type.ARRAY_BIGINT, false, null, "0", ""));
 
         // Tablet
-        Tablet tablet1 = new LakeTablet(tablet1Id);
-        Tablet tablet2 = new LakeTablet(tablet2Id);
+        Tablet tablet1 = new LakeTablet(TABLET_1_ID);
+        Tablet tablet2 = new LakeTablet(TABLET_2_ID);
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
@@ -152,7 +161,7 @@ public class DeleteTest {
     }
 
     public void setUpExpectation() {
-        Backend backend = new Backend(backendId, "127.0.0.1", 1234);
+        Backend backend = new Backend(BACKEND_ID, "127.0.0.1", 1234);
 
         new Expectations() {
             {
@@ -165,14 +174,11 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
 
-                //GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                //result = systemInfoService;
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
 
-                //systemInfoService.getBackendOrComputeNode(anyLong);
-                //result = backend;
-
-                //Utils.chooseNodeId((LakeTablet) any, anyLong);
-                //result = backend.getId();
+                systemInfoService.getBackendOrComputeNode(anyLong);
+                result = backend;
             }
         };
     }
@@ -196,10 +202,10 @@ public class DeleteTest {
                 return lakeService;
             }
         };
-        new MockUp<LakeService>() {
-            @Mock
-            Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
-                return new Future<DeleteDataResponse>() {
+        new Expectations() {
+            {
+                lakeService.deleteData((DeleteDataRequest) any);
+                result = new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
                         return false;
@@ -217,9 +223,7 @@ public class DeleteTest {
 
                     @Override
                     public DeleteDataResponse get() throws InterruptedException, ExecutionException {
-                        DeleteDataResponse response = new DeleteDataResponse();
-                        response.failedTablets = Lists.newArrayList(tablet1Id);
-                        return response;
+                        return null;
                     }
 
                     @Override
@@ -228,11 +232,7 @@ public class DeleteTest {
                         return null;
                     }
                 };
-            }
-        };
 
-        new Expectations() {
-            {
                 globalTransactionMgr.commitAndPublishTransaction(db, anyLong, (List) any, (List) any, anyLong);
                 result = true;
 
@@ -260,9 +260,6 @@ public class DeleteTest {
             Assert.fail();
         }
 
-        MockedStatic<Utils> utilsMockedStatic = Mockito.mockStatic(Utils.class);
-        utilsMockedStatic.when(() -> Utils.groupTabletID(any(), any(), anyLong())).thenReturn(new HashMap<Long, List<Long>>());
-
         try {
             deleteHandler.process(deleteStmt);
         } catch (QueryStateException e) {
@@ -282,11 +279,10 @@ public class DeleteTest {
                 return lakeService;
             }
         };
-
-        new MockUp<LakeService>() {
-            @Mock
-            Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
-                return new Future<DeleteDataResponse>() {
+        new Expectations() {
+            {
+                lakeService.deleteData((DeleteDataRequest) any);
+                result = new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
                         return false;
@@ -305,7 +301,7 @@ public class DeleteTest {
                     @Override
                     public DeleteDataResponse get() throws InterruptedException, ExecutionException {
                         DeleteDataResponse response = new DeleteDataResponse();
-                        response.failedTablets = Lists.newArrayList(tablet1Id);
+                        response.failedTablets = Lists.newArrayList(TABLET_1_ID);
                         return response;
                     }
 

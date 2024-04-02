@@ -101,6 +101,11 @@ public class TabletStatMgrTest {
             }
 
             @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
             public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
                 return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
             }
