@@ -845,15 +845,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
 void HiveDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
-<<<<<<< HEAD
-        _scanner->close(state);
-=======
         if (!_scanner->has_split_tasks()) {
             COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
             COUNTER_UPDATE(_profile.scan_ranges_size, _scan_range.length);
         }
-        _scanner->close();
->>>>>>> 22285e31e8 ([Enhancement] merge tiny stripes / RowGroups when do splitting (#43103))
+        _scanner->close(state);
     }
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
