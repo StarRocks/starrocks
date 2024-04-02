@@ -1689,6 +1689,13 @@ public class Config extends ConfigBase {
     public static boolean authorization_enable_priv_collection_cache = true;
 
     /**
+     * custom authentication class. If it is not existed, will turn back to ldap authentication if configured or SR
+     * native.
+     */
+    @ConfField(mutable = true)
+    public static String authorization_custom_class = "";
+
+    /**
      * In some cases, some tablets may have all replicas damaged or lost.
      * At this time, the data has been lost, and the damaged tablets
      * will cause the entire query to fail, and the remaining healthy tablets cannot be queried.

@@ -39,7 +39,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     public void authenticate(String user, String host, byte[] password, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         LDAPSecurityIntegration ldapSecurityIntegration =
-                (LDAPSecurityIntegration) authenticationInfo.extraInfo.get(PLUGIN_NAME);
+                (LDAPSecurityIntegration) authenticationInfo.extraInfo.get(SecurityIntegration.SECURITY_INTEGRATION_KEY);
         try {
             boolean authenticated = LDAPAuthProviderForExternal.authenticate(
                     user, StringUtils.stripEnd(new String(password), "\0"),
@@ -51,7 +51,7 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
                     ldapSecurityIntegration.getLdapBindRootPwd());
             if (!authenticated) {
                 throw new AuthenticationException(String.format(
-                                "external ldap authentication failure for user %s@%s", user, host));
+                        "external ldap authentication failure for user %s@%s", user, host));
             }
         } catch (Exception e) {
             throw new AuthenticationException(String.format(

@@ -16,9 +16,13 @@
 package com.starrocks.authentication;
 
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Security integration specified in `Config.authentication_chain`.
@@ -30,6 +34,18 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";
     public static final String LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY = "ldap_cache_refresh_interval";
 
+    public static final String LDAP_SERVER_HOST = "ldap_server_host";
+
+    public static final String LDAP_SERVER_PORT = "ldap_server_port";
+
+    public static final String LDAP_USER_SEARCH_ATTR = "ldap_user_search_attr";
+
+    public static final String LDAP_USER_GROUP_MATCH_ATTR = "ldap_user_group_match_attr";
+
+    private static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(Arrays.asList(
+            LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY,
+            LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY,
+            LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY));
 
     public LDAPSecurityIntegration(String name, Map<String, String> propertyMap) {
         super(name, propertyMap);
@@ -41,11 +57,11 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     public String getLdapServerHost() {
-        return propertyMap.getOrDefault("ldap_server_host", "127.0.0.1");
+        return propertyMap.getOrDefault(LDAP_SERVER_HOST, "127.0.0.1");
     }
 
     public String getLdapServerPort() {
-        return propertyMap.getOrDefault("ldap_server_port", "389");
+        return propertyMap.getOrDefault(LDAP_SERVER_PORT, "389");
     }
 
     public String getLdapBindBaseDn() {
@@ -53,11 +69,11 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     public String getLdapUserSearchAttr() {
-        return propertyMap.getOrDefault("ldap_user_search_attr", "uid");
+        return propertyMap.getOrDefault(LDAP_USER_SEARCH_ATTR, "uid");
     }
 
     public String getLdapUserGroupMatchAttr() {
-        return propertyMap.getOrDefault("ldap_user_group_match_attr", getLdapUserSearchAttr());
+        return propertyMap.getOrDefault(LDAP_USER_GROUP_MATCH_ATTR, getLdapUserSearchAttr());
     }
 
     public String getLdapBindRootDn() {
@@ -79,6 +95,30 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
         maskedMap.put(LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY, "******");
 
         return maskedMap;
+    }
+
+    @Override
+    public void checkProperties() {
+        REQUIRED_PROPERTIES.forEach(s -> {
+            if (!propertyMap.containsKey(s)) {
+                throw new SemanticException("missing required property: " + s);
+            }
+        });
+
+        if (propertyMap.containsKey(LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY)) {
+            try {
+                String val = propertyMap.get(LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY);
+                int interval = Integer.parseInt(val);
+                if (interval < 10) {
+                    throw new NumberFormatException("current value of '" +
+                            LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY + "' is less than 10");
+                }
+            } catch (NumberFormatException e) {
+                throw new SemanticException("invalid '" +
+                        LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY +
+                        "' property value, error: " + e.getMessage(), e);
+            }
+        }
     }
 
     @Override

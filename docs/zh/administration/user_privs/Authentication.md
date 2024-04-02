@@ -99,3 +99,58 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.M
 default_auth = mysql_clear_password
 ENABLE_CLEARTEXT_PLUGIN = 1
 ```
+
+## 设置 自定义方式 认证
+
+StarRocks 提供自定义方式认证。
+
+### 开启 自定义 认证
+
+1. 实现自定义认证抽象类
+
+自定义方式需要用户自己实现相关认证逻辑。用户需实现`CustomAuthenticationProvider`中的`authenticate`方法完成认证。
+
+代码示例：
+
+```java
+import com.starrocks.authentication.*;
+
+public class LoginSample extends CustomAuthenticationProvider {
+  @Override
+  public void authenticate(
+      String name,
+      String host,
+      byte[] password,
+      byte[] randomString,
+      UserAuthenticationInfo authenticationInfo)
+      throws AuthenticationException {
+      // user code
+  }
+}
+
+```
+
+2. 将相关jar包放入 **fe/lib** 下
+
+
+3. 在 FE 节点的配置文件 **fe.conf** 中添加以下配置项。
+
+```conf
+# 添加 自定义 认证方式相关类。
+authorization_custom_class = xxx.xxx.xxx
+```
+
+### 创建用户
+
+完成以上配置后，您还需要在 StarRocks 中创建相应用户，并指定其认证方式及认证信息。
+
+```sql
+CREATE USER user_identity IDENTIFIED WITH authentication_custom;
+```
+
+
+### 认证用户
+
+使用 自定义 认证时，您需要通过客户端传递明文密码给 StarRocks。
+
+传递方式参考上述LDAP认证用户相关内容。

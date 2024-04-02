@@ -93,7 +93,7 @@ public class SecurityIntegrationTest {
         assertExceptionContains(sql, "missing required property: type");
 
         // missing root dn
-        sql = "create security integration ldap1 properties (" +
+        sql = "create security integration ldap2 properties (" +
                 "\"type\" = \"ldap\"," +
                 "\"ldap_user_group_match_attr\" = \"memberUid\"," +
                 "\"ldap_user_search_attr\" = \"uid\"," +
@@ -104,7 +104,7 @@ public class SecurityIntegrationTest {
         assertExceptionContains(sql, "missing required property: ldap_bind_root_dn");
 
         // unsupported type
-        sql = "create security integration ldap1 properties (" +
+        sql = "create security integration ldap3 properties (" +
                 "\"type\" = \"oracle\"," +
                 "\"ldap_user_group_match_attr\" = \"memberUid\"," +
                 "\"ldap_user_search_attr\" = \"uid\"," +
@@ -116,7 +116,7 @@ public class SecurityIntegrationTest {
         assertExceptionContains(sql, "unsupported security integration type 'oracle'");
 
         // already exists
-        sql = "create security integration ldap2 properties (" +
+        sql = "create security integration ldap4 properties (" +
                 "\"type\" = \"ldap\"," +
                 "\"ldap_user_group_match_attr\" = \"memberUid\"," +
                 "\"ldap_user_search_attr\" = \"uid\"," +
@@ -126,7 +126,7 @@ public class SecurityIntegrationTest {
                 "\"ldap_cache_refresh_interval\" = \"1500\"" +
                 ")";
         createSecurityIntegration(sql);
-        assertExceptionContains(sql, "security integration 'ldap2' already exists");
+        assertExceptionContains(sql, "security integration 'ldap4' already exists");
     }
 
     @Test

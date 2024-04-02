@@ -72,3 +72,56 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.M
 * **ODBC**
 
 Add `default\_auth=mysql_clear_password` and `ENABLE_CLEARTEXT\_PLUGIN=1` in the DSN of ODBC: , along with username and password.
+
+## Custom Authentication
+
+StarRocks supports custom authentication.
+
+There are 3 steps to use Custom Authentication.
+
+1. Implement Custom abstract class
+
+Custom Authentication require users to implement relevant authentication logic themselves. 
+The user needs to implement the `authenticate` method in the `CustomiAuthenticationProvider` to complete authentication.
+
+example:
+
+```java
+import com.starrocks.authentication.*;
+
+public class LoginSample extends CustomAuthenticationProvider {
+  @Override
+  public void authenticate(
+      String name,
+      String host,
+      byte[] password,
+      byte[] randomString,
+      UserAuthenticationInfo authenticationInfo)
+      throws AuthenticationException {
+      // user code
+  }
+}
+
+```
+
+
+2. Put your jar in **fe/lib**
+
+
+3. Add a parameter in **fe.conf**
+
+```conf
+# add Custom Authentication Implementation Class。
+authorization_custom_class = xxx.xxx.xxx
+```
+
+When creating a user, specify the authentication method as Custom authentication by `IDENTIFIED WITH
+authentication_custom`.
+
+Example :
+
+```sql
+CREATE USER user_identity IDENTIFIED WITH authentication_custom;
+```
+
+How to connect StarRocks with username and password is similar to LDAP above.

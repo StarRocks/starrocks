@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.ClassUtil;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
@@ -134,6 +135,19 @@ public class AuthenticationMgr {
                 KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
         AuthenticationProviderFactory.installPlugin(
                 LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal());
+
+        String className = Config.authorization_custom_class.trim();
+        if (!className.isEmpty()) {
+            try {
+                CustomAuthenticationProvider customAuthenticationProvider =
+                        ClassUtil.initialize(className, CustomAuthenticationProvider.class);
+                AuthenticationProviderFactory.installPlugin(CustomAuthenticationProvider.PLUGIN_NAME,
+                        customAuthenticationProvider);
+            } catch (Exception e) {
+                LOG.warn("Error when initialize custom Authentication class " + className +
+                        ", will try to use other Authentication provider");
+            }
+        }
 
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
@@ -274,8 +288,7 @@ public class AuthenticationMgr {
             try {
                 AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                 UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
-                        securityIntegration);
+                userAuthenticationInfo.extraInfo.put(SecurityIntegration.SECURITY_INTEGRATION_KEY, securityIntegration);
                 provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
                         userAuthenticationInfo);
                 // the ephemeral user is identified as 'username'@'auth_mechanism'
