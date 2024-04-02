@@ -843,7 +843,6 @@ void HiveDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
         if (!_scanner->has_split_tasks()) {
             COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
-            COUNTER_UPDATE(_profile.scan_ranges_size, _scan_range.length);
         }
         _scanner->close(state);
     }
