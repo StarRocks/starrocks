@@ -451,6 +451,7 @@ public abstract class StarRocksHttpTestCase {
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
         WarehouseManager warehouseMgr = new WarehouseManagerEPack();
+        warehouseMgr.initDefaultWarehouse();
         new MockUp<ConnectContext>() {
             @Mock
             public long getCurrentWarehouseId() {
@@ -477,6 +478,10 @@ public abstract class StarRocksHttpTestCase {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseMgr;
             }
         };
 
