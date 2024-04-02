@@ -502,7 +502,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                          List<Long> versions, List<TransactionState> transactionStates,
                                          TransactionStateBatch stateBatch) {
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
         Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
         Set<Tablet> normalTablets = null;
@@ -550,7 +550,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         }
 
         long startVersion = versions.get(0);
@@ -857,14 +857,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         for (long tableId : transactionState.getTableIdList()) {
-            Table table;
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                table = db.getTable(tableId);
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
-            }
+            Table table = db.getTable(tableId);
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
@@ -874,14 +867,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
             while (mvIdIterator.hasNext()) {
                 MvId mvId = mvIdIterator.next();
                 Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                locker.lockDatabase(mvDb, LockType.READ);
+                MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
+                if (materializedView == null) {
+                    LOG.warn("materialized view {} does not exists.", mvId.getId());
+                    mvIdIterator.remove();
+                    continue;
+                }
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
                 try {
-                    MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
-                    if (materializedView == null) {
-                        LOG.warn("materialized view {} does not exists.", mvId.getId());
-                        mvIdIterator.remove();
-                        continue;
-                    }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
                                 "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
@@ -890,10 +884,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 } finally {
-                    locker.unLockDatabase(mvDb, LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
                 }
             }
         }
-
     }
 }
