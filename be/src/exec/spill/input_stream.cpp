@@ -349,7 +349,6 @@ Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs,
             if (!input_stream->is_ready()) {
                 return false;
             }
-            // @TODO(silverbullet233): reuse ctx
             SerdeContext ctx;
             workgroup::YieldContext mock_ctx;
             auto res = input_stream->get_next(mock_ctx, ctx);
@@ -386,7 +385,6 @@ StatusOr<ChunkUniquePtr> OrderedInputStream::get_next(workgroup::YieldContext& y
 }
 
 StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream(const SerdePtr& serde, Spiller* spiller) {
-    std::partition(_blocks.begin(), _blocks.end(), [](const BlockPtr& block) { return !block->is_remote(); });
     auto stream = std::make_shared<UnorderedInputStream>(_blocks, serde);
     return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream), spiller);
 }
@@ -396,8 +394,6 @@ StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, cons
     if (_blocks.empty()) {
         return as_unordered_stream(serde, spiller);
     }
-    std::partition(_blocks.begin(), _blocks.end(), [](const BlockPtr& block) { return !block->is_remote(); });
-
     auto stream = std::make_shared<OrderedInputStream>(_blocks, state);
     RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
     return stream;
