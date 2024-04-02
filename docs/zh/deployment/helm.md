@@ -127,6 +127,6 @@ displayed_sidebar: "Chinese"
 
   - **解决措施**
 
-      可能是因为 StarRocks 存算一体集群中只有一个 BE，仅支持副本数量为 1，但是默认的副本数量为 3。您可以在 PROPERTIES 中修改副本数为 1，即 PROPERTIES( "replication_num" = "1" ) 。
+      可能是因为 StarRocks 存算一体集群中只有一个 BE，仅支持副本数量为 1，但是默认的副本数量为 3。您可以在 PROPERTIES 中修改副本数为 1，即 `PROPERTIES( "replication_num" = "1" )`。
   
 - Artifict Hub 上 StarRocks 维护的 Helm Chart 地址：[kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。

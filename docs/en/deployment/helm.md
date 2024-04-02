@@ -126,6 +126,6 @@ displayed_sidebar: "English"
 
   - **Solution**
 
-       This may be because only one BE exists in that StarRocks shared-data cluster, which supports only one replica. However, the default number of replicas is 3. You can modify the number of replicas to 1 in PROPERTIES, such as, PROPERTIES( "replication_num" = "1" ).
+       This may be because only one BE exists in that StarRocks shared-data cluster, which supports only one replica. However, the default number of replicas is 3. You can modify the number of replicas to 1 in PROPERTIES, such as, `PROPERTIES( "replication_num" = "1" )`.
 
 - The address of Helm Chart maintained by StarRocks on Artifact Hub: [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks).
