@@ -37,7 +37,7 @@
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/json.h"
-#include "util/json_flater.h"
+#include "util/json_util.h"
 
 namespace starrocks {
 
