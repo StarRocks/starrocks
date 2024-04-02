@@ -470,16 +470,19 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDBName());
         }
 
-        long tableId = -1L;
+        Table table = db.getTable(stmt.getTableName());
+        if (table == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName());
+        }
+
+        long tableId = table.getId();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         try {
             unprotectedCheckMeta(db, stmt.getTableName(), stmt.getRoutineLoadDesc());
-            Table table = db.getTable(stmt.getTableName());
             Load.checkMergeCondition(stmt.getMergeConditionStr(), (OlapTable) table, table.getFullSchema(), false);
-            tableId = table.getId();
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         }
 
         // init kafka routine load job
