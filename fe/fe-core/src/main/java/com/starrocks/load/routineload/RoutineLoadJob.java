@@ -52,8 +52,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -865,13 +863,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
         }
+
+        Table table = db.getTable(this.tableId);
+        if (table == null) {
+            throw new MetaNotFoundException("table " + this.tableId + " does not exist");
+        }
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            Table table = db.getTable(this.tableId);
-            if (table == null) {
-                throw new MetaNotFoundException("table " + this.tableId + " does not exist");
-            }
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
             StreamLoadPlanner planner =
@@ -915,7 +915,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
             return planParams;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -1258,9 +1258,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected static void unprotectedCheckMeta(Database db, String tblName, RoutineLoadDesc routineLoadDesc)
             throws UserException {
         Table table = db.getTable(tblName);
-        if (table == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
-        }
 
         if (table instanceof MaterializedView) {
             throw new AnalysisException(String.format(
@@ -1413,14 +1410,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // check table belong to database
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        Table table;
-        try {
-            table = db.getTable(tableId);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        Table table = db.getTable(tableId);
         if (table == null) {
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id).add("db_id", dbId)
                     .add("table_id", tableId)

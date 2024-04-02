@@ -1665,30 +1665,31 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("unknown database, database=" + dbName);
         }
 
+        Table table = db.getTable(request.getTbl());
+        if (table == null) {
+            throw new UserException("unknown table, table=" + request.getTbl());
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new UserException("load table type is not OlapTable, type=" + table.getClass());
+        }
+        if (table instanceof MaterializedView) {
+            throw new UserException(String.format(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    table.getName(), table.getName()));
+        }
+
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
         // Make timeout less than thrift_rpc_timeout_ms.
         // Otherwise, it will result in error like "call frontend service failed"
         timeoutMs = timeoutMs * 3 / 4;
 
         Locker locker = new Locker();
-        if (!locker.tryLockDatabase(db, LockType.READ, timeoutMs)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ, timeoutMs)) {
             throw new LockTimeoutException(
                     "get database read lock timeout, database=" + dbName + ", timeout=" + timeoutMs + "ms");
         }
         try {
-            Table table = db.getTable(request.getTbl());
-            if (table == null) {
-                throw new UserException("unknown table, table=" + request.getTbl());
-            }
-            if (!(table instanceof OlapTable)) {
-                throw new UserException("load table type is not OlapTable, type=" + table.getClass());
-            }
-            if (table instanceof MaterializedView) {
-                throw new UserException(String.format(
-                        "The data of '%s' cannot be inserted because '%s' is a materialized view," +
-                                "and the data of materialized view must be consistent with the base table.",
-                        table.getName(), table.getName()));
-            }
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
@@ -1723,7 +1724,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             return plan;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
