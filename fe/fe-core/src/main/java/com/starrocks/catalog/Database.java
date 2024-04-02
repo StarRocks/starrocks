@@ -353,12 +353,11 @@ public class Database extends MetaObject implements Writable {
         locker.lockDatabase(this, LockType.WRITE);
         try {
             table = getTemporaryTable(tableId);
-            if (table == null && isSetIfExists) {
-                return;
-            }
             if (table == null) {
+                if (isSetIfExists) {
+                    return;
+                }
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-                return;
             }
             unprotectDropTemporaryTable(tableId, isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);

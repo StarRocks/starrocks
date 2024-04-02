@@ -635,15 +635,6 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof DmlStmt) {
                 handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt);
             } else if (parsedStmt instanceof DdlStmt) {
-                if (parsedStmt instanceof CreateTemporaryTableStmt) {
-                    ((CreateTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
-                }
-                if (parsedStmt instanceof DropTemporaryTableStmt) {
-                    ((DropTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
-                }
-                if (parsedStmt instanceof CreateTemporaryTableLikeStmt) {
-                    ((CreateTemporaryTableLikeStmt) parsedStmt).setSessionId(context.getSessionId());
-                }
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
                 handleShow();
@@ -1577,7 +1568,18 @@ public class StmtExecutor {
         return explainString;
     }
 
+
     private void handleDdlStmt() throws DdlException {
+        // set sessionId for temporary table related stmt
+        if (parsedStmt instanceof CreateTemporaryTableStmt) {
+            ((CreateTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
+        }
+        if (parsedStmt instanceof DropTemporaryTableStmt) {
+            ((DropTemporaryTableStmt) parsedStmt).setSessionId(context.getSessionId());
+        }
+        if (parsedStmt instanceof CreateTemporaryTableLikeStmt) {
+            ((CreateTemporaryTableLikeStmt) parsedStmt).setSessionId(context.getSessionId());
+        }
         try {
             ShowResultSet resultSet = DDLStmtExecutor.execute(parsedStmt, context);
             if (resultSet == null) {
