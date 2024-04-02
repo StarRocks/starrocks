@@ -185,9 +185,9 @@ std::unique_ptr<sstable::Iterator> LakePersistentIndex::prepare_merging_iterator
     std::vector<sstable::Iterator*> iters;
     auto max_compaction_versions = config::lake_pk_index_sst_max_compaction_versions;
     iters.reserve(max_compaction_versions);
-    auto sstables_size = _sstables.size();
-    for (size_t i = 0; i < sstables_size && i < max_compaction_versions; ++i) {
-        sstable::Iterator* iter = _sstables[i]->new_iterator(read_options);
+    for (auto it = _sstables.begin();
+         it != _sstables.end() && it != _sstables.begin() + config::lake_pk_index_sst_max_compaction_versions; ++it) {
+        sstable::Iterator* iter = (*it)->new_iterator(read_options);
         iters.emplace_back(iter);
     }
     sstable::Options options;
@@ -270,10 +270,11 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version, std::share
     RETURN_IF_ERROR(merge_sstables(std::move(iter_ptr), &builder));
     RETURN_IF_ERROR(wf->close());
 
-    auto sstables_size = _sstables.size();
-    for (int i = 0; i < sstables_size && i < config::lake_pk_index_sst_max_compaction_versions; ++i) {
+    for (auto iter = _sstables.begin();
+         iter != _sstables.end() && iter != _sstables.begin() + config::lake_pk_index_sst_max_compaction_versions;
+         ++iter) {
         auto input_sstable = txn_log->mutable_op_compaction()->add_input_sstables();
-        auto sstable_pb = _sstables[i]->sstable_pb();
+        auto sstable_pb = (*iter)->sstable_pb();
         input_sstable->CopyFrom(sstable_pb);
     }
     txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(filename);
@@ -282,11 +283,11 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version, std::share
 }
 
 Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
-    std::unordered_set<int64> versions;
     if (op_compaction.input_sstables().empty()) {
         return Status::OK();
     }
 
+    std::unordered_set<int64> versions;
     for (auto& input_sstable : op_compaction.input_sstables()) {
         versions.insert(input_sstable.version());
     }
@@ -299,13 +300,13 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
         }
     }
 
-    auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-    auto filename = gen_sst_filename();
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, filename)));
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.CopyFrom(op_compaction.output_sstable());
     sstable_pb.set_version(*std::max_element(versions.begin(), versions.end()));
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+    ASSIGN_OR_RETURN(auto rf,
+                     fs::new_random_access_file(opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, nullptr));
     _sstables.insert(_sstables.begin(), std::move(sstable));
     return Status::OK();

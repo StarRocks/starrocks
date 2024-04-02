@@ -108,10 +108,13 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                     ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
-        default:
+        case PersistentIndexTypePB::CLOUD_NATIVE: {
             _persistent_index = std::make_unique<LakePersistentIndex>(tablet_mgr, metadata->id());
             set_enable_persistent_index(true);
             return Status::OK();
+        }
+        default:
+            return Status::InternalError("Unsupported lake_persistent_index_type");
         }
     }
 
@@ -176,7 +179,13 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
     if (!_enable_persistent_index || metadata.persistent_index_type() == PersistentIndexTypePB::LOCAL) {
         return Status::OK();
     }
-    return dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->apply_opcompaction(op_compaction);
+
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->apply_opcompaction(op_compaction);
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+    }
 }
 
 Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder) {
@@ -195,20 +204,25 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
         // Because if publish version fail after `on_commited`, index will be rebuild.
         return on_commited();
     }
-    default:
+    case PersistentIndexTypePB::CLOUD_NATIVE: {
         dynamic_cast<LakePersistentIndex*>(_persistent_index.get())->commit(builder);
+        return Status::OK();
     }
+    default:
+        return Status::InternalError("Unsupported lake_persistent_index_type");
+    }
+
     return Status::OK();
 }
 
-Status LakePrimaryIndex::major_compaction(const TabletMetadata& metadata, std::shared_ptr<TxnLogPB>& txn_log) {
+Status LakePrimaryIndex::major_compact(const TabletMetadata& metadata, std::shared_ptr<TxnLogPB>& txn_log) {
     if (!_enable_persistent_index || metadata.persistent_index_type() == PersistentIndexTypePB::LOCAL) {
         return Status::OK();
     }
 
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->commit(builder);
+        return lake_persistent_index->major_compact(0, txn_log);
     } else {
         return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }

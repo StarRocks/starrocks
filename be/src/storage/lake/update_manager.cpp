@@ -850,7 +850,7 @@ Status UpdateManager::execute_index_major_compaction(int64_t tablet_id, const Ta
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     if (index_entry != nullptr) {
         auto& index = index_entry->value();
-        return index.major_compaction(metadata, txn_log);
+        return index.major_compact(metadata, txn_log);
     }
     return Status::OK();
 }
