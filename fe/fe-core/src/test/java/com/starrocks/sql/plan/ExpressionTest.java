@@ -1853,4 +1853,27 @@ public class ExpressionTest extends PlanTestBase {
             connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
         }
     }
+
+    @Test
+    public void testJsonQuery() throws Exception {
+        String sql = "select parse_json('{\"a\": true}')->\"a\"->\"b\"->\"c\"->\"d\"";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.b.c.d')");
+
+        sql = "select parse_json('{\"a\": true}')->\"$.a\"->\"$.b\"->\"$.c\"->\"$.d\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), '$.a.b.c.d')");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$.*\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.*");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$$$$\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.$$$$')");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$....\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(json_query(parse_json('{\"a\": true}'), 'a'), '$....')");
+    }
 }
