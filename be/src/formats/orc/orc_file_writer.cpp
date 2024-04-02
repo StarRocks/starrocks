@@ -23,6 +23,7 @@
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
 #include "runtime/current_thread.h"
+#include "util/debug_util.h"
 
 namespace starrocks::formats {
 
@@ -95,6 +96,7 @@ Status ORCFileWriter::init() {
     ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
     options.setCompression(compression);
     _writer = orc::createWriter(*_schema, _output_stream.get(), options);
+    _writer->addUserMetadata(STARROCKS_ORC_WRITER_VERSION_KEY, get_short_version());
     return Status::OK();
 }
 
