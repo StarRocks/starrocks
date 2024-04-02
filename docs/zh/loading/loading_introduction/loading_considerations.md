@@ -47,7 +47,7 @@ toc_max_heading_level: 4
 
 ### BE（或 CN）配置
 
-您可以通过修改每个 BE（或 CN）的配置文件 **be.conf** 来设置如下参数：
+您可以通过修改每个 BE 的配置文件 **be.conf**（或 CN 的配置文件 **cn.conf**）来设置如下参数：
 
 - `write_buffer_size`
 

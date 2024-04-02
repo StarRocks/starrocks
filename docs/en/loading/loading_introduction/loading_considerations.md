@@ -47,7 +47,7 @@ You can configure the following parameters in the configuration file **fe.conf**
 
 ### BE/CN configurations
 
-You can configure the following parameters in the configuration file **be.conf** of each BE or CN:
+You can configure the following parameters in the configuration file **be.conf** of each BE or the configuration file **cn.conf** of each CN:
 
 - `write_buffer_size`
   
