@@ -211,6 +211,22 @@ TEST_F(HdfsScannerTest, TestParquetOpen) {
     ASSERT_TRUE(status.ok());
 }
 
+TEST_F(HdfsScannerTest, TestHdfsRunningTime) {
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(default_parquet_file, 4, 1024);
+    auto* tuple_desc = _create_tuple_desc(default_parquet_descs);
+    auto* param = _create_param(default_parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok());
+
+    ASSERT_TRUE(scanner->cpu_time_spent() > 0);
+}
+
 TEST_F(HdfsScannerTest, TestParquetGetNext) {
     auto scanner = std::make_shared<HdfsParquetScanner>();
 
@@ -561,7 +577,35 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
     ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
 
-    auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
+    // TupleDescriptor* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
+    TupleDescriptor* min_max_tuple_desc = nullptr;
+    {
+        TDescriptorTableBuilder table_desc_builder;
+        TSlotDescriptorBuilder slot_desc_builder;
+        TTupleDescriptorBuilder tuple_desc_builder;
+
+        slot_desc_builder.column_name("id")
+                .type(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT))
+                .id(0)
+                .nullable(true);
+        tuple_desc_builder.add_slot(slot_desc_builder.build());
+        slot_desc_builder.column_name("PART_y")
+                .type(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT))
+                .id(25)
+                .nullable(true);
+        tuple_desc_builder.add_slot(slot_desc_builder.build());
+
+        tuple_desc_builder.build(&table_desc_builder);
+        std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+        std::vector<bool> nullable_tuples = std::vector<bool>{true};
+        DescriptorTbl* tbl = nullptr;
+        CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size)
+                      .ok());
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        min_max_tuple_desc = row_desc->tuple_descriptors()[0];
+    }
+
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};

@@ -106,11 +106,14 @@ public class StreamLoadPlanner {
     // just for using session variable
     private ConnectContext connectContext;
 
+    private long warehouseId;
+
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
         this.connectContext = new ConnectContext();
+        this.warehouseId = streamLoadInfo.getWarehouseId();
     }
 
     private void resetAnalyzer() {
@@ -125,6 +128,10 @@ public class StreamLoadPlanner {
 
     public ConnectContext getConnectContext() {
         return connectContext;
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
@@ -186,6 +193,7 @@ public class StreamLoadPlanner {
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
+        scanNode.setWarehouseId(streamLoadInfo.getWarehouseId());
 
         descTable.computeMemLayout();
 
@@ -290,11 +298,9 @@ public class StreamLoadPlanner {
         TNetworkAddress coordAddress = new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port);
         params.setCoord(coordAddress);
 
-        LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", DebugUtil.printId(loadId),
-                streamLoadInfo.getTxnId(),
-                queryOptions.getLoad_dop(),
-                queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(),
-                writeQuorum);
+        LOG.info("load job id: {}, txn id: {}, parallel: {}, compress: {}, replicated: {}, quorum: {}",
+                DebugUtil.printId(loadId), streamLoadInfo.getTxnId(), queryOptions.getLoad_dop(),
+                queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(), writeQuorum);
         this.execPlanFragmentParams = params;
         return params;
     }

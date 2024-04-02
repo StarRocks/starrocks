@@ -495,6 +495,14 @@ Status ColumnReader::seek_at_or_before(ordinal_t ordinal, OrdinalPageIndexIterat
     return Status::OK();
 }
 
+Status ColumnReader::seek_by_page_index(int page_index, OrdinalPageIndexIterator* iter) {
+    *iter = _ordinal_index->seek_by_page_index(page_index);
+    if (!iter->valid()) {
+        return Status::NotFound(fmt::format("Failed to seek page_index {}, out of bound", page_index));
+    }
+    return Status::OK();
+}
+
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,

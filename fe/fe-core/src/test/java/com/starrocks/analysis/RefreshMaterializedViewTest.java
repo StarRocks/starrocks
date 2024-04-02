@@ -25,7 +25,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,7 +35,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -746,4 +744,146 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
         Assert.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
 
     }
+
+    @Test
+    public void testMvOnUnion_Unaligned() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS mv_union_t1 (\n" +
+                "    leg_id VARCHAR(100) NOT NULL,\n" +
+                "    cabin_class VARCHAR(1) NOT NULL,\n" +
+                "    observation_date DATE NOT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY(leg_id, cabin_class)\n" +
+                "PARTITION BY RANGE(observation_date) (" +
+                "   PARTITION p1_20240321 VALUES LESS THAN ('2024-03-21'), \n" +
+                "   PARTITION p1_20240322 VALUES LESS THAN ('2024-03-22') \n" +
+                ") ");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS mv_union_t2 (\n" +
+                "    leg_id VARCHAR(100) NOT NULL,\n" +
+                "    cabin_class VARCHAR(1) NOT NULL,\n" +
+                "    observation_date DATE NOT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY(leg_id, cabin_class)\n" +
+                "PARTITION BY RANGE(observation_date) (" +
+                "   PARTITION p2_20240321 VALUES LESS THAN ('2024-03-21'), \n" +
+                "   PARTITION p2_20240322 VALUES LESS THAN ('2024-03-22'), \n" +
+                "   PARTITION p2_20240323 VALUES LESS THAN ('2024-03-23') \n" +
+                ") ");
+
+        starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv_union_1 \n" +
+                "PARTITION BY date_trunc('day', observation_date)\n" +
+                "DISTRIBUTED BY HASH(leg_id)\n" +
+                "REFRESH ASYNC\n" +
+                "AS \n" +
+                "SELECT * FROM mv_union_t1 t1\n" +
+                "UNION ALL\n" +
+                "SELECT * FROM mv_union_t2 t2\n");
+
+        String mvName = "mv_union_1";
+        MaterializedView mv = starRocksAssert.getMv("test", "mv_union_1");
+        Assert.assertEquals(
+                Sets.newHashSet("p00010101_20240321", "p20240321_20240322", "p20240322_20240323"),
+                mv.getPartitionNames());
+
+        // cleanup
+        starRocksAssert.dropTable("mv_union_t1");
+        starRocksAssert.dropTable("mv_union_t2");
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    /**
+     * Intersected UNION partition must be same, otherwise will report error
+     */
+    @Test
+    public void testMvOnUnion_IntersectedPartition() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS mv_union_t1 (\n" +
+                "    leg_id VARCHAR(100) NOT NULL,\n" +
+                "    cabin_class VARCHAR(1) NOT NULL,\n" +
+                "    observation_date DATE NOT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY(leg_id, cabin_class)\n" +
+                "PARTITION BY RANGE(observation_date) (" +
+                "   PARTITION p1_20240321 VALUES LESS THAN ('2024-03-21'), \n" +
+                "   PARTITION p1_20240322 VALUES LESS THAN ('2024-03-22') \n" +
+                ") ");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS mv_union_t2 (\n" +
+                "    leg_id VARCHAR(100) NOT NULL,\n" +
+                "    cabin_class VARCHAR(1) NOT NULL,\n" +
+                "    observation_date DATE NOT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY(leg_id, cabin_class)\n" +
+                "PARTITION BY RANGE(observation_date) (" +
+                "   PARTITION p2_20240322 VALUES LESS THAN ('2024-03-22'), \n" +
+                "   PARTITION p2_20240323 VALUES LESS THAN ('2024-03-23') \n" +
+                ") ");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS mv_union_t3 (\n" +
+                "    leg_id VARCHAR(100) NOT NULL,\n" +
+                "    cabin_class VARCHAR(1) NOT NULL,\n" +
+                "    observation_date DATE NOT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY(leg_id, cabin_class)\n" +
+                "PARTITION BY RANGE(observation_date) (" +
+                "   PARTITION p2_20240322 VALUES LESS THAN ('2024-03-21'), \n" +
+                "   PARTITION p2_20240323 VALUES LESS THAN ('2024-04-21') \n" +
+                ") ");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS mv_union_t4 (\n" +
+                "    leg_id VARCHAR(100) NOT NULL,\n" +
+                "    cabin_class VARCHAR(1) NOT NULL,\n" +
+                "    observation_date DATE NOT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY(leg_id, cabin_class)\n" +
+                "PARTITION BY RANGE(observation_date) (" +
+                "   PARTITION p2_20240321 VALUES LESS THAN ('2024-03-21'), \n" +
+                "   PARTITION p2_20240322 VALUES LESS THAN ('2024-03-22') \n" +
+                ") ");
+
+        {
+            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 \n" +
+                            "PARTITION BY date_trunc('day', observation_date)\n" +
+                            "DISTRIBUTED BY HASH(leg_id)\n" +
+                            "REFRESH ASYNC\n" +
+                            "AS \n" +
+                            "SELECT * FROM mv_union_t1 t1\n" +
+                            "UNION ALL\n" +
+                            "SELECT * FROM mv_union_t2 t2\n"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
+        }
+
+        {
+            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
+                            "PARTITION BY date_trunc('day', observation_date)\n" +
+                            "DISTRIBUTED BY HASH(leg_id)\n" +
+                            "REFRESH ASYNC\n" +
+                            "AS \n" +
+                            "SELECT * FROM mv_union_t1 t1\n" +
+                            "UNION ALL\n" +
+                            "SELECT * FROM mv_union_t3 t2\n"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
+        }
+
+        {
+            // create succeed, but refresh fail
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 \n" +
+                    "PARTITION BY date_trunc('day', observation_date)\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS \n" +
+                    "SELECT * FROM mv_union_t1 t1\n" +
+                    "UNION ALL\n" +
+                    "SELECT * FROM mv_union_t4 t2\n");
+            // add partition to child table
+            starRocksAssert.ddl("alter table mv_union_t4 add partition p20240325 values less than ('2024-03-25')");
+            starRocksAssert.ddl("alter table mv_union_t1 add partition p20240326 values less than ('2024-03-26')");
+
+            Exception e = Assert.assertThrows(IllegalArgumentException.class, () ->
+                    starRocksAssert.refreshMvPartition("refresh materialized view mv2"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("partitions are intersected"));
+        }
+
+        // cleanup
+        starRocksAssert.dropTable("mv_union_t1");
+        starRocksAssert.dropTable("mv_union_t2");
+        starRocksAssert.dropMaterializedView("mv1");
+    }
+
 }

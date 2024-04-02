@@ -73,8 +73,7 @@ public class ShowCreateTableStmtTest {
                         " as select k1 from base");
         String sql = "show create view test_mv";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(showCreateTableStmt, ctx);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
         Assert.assertEquals("test_mv", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE VIEW `test_mv` AS SELECT `test`.`base`.`k1`\n" +
                 "FROM `test`.`base`", resultSet.getResultRows().get(0).get(1));
@@ -115,8 +114,7 @@ public class ShowCreateTableStmtTest {
                         ");");
         String sql = "show create table test_pk_current_timestamp";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(showCreateTableStmt, ctx);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
         Assert.assertEquals("test_pk_current_timestamp", resultSet.getResultRows().get(0).get(0));
         Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("datetime NOT NULL DEFAULT CURRENT_TIMESTAMP"));
     }
@@ -128,7 +126,7 @@ public class ShowCreateTableStmtTest {
         Map<String, String> props = new HashMap<>();
         props.put("COLUMN_STATS_ACCURATE", "{\"BASIC_STATS\":\"true\"}");
 
-        HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx",
+        HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx", "",
                 0, new ArrayList<>(), fullSchema.stream().map(x -> x.getName()).collect(Collectors.toList()),
                 props, new HashMap<>(),  HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
         List<String> result = new ArrayList<>();
@@ -155,8 +153,7 @@ public class ShowCreateTableStmtTest {
                         ");");
         String sql = "show create table test.aaa";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(showCreateTableStmt, ctx);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
         Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
     }
 }

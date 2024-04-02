@@ -20,12 +20,17 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.UserException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
@@ -41,6 +46,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 
 public class PseudoClusterTest {
     @BeforeClass
@@ -227,12 +233,17 @@ public class PseudoClusterTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
+            public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
                 return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
             @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
                 return pathInfo;
             }
         };
@@ -248,6 +259,67 @@ public class PseudoClusterTest {
                 return fsInfo.getFsKey();
             }
         };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions, long warehouseId)
+                    throws DdlException {
+                return;
+            }
+        };
+
+        /*
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+
+        new MockUp<Cluster>() {
+            @Mock
+            public List<Long> getComputeNodeIds() {
+                return Lists.newArrayList(1L);
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+        };
+
+        new MockUp<ComputeNode>() {
+            @Mock
+            public boolean isAlive() {
+                return true;
+            }
+        };
+
+         */
 
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();

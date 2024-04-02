@@ -15,7 +15,7 @@ StarRocks provides two methods of loading data from a local file system:
 Each of these options has its own advantages:
 
 - Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB.
-- Broker Load supports Parquet, ORC, CSV, and JSON file formats (JSON file format is supported from v3.2.3 onwards). This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in a network attached storage (NAS) device. **Using Broker Load to load data from a local file system is supported from v2.5 onwards. Note that before you can use Broker Load to load data from a local file system, you must [deploy a broker](../deployment/deploy_broker.md) on the machine on which your data files are located.**
+- Broker Load supports Parquet, ORC, CSV, and JSON file formats (JSON file format is supported from v3.2.3 onwards). This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in a network attached storage (NAS) device. **Using Broker Load to load data from a local file system is supported from v2.5 onwards.**
 
 For CSV data, take note of the following points:
 
@@ -247,7 +247,7 @@ Stream Load does not allow you to cancel a load job. If a load job times out or 
 
 This section describes some system parameters that you need to configure if you choose the loading method Stream Load. These parameter configurations take effect on all Stream Load jobs.
 
-- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE dynamic parameters](../administration/BE_configuration.md#configure-be-dynamic-parameters).
+- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE dynamic parameters](../administration/management/BE_configuration.md#configure-be-dynamic-parameters).
   
   We recommend that you do not load more than 10 GB of data at a time. If the size of a data file exceeds 10 GB, we recommend that you split the data file into small files that each are less than 10 GB in size and then load these files one by one. If you cannot split a data file greater than 10 GB, you can increase the value of this parameter based on the file size.
 
@@ -263,7 +263,7 @@ This section describes some system parameters that you need to configure if you 
 
   :::
 
-- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [Configure FE dynamic parameters](../administration/FE_configuration.md#configure-fe-dynamic-parameters).
+- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [Configure FE dynamic parameters](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters).
   
   If many of the load jobs that you create time out, you can increase the value of this parameter based on the calculation result that you obtain from the following formula:
 
@@ -296,22 +296,6 @@ Broker Load is an asynchronous loading method. After you submit a load job, Star
 - Currently Broker Load supports loading from a local file system only through a single broker whose version is v2.5 or later.
 - Highly concurrent queries against a single broker may cause issues such as timeout and OOM. To mitigate the impact, you can use the `pipeline_dop` variable (see [System variable](../reference/System_variable.md#pipeline_dop)) to set the query parallelism for Broker Load. For queries against a single broker, we recommend that you set `pipeline_dop` to a value smaller than `16`.
 
-### Before you begin
-
-Before you can use Broker Load to load data from a local file system, finish the following preparations:
-
-1. Configure the machine on which your local files are located as instructed in "[Deployment prerequisites](../deployment/deployment_prerequisites.md)", "[Check environment configurations](../deployment/environment_configurations.md)", and "[Prepare deployment files](../deployment/prepare_deployment_files.md). Then, deploy a broker on that machine. The operations are the same as you deploy brokers on BE nodes. For detailed operations, see [Deploy and manage Broker node](../deployment/deploy_broker.md).
-
-   > **NOTICE**
-   >
-   > Deploy only a single broker and make sure that the broker version is v2.5 or later.
-
-2. Execute [ALTER SYSTEM](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md#broker) to add the broker you have deployed in the previous step to your StarRocks cluster, and define a new name for the broker. The following example adds a broker `172.26.199.40:8000` to the StarRocks cluster and defines the broker name as `sole_broker`:
-
-   ```SQL
-   ALTER SYSTEM ADD BROKER sole_broker "172.26.199.40:8000";
-   ```
-
 ### Typical example
 
 Broker Load supports loading from a single data file to a single table, loading from multiple data files to a single table, and loading from multiple data files to multiple tables. This section uses loading from multiple data files to a single table as an example.
@@ -320,7 +304,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 #### Prepare datasets
 
-Use the CSV file format as an example. Log in to your local file system, and create two CSV files, `file1.csv` and `file2.csv`, in a specific storage location (for example, `/user/starrocks/`). Both files consist of three columns, which represent the user ID, user name, and user score in sequence.
+Use the CSV file format as an example. Log in to your local file system, and create two CSV files, `file1.csv` and `file2.csv`, in a specific storage location (for example, `/home/disk1/business/`). Both files consist of three columns, which represent the user ID, user name, and user score in sequence.
 
 - `file1.csv`
 
@@ -366,7 +350,7 @@ PROPERTIES("replication_num"="1");
 
 #### Start a Broker Load
 
-Run the following command to start a Broker Load job that loads data from all data files (`file1.csv` and `file2.csv`) stored in the `/user/starrocks/` path of your local file system to the StarRocks table `mytable`:
+Run the following command to start a Broker Load job that loads data from all data files (`file1.csv` and `file2.csv`) stored in the `/home/disk1/business/` path of your local file system to the StarRocks table `mytable`:
 
 ```SQL
 LOAD LABEL mydatabase.label_local
@@ -387,7 +371,6 @@ This job has four main sections:
 
 - `LABEL`: A string used when querying the state of the load job.
 - `LOAD` declaration: The source URI, source data format, and destination table name.
-- `BROKER`: The name of the broker.
 - `PROPERTIES`: The timeout value and any other properties to apply to the load job.
 
 For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).

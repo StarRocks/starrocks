@@ -24,9 +24,6 @@ Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DE
 
 需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，例如，在多 HDFS 集群或者多 Kerberos 用户的场景。在这些场景下，可以继续采用有 Broker 的导入，需要确保至少部署了一组独立的 Broker。有关各种场景下如何指定认证方式和 HA 配置，参见 [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md##hdfs)。
 
-> **说明**
->
-> 您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据文件格式
 
@@ -503,7 +500,7 @@ WHERE LABEL = "label";
 
 - 如果声明多个 `data_desc` 参数对应导入同一张表的不同分区，则每个分区数据的导入会拆分成一个子任务。
 
-每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/FE_configuration.md)决定：
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/management/FE_configuration.md)决定：
 
 - `min_bytes_per_broker_scanner`：单个实例处理的最小数据量，默认为 64 MB。
 
@@ -517,7 +514,7 @@ WHERE LABEL = "label";
 
 ## 相关配置项
 
-[FE 配置项](../administration/FE_configuration.md) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
+[FE 配置项](../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
 
 StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
 

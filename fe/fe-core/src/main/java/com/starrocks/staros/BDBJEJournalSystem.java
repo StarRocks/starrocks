@@ -36,6 +36,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 // wrapper for star manager to use bdbje
@@ -162,6 +163,15 @@ public class BDBJEJournalSystem implements JournalSystem {
         }
     }
 
+    @Override
+    public Future<Boolean> writeAsync(Journal journal) throws StarException {
+        try {
+            return editLog.logStarMgrOperationNoWait(new StarMgrJournal(journal));
+        } catch (Exception e) {
+            throw new StarException(ExceptionCode.JOURNAL, e.getMessage());
+        }
+    }
+
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     public void replayTo(long journalId) throws StarException {
         JournalCursor cursor = null;
@@ -193,7 +203,7 @@ public class BDBJEJournalSystem implements JournalSystem {
                 break;
             }
 
-            EditLog.loadJournal(null /* GlobalStateMgr */, entity);
+            editLog.loadJournal(null /* GlobalStateMgr */, entity);
             replayedJournalId.incrementAndGet();
 
             LOG.debug("star mgr journal {} replayed.", replayedJournalId);

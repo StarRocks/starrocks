@@ -58,6 +58,7 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // this is a list in semicolon-delimited format, in CIDR notation, e.g. 10.10.10.0/24
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
+CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
 
 CONF_mBool(enable_auto_adjust_pagecache, "true");
 // Memory urget water level, if the memory usage exceeds this level, reduce the size of
@@ -434,6 +435,10 @@ CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // OlapTableSink sender's send interval, should be less than the real response time of a tablet writer rpc.
 CONF_mInt32(olap_table_sink_send_interval_ms, "10");
 
+CONF_Bool(enable_load_segment_parallel, "false");
+CONF_Int32(load_segment_thread_pool_num_max, "128");
+CONF_Int32(load_segment_thread_pool_queue_size, "10240");
+
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");
@@ -615,6 +620,8 @@ CONF_mInt32(tablet_meta_checkpoint_min_interval_secs, "600");
 CONF_Int64(brpc_max_body_size, "2147483648");
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
+// brpc connection types, "single", "pooled", "short".
+CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
 
 // Max number of txns for every txn_partition_map in txn manager.
 // this is a self-protection to avoid too many txns saving in manager.
@@ -768,6 +775,9 @@ CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
 CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
+// Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
+CONF_Double(lake_tablet_rows_splitted_ratio, "1.5");
+
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
 // The max hdfs file handle.
@@ -812,9 +822,8 @@ CONF_Int64(object_storage_request_timeout_ms, "-1");
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
 
-// text reader
-// Spilt text file's scan range into io ranges of 16mb size
-CONF_Int64(text_io_range_size, "16777216");
+// Lake
+CONF_mBool(io_coalesce_lake_read_enable, "false");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
@@ -926,9 +935,9 @@ CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Only support in S3/HDFS currently.
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
-// TODO: support runtime change
-CONF_Int32(starlet_star_cache_mem_size_percent, "0");
-CONF_Int64(starlet_star_cache_mem_size_bytes, "134217728");
+CONF_Bool(starlet_star_cache_async_init, "true");
+CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
+CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
@@ -966,6 +975,7 @@ CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "1000");
+CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
@@ -1115,6 +1125,9 @@ CONF_mInt32(max_bf_read_bytes_percent, "10");
 // If primary compaction pick all rowsets, we could rebuild pindex directly and skip read from index.
 CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 
+// enable read pindex by page
+CONF_mBool(enable_pindex_read_by_page, "false");
+
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
@@ -1142,6 +1155,8 @@ CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 // so large tabletmeta object can fit in block cache. After we optimize PK table's tabletmeta object size, we can
 // revert this config change.
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
+
+CONF_String(rocksdb_db_options_string, "create_if_missing=true;create_missing_column_families=true");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
@@ -1226,6 +1241,9 @@ CONF_mInt32(json_flat_column_max, "20");
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
 CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
+
+// Min data processed when scaling connector sink writers, default value is the same as Trino
+CONF_mInt64(writer_scaling_min_size_mb, "128");
 
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");

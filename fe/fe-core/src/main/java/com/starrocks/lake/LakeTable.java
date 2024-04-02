@@ -16,6 +16,7 @@ package com.starrocks.lake;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -140,8 +141,9 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    public Map<String, String> getProperties() {
-        Map<String, String> properties = super.getProperties();
+    public Map<String, String> getUniqueProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+
         if (tableProperty != null) {
             StorageInfo storageInfo = tableProperty.getStorageInfo();
             if (storageInfo != null) {
@@ -153,10 +155,24 @@ public class LakeTable extends OlapTable {
                 properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
                         String.valueOf(storageInfo.isEnableAsyncWriteBack()));
             }
+
+            // datacache partition duration
+            String partitionDuration =
+                    tableProperty.getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+            if (partitionDuration != null) {
+                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, partitionDuration);
+            }
         }
+
         // storage volume
         StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(id));
+
+        // persistent index type
+        if (enablePersistentIndex() && !Strings.isNullOrEmpty(getPersistentIndexTypeString())) {
+            properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
+        }
+
         return properties;
     }
 
@@ -231,6 +247,14 @@ public class LakeTable extends OlapTable {
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else {
             throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        if (getMaxColUniqueId() <= 0) {
+            setMaxColUniqueId(LakeTableHelper.restoreColumnUniqueId(this));
         }
     }
 }

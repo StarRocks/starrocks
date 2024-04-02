@@ -57,6 +57,8 @@ Status SharedBufferedInputStream::_sort_and_check_overlap(std::vector<IORange>& 
     // check io range is not overlapped.
     for (size_t i = 1; i < ranges.size(); i++) {
         if (ranges[i].offset < (ranges[i - 1].offset + ranges[i - 1].size)) {
+            LOG(WARNING) << "io ranges are overalpped" << ranges[i].offset << " "
+                         << ranges[i - 1].offset + ranges[i - 1].size;
             return Status::RuntimeError("io ranges are overalpped");
         }
     }
@@ -214,8 +216,8 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
         _shared_io_count += 1;
         _shared_io_bytes += sb.size;
         if (sb.size > sb.raw_size) {
-            // after called _deduplicate_shared_buffer(), sb.size may smaller than sb.raw_size
-            // we don't count this
+            // after called _deduplicate_shared_buffer(), sb.size maybe is larger than sb.raw_size
+            // we will count how many extra bytes we read because of alignment.
             _shared_align_io_bytes += sb.size - sb.raw_size;
         }
         sb.buffer.reserve(sb.size);
