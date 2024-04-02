@@ -29,7 +29,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
-#include "util/json_util.h"
+#include "util/json_flater.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

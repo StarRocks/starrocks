@@ -35,7 +35,7 @@
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
 #include "types/logical_type.h"
-#include "util/json_util.h"
+#include "util/json_flater.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
