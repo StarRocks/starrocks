@@ -175,26 +175,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public ValueProperty deriveValueProperty(List<OptExpression> inputs) {
-        Map<ScalarOperator, ValueProperty.ValueWrapper> valueMap = Maps.newHashMap();
-        for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
-            Column col = entry.getKey();
-            ColumnRefOperator colRef = entry.getValue();
-            Type type = colRef.getType();
-            ColumnStatistic stats = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                    .getColumnStatistic(table, col.getName());
-            if (!stats.isUnknown() && !stats.hasNaNValue()) {
-                if (type.isInt() || type.isSmallint() || type.isTinyint()) {
-                    valueMap.put(colRef, buildRangeDesc(colRef, ConstantOperator.createInt((int) stats.getMinValue()),
-                            ConstantOperator.createInt((int) stats.getMaxValue())));
-                } else if (type.isBigint()) {
-                    long min = (long) stats.getMinValue();
-                    long max = (long) stats.getMaxValue();
-                    valueMap.put(colRef, buildRangeDesc(colRef, ConstantOperator.createBigint(min),
-                            ConstantOperator.createBigint(max)));
-                }
-            }
-        }
-        ValueProperty valueProperty = new ValueProperty(valueMap);
+        valueProperty = new ValueProperty(Maps.newHashMap());
         if (predicate != null) {
             ValuePropertyDeriver deriver = new ValuePropertyDeriver();
             ValueProperty property = deriver.derive(predicate);
