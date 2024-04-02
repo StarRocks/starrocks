@@ -168,20 +168,29 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, clang-format ]
     name: Thirdparty Update
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        linux: [ centos7, ubuntu ]
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
+<<<<<<< HEAD
     outputs:
       ip: ${{ steps.update-image.outputs.ip }}
       instance_id: ${{ steps.update-image.outputs.instance_id }}
       image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
+=======
+>>>>>>> 5fbfe09700 ([Tool] Branch pipeline support ubuntu image update (#43499))
     steps:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
+<<<<<<< HEAD
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
@@ -194,6 +203,24 @@ jobs:
               rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
               ./bin/run-pr-update-image.sh
           fi
+=======
+      - name: Update Image (${{ matrix.linux }})
+        id: update-image
+        if: needs.be-checker.outputs.thirdparty_filter == 'true'
+        env:
+          linux_distro: ${{ matrix.linux }}
+        run: |
+          cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/run-pr-update-image.sh
+          
+      - name: Upload Thirdparty Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: THIRDPARTY-RESULT-${{ matrix.linux }}
+          path: image_cache.info
+          retention-days: 1
+          overwrite: true
+>>>>>>> 5fbfe09700 ([Tool] Branch pipeline support ubuntu image update (#43499))
 
       - name: Clean ENV
         if: always()
@@ -204,9 +231,40 @@ jobs:
           fi
           rm -rf ${{ github.workspace }}/*
 
+  thirdparty-info:
+    runs-on: [self-hosted, normal]
+    needs:
+      - thirdparty-update
+    name: Thirdparty Info
+    outputs:
+      centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
+      ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
+    steps:
+      - name: Check Result
+        run: |
+          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
+            echo "::error:: Thirdparty Update Error!"
+            exit 1
+          fi
+
+      - name: Download Thirdparty Artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: THIRDPARTY-RESULT-*
+          path: outputs
+
+      - name: Read Info
+        id: info
+        if: needs.thirdparty-update.result == 'success'
+        run: |
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+          echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+          echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+
   be-ut:
     runs-on: [self-hosted, normal]
-    needs: [ be-checker, thirdparty-update ]
+    needs: thirdparty-info
     timeout-minutes: 90
     name: BE UT
     env:
@@ -225,8 +283,13 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+<<<<<<< HEAD
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+=======
+          if [[ "${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}" != '' ]]; then
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
+>>>>>>> 5fbfe09700 ([Tool] Branch pipeline support ubuntu image update (#43499))
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }}
@@ -254,7 +317,12 @@ jobs:
 
   clang-tidy:
     runs-on: [self-hosted, normal]
+<<<<<<< HEAD
     needs: [ be-checker, thirdparty-update ]
+=======
+    needs: [ be-checker, thirdparty-info ]
+    if: success() && needs.be-checker.outputs.src_filter == 'true'
+>>>>>>> 5fbfe09700 ([Tool] Branch pipeline support ubuntu image update (#43499))
     timeout-minutes: 90
     name: Clang-Tidy
     env:
@@ -278,8 +346,13 @@ jobs:
         timeout-minutes: 60
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+<<<<<<< HEAD
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+=======
+          if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
+              export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
+>>>>>>> 5fbfe09700 ([Tool] Branch pipeline support ubuntu image update (#43499))
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --be --clang-tidy
@@ -522,7 +595,11 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
+<<<<<<< HEAD
     needs: [be-checker, fe-checker, be-ut, clang-tidy, fe-ut, thirdparty-update]
+=======
+    needs: [be-checker, fe-checker, test-checker, clang-tidy, fe-ut, thirdparty-info]
+>>>>>>> 5fbfe09700 ([Tool] Branch pipeline support ubuntu image update (#43499))
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -548,9 +625,26 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+<<<<<<< HEAD
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
+=======
+          if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
+            export image_cache_id=${{ needs.thirdparty-info.outputs.centos7_image_cache_id }}
+            export image_tag=$BRANCH-$PR_NUMBER
+          fi
+          
+          if [[ ${package} == "" ]]; then
+            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --with-gcov
+            echo "is_self_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "Use latest tar: ${package}" 
+            echo "OUTPUT_TAR=${package}" >> "$GITHUB_OUTPUT"
+            echo "BASE_VERSION=" >> "$GITHUB_OUTPUT"
+            echo "ECI_ID=" >> "$GITHUB_OUTPUT"
+            echo "is_self_build=false" >> $GITHUB_OUTPUT
+>>>>>>> 5fbfe09700 ([Tool] Branch pipeline support ubuntu image update (#43499))
           fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} 
 
