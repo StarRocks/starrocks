@@ -82,7 +82,7 @@ public:
 
 private:
     const HiveDataSourceProvider* _provider;
-    const THdfsScanRange _scan_range;
+    THdfsScanRange _scan_range;
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);

@@ -31,6 +31,13 @@ namespace starrocks {
 
 class RuntimeFilterProbeCollector;
 
+struct HdfsSplitContext : public pipeline::ScanSplitContext {
+    size_t split_start = 0;
+    size_t split_end = 0;
+    virtual std::unique_ptr<HdfsSplitContext> clone() = 0;
+};
+using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
+
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
@@ -139,7 +146,7 @@ struct HdfsScannerParams {
     const THdfsScanRange* scan_range = nullptr;
 
     bool enable_split_tasks = false;
-    const pipeline::ScanSplitContext* split_context = nullptr;
+    const HdfsSplitContext* split_context = nullptr;
 
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
@@ -207,6 +214,8 @@ struct HdfsScannerParams {
     bool use_file_metacache = false;
     bool orc_use_column_names = false;
     MORParams mor_params;
+
+    int64_t connector_max_split_size = 0;
 };
 
 struct HdfsScannerContext {
@@ -238,8 +247,10 @@ struct HdfsScannerContext {
     // scan range
     const THdfsScanRange* scan_range = nullptr;
     bool enable_split_tasks = false;
-    const pipeline::ScanSplitContext* split_context = nullptr;
-    std::vector<pipeline::ScanSplitContextPtr>* split_tasks = nullptr;
+    const HdfsSplitContext* split_context = nullptr;
+    std::vector<HdfsSplitContextPtr> split_tasks;
+    bool has_split_tasks = false;
+    size_t estimated_mem_usage_per_split_task = 0;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -270,6 +281,8 @@ struct HdfsScannerContext {
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
 
+    int64_t connector_max_split_size = 0;
+
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.
     // and to update `conjunct_ctxs_by_slot` field.
@@ -294,6 +307,8 @@ struct HdfsScannerContext {
     // other helper functions.
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
+
+    void merge_split_tasks();
 };
 
 class HdfsScanner {
@@ -323,9 +338,8 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
-    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
-        split_tasks->swap(_split_tasks);
-    }
+    void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
+    bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
 protected:
     Status open_random_access_file();
@@ -353,9 +367,6 @@ protected:
     int64_t _total_running_time = 0;
 
     std::shared_ptr<DefaultMORProcessor> _mor_processor;
-
-    const pipeline::ScanSplitContext* _split_context = nullptr;
-    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
 };
 
 } // namespace starrocks
