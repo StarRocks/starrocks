@@ -32,11 +32,11 @@
 #include "formats/file_writer.h"
 #include "formats/utils.h"
 #include "runtime/exec_env.h"
+#include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
-#include "util/debug_util.h"
 
 namespace starrocks::formats {
 
