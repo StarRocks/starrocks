@@ -43,6 +43,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 public class DropPartitionInfo implements Writable {
@@ -103,25 +104,22 @@ public class DropPartitionInfo implements Writable {
         Text.writeString(out, json);
     }
 
-    @Override
     public int hashCode() {
-        return Objects.hashCode(dbId, tableId, partitionNames);
+        return Objects.hashCode(dbId, tableId, partitionNames != null ? partitionNames : Collections.emptyList());
     }
 
-    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof DropPartitionInfo)) {
+        if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
-
         DropPartitionInfo info = (DropPartitionInfo) obj;
-
         return (dbId.equals(info.dbId))
                 && (tableId.equals(info.tableId))
-                && (partitionNames.equals(info.partitionNames))
+                && ((partitionNames == null && info.partitionNames == null) ||
+                (partitionNames != null && partitionNames.equals(info.partitionNames)))
                 && (isTempPartition == info.isTempPartition)
                 && (forceDrop == info.forceDrop);
     }
