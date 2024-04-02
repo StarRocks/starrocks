@@ -34,7 +34,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private final TableName tbl;
 
     private List<Expr> columns;
-    private List<String> columnNames;
+    private List<String> columnNames = Lists.newArrayList();
     private final boolean isSample;
     private Map<String, String> properties;
 
