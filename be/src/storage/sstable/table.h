@@ -16,12 +16,6 @@ struct Options;
 struct ReadOptions;
 class Iterator;
 
-using KeyIndexInfo = uint32_t;
-struct KeyIndexesInfo {
-    std::vector<KeyIndexInfo> key_index_infos;
-    size_t size() const { return key_index_infos.size(); }
-};
-
 // A Table is a sorted map from strings to strings.  Tables are
 // immutable and persistent.  A Table may be safely accessed from
 // multiple threads without external synchronization.
@@ -51,10 +45,10 @@ public:
     // call one of the Seek methods on the iterator before using it).
     Iterator* NewIterator(const ReadOptions&) const;
 
-    // Calls (*handle_result)(arg, ...) with the entry found after a call
-    // to Seek(key).  May not make such a call if filter policy says
-    // that key is not present.
-    Status MultiGet(const ReadOptions&, size_t n, const Slice* keys, const KeyIndexesInfo& keys_info,
+    // Batch get keys within indexes iterator between begin to end.
+    // If entry found, value of the corresponding index will be set.
+    template <typename ForwardIt>
+    Status MultiGet(const ReadOptions&, const Slice* keys, ForwardIt begin, ForwardIt end,
                     std::vector<std::string>* values);
 
 private:
