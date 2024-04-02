@@ -116,7 +116,10 @@ static Status cast_vpjson_to(const vpack::Slice& slice, ColumnBuilder<ResultType
         result.append(std::move(jv));
         return Status::OK();
     }
-
+    if (slice.isNull()) {
+        result.append_null();
+        return Status::OK();
+    }
     try {
         if constexpr (ResultType == TYPE_BOOLEAN) {
             if (LIKELY(slice.isBoolean())) {
