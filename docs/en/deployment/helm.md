@@ -106,7 +106,7 @@ displayed_sidebar: "English"
 
     :::danger
 
-    If you don't mount persistent volumes, the StarRocks Operator will use emptyDir to store FE metadata and logs, as well as BE data and logs. When containers restart, data will be lost.
+    If persistent volumes are not mounted, the StarRocks Operator will use emptyDir to store FE metadata and logs, as well as BE data and logs. When containers restart, data will be lost.
 
     :::
 
