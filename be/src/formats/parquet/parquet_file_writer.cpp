@@ -32,6 +32,7 @@
 #include "formats/file_writer.h"
 #include "formats/utils.h"
 #include "runtime/exec_env.h"
+#include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
@@ -477,6 +478,7 @@ Status ParquetFileWriter::init() {
                           ->write_batch_size(_writer_options->write_batch_size)
                           ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
                           ->compression(compression)
+                          ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
                           ->build();
 
     _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);

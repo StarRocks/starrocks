@@ -290,6 +290,7 @@ set(EXEC_FILES
     spill/dir_manager.cpp
     spill/serde.cpp
     spill/input_stream.cpp
+    spill/data_stream.cpp
     spill/log_block_manager.cpp
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp
