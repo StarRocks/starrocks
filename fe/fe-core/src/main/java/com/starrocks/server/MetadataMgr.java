@@ -15,7 +15,6 @@
 
 package com.starrocks.server;
 
-import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
@@ -25,6 +24,7 @@ import com.google.common.cache.RemovalCause;
 import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;

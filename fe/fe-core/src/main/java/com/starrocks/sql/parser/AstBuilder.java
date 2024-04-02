@@ -717,6 +717,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.columnDesc() != null) {
             columnDefs = getColumnDefs(context.columnDesc());
         }
+        if (context.TEMPORARY() != null) {
+            return new CreateTemporaryTableStmt(
+                    context.IF() != null,
+                    false,
+                    tableName,
+                    columnDefs,
+                    context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
+                    context.engineDesc() == null ? "" :
+                            ((Identifier) visit(context.engineDesc().identifier())).getValue(),
+                    context.charsetDesc() == null ? null :
+                            ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
+                    context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
+                    context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), columnDefs),
+                    context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
+                    properties,
+                    extProperties,
+                    context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                    context.rollupDesc() == null ?
+                            null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
+                    context.orderByDesc() == null ? null :
+                            visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                    .stream().map(Identifier::getValue).collect(toList()),
+                    NodePosition.ZERO);
+
+        }
 
         return new CreateTableStmt(
                 context.IF() != null,
@@ -970,56 +995,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitCreateTemporaryTableStatement(StarRocksParser.CreateTemporaryTableStatementContext context) {
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        Map<String, String> extProperties = null;
-        if (context.extProperties() != null) {
-            extProperties = new HashMap<>();
-            List<Property> propertyList = visit(context.extProperties().properties().property(), Property.class);
-            for (Property property : propertyList) {
-                extProperties.put(property.getKey(), property.getValue());
-            }
-        }
-        TableName tableName = qualifiedNameToTableName(getQualifiedName(context.qualifiedName()));
-
-        List<ColumnDef> columnDefs = null;
-        if (context.columnDesc() != null) {
-            columnDefs = getColumnDefs(context.columnDesc());
-        }
-
-        return new CreateTemporaryTableStmt(
-                context.IF() != null,
-                false,
-                tableName,
-                columnDefs,
-                context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                context.engineDesc() == null ? "" :
-                        ((Identifier) visit(context.engineDesc().identifier())).getValue(),
-                context.charsetDesc() == null ? null :
-                        ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
-                context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
-                context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), columnDefs),
-                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
-                properties,
-                extProperties,
-                context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
-                context.rollupDesc() == null ?
-                        null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
-                context.orderByDesc() == null ? null :
-                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList()),
-                NodePosition.ZERO);
-
-    }
-
-    @Override
     public ParseNode visitCreateTableAsSelectStatement(StarRocksParser.CreateTableAsSelectStatementContext context) {
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -1035,6 +1010,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (partitionDesc instanceof ListPartitionDesc && context.partitionDesc().LIST() == null) {
                 ((ListPartitionDesc) partitionDesc).setAutoPartitionTable(true);
             }
+        }
+
+        if (context.TEMPORARY() != null) {
+            CreateTemporaryTableStmt createTemporaryTableStmt = new CreateTemporaryTableStmt(
+                    context.IF() != null,
+                    false,
+                    qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
+                    null,
+                    context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
+                    "",
+                    null,
+                    context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
+                    partitionDesc,
+                    context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
+                    properties,
+                    null,
+                    context.comment() == null ? null :
+                            ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                    null,
+                    context.orderByDesc() == null ? null :
+                            visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                    .stream().map(Identifier::getValue).collect(toList())
+            );
+
+            List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+            return new CreateTemporaryTableAsSelectStmt(
+                    createTemporaryTableStmt,
+                    columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
+                    (QueryStatement) visit(context.queryStatement()),
+                    createPos(context));
         }
 
         CreateTableStmt createTableStmt = new CreateTableStmt(
@@ -1067,54 +1072,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitCreateTemporaryTableAsSelectStatement(
-            StarRocksParser.CreateTemporaryTableAsSelectStatementContext context) {
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-
-        PartitionDesc partitionDesc = null;
-        if (context.partitionDesc() != null) {
-            partitionDesc = (PartitionDesc) visit(context.partitionDesc());
-            if (partitionDesc instanceof ListPartitionDesc && context.partitionDesc().LIST() == null) {
-                ((ListPartitionDesc) partitionDesc).setAutoPartitionTable(true);
-            }
-        }
-
-        CreateTemporaryTableStmt createTemporaryTableStmt = new CreateTemporaryTableStmt(
-                context.IF() != null,
-                false,
-                qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
-                null,
-                context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                "",
-                null,
-                context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
-                partitionDesc,
-                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
-                properties,
-                null,
-                context.comment() == null ? null :
-                        ((StringLiteral) visit(context.comment().string())).getStringValue(),
-                null,
-                context.orderByDesc() == null ? null :
-                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                                .stream().map(Identifier::getValue).collect(toList())
-        );
-
-        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
-        return new CreateTemporaryTableAsSelectStmt(
-                createTemporaryTableStmt,
-                columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
-                (QueryStatement) visit(context.queryStatement()),
-                createPos(context));
-    }
-
-    @Override
     public ParseNode visitCreateTableLikeStatement(StarRocksParser.CreateTableLikeStatementContext context) {
         PartitionDesc partitionDesc = context.partitionDesc() == null ? null :
                 (PartitionDesc) visit(context.partitionDesc());
@@ -1122,23 +1079,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 (DistributionDesc) visit(context.distributionDesc());
         Map<String, String> properties = getProperties(context.properties());
 
+        if (context.TEMPORARY() != null) {
+            return new CreateTemporaryTableLikeStmt(context.IF() != null,
+                    qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
+                    qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))),
+                    partitionDesc, distributionDesc, properties,
+                    createPos(context));
+        }
+
         return new CreateTableLikeStmt(context.IF() != null,
-                qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
-                qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))),
-                partitionDesc, distributionDesc, properties,
-                createPos(context));
-    }
-
-    @Override
-    public ParseNode visitCreateTemporaryTableLikeStatement(
-            StarRocksParser.CreateTemporaryTableLikeStatementContext context) {
-        PartitionDesc partitionDesc = context.partitionDesc() == null ? null :
-                (PartitionDesc) visit(context.partitionDesc());
-        DistributionDesc distributionDesc = context.distributionDesc() == null ? null :
-                (DistributionDesc) visit(context.distributionDesc());
-        Map<String, String> properties = getProperties(context.properties());
-
-        return new CreateTemporaryTableLikeStmt(context.IF() != null,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))),
                 partitionDesc, distributionDesc, properties,
