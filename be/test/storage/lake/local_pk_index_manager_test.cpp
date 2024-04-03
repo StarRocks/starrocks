@@ -305,10 +305,12 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
                                                  std::to_string(_tablet_metadata->id())));
     auto local_pk_index_manager = std::make_unique<LocalPkIndexManager>();
     ASSERT_OK(local_pk_index_manager->init());
-    local_pk_index_manager->schedule([&]() { return _update_mgr->pick_tablets_to_do_pk_index_major_compaction(); });
+    local_pk_index_manager->schedule(
+            [&]() { return local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(_update_mgr.get()); });
     // LocalPkIndexManager use the global update manager to do major compaction.
     // But we are using _update_mgr constructed in ut, so we have to call pk_index_major_compaction explicitly.
-    std::vector<TabletAndScore> pick_tablets = _update_mgr->pick_tablets_to_do_pk_index_major_compaction();
+    std::vector<TabletAndScore> pick_tablets =
+            local_pk_index_manager->pick_tablets_to_do_pk_index_major_compaction(_update_mgr.get());
     for (auto& tablet_score : pick_tablets) {
         auto tablet_id = tablet_score.first;
         auto* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);

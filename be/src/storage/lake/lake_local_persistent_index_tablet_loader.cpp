@@ -15,6 +15,7 @@
 #include "storage/lake/lake_local_persistent_index_tablet_loader.h"
 
 #include "storage/chunk_helper.h"
+#include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/storage_engine.h"
@@ -68,6 +69,10 @@ Status LakeLocalPersistentIndexTabletLoader::rowset_iterator(
     }
 
     return Status::OK();
+}
+
+void LakeLocalPersistentIndexTabletLoader::set_write_amp_score(double score) {
+    _index->set_write_amp_score(score);
 }
 
 } // namespace starrocks::lake

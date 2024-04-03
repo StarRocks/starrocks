@@ -236,22 +236,21 @@ void LocalPkIndexManager::schedule(const std::function<std::vector<TabletAndScor
 }
 
 std::vector<TabletAndScore> LocalPkIndexManager::pick_tablets_to_do_pk_index_major_compaction(
-        UpdateManager* udpate_manager) {
-    auto index_cache = update_manager->index_cache();
-    auto tablet_ids = index_cache.get_keys();
+        UpdateManager* update_manager) {
+    auto tablet_ids = update_manager->index_cache().get_keys();
     std::vector<TabletAndScore> pick_tablets;
     if (tablet_ids.empty()) {
         return pick_tablets;
     }
     // 1. pick valid tablet, which score is larger than 0
     for (auto& tablet_id : tablet_ids) {
-        auto index_entry = index_cache.get(tablet_id);
-        DeferOp index_defer([&]() { index_cache.release(index_entry); });
+        auto index_entry = update_manager->index_cache().get(tablet_id);
+        DeferOp index_defer([&]() { update_manager->index_cache().release(index_entry); });
         if (index_entry == nullptr) {
             continue;
         }
         auto& index = index_entry->value();
-        double score = index.get_pk_index_write_amp_score();
+        double score = index.get_local_pk_index_write_amp_score();
         TEST_SYNC_POINT_CALLBACK("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1", &score);
         if (score <= 0) {
             // score == 0 means this tablet's pk index doesn't need major compaction

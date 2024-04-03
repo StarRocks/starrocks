@@ -69,10 +69,10 @@ public:
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
     Status major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log);
-    
-    double get_pk_index_write_amp_score() const { return _pk_index_write_amp_score.load(); }
 
-    void set_pk_index_write_amp_score(double score) { _pk_index_write_amp_score.store(score); }
+    double get_local_pk_index_write_amp_score();
+
+    void set_local_pk_index_write_amp_score(double score);
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
