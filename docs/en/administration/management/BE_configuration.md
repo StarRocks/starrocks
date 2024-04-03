@@ -3252,7 +3252,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: The high water at which cache eviction is triggered. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is lower than this value, cache eviction will be triggered.
+- Description: The low water at which cache eviction is triggered. In a shared-data cluster with file data cache enabled, if the percentage of available disk space is lower than this value, cache eviction will be triggered.
 - Introduced in: v3.0
 
 ##### starlet_cache_evict_high_water
