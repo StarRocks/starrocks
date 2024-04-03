@@ -129,7 +129,7 @@ public class MvPartitionCompensator {
         if (Objects.isNull(refTablePartitionNameToRefresh) || refTablePartitionNameToRefresh.isEmpty()) {
             // NOTE: This should not happen: `mvPartitionNameToRefresh` is not empty, so `refTablePartitionNameToRefresh`
             // should not empty. Return true in the situation to avoid bad cases.
-            return MVCompensation.createNoCompensateState(sessionVariable);
+            return MVCompensation.createUnkownState(sessionVariable);
         }
 
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryPlan);
