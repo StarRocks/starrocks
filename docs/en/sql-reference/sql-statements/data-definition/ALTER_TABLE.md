@@ -32,6 +32,7 @@ alter_clause1[, alter_clause2, ...]
 - column: adds, drops, or reorders columns, or modifies column type.
 - rollup index: creates or drops a rollup index.
 - bitmap index: modifies index (only Bitmap index can be modified).
+- swap: atomic exchange of two tables.
 
 ## Limits and usage notes
 
