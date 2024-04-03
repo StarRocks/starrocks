@@ -32,7 +32,7 @@ drop temporary table `t0`;
 create table `t0` (
     `c1` int,
     `c2` int
-) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="group1");
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="${uuid0}");
 insert into `t0` values (1,1),(2,2),(3,3);
 
 create temporary table `t1` like `t0`;
@@ -47,7 +47,7 @@ select * from `t1` order by `c1`,`c2`;
 create table `t0` (
     `c1` int,
     `c2` int
-) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="group1");
+) engine=OLAP primary key(`c1`) distributed by hash(`c1`) buckets 3 properties("replication_num" = "1", "colocate_with"="${uuid0}");
 insert into `t0` values (1,1),(2,2),(3,3);
 
 create temporary table `t1` as select * from `t0`;
