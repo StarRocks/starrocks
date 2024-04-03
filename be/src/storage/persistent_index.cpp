@@ -224,7 +224,6 @@ Status ImmutableIndexShard::write(WritableFile& wb) const {
 
 Status ImmutableIndexShard::compress_and_write(const CompressionTypePB& compression_type, WritableFile& wb,
                                                size_t* uncompressed_size) const {
-    LOG(INFO) << "_page_size:" << _page_size << ", _pages num:" << _pages.size();
     if (compression_type == CompressionTypePB::NO_COMPRESSION) {
         return write(wb);
     }
@@ -413,8 +412,6 @@ static void copy_kv_to_page(size_t key_size, size_t num_kv, const KVPairPtr* kv_
     for (size_t i = 0; i < num_kv; i++) {
         memcpy(kvs_dest, kv_ptrs[i], kv_size[i]);
         kvs_dest += kv_size[i];
-        Slice s(kv_ptrs[i], kv_size[i] - kIndexValueSize);
-        LOG(INFO) << "copy kv: " << s;
     }
 }
 
@@ -642,7 +639,6 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         _bf_vec.emplace_back(std::move(bf));
     }
 
-    LOG(INFO) << "create shard, key_size:" << key_size << ", page_size:" << page_size;
     auto rs_create = ImmutableIndexShard::create(key_size, npage_hint, page_size, nbucket, kvs);
     if (!rs_create.ok()) {
         return std::move(rs_create).status();
@@ -1027,6 +1023,10 @@ std::tuple<size_t, size_t, size_t> MutableIndex::estimate_nshard_and_npage(const
         if (nshard == kShardMax) {
             break;
         }
+    }
+
+    if (total_kv_num == 0) {
+        return {nshard, 0, kPageSize};
     }
 
     size_t avg_kv_len = total_kv_pairs_usage / total_kv_num;
@@ -2461,7 +2461,7 @@ Status ImmutableIndex::_get_in_fixlen_shard_by_page(size_t shard_idx, size_t n, 
             } else {
                 auto it = pages.find(bucket_info.pageid);
                 if (it != pages.end()) {
-                    bucket_pos = iter->second.pack(bucket_info.packid);
+                    bucket_pos = it->second.pack(bucket_info.packid);
                 } else {
                     LargeIndexPage page(shard_info.page_size / kPageSize);
                     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_size * bucket_info.pageid,
@@ -2510,7 +2510,7 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
             } else {
                 auto it = pages.find(bucket_info.pageid);
                 if (it != pages.end()) {
-                    bucket_pos = iter->second.pack(bucket_info.packid);
+                    bucket_pos = it->second.pack(bucket_info.packid);
                 } else {
                     LargeIndexPage page(shard_info.page_size / kPageSize);
                     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset + shard_info.page_size * bucket_info.pageid,
@@ -2536,6 +2536,10 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
                     found_keys_info->key_infos.emplace_back(key_idx, h.hash);
                     break;
                 }
+            }
+            if (values[key_idx].get_value() == NullIndexValue) {
+                LOG(INFO) << "can not find key:" << keys[key_idx] << ", pageid:" << pageid
+                          << ", real pageid:" << bucket_info.pageid;
             }
         }
     }
@@ -2601,8 +2605,6 @@ Status ImmutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                                      IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
-    LOG(INFO) << "get_in_shard, size:" << shard_info.size << ", npage:" << shard_info.npage
-              << ", keys_info size:" << keys_info.size();
     if (shard_info.size == 0 || shard_info.npage == 0 || keys_info.size() == 0) {
         return Status::OK();
     }
@@ -2618,7 +2620,6 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         }
     }
 
-    LOG(INFO) << "get_in_shard, check_key_info size:" << check_keys_info.size();
     if (check_keys_info.empty()) {
         // All keys have been filtered by bloom filter.
         return Status::OK();
@@ -2645,7 +2646,6 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         stat->read_iops++;
         stat->read_io_bytes += shard_info.bytes;
     }
-    LOG(INFO) << "get in shard, key_size:" << shard_info.key_size;
     if (shard_info.key_size != 0) {
         return _get_in_fixlen_shard(shard_idx, n, keys, check_keys_info, values, found_keys_info, &shard);
     } else {
