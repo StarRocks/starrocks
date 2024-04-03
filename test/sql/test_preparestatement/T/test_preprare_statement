@@ -68,4 +68,4 @@ SET @customer_key = 2;
 EXECUTE select_customer_stmt USING @customer_key;
 
 DROP PREPARE select_customer_stmt;
-DROP TABLE select_customer_stmt FORCE;
+DROP TABLE customer_row FORCE;
