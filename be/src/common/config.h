@@ -897,7 +897,7 @@ CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
-CONF_mBool(starlet_use_star_cache, "false");
+CONF_mBool(starlet_use_star_cache, "true");
 CONF_Bool(starlet_star_cache_async_init, "true");
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
