@@ -161,14 +161,17 @@ public class MetaUtils {
         if (Strings.isNullOrEmpty(tableName.getCatalog())) {
             tableName.setCatalog(session.getCurrentCatalog());
         }
-        // for internal catalog, use temporary table first
         Table table = null;
+        // for internal catalog, try to use temporary table first
         if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
                     session.getSessionId(), tableName.getCatalog(), database.getId(), tableName.getTbl());
-        }
-        if (table == null) {
-            table = database.getTable(tableName.getTbl());
+            if (table == null) {
+                table = database.getTable(tableName.getTbl());
+            }
+        } else {
+            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         }
         return table;
     }
