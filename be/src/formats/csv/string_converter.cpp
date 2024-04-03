@@ -13,12 +13,16 @@
 // limitations under the License.
 
 #include "formats/csv/string_converter.h"
-
+#ifdef __x86_64__
+#include <immintrin.h>
+#include <mmintrin.h>
+#endif
 #include "column/binary_column.h"
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
+#include "util/utf8.h"
 
 namespace starrocks::csv {
 
@@ -61,8 +65,18 @@ bool StringConverter::read_string(Column* column, const Slice& s, const Options&
     }
 
     if (options.is_hive) {
-        // truncate directly
-        down_cast<BinaryColumn*>(column)->append(Slice(s.get_data(), std::min(s.size, max_size)));
+        // truncate directly, support for utf-8 encoding
+        std::vector<size_t> index{};
+        const size_t utf8_length = get_utf8_index(s, &index);
+        size_t actual_size = 0;
+        if (utf8_length > max_size) {
+            // do truncate
+            actual_size = index[max_size];
+        } else {
+            // don't need to truncate
+            actual_size = s.size;
+        }
+        down_cast<BinaryColumn*>(column)->append(Slice(s.get_data(), actual_size));
     } else {
         if (config::enable_check_string_lengths &&
             ((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size))) {
