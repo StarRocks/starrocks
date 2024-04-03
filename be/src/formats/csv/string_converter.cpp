@@ -13,10 +13,7 @@
 // limitations under the License.
 
 #include "formats/csv/string_converter.h"
-#ifdef __x86_64__
-#include <immintrin.h>
-#include <mmintrin.h>
-#endif
+
 #include "column/binary_column.h"
 #include "common/config.h"
 #include "gutil/strings/substitute.h"
