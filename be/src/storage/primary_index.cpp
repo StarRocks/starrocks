@@ -1413,13 +1413,6 @@ std::size_t PrimaryIndex::size() const {
     return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->size() : 0;
 }
 
-std::size_t PrimaryIndex::capacity() const {
-    if (_persistent_index) {
-        return _persistent_index->capacity();
-    }
-    return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->capacity() : 0;
-}
-
 void PrimaryIndex::reserve(size_t s) {
     if (_pkey_to_rssid_rowid) {
         _pkey_to_rssid_rowid->reserve(s);

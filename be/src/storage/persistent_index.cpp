@@ -3035,6 +3035,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     RETURN_IF_ERROR(_delete_expired_index_file(
             l0_version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+    _calc_memory_usage();
     return Status::OK();
 }
 
@@ -3112,7 +3113,6 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     DCHECK(_l0 != nullptr);
     RETURN_IF_ERROR(_l0->load(l0_meta));
     {
-        std::unique_lock wrlock(_lock);
         _l1_vec.clear();
         _l1_merged_num.clear();
         _has_l1 = false;
@@ -3129,14 +3129,12 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             return l1_st.status();
         }
         {
-            std::unique_lock wrlock(_lock);
             _l1_vec.emplace_back(std::move(l1_st).value());
             _l1_merged_num.emplace_back(-1);
             _has_l1 = true;
         }
     }
     {
-        std::unique_lock wrlock(_lock);
         _l2_versions.clear();
         _l2_vec.clear();
     }
@@ -3149,7 +3147,6 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
             {
-                std::unique_lock wrlock(_lock);
                 _l2_versions.emplace_back(
                         EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
                 _l2_vec.emplace_back(std::move(l2_index));
@@ -3440,6 +3437,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
     }
+    _calc_memory_usage();
 
     LOG(INFO) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
                                      _version.minor_number());
@@ -3658,6 +3656,7 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
             }
         }
     }
+    _calc_memory_usage();
 
     return Status::OK();
 }
@@ -3864,7 +3863,6 @@ Status PersistentIndex::flush_advance() {
         return l1_st.status();
     }
     {
-        std::unique_lock wrlock(_lock);
         _l1_vec.emplace_back(std::move(l1_st).value());
         _l1_merged_num.emplace_back(1);
     }
@@ -4581,7 +4579,6 @@ Status PersistentIndex::_merge_compaction_advance() {
     std::vector<int> new_l1_merged_num;
     size_t merge_num = 0;
     {
-        std::unique_lock wrlock(_lock);
         merge_num = _l1_merged_num[merge_l1_start_idx];
         for (int i = 0; i < merge_l1_start_idx; i++) {
             new_l1_vec.emplace_back(std::move(_l1_vec[i]));
@@ -4605,7 +4602,6 @@ Status PersistentIndex::_merge_compaction_advance() {
     new_l1_vec.emplace_back(std::move(l1_st).value());
     new_l1_merged_num.emplace_back((merge_l1_end_idx - merge_l1_start_idx) * merge_num);
     {
-        std::unique_lock wrlock(_lock);
         _l1_vec.swap(new_l1_vec);
         _l1_merged_num.swap(new_l1_merged_num);
     }
@@ -4848,6 +4844,7 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         RETURN_IF_ERROR(_delete_expired_index_file(
                 l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+        _calc_memory_usage();
     }
     (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
@@ -4903,7 +4900,6 @@ double PersistentIndex::major_compaction_score(const PersistentIndexMetaPB& inde
 }
 
 Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
-    std::unique_lock wrlock(_lock);
     _cancel_major_compaction = true;
 
     auto tablet_schema_ptr = tablet->tablet_schema();
@@ -4946,6 +4942,7 @@ Status PersistentIndex::reset(Tablet* tablet, EditVersion version, PersistentInd
     PagePointerPB* data = snapshot->mutable_data();
     data->set_offset(0);
     data->set_size(0);
+    _calc_memory_usage();
 
     return Status::OK();
 }
@@ -5053,7 +5050,6 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
 
     // clear l1
     {
-        std::unique_lock wrlock(_lock);
         _l1_vec.clear();
         _usage_and_size_by_key_length.clear();
         _l1_merged_num.clear();
@@ -5079,7 +5075,6 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     }
     // clear l2
     {
-        std::unique_lock wrlock(_lock);
         _l2_vec.clear();
         _l2_versions.clear();
     }
@@ -5137,6 +5132,17 @@ Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* 
         RETURN_IF_ERROR(_l0->pk_dump(dump, level));
     }
     return Status::OK();
+}
+
+void PersistentIndex::_calc_memory_usage() {
+    size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
+    for (int i = 0; i < _l1_vec.size(); i++) {
+        memory_usage += _l1_vec[i]->memory_usage();
+    }
+    for (int i = 0; i < _l2_vec.size(); i++) {
+        memory_usage += _l2_vec[i]->memory_usage();
+    }
+    _memory_usage.store(memory_usage);
 }
 
 } // namespace starrocks
