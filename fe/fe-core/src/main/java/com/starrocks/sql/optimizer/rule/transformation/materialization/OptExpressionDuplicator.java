@@ -71,7 +71,7 @@ public class OptExpressionDuplicator {
         Pair<Table, Column> partitionInfo = materializationContext.getMv().getDirectTableAndPartitionColumn();
         this.partitionByTable = partitionInfo == null ? null : partitionInfo.first;
         this.partitionColumn = partitionInfo == null ? null : partitionInfo.second;
-        this.partialPartitionRewrite = !materializationContext.getMvPartitionNamesToRefresh().isEmpty();
+        this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMvToRefreshPartitionNames().isEmpty();
     }
 
     public OptExpressionDuplicator(ColumnRefFactory columnRefFactory) {

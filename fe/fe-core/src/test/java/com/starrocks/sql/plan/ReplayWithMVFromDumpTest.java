@@ -15,6 +15,8 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvRefreshArbiter;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -28,8 +30,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Set;
-
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
@@ -40,14 +40,14 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         ReplayFromDumpTestBase.beforeClass();
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
-        new MockUp<MaterializedView>() {
+        new MockUp<MvRefreshArbiter>() {
             /**
-             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
+             * {@link MvRefreshArbiter#getPartitionNamesToRefreshForMv(MaterializedView, boolean)}
              */
             @Mock
-            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
-                                                           boolean isQueryRewrite) {
-                return true;
+            public MvUpdateInfo getPartitionNamesToRefreshForMv(MaterializedView mv,
+                                                                boolean isQueryRewrite) {
+                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
             }
         };
 
