@@ -855,7 +855,7 @@ public class ConnectProcessor {
         }
 
         // no matter the master execute success or fail, the master must transfer the result to follower
-        // and tell the follower the current jounalID.
+        // and tell the follower the current journalID.
         TMasterOpResult result = new TMasterOpResult();
         result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
         // following stmt will not be executed, when current stmt is failed,
