@@ -22,9 +22,6 @@ public class ClassUtil {
             NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         Class<?> cls = classLoader.loadClass(className);
-        if (!isSubclass(cls, expectedClass)) {
-            throw new RuntimeException(className + "must extend of " + expectedClass.getSimpleName());
-        }
 
         return (T) cls.getDeclaredConstructor().newInstance();
     }
