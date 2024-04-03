@@ -108,7 +108,8 @@ public class DeletePlanner {
                 partitionIds.add(partition.getId());
             }
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage(), false, false);
+                    table.enableReplicatedStorage(), false, false,
+                    session.getCurrentWarehouseId());
             execPlan.getFragments().get(0).setSink(dataSink);
 
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
