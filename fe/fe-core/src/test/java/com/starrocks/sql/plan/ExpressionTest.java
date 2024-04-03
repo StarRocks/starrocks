@@ -22,6 +22,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -1875,5 +1878,18 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select parse_json('{\"a\": true}')->\"a\"->\"$....\"";
         plan = getFragmentPlan(sql);
         assertContains(plan, "json_query(json_query(parse_json('{\"a\": true}'), 'a'), '$....')");
+    }
+
+    @Test
+    public void testFoundJsonInt() {
+        Function func = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.VARCHAR, Type.VARCHAR},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertNotNull(func);
+        Assert.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
+
+        func = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.JSON, Type.VARCHAR},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertNotNull(func);
+        Assert.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
     }
 }
