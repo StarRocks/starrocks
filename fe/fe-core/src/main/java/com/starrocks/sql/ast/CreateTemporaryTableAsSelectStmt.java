@@ -18,14 +18,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.UUID;
 
 public class CreateTemporaryTableAsSelectStmt extends CreateTableAsSelectStmt {
-    private static final Logger LOG = LogManager.getLogger(CreateTemporaryTableAsSelectStmt.class);
 
     public CreateTemporaryTableAsSelectStmt(CreateTemporaryTableStmt createTemporaryTableStmt,
                                             List<String> columnNames, QueryStatement queryStatement, NodePosition pos) {
