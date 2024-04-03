@@ -419,7 +419,11 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                          scan_node->convert_scan_range_to_morsel_queue_factory(
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), dop,
                                  enable_tablet_internal_parallel, tablet_internal_parallel_mode));
-        scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
+        // enable shared scan when
+        // 1. sv is turned on and morsel factory is shared.
+        // 2. or scan node itself force to use shared scan.
+        scan_node->enable_shared_scan((enable_shared_scan && morsel_queue_factory->is_shared()) ||
+                                      (scan_node->always_shared_scan()));
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
 
