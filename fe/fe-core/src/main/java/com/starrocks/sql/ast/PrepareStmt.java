@@ -38,8 +38,10 @@ public class PrepareStmt extends StatementBase {
         this.name = name;
         this.innerStmt = stmt;
         this.parameters = parameters == null ? ImmutableList.of() : parameters;
-        for (int i = 0; i < parameters.size(); i++) {
-            mysqlTypeCodes.add(0);
+        if (this.parameters != null) {
+            for (int i = 0; i < parameters.size(); i++) {
+                mysqlTypeCodes.add(0);
+            }
         }
     }
 
@@ -78,7 +80,7 @@ public class PrepareStmt extends StatementBase {
         }
         return labels;
     }
-    
+
     public List<Integer> getMysqlTypeCodes() {
         return mysqlTypeCodes;
     }
