@@ -32,8 +32,8 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
-- rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-- comment: modifies the table comment (supported from **v3.1 onwards**). Currently, column comments cannot be modified.
+- rename: renames a table, rollup index, or partition.
+- comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
 - column: adds, drops, or reorders columns, or modifies column type.
@@ -42,13 +42,14 @@ alter_clause1[, alter_clause2, ...]
 - swap: atomic exchange of two tables.
 - compaction: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
-:::note
+## Limits and usage notes
 
-- Operations on partition, column and rollup index cannot be performed in one ALTER TABLE statement.
+- Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
+- Column names cannot be modified.
+- Column comments cannot be modified.
+- One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
 - Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](../data-definition/CANCEL_ALTER_TABLE.md) command to cancel the operation.
 - Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
-
-:::
 
 ### Rename
 

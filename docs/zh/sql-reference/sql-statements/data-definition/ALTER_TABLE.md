@@ -35,19 +35,22 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
-- rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
-- comment: 修改表的注释。**从 3.1 版本开始支持。** 当前还不支持修改列注释。
+- rename: 修改表名，rollup index 名称，修改 partition 名称。
+- comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
-- column: 增加列，删除列，调整列顺序，修改列类型。
+- column: 增加列，删除列，调整列顺序，修改列类型。*
 - rollup index: 创建或删除 rollup index。
 - bitmap index: 修改 bitmap index。
 - swap: 原子替换两张表。
 - compaction: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
 
-:::note
+## 使用限制和注意事项
 
 - partition、column 和 rollup index <!--是否包含compaction，bucket和column/rollupindex可以在一起吗-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
+- 当前还不支持修改列名。
+- 当前还不支持修改列注释。
+- 每张表仅支持一个进行中的 Schema Change 操作。不能对同一张表同时执行两条 Schema Change 命令。
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](../data-manipulation/SHOW_ALTER.md)。
 - rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
 
