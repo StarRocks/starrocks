@@ -38,6 +38,9 @@ public class PrepareStmt extends StatementBase {
         this.name = name;
         this.innerStmt = stmt;
         this.parameters = parameters == null ? ImmutableList.of() : parameters;
+        for (int i = 0; i < parameters.size(); i++) {
+            mysqlTypeCodes.add(0);
+        }
     }
 
     public StatementBase getInnerStmt() {
