@@ -1880,7 +1880,29 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ("true", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "true")->get_data()[0]);
     EXPECT_EQ("star", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"star\"")->get_data()[0]);
     EXPECT_EQ("{\"a\": 1}", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "{\"a\": 1}")->get_data()[0]);
-    EXPECT_EQ("", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "")->get_data()[0]);
+
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"1123\"")->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"true\"")->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 123)->get_data()[0]);
+    EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 234.453)->get_data()[0]);
+
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"0\"")->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"false\"")->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 0)->get_data()[0]);
+    EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, 0.000)->get_data()[0]);
+
+    EXPECT_EQ(123123, evaluateCastFromJson<TYPE_INT>(cast_expr, "\"123123\"")->get_data()[0]);
+    EXPECT_EQ(123123, evaluateCastFromJson<TYPE_INT>(cast_expr, "123123")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_INT>(cast_expr, 123.123)->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, true)->get_data()[0]);
+    EXPECT_EQ(0, evaluateCastFromJson<TYPE_INT>(cast_expr, false)->get_data()[0]);
+
+    EXPECT_EQ(123.123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "\"123.123\"")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "\"123\"")->get_data()[0]);
+    EXPECT_EQ(123.123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "123.123")->get_data()[0]);
+    EXPECT_EQ(123, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, "123")->get_data()[0]);
+    EXPECT_EQ(1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, true)->get_data()[0]);
+    EXPECT_EQ(0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, false)->get_data()[0]);
 
     // implicit json type case
     EXPECT_EQ(1.0, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, 1)->get_data()[0]);
@@ -1891,12 +1913,12 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "false")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "null")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "[1,2]")));
-    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "1")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "\"a\"")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "1.0")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "null")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "[]")));
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_BOOLEAN>(cast_expr, "{}")));
+    EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_INT>(cast_expr, "\"123.123\"")));
 
     // overflow
     EXPECT_EQ(2, ColumnHelper::count_nulls(evaluateCastJsonNullable<TYPE_TINYINT>(cast_expr, 100000)));
