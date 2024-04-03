@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
@@ -273,14 +272,11 @@ public class InsertAnalyzer {
                 throw new SemanticException("partition value should be literal expression");
             }
 
-            if (partitionValue instanceof NullLiteral) {
-                throw new SemanticException("partition value can't be null");
-            }
-
             LiteralExpr literalExpr = (LiteralExpr) partitionValue;
             Column column = table.getColumn(actualName);
             try {
-                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
+                Type type = literalExpr.isConstantNull() ? Type.NULL : column.getType();
+                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), type);
                 insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
