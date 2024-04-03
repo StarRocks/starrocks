@@ -35,7 +35,7 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
   - **Metastore service**: used by the FEs to access the metadata of external data sources. The FEs generate a query execution plan based on the metadata.
   - **Data storage system**: used to store external data. Both distributed file systems and object
-  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations, and then return the query result.
+  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs or CNs, all BEs or CNs scan the target external data in parallel, perform calculations, and then return the query result.
 
 ## Access catalog
 

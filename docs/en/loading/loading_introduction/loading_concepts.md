@@ -105,7 +105,7 @@ The workflow is described as follows:
 
 3. **LOADING**
 
-   The FE cleanses and transforms the data, and then sends the data to the BEs. After all data is loaded, the data is in queue waiting to take effect. At this time, the status of the job remains **LOADING**.
+   The FE cleanses and transforms the data, and then sends the data to the BEs or CNs. After all data is loaded, the data is in queue waiting to take effect. At this time, the status of the job remains **LOADING**.
 
 4. **FINISHED**
 
@@ -139,8 +139,8 @@ The workflow of a Routine Load job is described as follows:
 
 2. The FE splits the job into multiple tasks. Each task is engineered to load data from multiple partitions.
 
-3. The FE distributes the tasks to specified BEs.
+3. The FE distributes the tasks to specified BEs or CNs.
 
-4. The BEs execute the tasks, and report to the FE after they finish the tasks.
+4. The BEs or CNs execute the tasks, and report to the FE after they finish the tasks.
 
 5. The FE generates subsequent tasks, retries failed tasks if there are any, or suspends task scheduling based on the reports from the BEs.

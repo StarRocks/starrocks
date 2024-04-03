@@ -38,7 +38,7 @@ When you access the data files stored in your HDFS cluster, you may find a huge 
 
 You can use one of the following solutions to resolve this issue:
 
-- **[Recommended]** Enable the [data cache](../data_source/data_cache.md) feature, which eliminates the impact of slow HDFS DataNodes on queries by automatically caching the data from external storage systems to the BEs of your StarRocks cluster.
+- **[Recommended]** Enable the [data cache](../data_source/data_cache.md) feature, which eliminates the impact of slow HDFS DataNodes on queries by automatically caching the data from external storage systems to the BEs or CNs of your StarRocks cluster.
 - **[Recommended]** Shorten the timeout duration between the HDFS client and DataNode. This solution is suitable when Data Cache cannot help resolve the slow HDFS DataNode issue.
 - Enable the [Hedged Read](https://hadoop.apache.org/docs/r2.8.3/hadoop-project-dist/hadoop-common/release/2.4.0/RELEASENOTES.2.4.0.html) feature. With this feature enabled, if a read from a block is slow, StarRocks starts up a new read, which runs in parallel to the original read, to read against a different block replica. Whenever one of the two reads returns, the other read is cancelled. **The Hedged Read feature can help accelerate reads, but it also significantly increases heap memory consumption on Java virtual machines (JVMs). Therefore, if your physical machines provide a small memory capacity, we recommend that you do not enable the Hedged Read feature.**
 
@@ -61,7 +61,7 @@ Configure the `dfs.client.socket-timeout` property in the `hdfs-site.xml` file t
 
 #### Hedged Read
 
-Use the following parameters (supported from v3.0 onwards) in the BE configuration file `be.conf` to enable and configure the Hedged Read feature in your HDFS cluster.
+Use the following parameters (supported from v3.0 onwards) in the BE or CN configuration file `be.conf` to enable and configure the Hedged Read feature in your HDFS cluster.
 
 | Parameter                                | Default value | Description                                                         |
 | ---------------------------------------- | ------------- | ------------------------------------------------------------------- |
