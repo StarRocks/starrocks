@@ -106,7 +106,7 @@ REFRESH MATERIALIZED VIEW customer_mv;
 Example 1: Show a specific materialized view.
 
 ```Plain
-mysql> SHOW MATERIALIZED VIEWS WHERE NAME='customer_mv'\G;
+mysql> SHOW MATERIALIZED VIEWS WHERE NAME='customer_mv'\G
 *************************** 1. row ***************************
                         id: 10142
                       name: customer_mv
@@ -137,7 +137,7 @@ GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
 Example 2: Show materialized views by matching the name.
 
 ```Plain
-mysql> SHOW MATERIALIZED VIEWS WHERE NAME LIKE 'customer_mv'\G;
+mysql> SHOW MATERIALIZED VIEWS WHERE NAME LIKE 'customer_mv'\G
 *************************** 1. row ***************************
                         id: 10142
                       name: customer_mv
