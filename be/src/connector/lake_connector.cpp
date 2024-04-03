@@ -673,7 +673,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(
 #ifdef BE_TEST
     ASSIGN_OR_RETURN(
             auto first_tablet_schema,
-            _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, version));
+            _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
     keys_type = first_tablet_schema->keys_type();
 #else
     ASSIGN_OR_RETURN(auto first_tablet_schema,
