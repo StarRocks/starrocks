@@ -78,11 +78,7 @@ public class PrepareStmt extends StatementBase {
         }
         return labels;
     }
-
-    public void addMysqlTypeCodes(Integer mysqlTypeCode) {
-        mysqlTypeCodes.add(mysqlTypeCode);
-    }
-
+    
     public List<Integer> getMysqlTypeCodes() {
         return mysqlTypeCodes;
     }
