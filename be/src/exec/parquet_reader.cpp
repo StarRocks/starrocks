@@ -83,21 +83,22 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         */
         arrow_reader_properties.set_coerce_int96_timestamp_unit(arrow::TimeUnit::MICRO);
 
-        // default batch size is 64K
+        // arrow default batch size is 64K,
+        // the bigger batch size, the more memory it uses
         arrow_reader_properties.set_batch_size(config::arrow_read_batch_size);
 
         // io coalesce
-        // performance 0: tpcds store_sales, 23 columns, 649M, 7218819 lines
-        //                  | time | file read count | memory
-        // io coalesce 8M   | 13s  |   80            | 587M
-        // buffer stream 8M | 15s  |   176           | 1313M
-        // buffer stream 1M | 29s  |   1145          | 1157M
+        // performance test 0: tpcds store_sales, 23 columns, 649M, 7218819 lines
+        //                  | file read time | file read count | memory
+        // io coalesce 8M   | 13s            |   80            | 587M
+        // buffer stream 8M | 15s            |   176           | 1313M
+        // buffer stream 1M | 29s            |   1145          | 1157M
         //
-        // performance 1: 1001 columns table, 147M, 50000 lines
-        //                  | time | file read count | memory
-        // io coalesce 8M   | 3s   |   20            | 1G
-        // buffer stream 8M | 15s  |   1003          | 3.3G
-        // buffer stream 1M | 15s  |   1003          | 10.1G
+        // performance test 1: 1001 columns table, 147M, 50000 lines
+        //                  | file read time | file read count | memory
+        // io coalesce 8M   | 3s             |   20            | 1G
+        // buffer stream 8M | 15s            |   1003          | 10.1G
+        // buffer stream 1M | 15s            |   1003          | 3.3G
         //
         arrow_reader_properties.set_pre_buffer(true);
         auto cache_options = arrow::io::CacheOptions::LazyDefaults();
