@@ -1076,7 +1076,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         plan = getVerboseExplain(sql);
         assertContains(plan, "abs[(get_json_double[([2: j1, JSON, true], '$.a');");
         assertContains(plan, "concat[(get_json_string[([2: j1, JSON, true], '$.a');");
-        assertContains(plan, "ColumnAccessPath: [/j1/a(varchar)]");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
 
         sql = "select abs(j1->'$.a'), concat(j1->'$.a', 'abc'), j1->'$.a'->'$.b' from js0;";
         plan = getVerboseExplain(sql);
@@ -1101,6 +1101,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void testJsonBool() throws Exception {
         String sql = "select get_json_bool(j1, 'a') from js0";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "ColumnAccessPath: [/j1/a(boolean)]");
+        assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
     }
 }
