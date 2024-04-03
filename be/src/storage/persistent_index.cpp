@@ -459,6 +459,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
             npage = 1;
         }
     }
+    // the max packid right now is 256
     size_t pack_size = page_size / 256;
     const size_t total_bucket = npage * nbucket;
     std::vector<uint8_t> bucket_sizes(total_bucket);
@@ -492,8 +493,6 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
         if (key_size != 0) {
             npack = npad(pad((size_t)bucket_sizes[i], kPackSize) + pad(bucket_data_size[i].first, kPackSize),
                          pack_size);
-
-            //npack = npad((size_t)bucket_sizes[i], kPackSize) + npad(bucket_data_size[i].first, kPackSize);
         } else {
             npack = npad(pad((size_t)bucket_sizes[i], kPackSize) +
                                  pad(bucket_data_size[i].first + sizeof(uint16_t) * ((size_t)bucket_sizes[i] + 1),
