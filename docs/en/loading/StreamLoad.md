@@ -40,15 +40,15 @@ Stream Load is an HTTP PUT-based synchronous loading method. After you submit a 
 
 ### How it works
 
-You can submit a load request on your client to an FE according to HTTP, and the FE then uses an HTTP redirect to forward the load request to a specific BE. You can also directly submit a load request on your client to a BE of your choice.
+You can submit a load request on your client to an FE according to HTTP, and the FE then uses an HTTP redirect to forward the load request to a specific BE or CN. You can also directly submit a load request on your client to a BE or CN of your choice.
 
 :::note
 
-If you submit load requests to an FE, the FE uses a polling mechanism to decide which BE will serve as a coordinator to receive and process the load requests. The polling mechanism helps achieve load balancing within your StarRocks cluster. Therefore, we recommend that you send load requests to an FE.
+If you submit load requests to an FE, the FE uses a polling mechanism to decide which BE or CN will serve as a coordinator to receive and process the load requests. The polling mechanism helps achieve load balancing within your StarRocks cluster. Therefore, we recommend that you send load requests to an FE.
 
 :::
 
-The BE that receives the load request runs as the Coordinator BE to split data based on the used schema into portions and assign each portion of the data to the other involved BEs. After the load finishes, the Coordinator BE returns the result of the load job to your client. Note that if you stop the Coordinator BE during the load, the load job fails.
+The BE or CN that receives the load request runs as the Coordinator BE or CN to split data based on the used schema into portions and assign each portion of the data to the other involved BEs or CNs. After the load finishes, the Coordinator BE or CN returns the result of the load job to your client. Note that if you stop the Coordinator BE or CN during the load, the load job fails.
 
 The following figure shows the workflow of a Stream Load job.
 
@@ -247,11 +247,11 @@ Stream Load does not allow you to cancel a load job. If a load job times out or 
 
 This section describes some system parameters that you need to configure if you choose the loading method Stream Load. These parameter configurations take effect on all Stream Load jobs.
 
-- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE dynamic parameters](../administration/management/BE_configuration.md#configure-be-dynamic-parameters).
+- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE or CN dynamic parameters](../administration/management/BE_configuration.md).
   
   We recommend that you do not load more than 10 GB of data at a time. If the size of a data file exceeds 10 GB, we recommend that you split the data file into small files that each are less than 10 GB in size and then load these files one by one. If you cannot split a data file greater than 10 GB, you can increase the value of this parameter based on the file size.
 
-  After you increase the value of this parameter, the new value can take effect only after you restart the BEs of your StarRocks cluster. Additionally, system performance may deteriorate, and the costs of retries in the event of load failures also increase.
+  After you increase the value of this parameter, the new value can take effect only after you restart the BEs or CNs of your StarRocks cluster. Additionally, system performance may deteriorate, and the costs of retries in the event of load failures also increase.
 
   :::note
   
@@ -273,7 +273,7 @@ This section describes some system parameters that you need to configure if you 
 
   :::note
   
-  **Average loading speed** in the preceding formula is the average loading speed of your StarRocks cluster. It varies depending on the disk I/O and the number of BEs in your StarRocks cluster.
+  **Average loading speed** in the preceding formula is the average loading speed of your StarRocks cluster. It varies depending on the disk I/O and the number of BEs  or CNs in your StarRocks cluster.
 
   :::
 
@@ -448,7 +448,7 @@ There are two ways to load data from NAS by using Broker Load:
 
 This section introduces the second way. Detailed operations are as follows:
 
-1. Mount your NAS device to the same path on all the BE nodes and FE nodes of your StarRocks cluster. As such, all BEs can access the NAS device like they access their own locally stored files.
+1. Mount your NAS device to the same path on all the BE  or CN nodes and FE nodes of your StarRocks cluster. As such, all BEs  or CNs can access the NAS device like they access their own locally stored files.
 
 2. Use Broker Load to load data from the NAS device to the destination StarRocks table. Example:
 
