@@ -267,7 +267,7 @@ public class InsertPlanner {
                 dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
-                        nullExprInAutoIncrement, enableAutomaticPartition);
+                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
                 }

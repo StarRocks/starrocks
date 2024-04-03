@@ -53,6 +53,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -81,7 +82,8 @@ public class BackendsProcDir implements ProcDirInterface {
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
                 .add("StarletPort")
-                .add("WorkerId");
+                .add("WorkerId")
+                .add("WarehouseName");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
 
@@ -239,6 +241,8 @@ public class BackendsProcDir implements ProcDirInterface {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(backend.getWarehouseId());
+                backendInfo.add(wh.getName());
             }
 
             comparableBackendInfos.add(backendInfo);
