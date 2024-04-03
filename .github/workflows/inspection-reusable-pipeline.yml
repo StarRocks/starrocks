@@ -160,9 +160,12 @@ jobs:
         if: always()
         with:
           name: SQL-Tester Log (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
-          path: test/log/
+          path: ｜
+            test/log
+            test/crash_logs
           retention-days: 1
           overwrite: true
+          if-no-files-found: ignore
 
       - name: Clean ENV
         if: always()

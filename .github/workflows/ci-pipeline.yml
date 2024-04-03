@@ -734,16 +734,19 @@ jobs:
           branch=${{ steps.branch.outputs.branch }}
           bucket_prefix=${{ steps.branch.outputs.bucket_prefix }}
           ossutil64 --config-file ~/.ossutilconfig rm oss://${bucket_prefix}-ci-release/$branch/ASAN/pr/SQL-Tester-XML/${PR_NUMBER}/ -rf
-          ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/ASAN/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
+          ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/ASAN/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --disable-dir-object -r -f --tagging="type=ci"
 
       - name: Upload log
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: SQL-Tester Log
-          path: test/log/
+          path: ｜
+            test/log
+            test/crash_logs
           retention-days: 1
           overwrite: true
+          if-no-files-found: ignore
 
       - name: Clean ENV
         if: always()

@@ -66,6 +66,8 @@ CRASH_DIR = os.path.join(root_path, "crash_logs")
 if not os.path.exists(CRASH_DIR):
     os.mkdir(CRASH_DIR)
 
+LOG_LEVEL = logging.INFO
+
 
 class Filter(logging.Filter):
     """
@@ -73,7 +75,7 @@ class Filter(logging.Filter):
     """
 
     # pylint: disable= super-init-not-called
-    def __init__(self, msg_level=logging.WARNING):
+    def __init__(self, msg_level=LOG_LEVEL):
         super().__init__()
         self.msg_level = msg_level
 
@@ -85,7 +87,7 @@ class Filter(logging.Filter):
             except Exception:
                 record.msg = str(record.msg).replace(secret_v, '${%s}' % secret_k)
 
-        if record.levelno >= self.msg_level:
+        if record.levelno < self.msg_level:
             return False
         return True
 
@@ -99,7 +101,7 @@ def self_print(msg):
 
 
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
-log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
+log.init_comlog("sql", LOG_LEVEL, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, bprint_console=True, gen_wf=False)
 logging.getLogger().addFilter(Filter())
 
 T_R_DB = "t_r_db"
