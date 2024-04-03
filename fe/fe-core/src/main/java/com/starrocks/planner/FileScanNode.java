@@ -503,7 +503,9 @@ public class FileScanNode extends LoadScanNode {
         Preconditions.checkState(fileStatusesList.size() == fileGroups.size());
 
         if (isLoad() && filesAdded == 0) {
-            throw new UserException("No source file in this table(" + targetTable.getName() + ").");
+            List<String> filePaths =
+                    fileGroups.stream().map(BrokerFileGroup::getFilePaths).flatMap(List::stream).collect(Collectors.toList());
+            throw new UserException(String.format("No source file in the path: [%s]", String.join(", ", filePaths)));
         }
 
         for (List<TBrokerFileStatus> fileStatuses : fileStatusesList) {

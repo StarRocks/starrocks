@@ -316,7 +316,7 @@ public class TableFunctionTable extends Table {
         }
 
         if (fileStatuses.isEmpty()) {
-            throw new DdlException("no file found with given path pattern: " + path);
+            throw new DdlException(String.format("No source file in the path: [%s]", path));
         }
     }
 
