@@ -101,7 +101,7 @@ def self_print(msg):
 
 
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
-log.init_comlog("sql", LOG_LEVEL, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, bprint_console=True, gen_wf=False)
+log.init_comlog("sql", LOG_LEVEL, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, bprint_console=False, gen_wf=False)
 logging.getLogger().addFilter(Filter())
 
 T_R_DB = "t_r_db"
@@ -1403,7 +1403,7 @@ class StarrocksSQLApiLib(object):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             encoding="utf-8",
-            timeout=1800,
+            timeout=120,
         )
 
         log.info(cmd_res)
