@@ -38,6 +38,9 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 
 public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements AstVisitorEPack<Void, ConnectContext> {
 
@@ -45,6 +48,27 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
 
     public static AnalyzerVisitorEPack getInstance() {
         return INSTANCE;
+    }
+
+    // ---------------------------------------- Database Statement -----------------------------------------------------
+
+    @Override
+    public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
+        CreateTableAnalyzerEPack.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext session) {
+        ViewAnalyzerEPack.analyze(statement, session);
+        return null;
+    }
+
+    @Override
+    public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
+                                                     ConnectContext context) {
+        MaterializedViewAnalyzerEPack.analyze(statement, context);
+        return null;
     }
 
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
