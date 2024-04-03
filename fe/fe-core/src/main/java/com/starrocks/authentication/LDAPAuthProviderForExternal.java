@@ -13,10 +13,13 @@
 // limitations under the License.
 package com.starrocks.authentication;
 
+import com.google.common.base.Strings;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Hashtable;
 import javax.naming.Context;
@@ -27,6 +30,7 @@ import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
 
 public class LDAPAuthProviderForExternal implements AuthenticationProvider {
+    private static final Logger LOG = LogManager.getLogger(LDAPAuthProviderForExternal.class);
     public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name();
 
     @Override
@@ -37,6 +41,11 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
     }
 
     private static Hashtable<String, String> buildEnvironment(String host, String port, String dn, String pwd) {
+        if (Strings.isNullOrEmpty(pwd)) {
+            LOG.warn("empty password is not allowed for simple authentication");
+            return null;
+        }
+
         String url = "ldap://" + host + ":" + port;
         Hashtable<String, String> environment = new Hashtable<>();
         dn = StringUtils.strip(dn, "\"'");
@@ -51,6 +60,9 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
 
     private static boolean checkLdapUserPwd(String host, String port, String userDn, String pwd) throws Exception {
         Hashtable<String, String> environment = buildEnvironment(host, port, userDn, pwd);
+        if (environment == null) {
+            return false;
+        }
         DirContext ctx = null;
         try {
             // this will send a bind call to ldap server, throw exception if failed
@@ -68,6 +80,9 @@ public class LDAPAuthProviderForExternal implements AuthenticationProvider {
                                        String baseDn, String searchAttr,
                                        String rootDn, String rootPwd) throws Exception {
         Hashtable<String, String> environment = buildEnvironment(host, port, rootDn, rootPwd);
+        if (environment == null) {
+            return false;
+        }
         DirContext ctx = null;
         NamingEnumeration<SearchResult> results = null;
         try {

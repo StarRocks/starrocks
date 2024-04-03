@@ -15,6 +15,8 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.epack.privilege.AuthenticationMgrEPack;
@@ -31,7 +33,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.naming.Context;
+import javax.naming.NameNotFoundException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.directory.Attribute;
@@ -49,10 +54,15 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
     private static final String SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES = "groupOfNames";
     private static final String SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES = "groupOfUniqueNames";
     private static final String SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP = "posixGroup";
+    /**
+     * For microsoft active directory service.
+     */
+    private static final String SUPPORTED_LDAP_GROUP_TYPE_AD_GROUP = "group";
     private static final Set<String> SUPPORTED_LDAP_GROUP_TYPES = new HashSet<>(Arrays.asList(
             SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES,
             SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES,
-            SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP));
+            SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP,
+            SUPPORTED_LDAP_GROUP_TYPE_AD_GROUP));
 
     /**
      * store the group dn list for each member to which it belongs,
@@ -86,9 +96,7 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         }
 
         if (member2Groups.containsKey(integrationName)) {
-            return member2Groups.get(integrationName)
-                    .getOrDefault(ldapSecurityIntegration.getLdapUserGroupMatchAttr() + "=" + username,
-                            null);
+            return member2Groups.get(integrationName).getOrDefault(username, null);
         }
 
         return null;
@@ -115,19 +123,20 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
                 if (force || start > ldapSecurityIntegration.getLastRefreshTime() + refreshInterval * 1000L) {
                     Map<String, List<String>> result;
                     try {
-                        result = getMembersToGroupsMap(entry.getValue(),
+                        result = getMemberToGroupsMap(entry.getValue(),
                                 ldapSecurityIntegration.getLdapServerHost(),
                                 ldapSecurityIntegration.getLdapServerPort(),
                                 ldapSecurityIntegration.getLdapBindRootDn(),
                                 ldapSecurityIntegration.getLdapBindRootPwd(),
-                                ldapSecurityIntegration.getLdapUserGroupMatchAttr());
+                                ldapSecurityIntegration.getLdapUserGroupMatchAttr(),
+                                ldapSecurityIntegration.getLdapGroupMatchUseMemberUid());
                         long end = System.currentTimeMillis();
                         member2Groups.put(ldapSecurityIntegration.getName(), result);
                         ldapSecurityIntegration.setLastRefreshTime(end);
                         LOG.info("refreshed {} groups with {} members for security integration '{}' in {}ms",
                                 entry.getValue().size(), result.size(),
                                 ldapSecurityIntegration.getName(), end - start);
-                        LOG.debug("refresh result for groups {} with security integration '{}': {}",
+                        LOG.info("refresh result for groups {} with security integration '{}': {}",
                                 entry.getValue(), ldapSecurityIntegration.getName(), result);
                     } catch (Exception e) {
                         LOG.info("refresh group cache failed for groups {} with security integration '{}'," +
@@ -140,12 +149,14 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         }
     }
 
-    private static Map<String, List<String>> getMembersToGroupsMap(Set<String> groupDNs,
+    private static Map<String, List<String>> getMemberToGroupsMap(Set<String> groupDNs,
                                                                   String ldapServerHost,
                                                                   String ldapServerPort,
                                                                   String ldapRootDn,
                                                                   String ldapRootPassword,
-                                                                  String ldapGroupMatchAttr) throws NamingException {
+                                                                  String ldapGroupMatchAttr,
+                                                                  boolean ldapGroupMatchUseMemberUid)
+            throws NamingException {
         Map<String, List<String>> memberToGroups = new HashMap<>();
 
         Properties env = new Properties();
@@ -165,18 +176,29 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
                 if (groupType == null) {
                     continue;
                 }
-                if (Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES) ||
-                        Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES)) {
-                    List<String> memberDNs = getMemberDNsFromGroupOfNames(ctx, groupDN);
-                    updateGroupMemberShip(memberToGroups, memberDNs, ldapGroupMatchAttr, groupDN);
-                } else if (Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP)) {
-                    List<String> memberDNs = getMemberDNsFromPosixGroup(ctx, groupDN);
-                    updateGroupMemberShip(memberToGroups, memberDNs, ldapGroupMatchAttr, groupDN);
-                } else {
-                    throw new NamingException("unsupported group objectClass for group '" +
-                            groupDN + "' with class '" + groupType +
-                            "', currently supported: " + SUPPORTED_LDAP_GROUP_TYPES);
+                Set<String> memberNames;
+                switch (groupType) {
+                    case SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES:
+                    case SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES: {
+                        memberNames = getMemberNamesFromGroupOfNames(ctx, groupDN, ldapGroupMatchAttr);
+                        break;
+                    }
+                    case SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP: {
+                        memberNames = getMemberNamesFromPosixGroup(ctx, groupDN);
+                        break;
+                    }
+                    case SUPPORTED_LDAP_GROUP_TYPE_AD_GROUP:
+                        memberNames = getMemberNamesFromADGroup(ctx, groupDN,
+                                ldapGroupMatchAttr, ldapGroupMatchUseMemberUid);
+                        break;
+                    default:
+                        LOG.warn("unsupported group objectClass for group '" +
+                                groupDN + "' with class '" + groupType +
+                                "', currently supported: " + SUPPORTED_LDAP_GROUP_TYPES);
+                        continue;
                 }
+
+                updateGroupMembership(memberToGroups, memberNames, groupDN);
             }
         } finally {
             if (ctx != null) {
@@ -186,24 +208,19 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         return memberToGroups;
     }
 
-    private static void updateGroupMemberShip(Map<String, List<String>> membersToGroups,
-                                              List<String> memberDNs, String ldapGroupMatchAttr, String groupDN) {
-        memberDNs.forEach(memberDN -> Arrays.stream(memberDN.split(",\\s*"))
-                .filter(part -> part.startsWith(ldapGroupMatchAttr + "="))
-                .findFirst()
-                .ifPresent(matchedAttr ->
-                        membersToGroups.computeIfAbsent(matchedAttr, k -> new ArrayList<>()).add(groupDN)));
+    private static void updateGroupMembership(Map<String, List<String>> memberToGroups,
+                                              Set<String> memberNames, String groupDN) {
+        memberNames.forEach(memberName ->
+                memberToGroups.computeIfAbsent(memberName, k -> new ArrayList<>()).add(groupDN));
     }
 
     private static String getGroupType(DirContext ctx, String groupDN) throws NamingException {
-        Attributes attrs = null;
+        Attributes attrs;
         try {
             attrs = ctx.getAttributes(groupDN);
-        } catch (NamingException e) {
+        } catch (NameNotFoundException e) {
             // For non-existed group, ignore it
-            if (!e.getMessage().toLowerCase().contains("no such object")) {
-                throw e;
-            }
+            return null;
         }
         if (attrs == null) {
             return null;
@@ -213,17 +230,17 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
         String objectClassName = null;
         while (e.hasMore()) {
             objectClassName = (String) e.next();
-            if (Objects.equals(objectClassName, SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES) ||
-                    objectClassName.equals(SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES) ||
-                    objectClassName.equals(SUPPORTED_LDAP_GROUP_TYPE_POSIX_GROUP)) {
+            if (SUPPORTED_LDAP_GROUP_TYPES.contains(objectClassName)) {
                 return objectClassName;
             }
         }
         return objectClassName;
     }
 
-    private static List<String> getMemberDNsFromGroupOfNames(DirContext ctx, String groupDN) throws NamingException {
-        List<String> memberDNs = new ArrayList<>();
+    private static Set<String> getMemberNamesFromGroupOfNames(DirContext ctx,
+                                                               String groupDN,
+                                                               String ldapGroupMatchAttr) throws NamingException {
+        Set<String> memberNames = new HashSet<>();
         Attributes attrs = ctx.getAttributes(groupDN, new String[] {"member"});
         Attribute member = attrs.get("member");
         NamingEnumeration<?> e = member.getAll();
@@ -234,24 +251,108 @@ public class LDAPGroupCacheMgr extends FrontendDaemon {
             String groupType = getGroupType(ctx, memberDN);
             if (Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_NAMES) ||
                     Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_GROUP_OF_UNIQUE_NAMES)) {
-                memberDNs.addAll(getMemberDNsFromGroupOfNames(ctx, memberDN));
+                memberNames.addAll(getMemberNamesFromGroupOfNames(ctx, memberDN, ldapGroupMatchAttr));
             } else {
-                memberDNs.add(memberDN);
+                String name = retrieveMemberNameFromDn(memberDN, ldapGroupMatchAttr);
+                if (!Strings.isNullOrEmpty(name)) {
+                    memberNames.add(name);
+                }
             }
         }
-        return memberDNs;
+        return memberNames;
     }
 
-    private static List<String> getMemberDNsFromPosixGroup(DirContext ctx, String groupDN) throws NamingException {
-        List<String> memberDNs = new ArrayList<>();
+    private static Set<String> getMemberNamesFromPosixGroup(DirContext ctx, String groupDN) throws NamingException {
+        Set<String> memberNames = new HashSet<>();
         Attributes attrs = ctx.getAttributes(groupDN, new String[] {"memberUid"});
         Attribute memberUid = attrs.get("memberUid");
         NamingEnumeration<?> e = memberUid.getAll();
         while (e.hasMore()) {
             String memberUidValue = (String) e.next();
-            String memberDN = "uid=" + memberUidValue;
-            memberDNs.add(memberDN);
+            memberNames.add(memberUidValue);
         }
-        return memberDNs;
+        return memberNames;
+    }
+
+    private static Set<String> getMemberNamesFromADGroup(DirContext ctx,
+                                                         String groupDN,
+                                                         String ldapGroupMatchAttr,
+                                                         boolean ldapGroupMatchUseMemberUid) throws NamingException {
+        LOG.info("getting member names from AD group '{}'", groupDN);
+        Set<String> memberNames = new HashSet<>();
+        // check whether `memberUid` attribute is present or not.
+        Attributes attrs = ctx.getAttributes(groupDN, new String[] {"memberUid", "member"});
+        Attribute memberUid = attrs.get("memberUid");
+        boolean memberRetrievedFromUid = false;
+        if (ldapGroupMatchUseMemberUid && memberUid != null && memberUid.size() > 0) {
+            // If present, we will use `memberUid` attribute to get the members of the group directly,
+            // otherwise we will retrieve the members of the group using `member` attribute.
+            memberRetrievedFromUid = true;
+            NamingEnumeration<?> e = memberUid.getAll();
+            while (e.hasMore()) {
+                String memberUidValue = (String) e.next();
+                LOG.info("get memberUid: '{}' from AD group '{}'", memberUidValue, groupDN);
+                memberNames.add(memberUidValue);
+            }
+        }
+
+        Attribute member = attrs.get("member");
+        NamingEnumeration<?> e = member.getAll();
+        while (e.hasMore()) {
+            String memberDN = (String) e.next();
+            // recursively get all the members of subgroup
+            // `memberDN` may or may not be a supported group
+            String groupType = getGroupType(ctx, memberDN);
+            if (Objects.equals(groupType, SUPPORTED_LDAP_GROUP_TYPE_AD_GROUP)) {
+                LOG.info("found sub AD group '{}' from '{}'", memberDN, groupDN);
+                memberNames.addAll(getMemberNamesFromADGroup(ctx, memberDN,
+                        ldapGroupMatchAttr, ldapGroupMatchUseMemberUid));
+            } else if (!memberRetrievedFromUid) {
+                String name = retrieveMemberNameFromDn(memberDN, ldapGroupMatchAttr);
+                if (!Strings.isNullOrEmpty(name)) {
+                    memberNames.add(name);
+                }
+            }
+        }
+
+        return memberNames;
+    }
+
+    @VisibleForTesting
+    public static String retrieveMemberNameFromDn(String memberDn, String ldapGroupMatchAttr) {
+        boolean usingRegex = ldapGroupMatchAttr.startsWith("regex:");
+        String[] splits = memberDn.split(",\\s*");
+        if (usingRegex) {
+            String regex = ldapGroupMatchAttr.substring(ldapGroupMatchAttr.indexOf(":") + 1);
+            Pattern p = Pattern.compile(regex);
+            for (String split : splits) {
+                Matcher m = p.matcher(split);
+                if (m.find()) {
+                    if (m.groupCount() != 1) {
+                        LOG.warn("invalid regex pattern: '{}', no matched group found", regex);
+                        continue;
+                    }
+                    String matchedName = m.group(1);
+                    LOG.info("found regex matched member name '{}' from member '{}'", matchedName, memberDn);
+                    return matchedName;
+                }
+            }
+        } else {
+            for (String split : splits) {
+                if (split.startsWith(ldapGroupMatchAttr + "=")) {
+                    String matchedName;
+                    try {
+                        matchedName = split.substring(split.indexOf("=") + 1);
+                    } catch (IndexOutOfBoundsException e) {
+                        LOG.warn("invalid member name format: '{}', msg: {}", memberDn, e.getMessage());
+                        continue;
+                    }
+                    LOG.info("found matched member name '{}' from member '{}'", matchedName, memberDn);
+                    return matchedName;
+                }
+            }
+        }
+
+        return null;
     }
 }

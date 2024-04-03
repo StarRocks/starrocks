@@ -74,13 +74,13 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
+import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
@@ -1072,7 +1072,7 @@ public class UtFrameUtils {
 
         protected static synchronized void setUp() {
             assert (fakeJournalWriter == null);
-            GlobalStateMgr.getCurrentState().setEditLog(new EditLog(masterJournalQueue));
+            GlobalStateMgr.getCurrentState().setEditLog(new EditLogEPack(masterJournalQueue));
             GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
 
             // simulate the process of master journal synchronizing to the follower

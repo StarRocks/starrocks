@@ -20,7 +20,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY;
 import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY;
+import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_USE_MEMBER_UID_KEY;
 
 public class SecurityIntegrationStatementAnalyzer {
 
@@ -77,6 +79,24 @@ public class SecurityIntegrationStatementAnalyzer {
                     throw new SemanticException("invalid '" +
                             LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY +
                             "' property value, error: " + e.getMessage(), e);
+                }
+            }
+
+            if (propertyMap.containsKey(LDAP_SEC_INTEGRATION_PROP_USE_MEMBER_UID_KEY)) {
+                String val = propertyMap.get(LDAP_SEC_INTEGRATION_PROP_USE_MEMBER_UID_KEY);
+                if (!val.equalsIgnoreCase("true") && !val.equalsIgnoreCase("false")) {
+                    throw new SemanticException("invalid '" +
+                            LDAP_SEC_INTEGRATION_PROP_USE_MEMBER_UID_KEY +
+                            "' property value, expected 'true' or 'false'");
+                }
+            }
+
+            if (propertyMap.containsKey(LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY)) {
+                String value = propertyMap.get(LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY);
+                if (value.startsWith("regex:") && value.split(":").length < 2) {
+                    throw new SemanticException("invalid '" +
+                            LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY +
+                            "' property value: " + value);
                 }
             }
 

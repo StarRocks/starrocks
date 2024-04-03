@@ -29,6 +29,15 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY = "ldap_bind_root_dn";
     public static final String LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY = "ldap_bind_root_pwd";
     public static final String LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY = "ldap_cache_refresh_interval";
+    /**
+     * When `ldap_user_group_match_attr` set to "false",
+     * we will not retrieve the member of the group based on `memberUid` attribute.
+     */
+    public static final String LDAP_SEC_INTEGRATION_PROP_USE_MEMBER_UID_KEY = "ldap_group_match_use_member_uid";
+    public static final String LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY = "ldap_user_group_match_attr";
+
+    public static final String LDAP_USER_SEARCH_DEFAULT_ATTR = "uid";
+
 
     /**
      * last refresh time of group membership for all role
@@ -59,11 +68,16 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     public String getLdapUserSearchAttr() {
-        return propertyMap.getOrDefault("ldap_user_search_attr", "uid");
+        return propertyMap.getOrDefault("ldap_user_search_attr", LDAP_USER_SEARCH_DEFAULT_ATTR);
     }
 
     public String getLdapUserGroupMatchAttr() {
-        return propertyMap.getOrDefault("ldap_user_group_match_attr", getLdapUserSearchAttr());
+        return propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY, getLdapUserSearchAttr());
+    }
+
+    public boolean getLdapGroupMatchUseMemberUid() {
+        return Boolean.parseBoolean(
+                propertyMap.getOrDefault(LDAP_SEC_INTEGRATION_PROP_USE_MEMBER_UID_KEY, "true"));
     }
 
     public String getLdapBindRootDn() {

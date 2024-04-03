@@ -133,7 +133,8 @@ public class DDLStmtExecutorVisitorEPack extends DDLStmtExecutor.StmtExecutorVis
     public ShowResultSet visitRefreshRoleMappingStatement(RefreshRoleMappingStatement stmt,
                                                           ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> {
-            context.getGlobalStateMgr().refreshRoleMapping(stmt);
+            context.getGlobalStateMgr().getNodeMgr().refreshRoleMapping(stmt,
+                    context.getGlobalStateMgr().getLdapGroupCacheMgr());
         });
 
         return null;

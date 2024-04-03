@@ -258,6 +258,9 @@ public class RoleMappingMetaMgr {
             EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
             editLogEPack.logCreateRoleMapping(name, propertyMap);
             LOG.info("finished to create role mapping '{}'", roleMapping.toString());
+            // Refresh role mappings after new role mapping added to the system.
+            GlobalStateMgr.getCurrentState().getNodeMgr().refreshRoleMapping(null,
+                    GlobalStateMgr.getCurrentState().getLdapGroupCacheMgr());
         }
     }
 

@@ -130,7 +130,6 @@ import com.starrocks.epack.qe.ShowExecutorVisitorEPack;
 import com.starrocks.epack.server.WarehouseManagerEPack;
 import com.starrocks.epack.sql.analyzer.AnalyzerVisitorEPack;
 import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
-import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.epack.sql.parser.AstBuilderEPack;
 import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.ha.FrontendNodeType;
@@ -2447,15 +2446,6 @@ public class GlobalStateMgr {
 
         LOG.info("finished dumping image to {}", dumpFilePath);
         return dumpFilePath;
-    }
-
-    /**
-     * Run on leader, need to forward to all followers and observers.
-     *
-     * @param stmt role mapping refresh statement
-     */
-    public void refreshRoleMapping(RefreshRoleMappingStatement stmt) throws DdlException {
-        nodeMgr.refreshRoleMapping(ldapGroupCacheMgr);
     }
 
     public long getImageJournalId() {

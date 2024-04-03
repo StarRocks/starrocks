@@ -48,6 +48,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.epack.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.epack.system.SystemInfoServiceEpack;
 import com.starrocks.epack.warehouse.WarehouseInfo;
 import com.starrocks.ha.BDBHA;
@@ -1111,7 +1112,13 @@ public class NodeMgr {
         return warehouseInfos;
     }
 
-    public void refreshRoleMapping(LDAPGroupCacheMgr ldapGroupCacheMgr) throws DdlException {
+    /**
+     * Run on leader, need to forward to all followers and observers.
+     *
+     * @param stmt role mapping refresh statement
+     */
+    public void refreshRoleMapping(RefreshRoleMappingStatement stmt, /* currently not used */
+                                   LDAPGroupCacheMgr ldapGroupCacheMgr) throws DdlException {
         // refresh leader itself
         ldapGroupCacheMgr.refreshGroupCache(true);
 
