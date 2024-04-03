@@ -63,17 +63,7 @@ bool StringConverter::read_string(Column* column, const Slice& s, const Options&
 
     if (options.is_hive) {
         // truncate directly, support for utf-8 encoding
-        std::vector<size_t> index{};
-        const size_t utf8_length = get_utf8_index(s, &index);
-        size_t actual_size = 0;
-        if (utf8_length > max_size) {
-            // do truncate
-            actual_size = index[max_size];
-        } else {
-            // don't need to truncate
-            actual_size = s.size;
-        }
-        down_cast<BinaryColumn*>(column)->append(Slice(s.get_data(), actual_size));
+        down_cast<BinaryColumn*>(column)->append(truncate_utf8(s, max_size));
     } else {
         if (config::enable_check_string_lengths &&
             ((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size))) {
