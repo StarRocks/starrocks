@@ -1746,6 +1746,14 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testDropTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "cannot drop table in system database: information_schema",
+                () -> starRocksAssert.dropTable("information_schema.tables")
+        );
+    }
+
+    @Test
 
     public void testCreatePartitionByExprTable() {
         ExceptionChecker.expectThrowsNoException(
