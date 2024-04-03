@@ -122,7 +122,7 @@ void append_to_json(const vpack::Slice* json, NullableColumn* result) {
         result->append_nulls(1);
     } else {
         result->null_column()->append(0);
-        down_cast<JsonColumn*>(result->data_column().get())->append(std::move(JsonValue(*json)));
+        down_cast<JsonColumn*>(result->data_column().get())->append(JsonValue(*json));
     }
 }
 
