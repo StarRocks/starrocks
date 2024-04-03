@@ -2547,6 +2547,10 @@ public class LocalMetastore implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
+        if (db.isSystemDatabase()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                    "cannot drop table in system database: " + db.getOriginName());
+        }
         db.dropTable(tableName, stmt.isSetIfExists(), stmt.isForceDrop());
     }
 
