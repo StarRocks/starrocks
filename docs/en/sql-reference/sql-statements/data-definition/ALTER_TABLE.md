@@ -25,19 +25,38 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, and swap.
 
+<<<<<<< HEAD
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
+=======
+- rename: renames a table, rollup index, or partition.
+- comment: modifies the table comment (supported from **v3.1 onwards**).
+- partition: modifies partition properties, drops a partition, or adds a partition.
+- bucket: modifies the bucketing method and number of buckets.
+- column: adds, drops, or reorders columns, or modifies column type.
+- rollup index: creates or drops a rollup index.
+- bitmap index: modifies index (only Bitmap index can be modified).
+>>>>>>> 8dc78953cc ([Doc] add a limit  for schema change in alter table (#43570))
 - swap: atomic exchange of two tables.
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - schema change: adds, drops, or reorders columns, or modifies column type.
 - rollup: creates or drops a rollup index.
 - index: modifies index (only Bitmap index can be modified).
 
-:::note
+## Limits and usage notes
 
+<<<<<<< HEAD
 - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
 - Schema change and rollup are asynchronous operations. A success message is returned immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
 - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
 :::
+=======
+- Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
+- Column names cannot be modified.
+- Column comments cannot be modified.
+- One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
+- Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](../data-definition/CANCEL_ALTER_TABLE.md) command to cancel the operation.
+- Operations on rename, comment, partition, bitmap index and swap are synchronous operations, and a command return indicates that the execution is finished.
+>>>>>>> 8dc78953cc ([Doc] add a limit  for schema change in alter table (#43570))
 
 ### Rename
 
