@@ -543,7 +543,7 @@ public class ConnectProcessor {
                     exprs.add(new NullLiteral());
                     continue;
                 }
-                LiteralExpr l = LiteralExpr.parseLiteral(mysqlTypeCodes[i]);
+                LiteralExpr l = LiteralExpr.parseLiteral(prepareCtx.getStmt().getMysqlTypeCodes().get(i));
                 l.parseMysqlParam(packetBuf);
                 exprs.add(l);
             }
