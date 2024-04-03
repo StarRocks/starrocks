@@ -332,7 +332,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 2. 基于查询到的 `TASK_NAME` 在表 `task_runs` 中查看执行状态。
 
    ```Plain
-   mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
+   mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME\G
    *************************** 1. row ***************************
         QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
        TASK_NAME: mv-59299

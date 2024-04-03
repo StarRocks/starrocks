@@ -130,7 +130,7 @@ To specify the mapping and transformation relationship between the source data a
 First, we check the Routine Load import job and confirm the Routine Load import task status is in RUNNING status.
 
 ```sql
-show routine load\G;
+show routine load\G
 ```
 
 Then, querying the corresponding table in the StarRocks database, we can observe that the data has been successfully imported.
