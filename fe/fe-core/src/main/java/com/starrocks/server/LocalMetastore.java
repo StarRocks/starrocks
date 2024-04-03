@@ -194,6 +194,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -270,7 +271,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
-import javax.validation.constraints.NotNull;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -288,6 +288,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
 
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
@@ -1579,14 +1580,13 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException, AnalysisException {
+    public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
         CatalogUtils.checkTableExist(db, table.getName());
         OlapTable olapTable = (OlapTable) table;
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         Map<String, String> tableProperties = olapTable.getTableProperty().getProperties();
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
@@ -1635,7 +1635,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 context.setFirstPartitionColumnType(firstPartitionColumn.getType());
                 context.setProperties(properties);
                 context.setTempPartition(clause.isTempPartition());
-                List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
+                List<SingleRangePartitionDesc> singleRangePartitionDescs;
+                try {
+                    singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
                 partitionNames.addAll(singleRangePartitionDescs.stream()
                         .map(SingleRangePartitionDesc::getPartitionName).collect(Collectors.toList()));
             }

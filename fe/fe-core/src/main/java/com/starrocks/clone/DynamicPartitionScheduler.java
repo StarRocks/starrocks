@@ -284,7 +284,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     }
                     distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
                             distColumnNames);
-                } else if (distributionInfo instanceof  RandomDistributionInfo) {
+                } else if (distributionInfo instanceof RandomDistributionInfo) {
                     distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
                 }
 
@@ -439,7 +439,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 clearDropPartitionFailedMsg(tableName);
-            } catch (DdlException | AnalysisException e) {
+            } catch (DdlException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
             } finally {
                 locker.unLockDatabase(db, LockType.WRITE);
@@ -459,7 +459,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         return false;
     }
 
-    private void executePartitionTimeToLive() throws AnalysisException {
+    private void executePartitionTimeToLive() {
         Iterator<Pair<Long, Long>> iterator = ttlPartitionInfo.iterator();
         while (iterator.hasNext()) {
             Pair<Long, Long> tableInfo = iterator.next();
@@ -689,12 +689,12 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     @VisibleForTesting
-    public void runOnceForTest() throws AnalysisException {
+    public void runOnceForTest() {
         runAfterCatalogReady();
     }
 
     @Override
-    protected void runAfterCatalogReady() throws AnalysisException {
+    protected void runAfterCatalogReady() {
         if (!initialize) {
             // check Dynamic Partition tables only when FE start
             initDynamicPartitionTable();
