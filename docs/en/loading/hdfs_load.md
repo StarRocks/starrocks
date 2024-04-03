@@ -42,6 +42,8 @@ Make sure the source data you want to load into StarRocks is properly stored in 
 
 You can use the simple authentication method to establish connections with your HDFS cluster. To use simple authentication, you need to gather the username and password of the account that you can use to access the NameNode of the HDFS cluster.
 
+## Typical example
+
 Create a table, start a load process that pulls the data file `/user/amber/user_behavior_ten_million_rows.parquet` from HDFS, and verify the progress and success of the data loading.
 
 ### Create a database and a table
