@@ -270,6 +270,10 @@ StatusOr<ColumnPtr> JsonFunctions::get_json_int(FunctionContext* context, const 
     return _get_json_value<TYPE_INT>(context, columns);
 }
 
+StatusOr<ColumnPtr> JsonFunctions::get_json_bigint(FunctionContext* context, const Columns& columns) {
+    return _get_json_value<TYPE_BIGINT>(context, columns);
+}
+
 StatusOr<ColumnPtr> JsonFunctions::get_json_double(FunctionContext* context, const Columns& columns) {
     return _get_json_value<TYPE_DOUBLE>(context, columns);
 }
@@ -278,8 +282,16 @@ StatusOr<ColumnPtr> JsonFunctions::get_json_string(FunctionContext* context, con
     return _get_json_value<TYPE_VARCHAR>(context, columns);
 }
 
+StatusOr<ColumnPtr> JsonFunctions::get_native_json_bool(FunctionContext* context, const Columns& columns) {
+    return _json_query_impl<TYPE_BOOLEAN>(context, columns);
+}
+
 StatusOr<ColumnPtr> JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
     return _json_query_impl<TYPE_INT>(context, columns);
+}
+
+StatusOr<ColumnPtr> JsonFunctions::get_native_json_bigint(FunctionContext* context, const Columns& columns) {
+    return _json_query_impl<TYPE_BIGINT>(context, columns);
 }
 
 StatusOr<ColumnPtr> JsonFunctions::get_native_json_double(FunctionContext* context, const Columns& columns) {

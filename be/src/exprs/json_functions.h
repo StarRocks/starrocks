@@ -74,6 +74,7 @@ public:
      * @return: type column
      */
     DEFINE_VECTORIZED_FN(get_json_int);
+    DEFINE_VECTORIZED_FN(get_json_bigint);
     DEFINE_VECTORIZED_FN(get_json_double);
     DEFINE_VECTORIZED_FN(get_json_string);
 
@@ -82,7 +83,9 @@ public:
      * @paramType: [JsonColumn, BinaryColumn]
      * @return: type column
      */
+    DEFINE_VECTORIZED_FN(get_native_json_bool);
     DEFINE_VECTORIZED_FN(get_native_json_int);
+    DEFINE_VECTORIZED_FN(get_native_json_bigint);
     DEFINE_VECTORIZED_FN(get_native_json_double);
     DEFINE_VECTORIZED_FN(get_native_json_string);
     DEFINE_VECTORIZED_FN(json_query);
