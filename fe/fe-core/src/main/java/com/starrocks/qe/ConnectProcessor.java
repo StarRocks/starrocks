@@ -533,7 +533,8 @@ public class ConnectProcessor {
             // new_params_bind_flag
             if (packetBuf.hasRemaining() && (int) packetBuf.get() != 0) {
                 // parse params types
-                IntStream.range(0, numParams).forEach(i -> mysqlTypeCodes[i] = (int) packetBuf.getChar());
+                IntStream.range(0, numParams)
+                        .forEach(i -> prepareCtx.getStmt().addMysqlTypeCodes((int) packetBuf.getChar()));
             }
             // gene exprs
             List<Expr> exprs = new ArrayList<>();

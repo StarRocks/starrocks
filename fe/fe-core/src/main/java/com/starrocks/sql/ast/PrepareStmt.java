@@ -31,6 +31,8 @@ public class PrepareStmt extends StatementBase {
 
     protected List<Parameter> parameters;
 
+    protected List<Integer> mysqlTypeCodes = new ArrayList<>();
+
     public PrepareStmt(String name, StatementBase stmt, List<Parameter> parameters) {
         super(NodePosition.ZERO);
         this.name = name;
@@ -72,6 +74,14 @@ public class PrepareStmt extends StatementBase {
             labels.add("$" + parameter.getSlotId());
         }
         return labels;
+    }
+
+    public void addMysqlTypeCodes(Integer mysqlTypeCode) {
+        mysqlTypeCodes.add(mysqlTypeCode);
+    }
+
+    public List<Integer> getMysqlTypeCodes() {
+        return mysqlTypeCodes;
     }
 
     @Override
