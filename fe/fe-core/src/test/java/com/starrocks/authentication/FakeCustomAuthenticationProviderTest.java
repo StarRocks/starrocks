@@ -14,10 +14,25 @@
 
 package com.starrocks.authentication;
 
-public class FakeCustomAuthenticationProviderTest extends CustomAuthenticationProvider {
+import com.starrocks.mysql.privilege.Password;
+import com.starrocks.sql.ast.UserIdentity;
+
+public class FakeCustomAuthenticationProviderTest implements AuthenticationProvider {
+    @Override
+    public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity, String password, String textForAuthPlugin)
+            throws AuthenticationException {
+        return null;
+    }
+
     @Override
     public void authenticate(String user, String host, byte[] password, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         throw new AuthenticationException("Login error");
+    }
+
+    @Override
+    public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
+            throws AuthenticationException {
+        return null;
     }
 }

@@ -136,18 +136,7 @@ public class AuthenticationMgr {
         AuthenticationProviderFactory.installPlugin(
                 LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal());
 
-        String className = Config.authorization_custom_class.trim();
-        if (!className.isEmpty()) {
-            try {
-                CustomAuthenticationProvider customAuthenticationProvider =
-                        ClassUtil.initialize(className, CustomAuthenticationProvider.class);
-                AuthenticationProviderFactory.installPlugin(CustomAuthenticationProvider.PLUGIN_NAME,
-                        customAuthenticationProvider);
-            } catch (Exception e) {
-                LOG.warn("Error when initialize custom Authentication class " + className +
-                        ", will try to use other Authentication provider");
-            }
-        }
+        initCustomAuthenticationIfSet();
 
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
@@ -823,5 +812,20 @@ public class AuthenticationMgr {
         this.userNameToProperty = ret.userNameToProperty;
         this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
+    }
+
+    private void initCustomAuthenticationIfSet() {
+        String className = Config.authorization_custom_class.trim();
+        if (!className.isEmpty()) {
+            try {
+                AuthenticationProvider customAuthenticationProvider =
+                        ClassUtil.initialize(className, AuthenticationProvider.class);
+                AuthenticationProviderFactory.installPlugin(AuthPlugin.AUTHENTICATION_CUSTOM.name(),
+                        customAuthenticationProvider);
+            } catch (Exception e) {
+                LOG.warn("Error when initialize custom Authentication class " + className +
+                        ", will try to use other Authentication provider");
+            }
+        }
     }
 }
