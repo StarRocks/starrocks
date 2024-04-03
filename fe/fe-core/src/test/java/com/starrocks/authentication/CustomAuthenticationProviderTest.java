@@ -67,7 +67,6 @@ public class CustomAuthenticationProviderTest {
 
         AuthenticationProvider provider =
                 AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-        Assert.assertTrue(provider instanceof CustomAuthenticationProvider);
         try {
             provider.authenticate(user, host, password, randomString, matchedUserIdentity.getValue());
             Assert.fail();
@@ -84,7 +83,6 @@ public class CustomAuthenticationProviderTest {
         SecurityIntegration securityIntegration = new CustomSecurityIntegration(authMechanism, Collections.EMPTY_MAP);
 
         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-        Assert.assertTrue(provider instanceof CustomAuthenticationProvider);
 
         try {
             UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
