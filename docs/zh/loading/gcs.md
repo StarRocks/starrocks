@@ -25,8 +25,8 @@ StarRocks 支持通过 [Broker Load](../sql-reference/sql-statements/data-manipu
 ![Broker Load 原理图](../assets/broker_load_how-to-work_zh.png)
 
 1. 用户创建导入作业。
-2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE 执行。
-3. 各个 BE 从数据源拉取数据并把数据导入到 StarRocks 中。
+2. FE 生成查询计划，然后把查询计划拆分并分分配给各个 BE（或 CN）执行。
+3. 各个 BE（或 CN）从数据源拉取数据并把数据导入到 StarRocks 中。
 
 ## 准备工作
 
@@ -53,7 +53,7 @@ StarRocks 支持通过 [Broker Load](../sql-reference/sql-statements/data-manipu
 
 ## 操作示例
 
-创建 StarRocks 表，启动导入作业从 AGCS 拉取样例数据集  `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` 的数据，然后验证导入过程和结果是否成功。
+创建 StarRocks 表，启动导入作业从 GCS 拉取样例数据集  `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` 的数据，然后验证导入过程和结果是否成功。
 
 ### 建库建表
 
