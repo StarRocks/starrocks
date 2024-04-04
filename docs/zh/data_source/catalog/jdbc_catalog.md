@@ -115,7 +115,7 @@ DROP Catalog jdbc0;
 1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查看指定 Catalog 所属的集群中的数据库：
 
    ```SQL
-   SHOW DATABASES from <catalog_name>;
+   SHOW DATABASES FROM <catalog_name>;
    ```
 
 2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 切换当前会话生效的 Catalog：
