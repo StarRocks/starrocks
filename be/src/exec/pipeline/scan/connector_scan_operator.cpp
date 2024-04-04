@@ -487,9 +487,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     // consumed chunks per 10ms, but op_running time is nanosecond unit.
     double operator_speed = _op_pull_chunks * 1e7 / (_op_running_time_ns + 1);
 
-    // `cs_scan_speed` is speed in this single scan operator.
+    // `cs_scan_speed` is speed in this single scan operator. bytes/us.
     int64_t cs_total_scan_bytes = P.cs_total_scan_bytes.load();
-    double cs_scan_speed = cs_total_scan_bytes * 1e4 / (P.cs_gen_chunks_time + 1);
+    double cs_scan_speed = cs_total_scan_bytes * 1.0 / (P.cs_gen_chunks_time + 1);
 
     // chunk source: total io time and running time.
     // we can see if this is slow device. io_latency in ms unit.
@@ -532,13 +532,18 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
 
     // adjust io tasks according to feedback.
     auto do_adjustment = [&]() {
+        // if operator can not consume chunks, dec io task.
         if (source_speed > operator_speed) {
             do_sub_io_tasks();
             return;
         }
 
         check_slow_io();
-        if (try_add_io_tasks()) {
+
+        // if source is too slow, add io task
+        if ((source_speed * 4) < operator_speed) {
+            do_add_io_tasks();
+        } else if (try_add_io_tasks()) {
             // if we don't try add io tasks before,
             // or if we've tried and we get expected speedup ratio.
             do_add_io_tasks();
@@ -557,10 +562,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         ss << "available_pickup_morsel_count. id = " << _plan_node_id << ", seq = " << _driver_sequence;
 
         // ---- adaptive chunk source scan speed -----
-        ss << ", scan = " << doround(cs_scan_speed) << "(" << cs_total_scan_bytes * 1e4 << "/" << P.cs_gen_chunks_time
-           << ")";
-        ss << ", last_scan = " << doround(P.last_cs_scan_speed) << "(" << doround(cs_scan_speed / P.last_cs_scan_speed)
-           << ")";
+        ss << ", scan = " << doround(cs_scan_speed) << "(" << cs_total_scan_bytes << "/" << P.cs_gen_chunks_time << ")";
+        ss << ", last_scan = " << doround(P.last_cs_scan_speed) << "("
+           << doround(cs_scan_speed / (P.last_cs_scan_speed + 1e-3)) << ")";
 
         // --- source vs. operator -----
         ss << ", src = " << doround(source_speed) << "(" << _op_pull_chunks << "/" << (P.cs_gen_chunks_time * 1e-4)
