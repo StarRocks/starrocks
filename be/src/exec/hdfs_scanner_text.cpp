@@ -248,17 +248,6 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-
-    // update materialized columns.
-    {
-        std::unordered_set<std::string> names;
-        for (const auto& column : _scanner_ctx.materialized_columns) {
-            if (column.name() == "__count__") continue;
-            names.insert(column.name());
-        }
-        _scanner_ctx.update_materialized_columns(names);
-    }
-
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
     for (const auto column : _scanner_ctx.materialized_columns) {
         // We don't care about _invalid_field_as_null here, if get converter failed,
