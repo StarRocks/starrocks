@@ -114,7 +114,7 @@ DROP Catalog jdbc0;
 1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your JDBC-compatible cluster:
 
    ```SQL
-   SHOW DATABASES <catalog_name>;
+   SHOW DATABASES FROM <catalog_name>;
    ```
 
 2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
