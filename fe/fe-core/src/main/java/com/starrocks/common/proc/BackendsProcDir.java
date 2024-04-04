@@ -39,8 +39,10 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.starrocks.alter.DecommissionType;
+import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -60,6 +62,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class BackendsProcDir implements ProcDirInterface {
@@ -69,7 +72,7 @@ public class BackendsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES_SHARED_DATA;
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
-                .add("BackendId").add("IP").add("HeartbeatPort")
+                .add("BackendId").add("Address").add("IP").add("HeartbeatPort")
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat")
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
@@ -130,6 +133,7 @@ public class BackendsProcDir implements ProcDirInterface {
         Stopwatch watch = Stopwatch.createUnstarted();
         List<List<Comparable>> comparableBackendInfos = new LinkedList<>();
         long tabletNum = 0;
+        DomainResolver domainResolver = new DomainResolver();
         for (long backendId : backendIds) {
             Backend backend = clusterInfoService.getBackend(backendId);
             if (backend == null) {
@@ -145,8 +149,14 @@ public class BackendsProcDir implements ProcDirInterface {
             }
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
+            Set<String> resolvedIPs = Sets.newHashSet();
+            String resolvedip = null;
             backendInfo.add(String.valueOf(backendId));
             backendInfo.add(backend.getHost());
+            if (domainResolver.resolveWithDNS(backend.getHost(), resolvedIPs)) {
+                resolvedip = (String) resolvedIPs.toArray()[0];
+            }
+            backendInfo.add(resolvedip);
             backendInfo.add(String.valueOf(backend.getHeartbeatPort()));
             backendInfo.add(String.valueOf(backend.getBePort()));
             backendInfo.add(String.valueOf(backend.getHttpPort()));
@@ -296,5 +306,6 @@ public class BackendsProcDir implements ProcDirInterface {
     }
 
 }
+
 
 
