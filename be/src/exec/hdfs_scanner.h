@@ -347,7 +347,7 @@ public:
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
-    virtual bool is_jni_scanner() { return false; }
+    virtual Status reinterpret_status(const Status& st);
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
