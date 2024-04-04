@@ -256,7 +256,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
             if (column.name() == "___count___") continue;
             names.insert(column.name());
         }
-        _scanner_ctx.update_materialized_columns(names);
+        RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
     }
 
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
@@ -369,7 +369,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
     }
 
-    _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read);
+    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     // Check chunk's row number for each column
