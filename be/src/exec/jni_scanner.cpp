@@ -45,7 +45,7 @@ Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams&
 Status JniScanner::do_open(RuntimeState* state) {
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
-    update_jni_scanner_params();
+    RETURN_IF_ERROR(update_jni_scanner_params());
     if (env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
         RETURN_IF_ERROR(_check_jni_exception(env, "Failed to ensure the local capacity."));
     }
@@ -383,7 +383,7 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // important to add columns before evaluation
     // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
     size_t chunk_size = (*chunk)->num_rows();
-    _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
+    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
     return status;
@@ -489,7 +489,7 @@ Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         chunk_size = first_non_partition_column->size();
     }
 
-    _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
+    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
     // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));

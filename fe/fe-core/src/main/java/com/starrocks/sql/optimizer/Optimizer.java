@@ -65,6 +65,11 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
+>>>>>>> 9d1c52cfa5 ([Feature] Optimize count(1) in hdfs scanner by rewriting plan to sum)
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;

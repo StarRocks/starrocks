@@ -44,6 +44,11 @@ select * from test_hive_avro_format where abs(col_float - 1.23) < 0.01 ;
 select col_tinyint,col_decimal,col_array from test_hive_avro_format;
 select col_tinyint,col_timestamp from test_hive_avro_format  order by 1 limit 3;
 
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from test_hive_avro_format;
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*) from test_hive_avro_format;
+
 
 shell: ossutil64 rm -rf ${avro_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 
@@ -90,6 +95,13 @@ select col_tinyint,col_decimal,col_array from test_hive_rcbinary_format;
 -- test timestamp with rcbianry dealing with timezone
 select col_tinyint,col_timestamp from test_hive_rcbinary_format  order by 1 limit 3;
 
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from test_hive_rcbinary_format;
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*) from test_hive_rcbinary_format;
+
+
+
 shell: ossutil64 rm -rf ${rcbinary_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 
 -- name: testHiveRctextFormat
@@ -131,6 +143,11 @@ select * from test_hive_rctext_format where col_string = 'world';
 select * from test_hive_rctext_format where abs(col_float - 1.23) < 0.01 ;
 select col_tinyint,col_decimal,col_array from test_hive_rctext_format;
 
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from test_hive_rctext_format;
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*) from test_hive_rctext_format;
+
 shell: ossutil64 rm -rf ${rctext_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 
 -- name: testHiveSequenceFormat
@@ -171,6 +188,11 @@ PROPERTIES
 select * from test_hive_sequence_format where col_string = 'world';
 select * from test_hive_sequence_format where abs(col_float - 1.23) < 0.01 ;
 select col_tinyint,col_decimal,col_array from test_hive_sequence_format;
+
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*) from test_hive_sequence_format;
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*) from test_hive_sequence_format;
 
 shell: ossutil64 rm -rf ${sequence_prefix[1]}  >/dev/null || echo "exit 0" >/dev/null
 
