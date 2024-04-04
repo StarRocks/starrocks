@@ -181,7 +181,6 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_opened) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(_build_scanner_context());
     RETURN_IF_ERROR(do_open(runtime_state));
     RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
     _opened = true;
