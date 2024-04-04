@@ -212,12 +212,12 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         vector<IndexValue> values;
         values.reserve(N);
         for (int j = 0; j < N; j++) {
-            keys.emplace_back(k);
-            total_keys.emplace_back(k);
+            keys.emplace_back(j);
+            total_keys.emplace_back(j);
             key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
             total_key_slices.emplace_back((uint8_t*)(&total_keys[k]), sizeof(Key));
-            values.emplace_back(k * 2);
-            total_values.emplace_back(k * 2);
+            values.emplace_back(j * 2);
+            total_values.emplace_back(j * 2);
             ++k;
         }
         index->prepare(EditVersion(i, 0), 0);

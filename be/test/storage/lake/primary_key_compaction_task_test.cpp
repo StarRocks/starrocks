@@ -1162,7 +1162,8 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     }
     // Prepare data for writing
     std::vector<Chunk> chunks;
-    for (int i = 0; i < 10; i++) {
+    int N = config::lake_pk_index_sst_max_compaction_versions + 5;
+    for (int i = 0; i < N; i++) {
         chunks.push_back(generate_data(kChunkSize, i));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -1174,7 +1175,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     config::l0_max_mem_usage = 10;
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < N; i++) {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -1208,7 +1209,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     version++;
     ASSERT_EQ(10 * kChunkSize, read(version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 5);
+    EXPECT_EQ(config::lake_pk_index_sst_max_compaction_versions, new_tablet_metadata->orphan_files_size());
 
     config::l0_max_mem_usage = l0_max_mem_usage;
 }

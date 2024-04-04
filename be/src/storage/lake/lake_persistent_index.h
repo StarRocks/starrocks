@@ -36,6 +36,24 @@ class TxnLogPB_OpCompaction;
 
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
+class KeyValueMerger {
+public:
+    explicit KeyValueMerger(const std::string& key, sstable::TableBuilder* builder)
+            : _key(std::move(key)), _builder(builder) {}
+
+    Status merge(const std::string& key, const std::string& value);
+
+    void finish() { build_index_value_vers(); }
+
+private:
+    void build_index_value_vers();
+
+private:
+    std::string _key;
+    sstable::TableBuilder* _builder;
+    std::list<IndexValueWithVer> _index_value_vers;
+};
+
 // LakePersistentIndex is not thread-safe.
 // Caller should take care of the multi-thread safety
 class LakePersistentIndex : public PersistentIndex {
@@ -115,9 +133,6 @@ private:
                              int64_t version) const;
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
-
-    static void build_index_value_vers(const std::string& key, const std::list<IndexValueWithVer>& index_value_vers,
-                                       sstable::TableBuilder* builder);
 
     std::unique_ptr<sstable::Iterator> prepare_merging_iterator();
 
