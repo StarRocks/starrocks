@@ -367,8 +367,22 @@ void HdfsScanner::update_counter() {
     do_update_counter(profile);
 }
 
-void HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
+Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
     std::vector<ColumnInfo> updated_columns;
+
+    // special handling for ___count__ optimization.
+    {
+        for (auto& column : materialized_columns) {
+            if (column.name() == "___count___") {
+                return_count_column = true;
+                break;
+            }
+        }
+
+        if (return_count_column && materialized_columns.size() != 1) {
+            return Status::InternalError("Plan inconsistency. ___count___ column should be unique.");
+        }
+    }
 
     for (auto& column : materialized_columns) {
         auto col_name = column.formatted_name(case_sensitive);
@@ -388,19 +402,57 @@ void HdfsScannerContext::update_materialized_columns(const std::unordered_set<st
     }
 
     materialized_columns.swap(updated_columns);
+    return Status::OK();
 }
 
-void HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.empty()) return;
+Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (not_existed_slots.empty()) return Status::OK();
     ChunkPtr& ck = (*chunk);
-    for (auto* slot_desc : not_existed_slots) {
-        auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-        if (row_count > 0) {
-            col->append_default(row_count);
+
+    // special handling for ___count___ optimization
+    {
+        for (auto* slot_desc : not_existed_slots) {
+            if (slot_desc->col_name() == "___count___") {
+                return_count_column = true;
+                break;
+            }
         }
+        if (return_count_column && not_existed_slots.size() != 1) {
+            return Status::InternalError("Plan inconsistency. ___count___ column should be unique.");
+        }
+    }
+
+    if (return_count_column) {
+        auto* slot_desc = not_existed_slots[0];
+        TypeDescriptor desc;
+        desc.type = TYPE_BIGINT;
+        auto col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
+        col->append_datum(int64_t(1));
+        col->assign(row_count, 0);
         ck->append_or_update_column(std::move(col), slot_desc->id());
+    } else {
+        for (auto* slot_desc : not_existed_slots) {
+            auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+            if (row_count > 0) {
+                col->append_default(row_count);
+            }
+            ck->append_or_update_column(std::move(col), slot_desc->id());
+        }
     }
     ck->set_num_rows(row_count);
+    return Status::OK();
+}
+
+void HdfsScannerContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (not_existed_slots.empty() || row_count < 0) return;
+    ChunkPtr& ck = (*chunk);
+    auto* slot_desc = not_existed_slots[0];
+    TypeDescriptor desc;
+    desc.type = TYPE_BIGINT;
+    auto col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
+    col->append_datum(int64_t(row_count));
+    ck->append_or_update_column(std::move(col), slot_desc->id());
+    ck->set_num_rows(1);
 }
 
 Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {
@@ -426,7 +478,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
-    append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);

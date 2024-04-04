@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.AbstractSequentialIterator;
@@ -243,6 +242,14 @@ public class IcebergStatisticProvider {
 
             columnStatistics.put(columnList.get(0), buildColumnStatistic(
                     idColumn.getKey(), colRefToColumnMetaMap.get(columnList.get(0)), icebergFileStats, colIdToNdv));
+        }
+
+        // when we rewrit plan, we will add some artificial columns which not eixst in iceberg table,
+        // and we will mark those columns as unknown column statistics.
+        for (ColumnRefOperator c : colRefToColumnMetaMap.keySet()) {
+            if (!columnStatistics.containsKey(c)) {
+                columnStatistics.put(c, ColumnStatistic.unknown());
+            }
         }
 
         return columnStatistics;

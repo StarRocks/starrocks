@@ -95,7 +95,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     std::unordered_set<std::string> names;
     _meta_helper = _build_meta_helper();
     _meta_helper->set_existed_column_names(&names);
-    _scanner_ctx->update_materialized_columns(names);
+    RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(names));
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
@@ -688,7 +688,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                _scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count);
+                RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count));
                 _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
@@ -699,6 +699,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
                     // prepare new group
                     RETURN_IF_ERROR(_prepare_cur_row_group());
                 }
+
                 return Status::OK();
             }
         } else {
@@ -716,9 +717,16 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
-        size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-        _scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size);
-        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
+        size_t read_size = 0;
+        if (_scanner_ctx->return_count_column) {
+            read_size = _total_row_count - _scan_row_count;
+            _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
+            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
+        } else {
+            read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
+            RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size));
+            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
+        }
         _scan_row_count += read_size;
         return Status::OK();
     }
