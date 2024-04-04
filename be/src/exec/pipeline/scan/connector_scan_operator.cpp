@@ -580,7 +580,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         return ss.str();
     };
 
-    // VLOG_OPERATOR << build_debug_string();
+    VLOG_OPERATOR << build_debug_string();
 
     P.last_cs_scan_speed = cs_scan_speed;
     P.last_cs_total_scan_bytes = cs_total_scan_bytes;
