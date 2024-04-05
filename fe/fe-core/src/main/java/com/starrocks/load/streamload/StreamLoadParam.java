@@ -47,7 +47,6 @@ public class StreamLoadParam {
     private static final String MAX_FILTER_RATIO = "max_filter_ratio";
     private static final String IDLE_TRANSACTION_TIMEOUT = "idle_transaction_timeout";
     private static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
-
     private static final String ENVELOPE = "envelope";
 
     public TFileFormatType formatType = TFileFormatType.FORMAT_CSV_PLAIN;
@@ -98,7 +97,7 @@ public class StreamLoadParam {
     }
 
     public TEnvelope parseStreamLoadEnvelope(String envelope) {
-        if (envelope.equalsIgnoreCase("debezium")) {
+        if (envelope.equalsIgnoreCase(TEnvelope.DEBEZIUM.name())) {
             return TEnvelope.DEBEZIUM;
         }
         return TEnvelope.UNKNOWN;

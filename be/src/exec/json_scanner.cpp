@@ -14,6 +14,7 @@
 
 #include "exec/json_scanner.h"
 
+#include <column/primary_key_ops.h>
 #include <fmt/format.h>
 #include <ryu/ryu.h>
 
@@ -41,6 +42,14 @@
 namespace starrocks {
 
 const int64_t MAX_ERROR_LOG_LENGTH = 64;
+// Debezium-json
+const std::string DEBEZIUM_OP_PATH = "$.op";
+const std::string DEBEZIUM_BEFORE_PATH = "$.before";
+const std::string DEBEZIUM_AFTER_PATH = "$.after";
+const std::string DEBEZIUM_CREATE = "c";
+const std::string DEBEZIUM_UPDATE = "u";
+const std::string DEBEZIUM_READ = "r";
+const std::string DEBEZIUM_DELETE = "d";
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
@@ -601,11 +610,9 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
-                    std::string op = is_delete ? "1" : "0";
-                    std::ignore = column->append_strings(std::vector{Slice{op}});
+                    std::ignore = column->append_strings(std::vector{Slice{PrimaryKeyOps::get_op_string(is_delete)}});
                 } else {
-                    uint8_t op = is_delete ? 1 : 0;
-                    column->append_datum(Datum((uint8_t)op));
+                    column->append_datum(Datum((uint8_t)PrimaryKeyOps::get_op_int(is_delete)));
                 }
             } else {
                 column->append_nulls(1);
@@ -617,27 +624,30 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
 // process debezium-json record
 Status JsonReader::_construct_row_by_debezium(simdjson::ondemand::object* row, Chunk* chunk) {
     if (UNLIKELY(_op_col_index < 0)) {
-        return Status::InternalError("Debezium json must apply to PRIMARY KEY table.");
+        return Status::JsonFormatError(
+                strings::Substitute("Debezium json must apply to PRIMARY KEY table, current table $0.$1 is not.",
+                                    _scanner->_params.db_name, _scanner->_params.table_name));
     }
     simdjson::ondemand::value op_value, value;
     // Extract the operation type
     std::vector<SimpleJsonPath> op_json_paths;
-    RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string("$.op"), &op_json_paths));
+    RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(DEBEZIUM_OP_PATH), &op_json_paths));
     RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, op_json_paths, &op_value));
     std::string_view op_sv = op_value.get_string().value();
 
     std::vector<SimpleJsonPath> row_json_paths;
     // Based on the operation type, extract the relevant data and set the operation column
-    if (op_sv == "c" || op_sv == "u" || op_sv == "r") {
+    if (op_sv == DEBEZIUM_READ || op_sv == DEBEZIUM_CREATE || op_sv == DEBEZIUM_UPDATE) {
         // For create, update, or read operations, use the 'after' field
-        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string("$.after"), &row_json_paths));
+        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(DEBEZIUM_AFTER_PATH), &row_json_paths));
         RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, row_json_paths, &value));
-    } else if (op_sv == "d") {
+    } else if (op_sv == DEBEZIUM_DELETE) {
         // For delete operations, use the 'before' field
-        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string("$.before"), &row_json_paths));
+        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(DEBEZIUM_BEFORE_PATH), &row_json_paths));
         RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, row_json_paths, &value));
     } else {
-        return Status::DataQualityError("Invalid 'op' value in Debezium JSON");
+        return Status::DataQualityError(strings::Substitute(
+                "Invalid 'op' value in Debezium JSON, op='$0', vaild ops are (c, u, r, d).", op_sv));
     }
 
     // Construct the row with the extracted value
@@ -711,8 +721,12 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
 }
 
 Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk) {
-    if (_scanner->_envelope == TEnvelope::DEBEZIUM) return _construct_row_by_debezium(row, chunk);
-    if (_scanner->_json_paths.empty()) return _construct_row_without_jsonpath(row, chunk, false);
+    if (_scanner->_envelope == TEnvelope::DEBEZIUM) {
+        return _construct_row_by_debezium(row, chunk);
+    }
+    if (_scanner->_json_paths.empty()) {
+        return _construct_row_without_jsonpath(row, chunk, false);
+    }
     return _construct_row_with_jsonpath(row, chunk);
 }
 

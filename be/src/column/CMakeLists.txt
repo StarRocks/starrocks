@@ -45,4 +45,5 @@ add_library(Column STATIC
         map_column.cpp
         struct_column.cpp
         stream_chunk.cpp
+        primary_key_ops.cpp
 )
