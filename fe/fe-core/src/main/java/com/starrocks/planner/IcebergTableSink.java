@@ -52,6 +52,7 @@ public class IcebergTableSink extends DataSink {
     private final String fileFormat;
     private final String location;
     private final String compressionType;
+    private final long targetMaxFileSize;
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
@@ -66,10 +67,7 @@ public class IcebergTableSink extends DataSink {
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
         this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
-        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
-            throw new SemanticException("compression type " + compressionType + " is not supported. " +
-                    "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
-        }
+        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
         String catalogName = icebergTable.getCatalogName();
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,
@@ -108,6 +106,7 @@ public class IcebergTableSink extends DataSink {
         tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tIcebergTableSink.setCompression_type(compression);
+        tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tIcebergTableSink.setCloud_configuration(tCloudConfiguration);

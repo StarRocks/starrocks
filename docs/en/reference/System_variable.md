@@ -170,6 +170,12 @@ Whether to enable low cardinality optimization. After this feature is enabled, t
 
 Specifies the data type used for data comparison between DECIMAL data and STRING data. The default value is `VARCHAR`, and DECIMAL is also a valid value.
 
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* Description: Specifies the maximum number of candidate materialized views allowed during query planning.
+* Default: 64
+* Introduced in: v3.1.9, v3.2.5
+
 ### character_set_database (global)
 
 The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
@@ -206,11 +212,19 @@ Used to control whether the Colocation Join is enabled. The default value is `fa
 
 ### disable_streaming_preaggregations
 
-Used to enable the streaming pre-aggregations. The default value is `false`, meaning  it is enabled.
+Used to enable the streaming pre-aggregations. The default value is `false`, meaning it is enabled.
 
 ### div_precision_increment
 
 Used for MySQL client compatibility. No practical usage.
+
+<!--
+### enable_collect_table_level_scan_stats (Invisible to users)
+
+This variable is introduced to solve compatibility issues.
+
+Default value: `true`.
+-->
 
 ### enable_connector_adaptive_io_tasks (2.5 and later)
 
@@ -228,7 +242,7 @@ You can also enable bucketization for the COUNT DISTINCT column by adding the `s
 
 ### enable_group_level_query_queue (3.1.4 and later)
 
-Whether to enable resource group-level [query queue](../administration/query_queues.md).
+Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 
 Default value: false, which means this feature is disabled.
 
@@ -736,4 +750,6 @@ The StarRocks version. Cannot be changed.
 
 ### wait_timeout
 
-Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
+The number of seconds the server waits for activity on a noninteractive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
+
+Unit: seconds. Default value: 28800 (8 hours).

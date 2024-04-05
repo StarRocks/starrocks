@@ -1047,8 +1047,9 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
                             std::unique_ptr<ColumnReader>* output) {
     // We will only set a complex type in ParquetField
     if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
-        return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
-                                                         field->type.type, col_type.type));
+        return Status::InternalError(
+                strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
+                                    logical_type_to_string(field->type.type), logical_type_to_string(col_type.type)));
     }
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;

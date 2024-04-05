@@ -27,6 +27,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,6 +55,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .addAll(TITLE_NAMES)
                 .add("StarletPort")
                 .add("WorkerId")
+                .add("WarehouseName")
                 .add("TabletNum");
         TITLE_NAMES_SHARED_DATA = builder.build();
     }
@@ -151,6 +153,8 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
+                Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(computeNode.getWarehouseId());
+                computeNodeInfo.add(wh.getName());
 
                 String workerAddr = computeNode.getHost() + ":" + computeNode.getStarletPort();
                 long tabletNum = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerTabletNum(workerAddr);

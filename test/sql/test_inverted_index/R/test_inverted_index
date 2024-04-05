@@ -8,7 +8,6 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -42,7 +41,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -105,7 +103,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -133,7 +130,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -193,7 +189,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -293,7 +288,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -398,7 +392,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -483,7 +476,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -554,7 +546,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -585,7 +576,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -640,7 +630,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -668,7 +657,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -719,7 +707,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -735,7 +722,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -751,7 +737,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -767,7 +752,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -784,7 +768,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -801,7 +784,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -818,7 +800,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -836,7 +817,6 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "2",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "compression" = "LZ4"
@@ -859,4 +839,100 @@ SELECT * FROM t_clone_for_gin ORDER BY id1;
 -- result:
 1	abc
 2	ABC
+-- !result
+-- name: test_complex_predicate_for_gin
+CREATE TABLE `t_complex_predicate_for_gin_none` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT ''
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t_complex_predicate_for_gin_english` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  INDEX gin_english (`text_column`) USING GIN ("parser" = "english") COMMENT ''
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_complex_predicate_for_gin_none VALUES (1, "abc cbd");
+-- result:
+-- !result
+INSERT INTO t_complex_predicate_for_gin_none VALUES (2, "cbd edf");
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) LIKE "%CBD%";
+-- result:
+1	abc cbd
+2	cbd edf
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) LIKE "%cbd%";
+-- result:
+1	abc cbd
+2	cbd edf
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) LIKE "abc";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) LIKE "%abc%";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column LIKE CONCAT("ab", "c");
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column LIKE CONCAT("ab", "%");
+-- result:
+1	abc cbd
+-- !result
+INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
+-- result:
+-- !result
+INSERT INTO t_complex_predicate_for_gin_english VALUES (2, "cbd edf");
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) LIKE "%CBD%";
+-- result:
+1	abc cbd
+2	cbd edf
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) LIKE "%cbd%";
+-- result:
+1	abc cbd
+2	cbd edf
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) LIKE "abc";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) LIKE "%abc%";
+-- result:
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column LIKE CONCAT("ab", "c");
+-- result:
+1	abc cbd
+-- !result
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column LIKE CONCAT("ab", "%");
+-- result:
+1	abc cbd
+-- !result
+DROP TABLE t_complex_predicate_for_gin_none;
+-- result:
+-- !result
+DROP TABLE t_complex_predicate_for_gin_english;
+-- result:
 -- !result

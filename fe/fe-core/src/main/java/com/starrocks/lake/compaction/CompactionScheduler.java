@@ -32,7 +32,6 @@ import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -46,6 +45,7 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -358,12 +358,14 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utils.chooseNodeId((LakeTablet) tablet);
-                if (beId == null) {
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeAssignedToTablet(
+                        Config.lake_compaction_warehouse, (LakeTablet) tablet);
+                if (computeNode == null) {
                     beToTablets.clear();
                     return beToTablets;
                 }
-                beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+
+                beToTablets.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
             }
         }
         return beToTablets;
@@ -380,8 +382,11 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnSourceType txnSourceType = TransactionState.TxnSourceType.FE;
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
+
+        String warehouseName = Config.lake_compaction_warehouse;
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, Config.lake_compaction_default_timeout_second);
+                loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)

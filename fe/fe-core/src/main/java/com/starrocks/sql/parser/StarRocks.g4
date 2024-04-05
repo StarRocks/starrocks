@@ -131,6 +131,7 @@ statement
     | adminRepairTableStatement
     | adminCancelRepairTableStatement
     | adminCheckTabletsStatement
+    | adminSetPartitionVersion
     | killStatement
     | syncStatement
     | executeScriptStatement
@@ -754,6 +755,10 @@ adminCancelRepairTableStatement
 
 adminCheckTabletsStatement
     : ADMIN CHECK tabletList PROPERTIES '('property')'
+    ;
+
+adminSetPartitionVersion
+    : ADMIN SET TABLE qualifiedName PARTITION '('(partitionName=identifierOrString | partitionId=INTEGER_VALUE)')' VERSION TO version=INTEGER_VALUE
     ;
 
 killStatement
@@ -1709,7 +1714,7 @@ privilegeType
     | ALTER | APPLY | BLACKLIST
     | CREATE (
         DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
-        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY | STORAGE VOLUME
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY | STORAGE VOLUME | WAREHOUSE
         | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
@@ -1717,12 +1722,12 @@ privilegeType
 
 privObjectType
     : CATALOG | DATABASE | MATERIALIZED VIEW | POLICY | RESOURCE | RESOURCE GROUP| STORAGE VOLUME | SYSTEM | TABLE| VIEW
-    | PIPE
+        | WAREHOUSE | PIPE
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS | PIPES
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
     ;
 
 // ---------------------------------------- Security Policy Statement ---------------------------------------------------
@@ -2824,7 +2829,7 @@ nonReserved
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
-    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VOLUME | VOLUMES
+    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT | NGRAMBF

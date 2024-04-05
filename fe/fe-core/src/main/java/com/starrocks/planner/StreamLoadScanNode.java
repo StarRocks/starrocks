@@ -145,8 +145,9 @@ public class StreamLoadScanNode extends LoadScanNode {
     }
 
     public StreamLoadScanNode(
-            TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable, 
-            StreamLoadInfo streamLoadInfo, String dbName, String label, int numInstances, long txnId) {
+            TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable,
+            StreamLoadInfo streamLoadInfo, String dbName, String label,
+            int numInstances, long txnId, long warehouseId) {
         super(id, tupleDesc, "StreamLoadScanNode");
         this.loadId = loadId;
         this.dstTable = dstTable;
@@ -160,6 +161,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.txnId = txnId;
         this.curChannelId = 0;
         this.nullExprInAutoIncrement = true;
+        this.warehouseId = warehouseId;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -233,9 +235,9 @@ public class StreamLoadScanNode extends LoadScanNode {
     private void initColumns() throws UserException {
         paramCreateContext.tupleDescriptor = analyzer.getDescTbl().createTupleDescriptor("StreamLoadScanNode");
         Load.initColumns(dstTable, streamLoadInfo.getColumnExprDescs(), null /* no hadoop function */,
-                    exprsByName, analyzer, paramCreateContext.tupleDescriptor, slotDescByName,
-                    paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
-                    streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate());
+                exprsByName, analyzer, paramCreateContext.tupleDescriptor, slotDescByName,
+                paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
+                streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate());
     }
 
     @Override

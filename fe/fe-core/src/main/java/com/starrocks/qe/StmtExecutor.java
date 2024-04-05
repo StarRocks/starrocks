@@ -1310,12 +1310,12 @@ public class StmtExecutor {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
         Table table = MetaUtils.getTable(context, dropHistogramStmt.getTableName());
         if (dropHistogramStmt.isExternal()) {
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
+            List<String> columns = dropHistogramStmt.getColumnNames();
 
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalHistogramStatsMetaAndData(
-                    StatisticUtils.buildConnectContext(), dropHistogramStmt.getTableName(), table,
-                    dropHistogramStmt.getColumnNames());
-            // todo(ywb): expire external histogram statistics
+                    StatisticUtils.buildConnectContext(), dropHistogramStmt.getTableName(), table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorHistogramStatistics(table, columns);
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
@@ -1547,8 +1547,7 @@ public class StmtExecutor {
 
     // Process show statement
     private void handleShow() throws IOException, AnalysisException, DdlException {
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute((ShowStmt) parsedStmt, context);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute((ShowStmt) parsedStmt, context);
         if (resultSet == null) {
             // state changed in execute
             return;
@@ -1693,8 +1692,7 @@ public class StmtExecutor {
                 com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
         ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
         showExportStmt.setQueryId(queryId);
-        ShowExecutor executor = new ShowExecutor();
-        ShowResultSet resultSet = executor.execute(showExportStmt, context);
+        ShowResultSet resultSet = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showExportStmt, context);
         if (resultSet == null) {
             // state changed in execute
             return;
@@ -1823,7 +1821,7 @@ public class StmtExecutor {
         }
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
-                insertStmt, db.getId(), olapTable.getId());
+                insertStmt, db.getId(), olapTable.getId(), context.getCurrentWarehouseId());
         if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
             throw new DmlException("database:%s does not exist.", db.getFullName());
         }

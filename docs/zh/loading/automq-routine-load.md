@@ -122,7 +122,7 @@ COLUMNS 中的列名对应**目标表**的列名，列的顺序对应**源数据
 首先我们查看 Routine Load 导入作业的情况，确认 Routine Load 导入任务状态为 RUNNING：
 
 ```sql
-show routine load\G;
+show routine load\G
 ```
 
 然后查询 StarRocks 数据库中对应的表，我们可以看到数据已经被成功导入：

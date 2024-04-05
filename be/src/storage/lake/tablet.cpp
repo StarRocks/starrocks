@@ -92,12 +92,20 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int6
     }
 }
 
+const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
+    auto tablet_schema_or = _mgr->get_tablet_schema(_id, nullptr);
+    if (!tablet_schema_or.ok()) {
+        return nullptr;
+    }
+    return tablet_schema_or.value();
+}
+
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
-StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_index_id(int64_t index_id) {
-    return _mgr->get_tablet_schema_by_index_id(_id, index_id);
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t index_id) {
+    return _mgr->get_tablet_schema_by_id(_id, index_id);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
@@ -141,6 +149,10 @@ std::string Tablet::delvec_location(std::string_view delvec_name) const {
     return _mgr->delvec_location(_id, delvec_name);
 }
 
+std::string Tablet::sst_location(std::string_view sst_name) const {
+    return _mgr->sst_location(_id, sst_name);
+}
+
 std::string Tablet::root_location() const {
     return _mgr->tablet_root_location(_id);
 }
@@ -174,6 +186,17 @@ int64_t Tablet::data_size() {
         return size.value();
     } else {
         LOG(WARNING) << "failed to get tablet " << _id << " data size: " << size.status();
+        return 0;
+    }
+}
+
+size_t Tablet::num_rows() const {
+    int64_t version = _version_hint;
+    auto num_rows = _mgr->get_tablet_num_rows(_id, &version);
+    if (num_rows.ok()) {
+        return num_rows.value();
+    } else {
+        LOG(WARNING) << "failed to get tablet rows num" << _id << "num rows: " << num_rows.status();
         return 0;
     }
 }

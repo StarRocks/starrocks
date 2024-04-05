@@ -285,6 +285,14 @@ public class SetStmtAnalyzer {
                 throw new SemanticException(String.format("Unknown catalog %s", catalog));
             }
         }
+        // connector sink compression codec
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_COMPRESSION_CODEC)) {
+            String codec = resolvedExpression.getStringValue();
+            if (CompressionUtils.getConnectorSinkCompressionType(codec).isEmpty()) {
+                throw new SemanticException(String.format("Unsupported compression codec %s." +
+                        " Use any of (uncompressed, snappy, lz4, zstd, gzip)", codec));
+            }
+        }
 
         var.setResolvedExpression(resolvedExpression);
     }
@@ -422,13 +430,15 @@ public class SetStmtAnalyzer {
         if (type.isArrayType()) {
             ArrayType arrayType = (ArrayType) type;
             PrimitiveType itemPrimitiveType = arrayType.getItemType().getPrimitiveType();
-            if (itemPrimitiveType.isDateType() || itemPrimitiveType.isNumericType() ||
+            if (itemPrimitiveType == PrimitiveType.BOOLEAN ||
+                    itemPrimitiveType.isDateType() || itemPrimitiveType.isNumericType() ||
                     itemPrimitiveType.isCharFamily()) {
                 return true;
             }
         } else if (type.isScalarType()) {
             PrimitiveType primitiveType = type.getPrimitiveType();
-            if (primitiveType.isDateType() || primitiveType.isNumericType() ||
+            if (primitiveType == PrimitiveType.BOOLEAN ||
+                    primitiveType.isDateType() || primitiveType.isNumericType() ||
                     primitiveType.isCharFamily() || primitiveType.isJsonType()) {
                 return true;
             }

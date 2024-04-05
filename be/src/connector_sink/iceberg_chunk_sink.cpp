@@ -47,35 +47,16 @@ Status IcebergChunkSink::init() {
 
 // requires that input chunk belongs to a single partition (see LocalKeyPartitionExchange)
 StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
-    std::string partition;
-    if (_partition_column_names.empty()) {
-        partition = DEFAULT_PARTITION;
-    } else {
+    std::string partition = DEFAULT_PARTITION;
+    bool partitioned = !_partition_column_names.empty();
+    if (partitioned) {
         ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name_nullable(_partition_column_names,
                                                                             _partition_column_evaluators, chunk.get()));
     }
 
-    // create writer if not found
-    if (_partition_writers[partition] == nullptr) {
-        auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
-        ASSIGN_OR_RETURN(_partition_writers[partition], _file_writer_factory->create(path));
-        RETURN_IF_ERROR(_partition_writers[partition]->init());
-    }
-
-    Futures futures;
-    auto writer = _partition_writers[partition];
-    if (writer->get_written_bytes() >= _max_file_size) {
-        auto f = writer->commit();
-        futures.commit_file_futures.push_back(std::move(f));
-        auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
-        ASSIGN_OR_RETURN(writer, _file_writer_factory->create(path));
-        RETURN_IF_ERROR(writer->init());
-        _partition_writers[partition] = writer;
-    }
-
-    auto f = writer->write(chunk);
-    futures.add_chunk_futures.push_back(std::move(f));
-    return futures;
+    return HiveUtils::hive_style_partitioning_write_chunk(chunk, partitioned, partition, _max_file_size,
+                                                          _file_writer_factory.get(), _location_provider.get(),
+                                                          _partition_writers);
 }
 
 ConnectorChunkSink::Futures IcebergChunkSink::finish() {
@@ -140,8 +121,8 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
-                std::move(fs), ctx->options, ctx->column_names, std::move(column_evaluators), ctx->parquet_field_ids,
-                ctx->executor);
+                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
+                ctx->parquet_field_ids, ctx->executor, runtime_state);
     } else {
         file_writer_factory = std::make_unique<formats::UnknownFileWriterFactory>(ctx->format);
     }

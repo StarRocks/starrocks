@@ -16,12 +16,12 @@
 
 #include <utility>
 
-#include "storage/rowset/rowset.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/rowset/segment.h"
 
 namespace starrocks {
 
-void RowidRangeOption::add(const Rowset* rowset, const Segment* segment, SparseRangePtr rowid_range,
+void RowidRangeOption::add(const BaseRowset* rowset, const Segment* segment, SparseRangePtr rowid_range,
                            bool is_first_split_of_segment) {
     auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset->rowset_id());
     if (rowset_it == rowid_range_per_segment_per_rowset.end()) {
@@ -32,11 +32,12 @@ void RowidRangeOption::add(const Rowset* rowset, const Segment* segment, SparseR
     segment_map.emplace(segment->id(), SegmentSplit{std::move(rowid_range), is_first_split_of_segment});
 }
 
-bool RowidRangeOption::contains_rowset(const Rowset* rowset) const {
+bool RowidRangeOption::contains_rowset(const BaseRowset* rowset) const {
     return rowid_range_per_segment_per_rowset.find(rowset->rowset_id()) != rowid_range_per_segment_per_rowset.end();
 }
 
-RowidRangeOption::SegmentSplit RowidRangeOption::get_segment_rowid_range(const Rowset* rowset, const Segment* segment) {
+RowidRangeOption::SegmentSplit RowidRangeOption::get_segment_rowid_range(const BaseRowset* rowset,
+                                                                         const Segment* segment) {
     auto rowset_it = rowid_range_per_segment_per_rowset.find(rowset->rowset_id());
     if (rowset_it == rowid_range_per_segment_per_rowset.end()) {
         return {nullptr, false};

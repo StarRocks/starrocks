@@ -30,7 +30,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -38,6 +37,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -47,6 +47,8 @@ import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,8 +65,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @SerializedName(value = "partitionIndexMap")
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
     @SerializedName(value = "commitVersionMap")
-    // Mapping from physical partition id to commit version
     private Map<Long, Long> commitVersionMap = new HashMap<>();
+    private AgentBatchTask batchTask = null;
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
                                      String tableName, long timeoutMs) {
@@ -74,9 +76,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     @Override
     protected void runPendingJob() throws AlterCancelException {
         // send task to be
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<Partition> partitions = Lists.newArrayList();
-        OlapTable olapTable;
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        LakeTable table;
+        Database db = globalStateMgr.getDb(dbId);
 
         if (db == null) {
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
@@ -85,24 +88,24 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         locker.lockDatabase(db, LockType.READ);
 
         try {
-            olapTable = (OlapTable) db.getTable(tableName);
-            if (olapTable == null) {
+            table = (LakeTable) db.getTable(tableName);
+            if (table == null) {
                 throw new AlterCancelException("table does not exist, tableName:" + tableName);
             }
-            partitions.addAll(olapTable.getPartitions());
+            partitions.addAll(table.getPartitions());
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
 
         if (this.watershedTxnId == -1) {
-            this.watershedTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getTransactionIDGenerator().getNextTransactionId();
+            this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
+                    .getNextTransactionId();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
 
         try {
             for (Partition partition : partitions) {
-                updatePartitionTabletMeta(db, olapTable.getName(), partition.getName());
+                updatePartitionTabletMeta(db, table, partition);
             }
         } catch (DdlException e) {
             throw new AlterCancelException(e.getMessage());
@@ -111,7 +114,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         this.jobState = JobState.RUNNING;
     }
 
-    protected abstract TabletMetadataUpdateAgentTask createTask(long backendId, Set<Long> tablets);
+    protected abstract TabletMetadataUpdateAgentTask createTask(MaterializedIndex index, long nodeId,
+                                                                Set<Long> tablets);
 
     protected abstract void updateCatalog(Database db, LakeTable table);
 
@@ -132,12 +136,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
 
-        LakeTable table = (LakeTable) db.getTable(tableId);
-        if (table == null) {
-            // table has been dropped
-            throw new AlterCancelException("table does not exist, tableId:" + tableId);
-        }
         try {
+            LakeTable table = (LakeTable) db.getTable(tableId);
+            if (table == null) {
+                // table has been dropped
+                throw new AlterCancelException("table does not exist, tableId:" + tableId);
+            }
+
             commitVersionMap.clear();
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -196,7 +201,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
-
             // set visible version
             updateVisibleVersion(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
@@ -216,13 +220,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
-
-        LakeTable table = (LakeTable) db.getTable(tableId);
-        if (table == null) {
-            // table has been dropped
-            throw new AlterCancelException("table does not exist, tableId:" + tableId);
-        }
         try {
+            LakeTable table = (LakeTable) db.getTable(tableId);
+            if (table == null) {
+                // table has been dropped
+                throw new AlterCancelException("table does not exist, tableId:" + tableId);
+            }
+
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
@@ -247,7 +251,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
-                            finishedTimeMs / 1000);
+                            finishedTimeMs / 1000, WarehouseManager.DEFAULT_WAREHOUSE_ID);
                 }
             }
             return true;
@@ -261,84 +265,107 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         physicalPartitionIndexMap.put(partitionId, indexId, index);
     }
 
-    public void updatePartitionTabletMeta(Database db,
-                                          String tableName,
-                                          String partitionName) throws DdlException {
-        // be id -> <tablet id,schemaHash>
-        Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
+    public void updatePartitionTabletMeta(Database db, LakeTable table, Partition partition) throws DdlException {
+        Collection<PhysicalPartition> subPartitions;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            OlapTable olapTable = (OlapTable) db.getTable(tableName);
-            Partition partition = olapTable.getPartition(partitionName);
-            if (partition == null) {
-                throw new DdlException(
-                        "Partition[" + partitionName + "] does not exist in table[" + olapTable.getName() + "]");
-            }
-
-            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
-                        MaterializedIndex.IndexExtState.VISIBLE)) {
-                    addDirtyPartitionIndex(physicalPartition.getId(), index.getId(), index);
-                    for (Tablet tablet : index.getTablets()) {
-                        Long backendId = Utils.chooseNodeId((LakeTablet) tablet);
-                        Set<Long> set = beIdToTabletSet.computeIfAbsent(backendId, k -> Sets.newHashSet());
-                        set.add(tablet.getId());
-                    }
-                }
-            }
+            subPartitions = partition.getSubPartitions();
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
 
+        for (PhysicalPartition physicalPartition : subPartitions) {
+            updatePhysicalPartitionTabletMeta(db, table, partition, physicalPartition);
+        }
+    }
+
+    public void updatePhysicalPartitionTabletMeta(Database db, OlapTable table, Partition partition,
+                                                  PhysicalPartition subPartition) throws DdlException {
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        List<MaterializedIndex> indexList;
+        try {
+            indexList = new ArrayList<>(subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE));
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+        for (MaterializedIndex index : indexList) {
+            updateIndexTabletMeta(db, table, partition, index);
+        }
+    }
+
+    public void updateIndexTabletMeta(Database db, OlapTable table, PhysicalPartition partition,
+                                      MaterializedIndex index) throws DdlException {
+        addDirtyPartitionIndex(partition.getId(), index.getId(), index);
+        // be id -> <tablet id,schemaHash>
+        Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
+        Locker locker = new Locker();
+        List<Tablet> tablets;
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            tablets = new ArrayList<>(index.getTablets());
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        for (Tablet tablet : tablets) {
+            Long backendId = warehouseManager.getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                    (LakeTablet) tablet);
+            if (backendId == null) {
+                throw new AlterCancelException("no alive node");
+            }
+            Set<Long> set = beIdToTabletSet.computeIfAbsent(backendId, k -> Sets.newHashSet());
+            set.add(tablet.getId());
+        }
+
         int totalTaskNum = beIdToTabletSet.keySet().size();
         MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
-        AgentBatchTask batchTask = new AgentBatchTask();
+        batchTask = new AgentBatchTask();
         for (Map.Entry<Long, Set<Long>> kv : beIdToTabletSet.entrySet()) {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
-            TabletMetadataUpdateAgentTask task = createTask(kv.getKey(), kv.getValue());
+            TabletMetadataUpdateAgentTask task = createTask(index, kv.getKey(), kv.getValue());
             Preconditions.checkState(task != null, "task is null");
             task.setLatch(countDownLatch);
             task.setTxnId(watershedTxnId);
             batchTask.addTask(task);
         }
-        if (!FeConstants.runningUnitTest) {
-            // send all tasks and wait them finished
-            AgentTaskQueue.addBatchTask(batchTask);
-            AgentTaskExecutor.submit(batchTask);
-            LOG.info("send update tablet meta task for table {}, partitions {}, number: {}",
-                    tableName, partitionName, batchTask.getTaskNum());
+        // send all tasks and wait them finished
+        AgentTaskQueue.addBatchTask(batchTask);
+        AgentTaskExecutor.submit(batchTask);
+        LOG.info("Sent update tablet metadata task. tableName={} partitionId={} indexId={} taskNum={}",
+                tableName, partition.getId(), index.getId(), batchTask.getTaskNum());
 
-            // estimate timeout
-            long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
-            timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
-            boolean ok = false;
-            try {
-                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                LOG.warn("InterruptedException: ", e);
-            }
+        // estimate timeout
+        long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
+        timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000L);
+        boolean ok = false;
+        try {
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            LOG.warn("InterruptedException: ", e);
+        }
 
-            if (!ok || !countDownLatch.getStatus().ok()) {
-                String errMsg = "Failed to update partition[" + partitionName + "]. tablet meta.";
-                // clear tasks
-                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.UPDATE_TABLET_META_INFO);
+        if (!ok || !countDownLatch.getStatus().ok()) {
+            String errMsg = "Failed to update tablet meta.";
+            // clear tasks
+            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.UPDATE_TABLET_META_INFO);
 
-                if (!countDownLatch.getStatus().ok()) {
-                    errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
-                } else {
-                    List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
-                    // only show at most 3 results
-                    List<Map.Entry<Long, Set<Long>>> subList =
-                            unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                    if (!subList.isEmpty()) {
-                        errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
-                    }
+            if (!countDownLatch.getStatus().ok()) {
+                errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
+            } else {
+                List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                // only show at most 3 results
+                List<Map.Entry<Long, Set<Long>>> subList =
+                        unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                if (!subList.isEmpty()) {
+                    errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
                 }
-                errMsg += ". This operation maybe partial successfully, You should retry until success.";
-                LOG.warn(errMsg);
-                throw new DdlException(errMsg);
             }
+            errMsg += ". This operation maybe partial successfully, You should retry until success.";
+            LOG.warn(errMsg);
+            throw new DdlException(errMsg);
         }
     }
 
@@ -367,6 +394,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
+    protected AgentBatchTask getBatchTask() {
+        return batchTask;
+    }
+
+    protected long getWatershedTxnId() {
+        return watershedTxnId;
+    }
+
     @Override
     protected boolean cancelImpl(String errMsg) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
@@ -374,37 +409,31 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            // database has been dropped
-            return false;
+        if (db != null) {
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
+            LakeTable table;
+            try {
+                table = (LakeTable) db.getTable(tableId);
+
+                // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
+                if (jobState == JobState.FINISHED_REWRITING && table != null) {
+                    return false;
+                }
+                if (table != null) {
+                    table.setState(OlapTable.OlapTableState.NORMAL);
+                }
+            } finally {
+                locker.unLockDatabase(db, LockType.WRITE);
+            }
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
-        LakeTable table;
-        try {
-            table = (LakeTable) db.getTable(tableId);
-
-            // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
-            if (jobState == JobState.FINISHED_REWRITING && table != null) {
-                return false;
-            }
-
-            this.jobState = JobState.CANCELLED;
-            this.errMsg = errMsg;
-            this.finishedTimeMs = System.currentTimeMillis();
-
-            if (table != null) {
-                table.setState(OlapTable.OlapTableState.NORMAL);
-            }
-
-            if (span != null) {
-                span.setStatus(StatusCode.ERROR, errMsg);
-                span.end();
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+        if (span != null) {
+            span.setStatus(StatusCode.ERROR, errMsg);
+            span.end();
         }
-
+        this.jobState = JobState.CANCELLED;
+        this.errMsg = errMsg;
+        this.finishedTimeMs = System.currentTimeMillis();
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         return true;
     }
@@ -447,21 +476,22 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
-        LakeTable table = (LakeTable) db.getTable(tableId);
-        if (table == null) {
-            return;
-        }
-
         try {
+            LakeTable table = (LakeTable) db.getTable(tableId);
+            if (table == null) {
+                return;
+            }
+
             if (jobState == JobState.FINISHED_REWRITING) {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
                 updateVisibleVersion(table);
+                updateCatalog(db, table);
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.CANCELLED) {
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN) {
-                // do nothing
+                table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }

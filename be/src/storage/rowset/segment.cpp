@@ -364,7 +364,12 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
     for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
         const auto& column_pb = footer->columns(ordinal);
-        column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+        if (UNLIKELY(!ok)) {
+            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
+                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
+            return Status::InternalError("Duplicate column id");
+        }
     }
 
     for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {

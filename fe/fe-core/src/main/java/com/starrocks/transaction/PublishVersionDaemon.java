@@ -61,6 +61,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -100,7 +101,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     @VisibleForTesting
     protected Set<Long> publishingLakeTransactionsBatchTableId;
-
 
     public PublishVersionDaemon() {
         super("PUBLISH_VERSION", Config.publish_version_interval_ms);
@@ -498,12 +498,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
         });
     }
 
-
     public boolean publishPartitionBatch(Database db, long tableId, long partitionId, List<Long> txnIds,
                                          List<Long> versions, List<TransactionState> transactionStates,
                                          TransactionStateBatch stateBatch) {
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
         Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
         Set<Tablet> normalTablets = null;
@@ -551,7 +550,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         }
 
         long startVersion = versions.get(0);
@@ -562,7 +561,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 int index = versions.indexOf(item.getKey());
                 List<Tablet> publishShdowTablets = new ArrayList<>(item.getValue());
                 Utils.publishLogVersionBatch(publishShdowTablets, txnIds.subList(index, txnIds.size()),
-                        versions.subList(index, versions.size()));
+                        versions.subList(index, versions.size()), WarehouseManager.DEFAULT_WAREHOUSE_ID);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
@@ -575,7 +574,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
                 Utils.publishVersionBatch(publishTablets, txnIds,
-                        startVersion - 1, endVersion, commitTime, compactionScores, nodeToTablets);
+                        startVersion - 1, endVersion, commitTime, compactionScores,
+                        WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        nodeToTablets);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
@@ -643,7 +644,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Map<Long, List<Long>> partitionVersions = new HashMap<>();
         // partitionId -> transactionState
         Map<Long, List<TransactionState>> partitionStates = new HashMap<>();
-
 
         for (TransactionState state : states) {
             Map<Long, PartitionCommitInfo> partitionCommitInfoMap = state.getTableCommitInfo(tableId)
@@ -782,6 +782,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
+        long warehouseId = txnState.getWarehouseId();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
 
@@ -825,12 +826,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
-                Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
+                Utils.publishLogVersion(shadowTablets, txnId, txnVersion, warehouseId);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
-                        compactionScores);
+                        compactionScores, warehouseId);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
@@ -856,14 +857,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         for (long tableId : transactionState.getTableIdList()) {
-            Table table;
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                table = db.getTable(tableId);
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
-            }
+            Table table = db.getTable(tableId);
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
@@ -873,14 +867,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
             while (mvIdIterator.hasNext()) {
                 MvId mvId = mvIdIterator.next();
                 Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                locker.lockDatabase(mvDb, LockType.READ);
+                MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
+                if (materializedView == null) {
+                    LOG.warn("materialized view {} does not exists.", mvId.getId());
+                    mvIdIterator.remove();
+                    continue;
+                }
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
                 try {
-                    MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
-                    if (materializedView == null) {
-                        LOG.warn("materialized view {} does not exists.", mvId.getId());
-                        mvIdIterator.remove();
-                        continue;
-                    }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
                                 "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
@@ -889,10 +884,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 } finally {
-                    locker.unLockDatabase(mvDb, LockType.READ);
+                    locker.unLockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
                 }
             }
         }
-
     }
 }

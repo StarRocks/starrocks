@@ -208,6 +208,8 @@ public:
         return _fs->get_file_size(_segment_file_info.path).value_or(0);
     }
 
+    lake::TabletManager* lake_tablet_manager() { return _tablet_manager; }
+
     // read short_key_index, for data check, just used in unit test now
     [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
@@ -215,6 +217,8 @@ public:
     // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
     // so the segment size in the cache needs to be updated when indexes are loading.
     void update_cache_size();
+
+    bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
 
     DISALLOW_COPY_AND_MOVE(Segment);
 

@@ -14,12 +14,11 @@ StarRocks 能很好地支持实时数据分析，并能实现对实时更新数�
 
 StarRocks 兼容 MySQL 协议，支持标准 SQL 语法，易于对接使用，全系统无外部依赖，高可用，易于运维管理。StarRocks 还兼容多种主流 BI 产品，包括 Tableau、Power BI、FineBI 和 Smartbi。
 
-[StarRocks](https://github.com/StarRocks/starrocks/tree/main)采用Apache 2.0许可证，可在StarRocks GitHub存储库中找到（请参阅[StarRocks许可证](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)）。StarRocks（i）链接或调用第三方软件库中的函数，其许可证可在[licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary)文件夹中找到；和（ii）包含第三方软件代码，其许可证可在[licenses](https://github.com/StarRocks/starrocks/tree/main/licenses)文件夹中找到。
+[StarRocks](https://github.com/StarRocks/starrocks/tree/main) 是 Linux 基金会项目，采用 Apache 2.0 许可证，可在 StarRocks GitHub 存储库中找到（请参阅 [StarRocks 许可证](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)）。StarRocks（i）链接或调用第三方软件库中的函数，其许可证可在 [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary) 文件夹中找到；和（ii）包含第三方软件代码，其许可证可在 [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses) 文件夹中找到。
 
 ## 适用场景
 
 StarRocks 可以满足企业级用户的多种分析需求，包括 OLAP (Online Analytical Processing) 多维分析、定制报表、实时数据分析和 Ad-hoc 数据分析等。
-
 
 ### OLAP 多维分析
 

@@ -1245,5 +1245,11 @@ public class ScalarOperatorFunctions {
 
         return ConstantOperator.createBoolean(roleNames.contains(role.getVarchar()));
     }
+
+    @ConstantFunction(name = "typeof_internal", returnType = VARCHAR, argTypes = { VARCHAR })
+    public static ConstantOperator typeofInternal(ConstantOperator value) {
+        return ConstantOperator.createVarchar(value.getVarchar());
+    }
+
 }
 

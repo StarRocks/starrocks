@@ -131,7 +131,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
-                        timeoutSecond);
+                        timeoutSecond, warehouseId);
     }
 
     @Override

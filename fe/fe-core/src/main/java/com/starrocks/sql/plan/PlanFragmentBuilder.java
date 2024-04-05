@@ -266,7 +266,8 @@ public class PlanFragmentBuilder {
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
 
         DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds,
-                view.writeQuorum(), view.enableReplicatedStorage(), false, false);
+                view.writeQuorum(), view.enableReplicatedStorage(), false, false,
+                connectContext.getCurrentWarehouseId());
         execPlan.getTopFragment().setSink(tableSink);
 
         return execPlan;
@@ -768,7 +769,8 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(referenceTable);
 
-            OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode");
+            OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
+                    context.getConnectContext().getCurrentWarehouseId());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
@@ -916,9 +918,9 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(scan.getTable());
 
-            MetaScanNode scanNode =
-                    new MetaScanNode(context.getNextNodeId(),
-                            tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames());
+            MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
+                    tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
+                    context.getConnectContext().getCurrentWarehouseId());
             scanNode.computeRangeLocations();
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
@@ -3469,8 +3471,9 @@ public class PlanFragmentBuilder {
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.fileList());
 
+            long warehouseId = context.getConnectContext().getCurrentWarehouseId();
             FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
-                    "FileScanNode", files, table.fileList().size());
+                    "FileScanNode", files, table.fileList().size(), warehouseId);
             List<BrokerFileGroup> fileGroups = new ArrayList<>();
 
             try {

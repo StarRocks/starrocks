@@ -61,7 +61,9 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
+
+        AstBuilder astBuilder = AstBuilder.getInstance().create(32);
+        StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
         ModifyBackendClause clause = (ModifyBackendClause) field.get(statement);
@@ -76,7 +78,8 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
+        AstBuilder astBuilder = AstBuilder.getInstance().create(32);
+        StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
         ModifyFrontendAddressClause clause = (ModifyFrontendAddressClause) field.get(statement);

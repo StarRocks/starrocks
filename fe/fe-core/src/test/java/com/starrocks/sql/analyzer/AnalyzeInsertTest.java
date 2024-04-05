@@ -192,8 +192,7 @@ public class AnalyzeInsertTest {
             }
         };
 
-        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)",
-                "partition value can't be null.");
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)");
         analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
 
         new Expectations() {
@@ -274,23 +273,21 @@ public class AnalyzeInsertTest {
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"compression\" = \"uncompressed\" ) \n" +
                         "select \"abc\" as k1",
-                "format is a mandatory property. " +
-                        "Use \"format\" = \"parquet\" as only parquet format is supported now");
+                "format is a mandatory property. Use any of (parquet, orc, csv).");
 
         analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                "\t\"format\"=\"orc\", \n" +
+                "\t\"format\"=\"unknown\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1",
-                "use \"format\" = \"parquet\", as only parquet format is supported now");
+                "Unsupported format unknown. Use any of (parquet, orc, csv).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"format\"=\"parquet\", \n" +
                         "\t\"compression\" = \"unknown\" ) \n" +
                         "select \"abc\" as k1",
-                "compression type unknown is not supported. " +
-                        "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
+                "Unsupported compression codec unknown. Use any of (uncompressed, snappy, lz4, zstd, gzip).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -307,14 +304,6 @@ public class AnalyzeInsertTest {
                         "\t\"compression\" = \"uncompressed\", \n" +
                         "\t\"partition_by\"=\"k1\" ) \n" +
                         "select \"abc\" as k1");
-
-        analyzeFail("insert into files ( \n" +
-                "\t\"path\" = \"s3://path/to/directory/prefix\", \n" +
-                "\t\"format\"=\"parquet\", \n" +
-                "\t\"compression\" = \"uncompressed\", \n" +
-                "\t\"partition_by\"=\"k1\" ) \n" +
-                "select \"abc\" as k1",
-                "If partition_by is used, path should be a directory ends with forward slash(/).");
 
         analyzeSuccess("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +

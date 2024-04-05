@@ -614,6 +614,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static String priority_networks = "";
 
+    @ConfField
+    public static boolean net_use_ipv6_when_priority_networks_empty = false;
+
     /**
      * Fe http port
      * Currently, all FEs' http port must be same.
@@ -626,7 +629,8 @@ public class Config extends ConfigBase {
      * some I/O operations. If set with a non-positive value, it will use netty's default
      * value <code>DEFAULT_EVENT_LOOP_THREADS</code> which is availableProcessors * 2. The
      * default value is 0 which is same as the previous behaviour.
-     * See <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
+     * See
+     * <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
      * for details.
      */
     @ConfField
@@ -2042,13 +2046,6 @@ public class Config extends ConfigBase {
     public static int hms_process_events_parallel_num = 4;
 
     /**
-     * Used to split files stored in dfs such as object storage
-     * or hdfs into smaller files for hive external table
-     */
-    @ConfField(mutable = true)
-    public static long hive_max_split_size = 64L * 1024L * 1024L;
-
-    /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField(mutable = true)
@@ -2440,6 +2437,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
+    @ConfField(mutable = true)
+    public static String lake_compaction_warehouse = "default_warehouse";
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
 
@@ -2512,14 +2512,21 @@ public class Config extends ConfigBase {
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
      * e.g. 495501,495503
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     /**
      * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
      */
     @ConfField
-    public static boolean metadata_journal_ignore_replay_failure = false;
+    public static boolean metadata_journal_ignore_replay_failure = true;
+
+    /**
+     * In this mode, system will start some damon to recover metadata (Currently only partition version is supported)
+     * and any kind of loads will be rejected.
+     */
+    @ConfField
+    public static boolean metadata_enable_recovery_mode = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

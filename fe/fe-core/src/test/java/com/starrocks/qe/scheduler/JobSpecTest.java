@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCompressionType;
@@ -311,7 +312,7 @@ public class JobSpecTest extends SchedulerTestBase {
         DefaultCoordinator coordinator = COORDINATOR_FACTORY.createBrokerExportScheduler(
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
-                execMemLimit);
+                execMemLimit, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         JobSpec jobSpec = coordinator.getJobSpec();
 
         // Check created jobSpec.
@@ -334,7 +335,7 @@ public class JobSpecTest extends SchedulerTestBase {
         coordinator = COORDINATOR_FACTORY.createBrokerExportScheduler(
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
-                execMemLimit);
+                execMemLimit, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         jobSpec = coordinator.getJobSpec();
 
         Assert.assertEquals(TCompressionType.LZ4, jobSpec.getQueryOptions().getLoad_transmission_compression_type());
