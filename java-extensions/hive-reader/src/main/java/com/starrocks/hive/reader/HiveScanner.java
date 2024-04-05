@@ -14,12 +14,23 @@
 
 package com.starrocks.hive.reader;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
+import com.google.common.base.Splitter;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.JavaUtils;
@@ -36,17 +47,6 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.stream.Collectors;
-
-import static com.google.common.base.Preconditions.checkArgument;
 
 public class HiveScanner extends ConnectorScanner {
 
@@ -92,7 +92,8 @@ public class HiveScanner extends ConnectorScanner {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
         this.hiveColumnTypes = params.get("hive_column_types").split("#");
-        this.requiredFields = params.get("required_fields").split(",");
+        this.requiredFields =
+                Splitter.on(',').omitEmptyStrings().splitToList(params.get("required_fields")).toArray(new String[0]);
         this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.dataFilePath = params.get("data_file_path");
         this.blockOffset = Long.parseLong(params.get("block_offset"));

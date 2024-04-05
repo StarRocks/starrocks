@@ -41,7 +41,7 @@ PROPERTIES
 
 select * from test_hive_avro_format where col_string = 'world';
 select * from test_hive_avro_format where abs(col_float - 1.23) < 0.01 ;
-select col_tinyint,col_decimal,col_array from test_hive_avro_format;
+select col_tinyint,col_decimal,col_array from test_hive_avro_format order by 1;
 select col_tinyint,col_timestamp from test_hive_avro_format  order by 1 limit 3;
 
 set enable_rewrite_simple_agg_to_hdfs_scan = true;
@@ -91,7 +91,7 @@ PROPERTIES
 select * from test_hive_rcbinary_format where col_string = 'world';
 select * from test_hive_rcbinary_format where abs(col_float - 1.23) < 0.01 ;
 -- test select some non-partition columns
-select col_tinyint,col_decimal,col_array from test_hive_rcbinary_format;
+select col_tinyint,col_decimal,col_array from test_hive_rcbinary_format order by 1;
 -- test timestamp with rcbianry dealing with timezone
 select col_tinyint,col_timestamp from test_hive_rcbinary_format  order by 1 limit 3;
 
