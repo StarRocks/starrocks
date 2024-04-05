@@ -100,13 +100,14 @@ public class IcebergTable extends Table {
     }
 
     public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
-                        String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
-                        Map<String, String> icebergProperties) {
+                        String remoteTableName, String comment, List<Column> schema,
+                        org.apache.iceberg.Table nativeTable, Map<String, String> icebergProperties) {
         super(id, srTableName, TableType.ICEBERG, schema);
         this.catalogName = catalogName;
         this.resourceName = resourceName;
         this.remoteDbName = remoteDbName;
         this.remoteTableName = remoteTableName;
+        this.comment =  comment;
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
     }
@@ -439,6 +440,8 @@ public class IcebergTable extends Table {
         private String resourceName;
         private String remoteDbName;
         private String remoteTableName;
+
+        private String comment;
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
@@ -458,6 +461,12 @@ public class IcebergTable extends Table {
 
         public Builder setCatalogName(String catalogName) {
             this.catalogName = catalogName;
+            return this;
+        }
+
+
+        public Builder setComment(String comment) {
+            this.comment = comment;
             return this;
         }
 
@@ -493,7 +502,7 @@ public class IcebergTable extends Table {
 
         public IcebergTable build() {
             return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
-                    fullSchema, nativeTable, icebergProperties);
+                    comment, fullSchema, nativeTable, icebergProperties);
         }
     }
 }

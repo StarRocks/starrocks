@@ -81,7 +81,6 @@ import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateSetRule;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -98,7 +97,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.setAppliedUnionAllRewrite;
+import static com.starrocks.sql.optimizer.operator.Operator.OP_UNION_ALL_BIT;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.getMvTransparentPlan;
 
 /*
  * SPJG materialized view rewriter, based on
@@ -114,8 +114,6 @@ public class MaterializedViewRewriter {
     protected final OptimizerContext optimizerContext;
     // Mark whether query's plan is rewritten by materialized view.
     public static final String REWRITE_SUCCESS = "Rewrite Succeed";
-    public static final int UNION_REWRITE_EAGER_MODE_1 = 1;
-    public static final int UNION_REWRITE_EAGER_MODE_2 = 2;
 
     private static final Map<JoinOperator, List<JoinOperator>> JOIN_COMPATIBLE_MAP =
             ImmutableMap.<JoinOperator, List<JoinOperator>>builder()
@@ -622,7 +620,7 @@ public class MaterializedViewRewriter {
      * @return
      */
     private ScalarOperator getMVCompensatePartitionPredicate() {
-        return  materializationContext.isCompensatePartitionPredicate() ?
+        return  materializationContext.getMvCompensation().isCompensatePartitionPredicate() ?
                 materializationContext.getMvPartialPartitionPredicate() : ConstantOperator.TRUE;
     }
 
@@ -1191,8 +1189,9 @@ public class MaterializedViewRewriter {
         // the rewritten expression to replace query
         // should copy the op because the op will be modified and reused
         final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
-        final Operator.Builder mvScanBuilder = OperatorBuilderFactory.build(mvScanOperator);
-        mvScanBuilder.withOperator(mvScanOperator);
+        // reset original partition predicates to prune partitions/tablets again
+        final LogicalOlapScanOperator newMvScanOperator = MVPartitionPruner.resetSelectedPartitions(mvScanOperator);
+        OptExpression mvScanOptExpression = OptExpression.create(newMvScanOperator);
 
         // Rewrite original mv's predicates into query if needed.
         if (mvRewriteContext.getMvPruneConjunct() != null && !mvRewriteContext.getMvPruneConjunct().isTrue()) {
@@ -1200,15 +1199,12 @@ public class MaterializedViewRewriter {
                     mvColumnRefToScalarOp, mvRewriteContext.getMvPruneConjunct(), false);
             mvRewriteContext.setMvPruneConjunct(MvUtils.canonizePredicate(rewrittenPrunePredicate));
         }
-        OptExpression mvScanOptExpression = OptExpression.create(mvScanBuilder.build());
-        deriveLogicalProperty(mvScanOptExpression);
         return mvScanOptExpression;
     }
 
     private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext) {
         final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp = rewriteContext.getMVColumnRefToScalarOp();
-        OptExpression mvScanOptExpression = buildMVScanOptExpression(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
 
         final PredicateSplit compensationPredicates = getCompensationPredicates(columnRewriter,
                 rewriteContext.getQueryEquivalenceClasses(),
@@ -1216,7 +1212,17 @@ public class MaterializedViewRewriter {
                 rewriteContext.getQueryPredicateSplit(),
                 rewriteContext.getMvPredicateSplit(),
                 true);
+
+        MVCompensation mvCompensation = materializationContext.getMvCompensation();
+        boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
+        logMVRewrite(mvRewriteContext, "Get compensation predicates:{}, isTransparentRewrite: {}",
+                compensationPredicates, isTransparentRewrite);
         if (compensationPredicates == null) {
+            if (isTransparentRewrite) {
+                logMVRewrite(mvRewriteContext, "Partitions no need to compensate: cannot compensate predicates " +
+                        "from mv rewrite, and no try to use union rewrite");
+                return null;
+            }
             logMVRewrite(mvRewriteContext, "Cannot compensate predicates from mv rewrite, " +
                     "try to use union rewrite.");
             if (!optimizerContext.getSessionVariable().isEnableMaterializedViewUnionRewrite()) {
@@ -1227,6 +1233,7 @@ public class MaterializedViewRewriter {
                 // TODO: support union rewrite for view based mv rewrite
                 return null;
             }
+            OptExpression mvScanOptExpression = buildMVScanOptExpression(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
             return tryUnionRewrite(rewriteContext, mvScanOptExpression);
         } else {
             // all predicates are now query based
@@ -1241,6 +1248,14 @@ public class MaterializedViewRewriter {
                 return null;
             }
 
+            OptExpression mvScanOptExpression = isTransparentRewrite ?
+                    getMvTransparentPlan(materializationContext, mvCompensation, null) :
+                    buildMVScanOptExpression(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
+            if (mvScanOptExpression == null) {
+                logMVRewrite(mvRewriteContext, "Get mv scan opt expression failed, isTransparentRewrite: {}",
+                        isTransparentRewrite);
+                return null;
+            }
             if (!compensationPredicate.isTrue()) {
                 // NOTE: Keep mv's original predicates which have been already rewritten.
                 ScalarOperator finalCompensationPredicate = compensationPredicate;
@@ -1250,15 +1265,15 @@ public class MaterializedViewRewriter {
                 }
                 final Operator.Builder newScanOpBuilder = OperatorBuilderFactory.build(mvScanOptExpression.getOp());
                 newScanOpBuilder.withOperator(mvScanOptExpression.getOp());
+                mvScanOptExpression = OptExpression.create(newScanOpBuilder.build(), mvScanOptExpression.getInputs());
 
                 ScalarOperator normalizedPredicate = normalizePredicate(finalCompensationPredicate);
                 // Canonize predicates to make uts more stable.
                 if (optimizerContext.getSessionVariable().getQueryDebugOptions().isEnableNormalizePredicateAfterMVRewrite()) {
                     normalizedPredicate = MvUtils.canonizePredicateForRewrite(queryMaterializationContext, normalizedPredicate);
                 }
-                newScanOpBuilder.setPredicate(normalizedPredicate);
+                mvScanOptExpression = addExtraPredicate(mvScanOptExpression, normalizedPredicate);
 
-                mvScanOptExpression = OptExpression.create(newScanOpBuilder.build());
                 mvScanOptExpression.setLogicalProperty(null);
                 deriveLogicalProperty(mvScanOptExpression);
             }
@@ -1572,8 +1587,9 @@ public class MaterializedViewRewriter {
             return mvCompensationToQuery;
         }
         SessionVariable sessionVariable = optimizerContext.getSessionVariable();
-        int unionRewriteMode = sessionVariable.getMaterializedViewUnionRewriteMode();
-        if (unionRewriteMode != UNION_REWRITE_EAGER_MODE_1 && unionRewriteMode != UNION_REWRITE_EAGER_MODE_2) {
+        MVUnionRewriteMode unionRewriteMode =
+                MVUnionRewriteMode.getInstance(sessionVariable.getMaterializedViewUnionRewriteMode());
+        if (!unionRewriteMode.isPullPredicateRewrite()) {
             return null;
         }
 
@@ -1596,7 +1612,7 @@ public class MaterializedViewRewriter {
                 .map(x -> x.getUsedColumns())
                 .orElse(new ColumnRefSet());
 
-        ColumnRefSet queryOutputColumnRefs = unionRewriteMode == UNION_REWRITE_EAGER_MODE_2 ?
+        ColumnRefSet queryOutputColumnRefs = unionRewriteMode.isPullPredicateRewriteV2() ?
                 rewriteContext.getQueryExpression().getOutputColumns() : null;
         Set<ScalarOperator> queryExtraPredicates = queryPredicates.stream()
                 .filter(pred -> isPullUpQueryPredicate(pred, mvPredicateUsedColRefs,
@@ -1740,8 +1756,8 @@ public class MaterializedViewRewriter {
         //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
         //                                       /      \
         //                                  EXTRA-OP    MV-SCAN
-        setAppliedUnionAllRewrite(queryInput.getOp());
-        setAppliedUnionAllRewrite(viewInput.getOp());
+        queryInput.getOp().setOpRuleMask(OP_UNION_ALL_BIT);
+        viewInput.getOp().setOpRuleMask(OP_UNION_ALL_BIT);
 
         // createUnion will return the union all result of queryInput and viewInput
         //           Union
@@ -2079,6 +2095,8 @@ public class MaterializedViewRewriter {
         // rewrite query
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
+        // NOTE: selected partitions and tablets should be deduced again.
+        newQueryInput = MVPartitionPruner.resetSelectedPartitions(newQueryInput);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 
         // rewrite viewInput
@@ -2119,26 +2137,30 @@ public class MaterializedViewRewriter {
 
         // Add extra union all predicates above union all operator.
         if (rewriteContext.getUnionRewriteQueryExtraPredicate() != null) {
-            result = addUnionAllExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
+            result = addExtraPredicate(result, rewriteContext.getUnionRewriteQueryExtraPredicate());
         }
 
         deriveLogicalProperty(result);
         return result;
     }
 
-    protected OptExpression addUnionAllExtraPredicate(OptExpression result,
-                                                      ScalarOperator extraPredicate) {
+    protected OptExpression addExtraPredicate(OptExpression result,
+                                              ScalarOperator extraPredicate) {
         Operator op = result.getOp();
         if (op instanceof LogicalSetOperator) {
             LogicalFilterOperator filter = new LogicalFilterOperator(extraPredicate);
-            // TODO: Refactor this so can use PUSH_DOWN_PREDICATE rule set after mv rewrite rule.
-            return PushDownPredicateSetRule.doProcess(filter, result, false).get(0);
+            // use PUSH_DOWN_PREDICATE rule to push down filter after union all set after mv rewrite rule.
+            return OptExpression.create(filter, result);
         } else {
             // If op is aggregate operator, use setPredicate directly.
             ScalarOperator origPredicate = op.getPredicate();
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(op.getProjection().getColumnRefMap());
-            ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
-            op.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
+            if (op.getProjection() != null) {
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(op.getProjection().getColumnRefMap());
+                ScalarOperator rewrittenExtraPredicate = rewriter.rewrite(extraPredicate);
+                op.setPredicate(Utils.compoundAnd(origPredicate, rewrittenExtraPredicate));
+            } else {
+                op.setPredicate(Utils.compoundAnd(origPredicate, extraPredicate));
+            }
             return result;
         }
     }

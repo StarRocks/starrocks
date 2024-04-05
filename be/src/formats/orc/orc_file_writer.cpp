@@ -22,6 +22,8 @@
 #include "column/struct_column.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
+#include "runtime/current_thread.h"
+#include "util/debug_util.h"
 
 namespace starrocks::formats {
 
@@ -72,21 +74,29 @@ ORCFileWriter::ORCFileWriter(const std::string& location, std::unique_ptr<OrcOut
                              const std::vector<std::string>& column_names,
                              const std::vector<TypeDescriptor>& type_descs,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             TCompressionType::type compression_type,
                              const std::shared_ptr<ORCWriterOptions>& writer_options,
-                             const std::function<void()> rollback_action, PriorityThreadPool* executors)
+                             const std::function<void()> rollback_action, PriorityThreadPool* executors,
+                             RuntimeState* runtime_state)
         : _location(location),
           _output_stream(std::move(output_stream)),
           _column_names(column_names),
           _type_descs(type_descs),
           _column_evaluators(std::move(column_evaluators)),
+          _compression_type(compression_type),
           _writer_options(writer_options),
           _rollback_action(rollback_action),
-          _executors(executors) {}
+          _executors(executors),
+          _runtime_state(runtime_state) {}
 
 Status ORCFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     ASSIGN_OR_RETURN(_schema, _make_schema(_column_names, _type_descs));
-    _writer = orc::createWriter(*_schema, _output_stream.get(), orc::WriterOptions());
+    auto options = orc::WriterOptions();
+    ASSIGN_OR_RETURN(auto compression, _convert_compression_type(_compression_type));
+    options.setCompression(compression);
+    _writer = orc::createWriter(*_schema, _output_stream.get(), options);
+    _writer->addUserMetadata(STARROCKS_ORC_WRITER_VERSION_KEY, get_short_version());
     return Status::OK();
 }
 
@@ -112,7 +122,12 @@ std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
     std::future<FileWriter::CommitResult> future = promise->get_future();
 
     auto task = [writer = _writer, output_stream = _output_stream, p = promise, rollback = _rollback_action,
-                 row_counter = _row_counter, location = _location] {
+                 row_counter = _row_counter, location = _location, state = _runtime_state] {
+#ifndef BE_TEST
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+        CurrentThread::current().set_query_id(state->query_id());
+        CurrentThread::current().set_fragment_instance_id(state->fragment_instance_id());
+#endif
         FileWriter::CommitResult result{
                 .io_status = Status::OK(), .format = ORC, .location = location, .rollback_action = rollback};
         try {
@@ -188,9 +203,11 @@ void ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     }
     case TYPE_FLOAT: {
         _write_number<TYPE_FLOAT, orc::DoubleVectorBatch>(orc_column, column);
+        break;
     }
     case TYPE_DOUBLE: {
         _write_number<TYPE_DOUBLE, orc::DoubleVectorBatch>(orc_column, column);
+        break;
     }
     case TYPE_CHAR:
         [[fallthrough]];
@@ -471,6 +488,37 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
     _write_column(values_orc_column, values, type.children[1]);
 }
 
+StatusOr<orc::CompressionKind> ORCFileWriter::_convert_compression_type(TCompressionType::type type) {
+    orc::CompressionKind converted_type;
+    switch (type) {
+    case TCompressionType::NO_COMPRESSION: {
+        converted_type = orc::CompressionKind_NONE;
+        break;
+    }
+    case TCompressionType::SNAPPY: {
+        converted_type = orc::CompressionKind_SNAPPY;
+        break;
+    }
+    case TCompressionType::GZIP: {
+        converted_type = orc::CompressionKind_ZLIB;
+        break;
+    }
+    case TCompressionType::ZSTD: {
+        converted_type = orc::CompressionKind_ZSTD;
+        break;
+    }
+    case TCompressionType::LZ4: {
+        converted_type = orc::CompressionKind_LZ4;
+        break;
+    }
+    default: {
+        return Status::NotSupported(fmt::format("not supported compression type {}", type));
+    }
+    }
+
+    return converted_type;
+}
+
 StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema(const std::vector<std::string>& column_names,
                                                                  const std::vector<TypeDescriptor>& type_descs) {
     auto schema = orc::createStructType();
@@ -553,16 +601,18 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     }
 }
 
-ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs,
+ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
                                            const std::map<std::string, std::string>& options,
                                            const std::vector<std::string>& column_names,
                                            std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                                           PriorityThreadPool* executors)
+                                           PriorityThreadPool* executors, RuntimeState* runtime_state)
         : _fs(std::move(fs)),
+          _compression_type(compression_type),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),
-          _executors(executors) {}
+          _executors(executors),
+          _runtime_state(runtime_state) {}
 
 Status ORCFileWriterFactory::init() {
     for (auto& e : _column_evaluators) {
@@ -572,7 +622,7 @@ Status ORCFileWriterFactory::init() {
     return Status::OK();
 }
 
-StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) {
+StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::string& path) const {
     ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
@@ -581,7 +631,8 @@ StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const std::st
     auto types = ColumnEvaluator::types(_column_evaluators);
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(file));
     return std::make_shared<ORCFileWriter>(path, std::move(output_stream), _column_names, types,
-                                           std::move(column_evaluators), _parsed_options, rollback_action, _executors);
+                                           std::move(column_evaluators), _compression_type, _parsed_options,
+                                           rollback_action, _executors, _runtime_state);
 }
 
 } // namespace starrocks::formats

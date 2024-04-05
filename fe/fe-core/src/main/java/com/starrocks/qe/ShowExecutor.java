@@ -51,6 +51,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -269,22 +270,24 @@ import static com.starrocks.catalog.Table.TableType.JDBC;
 public class ShowExecutor {
     private static final Logger LOG = LogManager.getLogger(ShowExecutor.class);
     private static final List<List<String>> EMPTY_SET = Lists.newArrayList();
+    private final ShowExecutorVisitor showExecutorVisitor;
 
-    public ShowExecutor() {
+    public ShowExecutor(ShowExecutorVisitor showExecutorVisitor) {
+        this.showExecutorVisitor = showExecutorVisitor;
     }
 
-    public ShowResultSet execute(ShowStmt statement, ConnectContext context) {
-        return statement.accept(ShowExecutorVisitor.getInstance(), context);
+    public static ShowResultSet execute(ShowStmt statement, ConnectContext context) {
+        return GlobalStateMgr.getCurrentState().getShowExecutor().showExecutorVisitor.visit(statement, context);
     }
 
-    protected static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
-
+    public static class ShowExecutorVisitor implements AstVisitor<ShowResultSet, ConnectContext> {
         private static final Logger LOG = LogManager.getLogger(ShowExecutor.ShowExecutorVisitor.class);
-
         private static final ShowExecutor.ShowExecutorVisitor INSTANCE = new ShowExecutor.ShowExecutorVisitor();
-
         public static ShowExecutor.ShowExecutorVisitor getInstance() {
             return INSTANCE;
+        }
+
+        protected ShowExecutorVisitor() {
         }
 
         @Override
@@ -472,7 +475,8 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(tableName)) {
                         continue;
                     }
-                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+                    BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                            catalogName, dbName, tableName);
                     if (table == null) {
                         LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                         continue;
@@ -1761,8 +1765,9 @@ public class ShowExecutor {
 
             for (Database db : dbs) {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-                if (!(jobI instanceof BackupJob)) {
-                    return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
+                if (jobI == null || !(jobI instanceof BackupJob)) {
+                    // show next db
+                    continue;
                 }
 
                 BackupJob backupJob = (BackupJob) jobI;
@@ -1806,8 +1811,9 @@ public class ShowExecutor {
 
             for (Database db : dbs) {
                 AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-                if (!(jobI instanceof RestoreJob)) {
-                    return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
+                if (jobI == null || !(jobI instanceof RestoreJob)) {
+                    // show next db
+                    continue;
                 }
 
                 RestoreJob restoreJob = (RestoreJob) jobI;

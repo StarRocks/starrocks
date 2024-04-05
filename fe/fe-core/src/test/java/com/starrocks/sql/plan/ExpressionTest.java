@@ -22,6 +22,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -1746,5 +1749,147 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select 2011-12-01 = id_date from test_all_type";
         String plan = getFragmentPlan(sql);
         assertContains(plan, " CAST(9: id_date AS DOUBLE) = 1998.0");
+    }
+
+    @Test
+    public void testCastStringNumber() throws Exception {
+        try {
+            // string number
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+            String sql = "select t1a = 1.2345 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "[1: t1a, VARCHAR, true] = '1.2345'");
+
+            sql = "select t1a < 1 from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([1: t1a, VARCHAR, true] as DOUBLE) < 1.0");
+
+            // number string
+            sql = "select t1f = '123.345' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[6: t1f, DOUBLE, true] = 123.345");
+
+            sql = "select t1c >= '123.345' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([3: t1c, INT, true] as DOUBLE) >= 123.345");
+
+            sql = "select t1e >= '123.345' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([5: t1e, FLOAT, true] as DOUBLE) >= 123.345");
+
+            sql = "select t1f <= '123.345' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[6: t1f, DOUBLE, true] <= 123.345");
+
+            sql = "select t1e >= 'abc' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([5: t1e, FLOAT, true] as DOUBLE) >= cast('abc' as DOUBLE)");
+
+            sql = "select t1g = 'abc' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([7: t1g, BIGINT, true] as VARCHAR(1048576)) = 'abc'");
+
+            sql = "select id_bool = 'abc' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([11: id_bool, BOOLEAN, true] as DOUBLE) = cast('abc' as DOUBLE)");
+
+            sql = "select id_bool = 'false' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[11: id_bool, BOOLEAN, true] = FALSE");
+
+            sql = "select t1g = true from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[7: t1g, BIGINT, true] = 1");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("DECIMAL");
+            // string number
+            String sql = "select t1a = 1.2345 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([1: t1a, VARCHAR, true] as DECIMAL32(5,4)) = 1.2345");
+
+            sql = "select t1a < 1 from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([1: t1a, VARCHAR, true] as DOUBLE) < 1.0");
+
+            // number string
+            sql = "select t1f = '123.345' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[6: t1f, DOUBLE, true] = 123.345");
+
+            sql = "select t1c >= '123.345' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([3: t1c, INT, true] as DOUBLE) >= 123.345");
+
+            sql = "select t1e >= '123.345' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([5: t1e, FLOAT, true] as DOUBLE) >= 123.345");
+
+            sql = "select t1f <= '123.345' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[6: t1f, DOUBLE, true] <= 123.345");
+
+            sql = "select t1e >= 'abc' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([5: t1e, FLOAT, true] as DOUBLE) >= cast('abc' as DOUBLE)");
+
+            sql = "select t1g = 'abc' from test_all_type";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([7: t1g, BIGINT, true] as DECIMAL128(38,9)) " +
+                    "= cast('abc' as DECIMAL128(38,9))");
+
+            sql = "select id_bool = 'abc' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([11: id_bool, BOOLEAN, true] as DOUBLE) = cast('abc' as DOUBLE)");
+
+            sql = "select id_bool = 'false' from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[11: id_bool, BOOLEAN, true] = FALSE");
+
+            sql = "select t1g = true from test_bool";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "[7: t1g, BIGINT, true] = 1");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+    }
+
+    @Test
+    public void testJsonQuery() throws Exception {
+        String sql = "select parse_json('{\"a\": true}')->\"a\"->\"b\"->\"c\"->\"d\"";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.b.c.d')");
+
+        sql = "select parse_json('{\"a\": true}')->\"$.a\"->\"$.b\"->\"$.c\"->\"$.d\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), '$.a.b.c.d')");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$.*\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.*");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$$$$\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.$$$$')");
+
+        sql = "select parse_json('{\"a\": true}')->\"a\"->\"$....\"";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "json_query(json_query(parse_json('{\"a\": true}'), 'a'), '$....')");
+    }
+
+    @Test
+    public void testFoundJsonInt() {
+        Function func = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.VARCHAR, Type.VARCHAR},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertNotNull(func);
+        Assert.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
+
+        func = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.JSON, Type.VARCHAR},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertNotNull(func);
+        Assert.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
     }
 }

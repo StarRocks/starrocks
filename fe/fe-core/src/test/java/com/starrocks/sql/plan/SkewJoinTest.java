@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.statistic.MockTPCHHistogramStatisticStorage;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -33,6 +36,35 @@ public class SkewJoinTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+
+        int scale = 100;
+        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCHHistogramStatisticStorage(scale));
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
+        setTableStatistics(t0, 5);
+
+        OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
+        setTableStatistics(t5, 25);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
+        setTableStatistics(t1, 10000 * scale);
+
+        OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
+        setTableStatistics(t4, 150000 * scale);
+
+        OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
+        setTableStatistics(t6, 200000 * scale);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
+        setTableStatistics(t2, 800000 * scale);
+
+        OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
+        setTableStatistics(t3, 1500000 * scale);
+
+        OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+        setTableStatistics(t7, 6000000 * scale);
+
         starRocksAssert.withTable("create table struct_tbl(c0 INT, " +
                 "c1 struct<a int, b array<struct<a int, b int>>>," +
                 "c2 struct<a int, b int>," +
@@ -45,7 +77,7 @@ public class SkewJoinTest extends PlanTestBase {
     public void testSkewJoin() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, " equal join conjunct: 7: rand_col = 15: cast\n" +
+        assertCContains(sqlPlan, " equal join conjunct: 7: rand_col = 14: rand_col\n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4");
         assertCContains(sqlPlan, "  |  <slot 10> : 10: unnest\n" +
                 "  |  <slot 11> : 0\n" +
@@ -125,11 +157,20 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
+    public void testSkewJoinWithException7() throws Exception {
+        String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew] hive0.partitioned_db.t3" +
+                " on t1.c1 = t3.c1";
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("Skew join column must be specified");
+        getFragmentPlan(sql);
+    }
+
+    @Test
     public void testSkewJoinWithHiveTable() throws Exception {
         String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew|t1.c1(1,2)] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1";
         String sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, " equal join conjunct: 9: rand_col = 17: cast\n" +
+        assertCContains(sqlPlan, " equal join conjunct: 9: rand_col = 16: rand_col\n" +
                 "  |  equal join conjunct: 1: c1 = 5: c1");
         assertCContains(sqlPlan, " 5:Project\n" +
                 "  |  <slot 11> : [1,2]");
@@ -148,15 +189,15 @@ public class SkewJoinTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN 26: round " +
-                "WHEN 2: c1.a[true] IN (1, 2) THEN 26: round ELSE 0 END\n" +
-                "  |  <slot 19> : 2: c1.a[true]\n" +
-                "  |  <slot 21> : 3: c2.a[false]\n" +
+                "  |  <slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN " +
+                "24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: round ELSE 0 END\n" +
+                "  |  <slot 18> : 2: c1.a[true]\n" +
+                "  |  <slot 19> : 3: c2.a[false]\n" +
                 "  |  common expressions:\n" +
-                "  |  <slot 23> : 2: c1.a[true]\n" +
-                "  |  <slot 24> : rand()\n" +
-                "  |  <slot 25> : 24: rand * 1000.0\n" +
-                "  |  <slot 26> : round(25: multiply)");
+                "  |  <slot 21> : 2: c1.a[true]\n" +
+                "  |  <slot 22> : rand()\n" +
+                "  |  <slot 23> : 22: rand * 1000.0\n" +
+                "  |  <slot 24> : round(23: multiply)");
     }
 
     @Test
@@ -169,9 +210,47 @@ public class SkewJoinTest extends PlanTestBase {
         sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew|t1.c1(1,2)] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1 join[skew|t1.c2('a','b','c')] hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
         sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 30: cast\n" +
+        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
                 "  |  equal join conjunct: 1: c1 = 5: c1");
-        assertCContains(sqlPlan, "equal join conjunct: 13: rand_col = 29: cast\n" +
+        assertCContains(sqlPlan, "equal join conjunct: 13: rand_col = 20: rand_col\n" +
                 "  |  equal join conjunct: 2: c2 = 10: c2");
+    }
+
+    @Test
+    public void testSkewJoinWithStats() throws Exception {
+        String sql = "select * from test.customer join test.part on c_mktsegment = p_name and c_custkey = p_partkey ";
+        String sqlPlan = getFragmentPlan(sql);
+        // rewrite success
+        assertCContains(sqlPlan, "equal join conjunct: 20: rand_col = 27: rand_col\n" +
+                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
+                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+
+        int skewJoinUseMCVCount = connectContext.getSessionVariable().getSkewJoinOptimizeUseMCVCount();
+        double skewDataThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        connectContext.getSessionVariable().setSkewJoinOptimizeUseMCVCount(1);
+        connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.3);
+        sqlPlan = getFragmentPlan(sql);
+        // not rewrite because of the skewJoinUseMCVCount and skewDataThreshold
+        assertCContains(sqlPlan, "equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
+                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+        connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(skewDataThreshold);
+        connectContext.getSessionVariable().setSkewJoinOptimizeUseMCVCount(skewJoinUseMCVCount);
+
+        sql = "select * from test.customer join test.part on trim(c_mktsegment) = p_name and c_custkey = p_partkey ";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 20: trim = 11: P_NAME\n" +
+                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+
+        sql = "select c_custkey, sum(p_retailprice) from (select c_custkey, c_mktsegment from test.customer) c" +
+                " join (select p_name,p_retailprice from test.part) p on c.c_mktsegment = p.p_name group by c_custkey";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
+                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME");
+
+        sql = "select * from test.customer join test.part on p_name = c_mktsegment and p_partkey = c_custkey";
+        sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 20: rand_col = 27: rand_col\n" +
+                "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
+                "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
     }
 }

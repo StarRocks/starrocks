@@ -98,7 +98,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -225,7 +227,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
-        properties.put(COMMENT, stmt.getComment());
+        String comment = stmt.getComment();
+        if (comment != null && !comment.isEmpty()) {
+            properties.put(COMMENT, comment);
+        }
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
         return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
@@ -901,7 +906,16 @@ public class IcebergMetadata implements ConnectorMetadata {
                     field.name().equals(parts[0]), "Invalid partition: %s", partitions[i]);
 
             org.apache.iceberg.types.Type sourceType = spec.partitionType().fields().get(i).type();
-            data.set(i, Conversions.fromPartitionString(sourceType, parts[1]));
+            // apply url decoding for string/fixed type
+            if (sourceType.typeId() == Type.TypeID.STRING || sourceType.typeId() == Type.TypeID.FIXED) {
+                parts[1] = URLDecoder.decode(parts[1], StandardCharsets.UTF_8);
+            }
+
+            if (parts[1].equals("null")) {
+                data.set(i, null);
+            } else {
+                data.set(i, Conversions.fromPartitionString(sourceType, parts[1]));
+            }
         }
         return data;
     }

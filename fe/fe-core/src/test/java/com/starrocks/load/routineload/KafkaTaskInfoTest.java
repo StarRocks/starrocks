@@ -46,7 +46,8 @@ public class KafkaTaskInfoTest {
             @Mock
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       List<Integer> partitions) throws UserException {
+                                                       List<Integer> partitions,
+                                                       long warehouseId) throws UserException {
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);
@@ -62,6 +63,7 @@ public class KafkaTaskInfoTest {
                 System.currentTimeMillis(),
                 offset1,
                 Config.routine_load_task_timeout_second * 1000);
+        Assert.assertEquals("kafka", kafkaTaskInfo1.dataSourceType());
         Assert.assertTrue(kafkaTaskInfo1.readyToExecute());
 
         Map<Integer, Long> offset2 = Maps.newHashMap();
@@ -112,7 +114,8 @@ public class KafkaTaskInfoTest {
             @Mock
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
-                                                       List<Integer> partitions) throws UserException {
+                                                       List<Integer> partitions,
+                                                       long warehouseId) throws UserException {
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);

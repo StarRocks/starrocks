@@ -513,11 +513,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/hive-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
-
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/odps-reader-lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/
     fi
 
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/

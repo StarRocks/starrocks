@@ -638,6 +638,8 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_split_context(split_context);
+
+    _data_source->set_morsel(scan_morsel);
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
@@ -760,7 +762,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
                 mem_tracker->consume(_request_mem_tracker_bytes);
             } else {
                 limiter->update_running_chunk_source_count(-1);
-                // VLOG_OPERATOR << build_debug_string("alloc failed");
+                VLOG_OPERATOR << build_debug_string("alloc failed");
                 _request_mem_tracker_bytes = 0;
                 return Status::OK();
             }
@@ -858,10 +860,11 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     {
         std::vector<ScanSplitContextPtr> split_tasks;
         _data_source->get_split_tasks(&split_tasks);
-        VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
-                      << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
-                      << ", split_tasks = " << split_tasks.size();
         if (split_tasks.size() != 0) {
+            VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
+                          << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
+                          << ", split_tasks = " << split_tasks.size();
+
             std::vector<MorselPtr> split_morsels;
             ScanMorsel* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
 

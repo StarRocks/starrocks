@@ -14,6 +14,8 @@
 
 #include "exprs/function_call_expr.h"
 
+#include <cstdint>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -25,6 +27,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 #include "storage/rowset/bloom_filter.h"
+#include "types/logical_type.h"
 #include "util/failpoint/fail_point.h"
 #include "util/slice.h"
 #include "util/utf8.h"
@@ -40,7 +43,19 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
         return Status::InternalError("Vectorized engine doesn't implement function " + _fn.name.function_name);
     }
 
-    _fn_desc = BuiltinFunctions::find_builtin_function(_fn.fid);
+    // branch-3.0 is 150102~150104, branch-3.1 is 150103~150105
+    // refs: https://github.com/StarRocks/starrocks/pull/17803
+    // @todo: remove this code when branch-3.0 is deprecated
+    int64_t fid = _fn.fid;
+    if (_fn.fid == 150102 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL32) {
+        fid = 150103;
+    } else if (_fn.fid == 150103 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL64) {
+        fid = 150104;
+    } else if (_fn.fid == 150104 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL128) {
+        fid = 150105;
+    }
+
+    _fn_desc = BuiltinFunctions::find_builtin_function(fid);
 
     if (_fn_desc == nullptr || _fn_desc->scalar_function == nullptr) {
         return Status::InternalError("Vectorized engine doesn't implement function " + _fn.name.function_name);
@@ -167,6 +182,13 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
         result = _fn_desc->scalar_function(fn_ctx, args);
     }
     RETURN_IF_ERROR(result);
+    if (_fn_desc->check_overflow) {
+        std::string err_msg;
+        if (UNLIKELY(result.value()->capacity_limit_reached(&err_msg))) {
+            return Status::InternalError(
+                    fmt::format("Result column of function {} exceed limit: {}", _fn_desc->name, err_msg));
+        }
+    }
 
     // For no args function call (pi, e)
     if (result.value()->is_constant() && ptr != nullptr) {

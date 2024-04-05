@@ -13,7 +13,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`) BUCKETS 6
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 DROP TABLE if exists t1;
@@ -30,7 +29,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`) BUCKETS 6
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 DROP TABLE if exists t2;
@@ -47,7 +45,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c0`) BUCKETS 6
 PROPERTIES(
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "default"
 );
 INSERT INTO t0

@@ -250,7 +250,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_base_tablet_schema->id())
+                                                   .set_schema_id(_base_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
@@ -295,7 +295,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_new_tablet_schema->id())
+                                                   .set_schema_id(_new_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes, sizeof(indexes) / sizeof(indexes[0])));
@@ -505,7 +505,7 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_base_tablet_schema->id())
+                                                   .set_schema_id(_base_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
@@ -549,7 +549,7 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_new_tablet_schema->id())
+                                                   .set_schema_id(_new_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes, sizeof(indexes) / sizeof(indexes[0])));
@@ -784,7 +784,7 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_base_tablet_schema->id())
+                                                   .set_schema_id(_base_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -818,7 +818,7 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_new_tablet_schema->id())
+                                                   .set_schema_id(_new_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -1058,7 +1058,7 @@ TEST_P(SchemaChangeModifyColumnMultiSegmentOrderTest, test_alter_table) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_base_tablet_schema->id())
+                                                   .set_schema_id(_base_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -1271,7 +1271,7 @@ TEST_P(SchemaChangeSortKeyReorderTest1, test_alter_sortkey_reorder_1) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_base_tablet_schema->id())
+                                                   .set_schema_id(_base_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -1305,7 +1305,7 @@ TEST_P(SchemaChangeSortKeyReorderTest1, test_alter_sortkey_reorder_1) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_new_tablet_schema->id())
+                                                   .set_schema_id(_new_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -1509,7 +1509,7 @@ TEST_P(SchemaChangeSortKeyReorderTest2, test_alter_sortkey_reorder2) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_base_tablet_schema->id())
+                                                   .set_schema_id(_base_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -1543,7 +1543,7 @@ TEST_P(SchemaChangeSortKeyReorderTest2, test_alter_sortkey_reorder2) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_new_tablet_schema->id())
+                                                   .set_schema_id(_new_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -1745,7 +1745,7 @@ TEST_P(SchemaChangeSortKeyReorderTest3, test_alter_sortkey_reorder3) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_base_tablet_schema->id())
+                                                   .set_schema_id(_base_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -1779,7 +1779,7 @@ TEST_P(SchemaChangeSortKeyReorderTest3, test_alter_sortkey_reorder3) {
                                                    .set_txn_id(txn_id)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_new_tablet_schema->id())
+                                                   .set_schema_id(_new_tablet_schema->id())
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));

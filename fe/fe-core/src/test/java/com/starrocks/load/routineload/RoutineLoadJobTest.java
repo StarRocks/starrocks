@@ -109,8 +109,10 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testAfterAborted(@Injectable TransactionState transactionState,
+    public void testAfterAborted(@Mocked RoutineLoadMgr routineLoadMgr,
+                                 @Injectable TransactionState transactionState,
                                  @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+        Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
         long txnId = 1L;
@@ -122,6 +124,8 @@ public class RoutineLoadJobTest {
         Deencapsulation.setField(attachment, "progress", kafkaProgress);
 
         KafkaProgress currentProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
 
         new Expectations() {
             {
@@ -140,6 +144,9 @@ public class RoutineLoadJobTest {
                 routineLoadTaskInfo.getId();
                 minTimes = 0;
                 result = UUID.randomUUID();
+                routineLoadMgr.getJob(anyLong);
+                minTimes = 0;
+                result = routineLoadJob;
             }
         };
 
@@ -150,7 +157,6 @@ public class RoutineLoadJobTest {
         };
 
         String txnStatusChangeReasonString = "no data";
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
         Deencapsulation.setField(routineLoadJob, "progress", currentProgress);
@@ -290,7 +296,8 @@ public class RoutineLoadJobTest {
         new MockUp<KafkaUtil>() {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                       ImmutableMap<String, String> properties) throws UserException {
+                                                       ImmutableMap<String, String> properties,
+                                                       long warehouseId) throws UserException {
                 return Lists.newArrayList(1, 2, 3);
             }
         };

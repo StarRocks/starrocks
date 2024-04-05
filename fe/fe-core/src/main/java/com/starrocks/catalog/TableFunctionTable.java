@@ -65,7 +65,7 @@ import static com.google.common.base.Verify.verify;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
-    private static final Set<String> SUPPORTED_FORMATS;
+    public static final Set<String> SUPPORTED_FORMATS;
     static {
         SUPPORTED_FORMATS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         SUPPORTED_FORMATS.add("parquet");
@@ -106,6 +106,7 @@ public class TableFunctionTable extends Table {
     @Nullable
     private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
+    private long targetMaxFileSize;
 
     // CSV format options
     private String csvColumnSeparator = "\t";
@@ -142,8 +143,8 @@ public class TableFunctionTable extends Table {
 
     // Ctor for unload data via table function
     public TableFunctionTable(String path, String format, String compressionType, List<Column> columns,
-                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile,
-                              Map<String, String> properties) {
+            @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile, long targetMaxFileSize,
+            Map<String, String> properties) {
         super(TableType.TABLE_FUNCTION);
         verify(!Strings.isNullOrEmpty(path), "path is null or empty");
         verify(!(partitionColumnIDs != null && writeSingleFile));
@@ -153,6 +154,7 @@ public class TableFunctionTable extends Table {
         this.partitionColumnIDs = partitionColumnIDs;
         this.writeSingleFile = writeSingleFile;
         this.properties = properties;
+        this.targetMaxFileSize = targetMaxFileSize;
         super.setNewFullSchema(columns);
     }
 
@@ -188,6 +190,7 @@ public class TableFunctionTable extends Table {
         tTableFunctionTable.setFile_format(format);
         tTableFunctionTable.setWrite_single_file(writeSingleFile);
         tTableFunctionTable.setCompression_type(PARQUET_COMPRESSION_TYPE_MAP.get(compressionType));
+        tTableFunctionTable.setTarget_max_file_size(targetMaxFileSize);
         if (partitionColumnIDs != null) {
             tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
         }

@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.threeten.extra.PeriodDuration;
 
@@ -150,6 +151,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
             queryRewriteSwitch = TableProperty.analyzeQueryRewriteSwitch(value);
             properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+        }
+
+        // warehouse
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            materializedView.setWarehouseId(warehouse.getId());
         }
 
         if (!properties.isEmpty()) {

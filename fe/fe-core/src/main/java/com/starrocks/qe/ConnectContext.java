@@ -74,6 +74,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -677,19 +678,30 @@ public class ConnectContext {
         this.sessionVariable.setCatalog(currentCatalog);
     }
 
-    public String getCurrentWarehouse() {
-        if (currentWarehouse != null) {
-            return currentWarehouse;
+    public long getCurrentWarehouseId() {
+        String warehouseName = this.sessionVariable.getWarehouseName();
+        if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+            return WarehouseManager.DEFAULT_WAREHOUSE_ID;
         }
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new SemanticException("Warehouse " + warehouseName + " not exist");
+        }
+        return warehouse.getId();
+    }
+
+    public String getCurrentWarehouseName() {
+        return this.sessionVariable.getWarehouseName();
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
-        this.currentWarehouse = currentWarehouse;
+        this.sessionVariable.setWarehouseName(currentWarehouse);
     }
 
-    public void setCurrentWarehouseId(long id) {
-        // not implemented in this codebase
+    public void setCurrentWarehouseId(long warehouseId) {
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
+        this.sessionVariable.setWarehouseName(warehouse.getName());
     }
 
     public void setParentConnectContext(ConnectContext parent) {

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 使用 Kafka connector 导入数据
 
-StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafka®)，持续消费 Kafka 的消息并导入至 StarRocks 中。
+StarRocks 提供 Apache Kafka® 连接器 (StarRocks Connector for Apache Kafka®，简称 Kafka connector)，作为 sink connector，持续消费 Kafka 的消息并导入至 StarRocks 中。
 
 使用 Kafka connector 可以更好的融入 Kafka 生态，StarRocks 可以与 Kafka Connect 无缝对接。为 StarRocks 准实时接入链路提供了更多的选择。相比于 Routine Load，您可以在以下场景中优先考虑使用 Kafka connector 导入数据：
 
@@ -65,6 +65,13 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 1. 配置 Kafka connector。在 Kafka 安装目录下的 **config** 目录，创建 Kafka connector 的配置文件 **connect-StarRocks-sink.properties**，并配置对应参数。参数和相关说明，参见[参数说明](#参数说明)。
 
+    :::info
+
+    - 在本示例中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
+    - 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要在 StarRocks 提供的 Kafka connector 的配置文件 **connect-StarRocks-sink.properties** 中[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
+
+    :::
+
       ```yaml
       name=starrocks-kafka-connector
       connector.class=com.starrocks.connector.kafka.StarRocksSinkConnector
@@ -85,17 +92,13 @@ CREATE TABLE test_tbl (id INT, city STRING);
       sink.properties.strip_outer_array=true
       ```
 
-    > **注意**
-    >
-    > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
-
 2. 配置并启动 Kafka Connect。
 
    1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-standalone.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
 
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
-        # 注意本示例使用 PLAINTEXT  安全协议访问 Kafka 集群，如果使用其他安全协议访问 Kafka 集群，则您需要在本文件中配置相关信息。
+        # 注意本示例使用 PLAINTEXT 安全协议访问 Kafka 集群，如果使用其他安全协议访问 Kafka 集群，则您需要在本文件中配置相关信息。
         bootstrap.servers=<kafka_broker_ip>:9092
         offset.storage.file.filename=/tmp/connect.offsets
         offset.flush.interval.ms=10000
@@ -103,7 +106,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # 修改 starrocks-kafka-connector 为解压后的绝对路径，例如：
+        # Kafka connector 解压后所在的绝对路径，例如：
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
 
@@ -112,10 +115,12 @@ CREATE TABLE test_tbl (id INT, city STRING);
         ```Bash
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
+
 #### 通过 Distributed 模式启动 Kafka Connect
 
 1. 配置并启动 Kafka Connect。
-   1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-distributed.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。     
+   1. 配置 Kafka Connect。在 **config** 目录中的 `config/connect-distributed.properties` 配置文件中配置如下参数。参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
+
         ```yaml
         # kafka broker 的地址，多个 Broker 之间以英文逗号 (,) 分隔。
         # 注意本示例使用 PLAINTEXT  安全协议访问 Kafka 集群，如果使用其他安全协议访问 Kafka 集群，则您需要在本文件中配置相关信息。        bootstrap.servers=<kafka_broker_ip>:9092
@@ -125,17 +130,24 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # 修改 starrocks-kafka-connector 为解压后的绝对路径，例如：
+        # Kafka connector 解压后所在的绝对路径，例如：
         plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
         ```
   
-    2. 启动 Kafka Connect。
+   2. 启动 Kafka Connect。
 
         ```BASH
         CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
 
 2. 配置并创建 Kafka connector。注意，在 Distributed 模式下您需要通过 REST API 来配置并创建 Kafka connector。参数和相关说明，参见[参数说明](#参数说明)。
+  
+    :::info
+
+    - 在本示例中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
+    - 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要在 StarRocks 提供的 Kafka connector 的配置文件 **connect-StarRocks-sink.properties** 中[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
+
+    :::
 
       ```Shell
       curl -i http://127.0.0.1:8083/connectors -H "Content-Type: application/json" -X POST -d '{
@@ -156,9 +168,6 @@ CREATE TABLE test_tbl (id INT, city STRING);
         }
       }'
       ```
-    > **注意**
-    >
-    > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键表，为了将源端的数据变更同步至主键表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
 #### 查询 StarRocks 表中的数据
 
@@ -181,9 +190,9 @@ MySQL [example_db]> select * from test_tbl;
 | 参数                                | 是否必填 | 默认值                                                       | 描述                                                         |
 | ----------------------------------- | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | name                                | 是       |                                                              | 表示当前的 Kafka connector，在 Kafka Connect 集群中必须为全局唯一，例如 starrocks-kafka-connector。 |
-| connector.class                     | 是       |              | kafka connector 的 sink 使用的类：com.starrocks.connector.kafka.StarRocksSinkConnector。                          |
-| topics                              | 是       |                                                              | 一个或多个待订阅 Topic，每个 Topic 对应一个 StarRocks 表，默认情况下 Topic 的名称与 StarRocks 表名一致，导入时根据 Topic 名称确定目标 StarRocks 表。`topics` 和 `topics.regex`（如下） 两者二选一填写。如果两者不一致，则还需要配置 `starrocks.topic2table.map`。 |
-| topics.regex                        |          | 与待订阅 Topic 匹配的正则表达式。更多解释，同 `topics`。`topics` 和 `topics.regex` 和 `topics`（如上）两者二选一填写。 |                                                              |
+| connector.class                     | 是       |              | Kafka connector 的 sink 使用的类：com.starrocks.connector.kafka.StarRocksSinkConnector。                          |
+| topics                              |       |                                                              | 一个或多个待订阅 Topic，每个 Topic 对应一个 StarRocks 表，默认情况下 Topic 的名称与 StarRocks 表名一致，导入时根据 Topic 名称确定目标 StarRocks 表。`topics` 和 `topics.regex`（如下） 两者二选一填写。如果两者不一致，则还需要配置 `starrocks.topic2table.map`。 |
+| topics.regex                        |          | |与待订阅 Topic 匹配的正则表达式。更多解释，同 `topics`。`topics` 和 `topics.regex` 和 `topics`（如上）两者二选一填写。 |
 | starrocks.topic2table.map           | 否       |                                                              | 当 Topic 的名称与 StarRocks 表名不一致时，该配置项可以说明映射关系，格式为 `<topic-1>:<table-1>,<topic-2>:<table-2>,...`。 |
 | starrocks.http.url                  | 是       |                                                              | FE 的 HTTP Server 地址。格式为 `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>,...`。多个地址，使用英文逗号 (,) 分隔。例如 `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
 | starrocks.database.name             | 是       |                                                              | StarRocks 目标库名。                                         |
@@ -203,13 +212,19 @@ MySQL [example_db]> select * from test_tbl;
 ## 使用限制
 
 - 不支持将 Kafka topic 里的一条消息展开成多条导入到 StarRocks。
-- Kafka connector 的 Sink 保证 at-least-once 语义。
+- StarRocks 提供的 Kafka connector 的 Sink 保证 at-least-once 语义。
 
 ## 最佳实践
 
 ### 导入 Debezium CDC 格式数据
 
-如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键表，则在 Kafka connector 配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#使用示例)外，还需要配置 `transforms` 以及相关参数。
+如果 Kafka 数据为 Debezium CDC 格式，并且 StarRocks 表为主键表，则在 StarRocks 提供的 Kafka connector 的配置文件 **connect-StarRocks-sink.properties** 中除了[配置基础参数](#配置-kafka-connector-和-kafka-connect然后启动-kafka-connect-导入数据)外，还需要配置 `transforms` 以及相关参数。
+
+:::info
+
+在本示例中，StarRocks 提供的 Kafka connector 是 sink connector，能够持续消费 Kafka 的数据并导入 StarRocks。
+
+:::
 
 ```Properties
 transforms=addfield,unwrap
@@ -221,5 +236,8 @@ transforms.unwrap.delete.handling.mode=rewrite
 
 在上述配置中，我们指定 `transforms=addfield,unwrap`。
 
-- addfield transform 用于向 Debezium CDC 格式数据的每个记录添加一个__op字段，以支持 [主键表](../table_design/table_types/primary_key_table.md)，。如果 StarRocks 表不是主键表，则无需指定 addfield 转换。addfield transform 的类是 com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord，已经包含在 Kafka connector 的 JAR 文件中，您无需手动安装。
+- Debezium CDC 格式数据中 `op` 字段记录了来自上游数据库的数据对应的 SQL 操作，`c`、`u`、`d` 分别代表 create，update 和 delete。如果 StarRocks 表是主键表，则需要指定 addfield transform。addfield transform 会为每行数据增加一个 `__op` 字段，来标记数据对应的 SQL 操作，并且会根据 Debezium CDC 格式数据的 `op` 字段的值去 `before` 或者 `after` 字段中里取其它列的值，以拼成一个完整的一行数据。最终这些数据会转成 JSON 或 CSV 格式，写入 StarRocks 中。addfield transform 的类是 `com.Starrocks.Kafka.Transforms.AddOpFieldForDebeziumRecord`，已经包含在 Kafka connector JAR 文件中，您无需手动安装。
+
+  如果 StarRocks 表不是主键表，则无需指定 addfield transform。
+
 - unwrap transform 是指由 Debezium 提供的 unwrap，可以根据操作类型 unwrap Debezium 复杂的数据结构。更多信息，参见 [New Record State Extraction](https://debezium.io/documentation/reference/stable/transformations/event-flattening.html)。

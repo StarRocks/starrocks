@@ -195,7 +195,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public void removeWorker(String hostAndPort) throws DdlException {
+        public void removeWorker(String hostAndPort, long workergroupid) throws DdlException {
             workers.removeIf(w -> Objects.equals(w.hostAndPort, hostAndPort));
         }
 
@@ -248,6 +248,11 @@ public class PseudoCluster {
 
         @Override
         public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
+            return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
+        }
+
+        @Override
+        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
 

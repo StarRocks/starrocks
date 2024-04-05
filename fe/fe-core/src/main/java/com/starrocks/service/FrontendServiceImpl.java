@@ -138,6 +138,7 @@ import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -150,6 +151,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -301,6 +303,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1247,13 +1250,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
+        String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        if (request.getWarehouse() != null && !request.getWarehouse().isEmpty()) {
+            warehouseName = request.getWarehouse();
+        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+
         // just use default value of session variable
         // as there is no connectContext for sync stream load
         ConnectContext connectContext = new ConnectContext();
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             TransactionResult resp = new TransactionResult();
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond * 1000, resp, false);
+            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(),
+                    timeoutSecond * 1000, resp, false, warehouse.getId());
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
                 throw new UserException(resp.msg);
@@ -1270,7 +1280,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond,
+                warehouse.getId());
     }
 
     @Override
@@ -1353,7 +1364,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (timeoutInfo.length() > 240) {
                 timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
-            status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
+            status.addToError_msgs("Publish timeout. The data will be visible after a while, " + timeoutInfo);
             return;
         }
         // if commit and publish is success, load can be regarded as success
@@ -1654,30 +1665,31 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("unknown database, database=" + dbName);
         }
 
+        Table table = db.getTable(request.getTbl());
+        if (table == null) {
+            throw new UserException("unknown table, table=" + request.getTbl());
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new UserException("load table type is not OlapTable, type=" + table.getClass());
+        }
+        if (table instanceof MaterializedView) {
+            throw new UserException(String.format(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    table.getName(), table.getName()));
+        }
+
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
         // Make timeout less than thrift_rpc_timeout_ms.
         // Otherwise, it will result in error like "call frontend service failed"
         timeoutMs = timeoutMs * 3 / 4;
 
         Locker locker = new Locker();
-        if (!locker.tryLockDatabase(db, LockType.READ, timeoutMs)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ, timeoutMs)) {
             throw new LockTimeoutException(
                     "get database read lock timeout, database=" + dbName + ", timeout=" + timeoutMs + "ms");
         }
         try {
-            Table table = db.getTable(request.getTbl());
-            if (table == null) {
-                throw new UserException("unknown table, table=" + request.getTbl());
-            }
-            if (!(table instanceof OlapTable)) {
-                throw new UserException("load table type is not OlapTable, type=" + table.getClass());
-            }
-            if (table instanceof MaterializedView) {
-                throw new UserException(String.format(
-                        "The data of '%s' cannot be inserted because '%s' is a materialized view," +
-                                "and the data of materialized view must be consistent with the base table.",
-                        table.getName(), table.getName()));
-            }
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
@@ -1712,7 +1724,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             return plan;
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         }
     }
 
@@ -2030,7 +2042,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo();
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
         return result;
@@ -2102,9 +2114,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 for (Tablet tablet : index.getTablets()) {
                     try {
                         // use default warehouse nodes
-                        long primaryId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
-                        tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(primaryId)));
-                    } catch (UserException exception) {
+                        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_WAREHOUSE_NAME, (LakeTablet) tablet);
+                        tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
+                    } catch (Exception exception) {
                         throw new UserException("Check if any backend is down or not. tablet_id: " + tablet.getId());
                     }
                 }
@@ -2329,12 +2342,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
                         try {
                             // use default warehouse nodes
-                            long primaryId = cloudNativeTablet.getPrimaryComputeNodeId();
+                            long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeId(
+                                    WarehouseManager.DEFAULT_WAREHOUSE_NAME, cloudNativeTablet);
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
-                                    Collections.singletonList(primaryId));
+                                    Collections.singletonList(computeNodeId));
                             tablets.add(tabletLocation);
                             txnState.getTabletIdToTTabletLocation().put(tablet.getId(), tabletLocation);
-                        } catch (UserException exception) {
+                        } catch (Exception exception) {
                             errorStatus.setError_msgs(Lists.newArrayList(
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
                                             + tablet.getId() + ", backends: none(cloud native table)"));
@@ -2373,7 +2387,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setTablets(tablets);
 
         // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo();
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         result.setNodes(nodesInfo.nodes);
         result.setStatus(new TStatus(OK));
         return result;
@@ -2769,7 +2783,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     dictTable.getAutomaticBucketSize(), allPartitions);
             response.setPartition(partitionParam);
             response.setLocation(OlapTableSink.createLocation(dictTable, partitionParam, dictTable.enableReplicatedStorage()));
-            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo());
+            response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID));
         } catch (UserException e) {
             SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
             semanticException.initCause(e);

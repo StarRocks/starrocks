@@ -79,6 +79,7 @@ bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
 }
 
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+    SCOPED_RAW_TIMER(&_total_running_time);
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
 
@@ -130,6 +131,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     ctx.hive_column_names = _scanner_params.hive_column_names;
     ctx.case_sensitive = _scanner_params.case_sensitive;
+    ctx.orc_use_column_names = _scanner_params.orc_use_column_names;
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
@@ -138,6 +140,8 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.stats = &_app_stats;
     ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
     ctx.split_context = _scanner_params.split_context;
+    ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
+    ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
     return Status::OK();
 }
 
@@ -264,6 +268,9 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
+    if (_scanner_ctx.estimated_mem_usage_per_split_task != 0) {
+        return _scanner_ctx.estimated_mem_usage_per_split_task;
+    }
     if (_shared_buffered_input_stream != nullptr) {
         return _shared_buffered_input_stream->estimated_mem_usage();
     }
@@ -384,7 +391,7 @@ void HdfsScannerContext::update_materialized_columns(const std::unordered_set<st
 }
 
 void HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (not_existed_slots.empty() || row_count < 0) return;
+    if (not_existed_slots.empty()) return;
     ChunkPtr& ck = (*chunk);
     for (auto* slot_desc : not_existed_slots) {
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
@@ -429,7 +436,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 }
 
 void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0 || row_count < 0) return;
+    if (partition_columns.size() == 0) return;
     ChunkPtr& ck = (*chunk);
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
@@ -469,6 +476,71 @@ bool HdfsScannerContext::can_use_dict_filter_on_slot(SlotDescriptor* slot) const
         }
     }
     return true;
+}
+
+void HdfsScannerContext::merge_split_tasks() {
+    if (split_tasks.size() < 2) return;
+
+    // NOTE: the prerequisites of `split_tasks` are
+    // 1. all ranges in it are sorted
+    // 2. and none of them is overlapped.
+    std::vector<HdfsSplitContextPtr> new_split_tasks;
+
+    auto do_merge = [&](size_t start, size_t end) {
+        auto start_ctx = split_tasks[start].get();
+        auto end_ctx = split_tasks[end].get();
+        auto new_ctx = start_ctx->clone();
+        new_ctx->split_start = start_ctx->split_start;
+        new_ctx->split_end = end_ctx->split_end;
+        new_split_tasks.emplace_back(std::move(new_ctx));
+    };
+
+    size_t head = 0;
+    for (size_t i = 1; i < split_tasks.size(); i++) {
+        bool cut = false;
+
+        auto prev_ctx = split_tasks[i - 1].get();
+        auto ctx = split_tasks[i].get();
+        auto head_ctx = split_tasks[head].get();
+
+        if ((ctx->split_start != prev_ctx->split_end) ||
+            (ctx->split_end - head_ctx->split_start > connector_max_split_size)) {
+            cut = true;
+        }
+
+        if (cut) {
+            do_merge(head, i - 1);
+            head = i;
+        }
+    }
+    do_merge(head, split_tasks.size() - 1);
+
+    // handle the tail stripe, if it's small and consecutive, merge it to the last one.
+    size_t new_size = new_split_tasks.size();
+    if (new_size >= 2) {
+        auto tail_ctx = new_split_tasks[new_size - 1].get();
+        size_t tail_size = (tail_ctx->split_end - tail_ctx->split_start);
+        if ((tail_size * 2) < connector_max_split_size) {
+            auto last_ctx = new_split_tasks[new_size - 2].get();
+            if (last_ctx->split_end == tail_ctx->split_start) {
+                last_ctx->split_end = tail_ctx->split_end;
+                new_split_tasks.pop_back();
+            }
+        }
+    }
+
+    split_tasks.swap(new_split_tasks);
+}
+void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+    size_t max_split_size = 0;
+    for (auto& t : _scanner_ctx.split_tasks) {
+        size_t size = (t->split_end - t->split_start);
+        max_split_size = std::max(max_split_size, size);
+        split_tasks->emplace_back(std::move(t));
+    }
+    if (split_tasks->size() > 0) {
+        _scanner_ctx.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
+    }
 }
 
 } // namespace starrocks

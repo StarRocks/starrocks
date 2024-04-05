@@ -63,6 +63,12 @@ StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schem
     return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema));
 }
 
+StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema, bool could_split,
+                                                                    bool could_split_physically) {
+    return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema), could_split,
+                                          could_split_physically);
+}
+
 bool VersionedTablet::has_delete_predicates() const {
     for (const auto& rowset : _metadata->rowsets()) {
         if (rowset.has_delete_predicate()) {

@@ -185,7 +185,7 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
 
     if (_partial_update_states[start_idx].inited) {
         // assume that states between [start_idx, end_idx) should be inited
-        CHECK(_partial_update_states[end_idx - 1].inited);
+        RETURN_ERROR_IF_FALSE(_partial_update_states[end_idx - 1].inited);
         return Status::OK();
     }
 

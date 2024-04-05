@@ -36,7 +36,7 @@ public:
     virtual Status finish() = 0;
 };
 
-std::unique_ptr<TxnLogApplier> new_txn_log_applier(Tablet tablet, MutableTabletMetadataPtr metadata,
+std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version);
 
 } // namespace starrocks::lake

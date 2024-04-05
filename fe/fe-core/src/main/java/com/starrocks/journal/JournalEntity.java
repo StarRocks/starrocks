@@ -116,6 +116,7 @@ import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -126,7 +127,6 @@ import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
-import com.starrocks.persist.SecurityIntegrationInfo;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
@@ -1070,11 +1070,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
-                data = SecurityIntegrationInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
                 data = UserPrivilegeCollectionInfo.read(in);
                 isRead = true;
@@ -1149,6 +1144,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_REPLICATION_JOB:
                 data = ReplicationJobLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_RECOVER_PARTITION_VERSION:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
                 isRead = true;
                 break;
             default: {

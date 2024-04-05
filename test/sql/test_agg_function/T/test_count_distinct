@@ -17,7 +17,6 @@ PARTITION p20220421 VALUES [("2022-04-21 00:00:00"), ("2022-04-22 00:00:00")))
 DISTRIBUTED BY HASH(`v1`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"

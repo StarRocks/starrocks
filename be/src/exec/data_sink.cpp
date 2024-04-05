@@ -39,8 +39,14 @@
 #include <memory>
 
 #include "common/logging.h"
+#include "connector/connector.h"
+#include "connector/file_connector.h"
+#include "connector_sink/file_chunk_sink.h"
+#include "connector_sink/hive_chunk_sink.h"
+#include "connector_sink/iceberg_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
+#include "exec/hdfs_scanner_text.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -48,6 +54,7 @@
 #include "exec/pipeline/olap_table_sink_operator.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/sink/blackhole_table_sink_operator.h"
+#include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
@@ -58,6 +65,7 @@
 #include "exec/pipeline/sink/table_function_table_sink_operator.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
+#include "formats/csv/csv_file_writer.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_sender.h"
@@ -393,124 +401,13 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         context->add_pipeline(std::move(prev_operators));
     } else if (typeid(*this) == typeid(starrocks::IcebergTableSink)) {
         auto* iceberg_table_sink = down_cast<starrocks::IcebergTableSink*>(this);
-        TableDescriptor* table_desc =
-                runtime_state->desc_tbl().get_table_descriptor(thrift_sink.iceberg_table_sink.target_table_id);
-        auto* iceberg_table_desc = down_cast<IcebergTableDescriptor*>(table_desc);
-
-        std::vector<TExpr> partition_expr;
-        std::vector<ExprContext*> partition_expr_ctxs;
-        auto output_expr = iceberg_table_sink->get_output_expr();
-        for (const auto& index : iceberg_table_desc->partition_index_in_schema()) {
-            partition_expr.push_back(output_expr[index]);
-        }
-
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
-                                                runtime_state));
-        size_t desired_iceberg_sink_dop = context->data_sink_dop();
-
-        OpFactoryPtr iceberg_table_sink_op = std::make_shared<IcebergTableSinkOperatorFactory>(
-                context->next_operator_id(), fragment_ctx, iceberg_table_sink->get_output_expr(), iceberg_table_desc,
-                thrift_sink.iceberg_table_sink, partition_expr_ctxs);
-
-        if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
-            auto ops = context->maybe_interpolate_local_passthrough_exchange(
-                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
-                    desired_iceberg_sink_dop);
-            ops.emplace_back(std::move(iceberg_table_sink_op));
-            context->add_pipeline(std::move(ops));
-        } else {
-            auto ops = context->interpolate_local_key_partition_exchange(
-                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, partition_expr_ctxs,
-                    desired_iceberg_sink_dop);
-            ops.emplace_back(std::move(iceberg_table_sink_op));
-            context->add_pipeline(std::move(ops));
-        }
-
+        RETURN_IF_ERROR(iceberg_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(starrocks::HiveTableSink)) {
         auto* hive_table_sink = down_cast<starrocks::HiveTableSink*>(this);
-        auto output_expr = hive_table_sink->get_output_expr();
-        const auto& t_hive_sink = thrift_sink.hive_table_sink;
-        const auto partition_col_size = t_hive_sink.partition_column_names.size();
-        std::vector<TExpr> partition_expr(output_exprs.end() - partition_col_size, output_exprs.end());
-        std::vector<ExprContext*> partition_expr_ctxs;
-
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
-                                                runtime_state));
-
-        size_t desired_hive_sink_dop = context->data_sink_dop();
-        OpFactoryPtr hive_table_sink_op = std::make_shared<HiveTableSinkOperatorFactory>(
-                context->next_operator_id(), fragment_ctx, thrift_sink.hive_table_sink,
-                hive_table_sink->get_output_expr(), partition_expr_ctxs);
-
-        if (t_hive_sink.partition_column_names.size() == 0 || t_hive_sink.is_static_partition_sink) {
-            auto ops = context->maybe_interpolate_local_passthrough_exchange(
-                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
-                    desired_hive_sink_dop);
-            ops.emplace_back(std::move(hive_table_sink_op));
-            context->add_pipeline(std::move(ops));
-        } else {
-            auto ops = context->interpolate_local_key_partition_exchange(
-                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, partition_expr_ctxs,
-                    desired_hive_sink_dop);
-            ops.emplace_back(std::move(hive_table_sink_op));
-            context->add_pipeline(std::move(ops));
-        }
+        RETURN_IF_ERROR(hive_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(starrocks::TableFunctionTableSink)) {
-        DCHECK(thrift_sink.table_function_table_sink.__isset.target_table);
-        DCHECK(thrift_sink.table_function_table_sink.__isset.cloud_configuration);
-
-        const auto& target_table = thrift_sink.table_function_table_sink.target_table;
-        DCHECK(target_table.__isset.path);
-        DCHECK(target_table.__isset.file_format);
-        DCHECK(target_table.__isset.columns);
-        DCHECK(target_table.__isset.write_single_file);
-        DCHECK(target_table.columns.size() == output_exprs.size());
-
-        std::vector<std::string> column_names;
-        for (const auto& column : target_table.columns) {
-            column_names.push_back(column.column_name);
-        }
-
-        std::vector<TExpr> partition_exprs;
-        std::vector<std::string> partition_column_names;
-        if (target_table.__isset.partition_column_ids) {
-            for (auto id : target_table.partition_column_ids) {
-                partition_exprs.push_back(output_exprs[id]);
-                partition_column_names.push_back(target_table.columns[id].column_name);
-            }
-        }
-        std::vector<ExprContext*> partition_expr_ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
-                                                runtime_state));
-
-        std::vector<ExprContext*> output_expr_ctxs;
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
-
-        auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
-                context->next_operator_id(), target_table.path, target_table.file_format, target_table.compression_type,
-                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names,
-                target_table.write_single_file, thrift_sink.table_function_table_sink.cloud_configuration,
-                fragment_ctx);
-
-        size_t sink_dop = context->data_sink_dop();
-        if (target_table.write_single_file) {
-            sink_dop = 1;
-        }
-
-        if (partition_expr_ctxs.empty()) {
-            auto ops = context->maybe_interpolate_local_passthrough_exchange(
-                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop);
-            ops.emplace_back(std::move(op));
-            context->add_pipeline(std::move(ops));
-
-        } else {
-            auto ops = context->interpolate_local_key_partition_exchange(runtime_state,
-                                                                         Operator::s_pseudo_plan_node_id_for_final_sink,
-                                                                         prev_operators, partition_expr_ctxs, sink_dop);
-            ops.emplace_back(std::move(op));
-            context->add_pipeline(std::move(ops));
-        }
+        auto* table_function_table_sink = down_cast<starrocks::TableFunctionTableSink*>(this);
+        RETURN_IF_ERROR(table_function_table_sink->decompose_to_pipeline(prev_operators, thrift_sink, context));
     } else if (typeid(*this) == typeid(starrocks::DictionaryCacheSink)) {
         OpFactoryPtr op = std::make_shared<DictionaryCacheSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().dictionary_cache_sink, fragment_ctx);
