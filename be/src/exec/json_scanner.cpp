@@ -634,17 +634,19 @@ Status JsonReader::_construct_row_by_debezium(simdjson::ondemand::object* row, C
     RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(DEBEZIUM_OP_PATH), &op_json_paths));
     RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, op_json_paths, &op_value));
     std::string_view op_sv = op_value.get_string().value();
-
+    bool is_delete;
     std::vector<SimpleJsonPath> row_json_paths;
     // Based on the operation type, extract the relevant data and set the operation column
     if (op_sv == DEBEZIUM_READ || op_sv == DEBEZIUM_CREATE || op_sv == DEBEZIUM_UPDATE) {
         // For create, update, or read operations, use the 'after' field
         RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(DEBEZIUM_AFTER_PATH), &row_json_paths));
         RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, row_json_paths, &value));
+        is_delete = false;
     } else if (op_sv == DEBEZIUM_DELETE) {
         // For delete operations, use the 'before' field
         RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(DEBEZIUM_BEFORE_PATH), &row_json_paths));
         RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, row_json_paths, &value));
+        is_delete = true;
     } else {
         return Status::DataQualityError(strings::Substitute(
                 "Invalid 'op' value in Debezium JSON, op='$0', vaild ops are (c, u, r, d).", op_sv));
@@ -653,7 +655,7 @@ Status JsonReader::_construct_row_by_debezium(simdjson::ondemand::object* row, C
     // Construct the row with the extracted value
     simdjson::ondemand::object value_obj;
     value.get(value_obj);
-    RETURN_IF_ERROR(_construct_row_without_jsonpath(&value_obj, chunk, op_sv == "d"));
+    RETURN_IF_ERROR(_construct_row_without_jsonpath(&value_obj, chunk, is_delete));
 
     return Status::OK();
 }
