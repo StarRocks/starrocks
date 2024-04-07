@@ -711,9 +711,7 @@ public class Optimizer {
         }
 
         if (mvRewriteStrategy.enableCBORewrite) {
-            if (mvRewriteStrategy.enableCBOSingleTableRewrite) {
-                context.getRuleSet().addSingleTableMvRewriteRule();
-            }
+            context.getRuleSet().addSingleTableMvRewriteRule();
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 

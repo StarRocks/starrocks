@@ -33,8 +33,8 @@ import java.util.List;
  */
 public class PermutationGenerator<T> {
     private List<List<T>> lists;
-    private int totalCount = 1;
-    private int iTotal = 0;
+    private long totalCount = 1;
+    private long iTotal = 0;
 
     private List<Generator<T>> generators = Lists.newArrayList();
 
@@ -44,7 +44,7 @@ public class PermutationGenerator<T> {
             totalCount *= list.size();
         }
         if (totalCount > 0) {
-            int multiplier = 1;
+            long multiplier = 1;
             for (List<T> list : lists) {
                 multiplier *= list.size();
                 generators.add(new Generator<T>(list, totalCount, totalCount / multiplier));
