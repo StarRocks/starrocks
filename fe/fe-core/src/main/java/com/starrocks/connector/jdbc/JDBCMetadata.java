@@ -80,8 +80,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
             schemaResolver = new OracleSchemaResolver();
         } else {
-            LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
-            throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
+            schemaResolver = new DefaultJDBCSchemaResolver();
         }
         if (dataSource == null) {
             dataSource = createHikariDataSource();
