@@ -6,40 +6,37 @@ displayed_sidebar: "English"
 
 ## Description
 
+Submits an ETL statement as an asynchronous task.
 
-SUBMIT TASK is used to create long-running background tasks, as well as tasks that are executed periodically.
+You can use this statement to:
 
-Related operations:
-- [SUBMIT TASK](./SUBMIT_TASK.md): Create a task
-- [DROP TASK](./DROP_TASK.md): Delete a task
-- INFORMATION_SCHEMA.tasks: Query the list of tasks
-- INFORMATION_SCHEMA.task_runs: Query the execution history of tasks
+- execute long-running tasks in background (supported from v2.5 onwards)
+- schedule a task at a regular interval (supported from v3.3 onwards)
 
-Versions and feature support:
-- This feature is supported starting from version 2.5.
-- As of version 3.0, support for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md) has been added
-- Scheduled tasks are supported starting from version 3.3.
+Supported statements include:
+
+- [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
+- [INSERT](./INSERT.md) (from v3.0 onwards)
+
+You can view the list of tasks by querying `INFORMATION_SCHEMA.tasks`, or view the execution history of tasks by querying `INFORMATION_SCHEMA.task_runs`. For more information, see [Usage Notes](#usage-notes)
 
 ## Syntax
 
 ```SQL
 SUBMIT TASK <task_name> 
 [SCHEDULE [START(<schedule_start>)] EVERY(INTERVAL <schedule_interval>) ]
-[PROPERTIES(<properties>)]
+[PROPERTIES(<"key" = "value"[, ...]>)]
 AS <etl_statement>
-
 ```
 
 ## Parameters
 
-| **Parameter**      | **Optional** | **Description**                                                                                     |
+| **Parameter**      | **Required** | **Description**                                                                                     |
 | -------------      | ------------ | ---------------------------------------------------------------------------------------------------- |
-| task_name          | Optional     | The name of the task.                                                                               |
-| schedule_start     | Optional     | The start time for scheduled tasks.                                                                 |
-| schedule_interval  | Optional     | The interval at which scheduled tasks are executed, with a minimum interval of 10 seconds.          |
-| etl_statement      | Required     | The ETL statement for creating asynchronous tasks. StarRocks currently supports creating asynchronous tasks using [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md). |
-
-
+| task_name          | Yes     | The name of the task.                                                                               |
+| schedule_start     | No      | The start time for the scheduled task.                                                                 |
+| schedule_interval  | No      | The interval at which the scheduled task is executed, with a minimum interval of 10 seconds.          |
+| etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md). |
 
 ## Usage notes
 
@@ -70,13 +67,13 @@ You can configure asynchronous ETL tasks using the following FE configuration it
 
 | **Parameter**                | **Default value** | **Description**                                              |
 | ---------------------------- | ----------------- | ------------------------------------------------------------ |
-| task_ttl_second              | 86400            | The period during which a Task is valid. Unit: seconds. Tasks that exceed the validity period are deleted. |
+| task_ttl_second              | 86400             | The period during which a Task is valid. Unit: seconds. Tasks that exceed the validity period are deleted. |
 | task_check_interval_second   | 14400             | The time interval to delete invalid Tasks. Unit: seconds.    |
-| task_runs_ttl_second         | 86400            | The period during which a TaskRun is valid. Unit: seconds. TaskRuns that exceed the validity period are deleted automatically. Additionally, TaskRuns in the `FAILED` and `SUCCESS` states are also deleted automatically. |
+| task_runs_ttl_second         | 86400             | The period during which a TaskRun is valid. Unit: seconds. TaskRuns that exceed the validity period are deleted automatically. Additionally, TaskRuns in the `FAILED` and `SUCCESS` states are also deleted automatically. |
 | task_runs_concurrency        | 4                 | The maximum number of TaskRuns that can be run in parallel.  |
 | task_runs_queue_length       | 500               | The maximum number of TaskRuns that are pending for running. If the number exceeds the default value, the incoming tasks will be suspended. |
-| task_runs_max_history_number | 10000      | The maximum number of TaskRun records to retain. |
-| task_min_schedule_interval_s | 10 |  The mininum interval of task execution，the default value is 10s. |
+| task_runs_max_history_number | 10000             | The maximum number of TaskRun records to retain. |
+| task_min_schedule_interval_s | 10                | The minimum interval for Task execution. Unit: seconds. |
 
 ## Examples
 
@@ -106,7 +103,8 @@ INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
-Example 5: Create a periodical task to write the sql result into a table
+Example 5: Create an asynchronous task for an INSERT OVERWRITE statement. The task will be regularly executed at an interval of 1 minute.
+
 ```SQL
 SUBMIT TASK
 SCHEDULE EVERY(INTERVAL 1 MINUTE)
