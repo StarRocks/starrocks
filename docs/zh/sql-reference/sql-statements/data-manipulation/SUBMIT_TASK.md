@@ -6,24 +6,39 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-为 ETL 语句创建异步任务。此功能自 StarRocks 2.5 起支持。
+为 ETL 语句创建异步任务。
 
-StarRocks v3.0 支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。
+您可将该语句用于以下场景：
+
+- 创建长时间运行的后台任务（从 v2.5 开始支持）
+- 创建定期执行的任务（从 v3.3 开始支持）
+
+支持的语句包括：
+
+- [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md)（从 v3.0 开始支持）
+- [INSERT](./INSERT.md)（从 v3.0 开始支持）
+
+您可以通过查询 `INFORMATION_SCHEMA.tasks` 查看任务列表，或通过查询 `INFORMATION_SCHEMA.task_runs` 查看任务的执行历史。有关更多信息，请参阅[使用说明](#使用说明)。
 
 您可以使用 [DROP TASK](./DROP_TASK.md) 删除异步任务。
 
 ## 语法
 
 ```SQL
-SUBMIT TASK [task_name] AS <etl_statement>
+SUBMIT TASK <task_name> 
+[SCHEDULE [START(<schedule_start>)] EVERY(INTERVAL <schedule_interval>) ]
+[PROPERTIES(<"key" = "value"[, ...]>)]
+AS <etl_statement>
 ```
 
 ## 参数说明
 
-| **参数**      | **说明**                                                     |
-| ------------- | ------------------------------------------------------------ |
-| task_name     | 任务名称。                                                   |
-| etl_statement | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。 |
+| **参数**      | **是否必须** | **描述**                                                                                     |
+| ------------- | ------------ | ----------------------------------------------------------------------------------------- |
+| task_name          | 是      | 任务名称。                                                                                   |
+| schedule_start     | 否      | 定时任务的开始时间。                                                                           |
+| schedule_interval  | 否      | 定时任务的执行间隔，最小间隔为 10 秒。                                                           |
+| etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。 |
 
 ## 使用说明
 
@@ -60,6 +75,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 | task_runs_concurrency        | 4          | 最多可同时运行的 TaskRun 的数量。                            |
 | task_runs_queue_length       | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |
 | task_runs_max_history_number | 10000      | 保留的最多历史 TaskRun 任务数量。 |
+| task_min_schedule_interval_s | 10         | Task 最小执行间隔。单位：秒。 |
 
 ## 示例
 
@@ -87,4 +103,16 @@ SUBMIT TASK AS INSERT OVERWRITE tbl3 SELECT * FROM src_tbl;
 SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
 INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
+```
+
+示例五：为 INSERT OVERWRITE 语句创建异步任务。任务将以一分钟为间隔定期执行。
+
+```SQL
+SUBMIT TASK
+SCHEDULE EVERY(INTERVAL 1 MINUTE)
+AS
+INSERT OVERWRITE insert_wiki_edit
+    SELECT dt, user_id, count(*) 
+    FROM source_wiki_edit 
+    GROUP BY dt, user_id;
 ```
