@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -26,18 +27,19 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.RangeExtractor;
+import com.starrocks.sql.optimizer.property.ReplaceShuttle;
 import com.starrocks.sql.optimizer.property.ValueProperty;
 import com.starrocks.sql.optimizer.property.ValuePropertyDeriver;
-import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class OnPredicateMoveAroundRule extends TransformationRule {
@@ -81,12 +83,17 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
 
         OptExpression result = null;
         if (joinOperator.getJoinType().isInnerJoin()) {
-            ScalarOperator toLeftPredicate = Utils.compoundAnd(binaryPredicates.stream()
+            List<ScalarOperator> toLeftPredicates = binaryPredicates.stream()
                     .map(e -> derivePredicate(e, rightValueProperty, leftValueProperty, true))
-                    .collect(Collectors.toList()));
-            ScalarOperator toRightPredicate = Utils.compoundAnd(binaryPredicates.stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            ScalarOperator toLeftPredicate = Utils.compoundAnd(distinctPredicates(toLeftPredicates));
+
+            List<ScalarOperator> toRightPredicates = binaryPredicates.stream()
                     .map(e -> derivePredicate(e, leftValueProperty, rightValueProperty, false))
-                    .collect(Collectors.toList()));
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            ScalarOperator toRightPredicate = Utils.compoundAnd(distinctPredicates(toRightPredicates));
 
             if (toLeftPredicate == null && toRightPredicate == null) {
                 return Lists.newArrayList();
@@ -113,9 +120,11 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                 );
             }
         } else if (joinOperator.getJoinType().isLeftOuterJoin()) {
-            ScalarOperator toRightPredicate = Utils.compoundAnd(binaryPredicates.stream()
+            List<ScalarOperator> toRightPredicates = binaryPredicates.stream()
                     .map(e -> derivePredicate(e, leftValueProperty, rightValueProperty, false))
-                    .collect(Collectors.toList()));
+                    .collect(Collectors.toList());
+            ScalarOperator toRightPredicate = Utils.compoundAnd(distinctPredicates(toRightPredicates));
+
             if (toRightPredicate != null) {
                 toRightPredicate.setIsPushdown(true);
                 LogicalFilterOperator filter = new LogicalFilterOperator(toRightPredicate);
@@ -124,9 +133,11 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
                 );
             }
         } else if (joinOperator.getJoinType().isRightOuterJoin()) {
-            ScalarOperator toLeftPredicate = Utils.compoundAnd(binaryPredicates.stream()
+            List<ScalarOperator> toLeftPredicates = binaryPredicates.stream()
                     .map(e -> derivePredicate(e, rightValueProperty, leftValueProperty, true))
-                    .collect(Collectors.toList()));
+                    .collect(Collectors.toList());
+            ScalarOperator toLeftPredicate = Utils.compoundAnd(distinctPredicates(toLeftPredicates));
+
             if (toLeftPredicate != null) {
                 toLeftPredicate.setIsPushdown(true);
                 LogicalFilterOperator filter = new LogicalFilterOperator(toLeftPredicate);
@@ -191,6 +202,20 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         return removeRedundantPredicate(offspring, rewriteResult, existValueProperty);
     }
 
+    private List<ScalarOperator> distinctPredicates(List<ScalarOperator> predicates) {
+        Iterator<ScalarOperator> it = predicates.iterator();
+        Set<ScalarOperator> set = Sets.newHashSet();
+        while (it.hasNext()) {
+            ScalarOperator predicate = it.next();
+            if (set.contains(predicate)) {
+                it.remove();
+            } else {
+                set.add(predicate);
+            }
+        }
+        return predicates;
+    }
+
     private ScalarOperator removeRedundantPredicate(ScalarOperator offspring, ScalarOperator rewriteResult,
                                                     ValueProperty existValueProperty) {
         if (!existValueProperty.contains(offspring)) {
@@ -248,40 +273,6 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
             }
         }
         return null;
-    }
-
-
-    private static class ReplaceShuttle extends BaseScalarOperatorShuttle {
-        private Map<ScalarOperator, ScalarOperator> replaceMap;
-
-        public ReplaceShuttle(Map<ScalarOperator, ScalarOperator> replaceMap) {
-            this.replaceMap = replaceMap;
-        }
-
-        public ScalarOperator rewrite(ScalarOperator scalarOperator) {
-            ScalarOperator result = scalarOperator.accept(this, null);
-            // failed to replace the scalarOperator
-            if (scalarOperator.getUsedColumns().isIntersect(result.getUsedColumns())) {
-                return null;
-            }
-            return result;
-        }
-
-        @Override
-        public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-            if (replaceMap.containsKey(variable)) {
-                return replaceMap.get(variable);
-            }
-            return variable;
-        }
-
-        @Override
-        public ScalarOperator visitCall(CallOperator call, Void context) {
-            if (replaceMap.containsKey(call)) {
-                return replaceMap.get(call);
-            }
-            return call;
-        }
     }
 
 }

@@ -52,8 +52,10 @@ public class ValueProperty {
     public ValueProperty projectValueProperty(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         Map<ScalarOperator, ValueWrapper> newValueMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
-            if (valueMap.containsKey(entry.getValue())) {
-                newValueMap.put(entry.getKey(), valueMap.get(entry.getValue()));
+            if (valueMap.containsKey(entry.getValue()) && !entry.getValue().equals(entry.getKey())) {
+                ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(entry.getValue(), entry.getKey()));
+                ScalarOperator rewriteResult = shuttle.rewrite(valueMap.get(entry.getValue()).getPredicateDesc());
+                newValueMap.put(entry.getKey(), new ValueWrapper(rewriteResult));
             }
         }
         ColumnRefSet outputCols = new ColumnRefSet(columnRefMap.keySet());
