@@ -79,6 +79,7 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -794,8 +795,9 @@ public class Load {
             for (SlotRef slot : slots) {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
                 if (slotDesc == null) {
-                    throw new UserException("unknown reference column, column=" + entry.getKey()
-                            + ", reference=" + slot.getColumnName());
+                    throw new UserException(String.format(
+                            "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'",
+                            slot.getColumnName(), AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey()));
                 }
                 if (useVectorizedLoad) {
                     slotDesc.setIsMaterialized(true);
@@ -893,8 +895,9 @@ public class Load {
                     smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
                             exprsByName.get(slot.getColumnName())));
                 } else {
-                    throw new UserException("unknown reference column, column=" + entry.getKey()
-                            + ", reference=" + slot.getColumnName());
+                    throw new UserException(String.format(
+                            "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'",
+                            slot.getColumnName(), AstToSQLBuilder.toSQL(entry.getValue()), entry.getKey()));
                 }
             }
             Expr expr = entry.getValue().clone(smap);
