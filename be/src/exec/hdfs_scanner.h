@@ -237,6 +237,10 @@ struct HdfsScannerContext {
         const TypeDescriptor& slot_type() const { return slot_desc->type(); }
     };
 
+    std::string formatted_name(const std::string& name) {
+        return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+    }
+
     const TupleDescriptor* tuple_desc = nullptr;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
