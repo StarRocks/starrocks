@@ -2215,10 +2215,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 columns.add(new SlotRef(null, qualifiedName.getParts().get(0)));
             } else {
                 Expr base = new SlotRef(null, qualifiedName.getParts().get(0));
-                for (int i = 1; i < qualifiedName.getParts().size(); i++) {
-                    base = new SubfieldExpr(base, List.of(qualifiedName.getParts().get(i)));
-                }
-                columns.add(base);
+                columns.add(new SubfieldExpr(base, qualifiedName.getParts().subList(1,
+                        qualifiedName.getParts().size())));
             }
         }
         return columns;

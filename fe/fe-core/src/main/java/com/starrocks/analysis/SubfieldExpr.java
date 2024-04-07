@@ -127,26 +127,13 @@ public class SubfieldExpr extends Expr {
 
     public String getPath() {
         String childPath = getChildPath();
-        return getSubFiledPath(childPath);
-    }
-
-    private String getSubFiledPath(String path) {
-        StringBuilder sb = new StringBuilder();
-        for (String fieldName : fieldNames) {
-            sb.append(path).append(".").append(fieldName).append(",");
-        }
-        return sb.substring(0, sb.length() - 1);
+        return childPath + "." + Joiner.on('.').join(fieldNames);
     }
 
     private String getChildPath() {
-        if (!(children.get(0) instanceof SubfieldExpr)) {
-            if (children.get(0) instanceof SlotRef) {
-                return ((SlotRef) children.get(0)).getColumnName();
-            }
-            return children.get(0).toSqlImpl();
+        if (children.get(0) instanceof SlotRef) {
+            return ((SlotRef) children.get(0)).getColumnName();
         }
-
-        String childPath = ((SubfieldExpr) children.get(0)).getChildPath();
-        return ((SubfieldExpr) children.get(0)).getSubFiledPath(childPath);
+        return children.get(0).toSqlImpl();
     }
 }
