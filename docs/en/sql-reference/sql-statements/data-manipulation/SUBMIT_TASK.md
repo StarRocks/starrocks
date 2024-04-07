@@ -10,7 +10,7 @@ Submits an ETL statement as an asynchronous task.
 
 You can use this statement to:
 
-- execute long-running tasks in background (supported from v2.5 onwards)
+- execute long-running tasks in the background (supported from v2.5 onwards)
 - schedule a task at a regular interval (supported from v3.3 onwards)
 
 Supported statements include:
